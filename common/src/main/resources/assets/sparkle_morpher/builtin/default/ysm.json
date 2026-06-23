@@ -1,0 +1,285 @@
+{
+    "spec": 2,
+    "metadata": {
+        "authors": [
+            {
+                "avatar": "avatar/汪.png",
+                "comment": "",
+                "contact": {
+                    "Afdian": "",
+                    "Bilibili": ""
+                },
+                "name": "汪",
+                "role": "模型"
+            }
+        ],
+        "license": {
+            "desc": "",
+            "type": "CC BY-NC-SA 4.0"
+        },
+        "link": {
+            "donate": "",
+            "home": ""
+        },
+        "name": "女仆小花火",
+        "tips": ""
+    },
+    "properties": {
+        "width_scale": 0.7,
+        "height_scale": 0.7,
+        "extra_animation": {
+            "extra30": "#服装配饰",
+            "extra40": "#表情管理",
+            "#舞蹈": "§l舞蹈",
+            "#基础动作": "§n基础动作",
+            "extra0": "§l你好",
+            "extra2": "§b§n开车车",
+            "extra3": "§l好耶",
+            "#立绘": "§l立绘"
+        },
+        "extra_animation_buttons": [
+            {
+                "id": "服装配饰",
+                "name": "§l服装配饰",
+                "config_forms": [
+                    {
+                        "type": "radio",
+                        "title": "§l服装切换",
+                        "description": "~",
+                        "value": "v.pants_change",
+                        "labels": {
+                            "§d浴袍": "v.pants_change=0;v.t=0",
+                            "女仆": "v.pants_change=1;v.t=1"
+                        }
+                    },
+                    {
+                        "type": "radio",
+                        "title": "§l面具",
+                        "description": "~",
+                        "value": "v.pants_change1",
+                        "labels": {
+                            "§n无": "v.pants_change1=0;v.t1=0",
+                            "§l§4白面具": "v.pants_change1=1;v.t1=1",
+                            "黑面具": "v.pants_change1=2;v.t1=2"
+                        }
+                    },
+                    {
+                        "type": "radio",
+                        "title": "§l帽子",
+                        "description": "~",
+                        "value": "v.pants_change2",
+                        "labels": {
+                            "§n无": "v.pants_change2=0;v.t2=0",
+                            "女仆帽": "v.pants_change2=1;v.t2=1"
+                        }
+                    },
+                    {
+                        "type": "radio",
+                        "title": "§l§4金鱼尾",
+                        "description": "~",
+                        "value": "v.pants_change3",
+                        "labels": {
+                            "有": "v.pants_change3=0;v.t3=0",
+                            "§l无": "v.pants_change3=1;v.t3=1"
+                        }
+                    },
+                    {
+                        "type": "radio",
+                        "title": "§l袜子",
+                        "description": "~",
+                        "value": "v.pants_change4",
+                        "labels": {
+                            "无": "v.pants_change4=0;v.t4=0",
+                            "白丝": "v.pants_change4=1;v.t4=1",
+                            "黑丝": "v.pants_change4=2;v.t4=2",
+                            "§d泡泡袜": "v.pants_change4=3;v.t4=3"
+                        }
+                    },
+                    {
+                        "type": "radio",
+                        "title": "§l手套",
+                        "description": "~",
+                        "value": "v.pants_change5",
+                        "labels": {
+                            "§n无": "v.pants_change5=0;v.t5=0",
+                            "有": "v.pants_change5=1;v.t5=1"
+                        }
+                    },
+                    {
+                        "type": "radio",
+                        "title": "§l§e铃铛",
+                        "description": "~",
+                        "value": "v.pants_change6",
+                        "labels": {
+                            "有": "v.pants_change6=0;v.t6=0",
+                            "§n无": "v.pants_change6=1;v.t6=1"
+                        }
+                    }
+                ]
+            },
+            {
+                "id": "表情管理",
+                "name": "表情管理",
+                "config_forms": [
+                    {
+                        "type": "radio",
+                        "title": "§l表情",
+                        "description": "~",
+                        "value": "v.pants_change7",
+                        "labels": {
+                            "§n无": "v.pants_change7=0;v.t7=0",
+                            "§l§4愤怒": "v.pants_change7=1;v.t7=1",
+                            "害羞": "v.pants_change7=2;v.t7=2"
+                        }
+                    },
+                    {
+                        "type": "radio",
+                        "title": "§l嘴巴",
+                        "description": "~",
+                        "value": "v.pants_change8",
+                        "labels": {
+                            "§n无": "v.pants_change8=0;v.t8=0",
+                            "吐舌头": "v.pants_change8=1;v.t8=1",
+                            "撇嘴": "v.pants_change8=2;v.t8=2",
+                            "§l§a尖叫": "v.pants_change8=3;v.t8=3",
+                            "§l§b难过": "v.pants_change8=4;v.t8=4",
+                            "笑": "v.pants_change8=5;v.t8=5",
+                            "微笑": "v.pants_change8=6;v.t8=6",
+                            "§l§d猫笑": "v.pants_change8=7;v.t8=7",
+                            "§n§c嘻~": "v.pants_change8=8;v.t8=8",
+                            "§n§c嘻嘻~": "v.pants_change8=9;v.t8=9"
+                        }
+                    }
+                ]
+            }
+        ],
+        "extra_animation_classify": [
+            {
+                "id": "舞蹈",
+                "extra_animation": {
+                    "extra7": "§n§a萝莉摇",
+                    "extra11": "§l二段",
+                    "extra18": "§n§b鹿乃子虎视眈眈",
+                    "extra16": "§ldoodle摇",
+                    "extra22": "§l左右摇",
+                    "extra20": "§l可爱摇",
+                    "extra6": "§l摆手",
+                    "#return": "返回按钮"
+                }
+            },
+            {
+                "id": "基础动作",
+                "extra_animation": {
+                    "extra1": "§l鼓掌",
+                    "extra4": "§l坐下",
+                    "extra5": "§l§b躺下",
+                    "extra9": "§l跪坐",
+                    "extra10": "§l§d魔法少女坐",
+                    "#return": "返回按钮"
+                }
+            },
+            {
+                "id": "立绘",
+                "extra_animation": {
+                    "extra23": "§a§l立绘1",
+                    "extra24": "§5§l立绘2",
+                    "extra25": "§6§l立绘3",
+                    "#return": "返回按钮"
+                }
+            }
+        ],
+        "preview_animation": "gui",
+        "free": true,
+        "render_layers_first": false,
+        "all_cutout": false,
+        "disable_preview_rotation": false,
+        "gui_foreground": "textures/gui/foreground.png",
+        "gui_background": "textures/gui/background.png",
+        "default_texture": "xiduo"
+    },
+    "files": {
+        "player": {
+            "model": {
+                "main": "models/main.json",
+                "arm": "models/arm.json"
+            },
+            "animation": {
+                "main": "animations/main.animation.json",
+                "arm": "animations/arm.animation.json",
+                "extra": "animations/extra.animation.json",
+                "tac": "animations/tac.animation.json",
+                "carryon": "animations/carryon.animation.json",
+                "parcool": "animations/parcool.animation.json",
+                "swem": "animations/swem.animation.json",
+                "slashblade": "animations/slashblade.animation.json",
+                "tlm": "animations/tlm.animation.json",
+                "immersive_melodies": "animations/im.animation.json",
+                "irons_spell_books": "animations/iss.animation.json",
+                "fp_arm": "animations/fp.arm.animation.json"
+            },
+            "animation_controllers": [],
+            "texture": [
+                {
+                    "uv": "textures/xiduo.png"
+                },
+                "textures/default.png",
+                "textures/blue.png"
+            ]
+        },
+        "projectiles": [
+            {
+                "match": ["minecraft:arrow"],
+                "model": "models/arrow.json",
+                "animation": "animations/arrow.animation.json",
+                "texture": "textures/arrow.png"
+            },
+            {
+                "match": ["minecraft:trident"],
+                "model": "models/trident.json",
+                "texture": "textures/trident.png"
+            },
+            {
+                "match": ["minecraft:fishing_bobber"],
+                "model": "models/fishing_bobber.json",
+                "texture": "textures/fishing_bobber.png"
+            },
+            {
+                "match": ["minecraft:firework_rocket"],
+                "model": "models/firework_rocket.json",
+                "texture": "textures/firework_rocket.png"
+            }
+        ],
+        "vehicles": [
+            {
+                "match": ["minecraft:boat"],
+                "model": "models/boat.json",
+                "animation": "animations/boat.animation.json",
+                "texture": "textures/boat.png"
+            },
+            {
+                "match": ["minecraft:chest_boat"],
+                "model": "models/chest_boat.json",
+                "animation": "animations/boat.animation.json",
+                "texture": "textures/boat.png"
+            },
+            {
+                "match": ["minecraft:bamboo_raft"],
+                "model": "models/raft.json",
+                "animation": "animations/boat.animation.json",
+                "texture": "textures/boat.png"
+            },
+            {
+                "match": ["minecraft:bamboo_chest_raft"],
+                "model": "models/chest_raft.json",
+                "animation": "animations/boat.animation.json",
+                "texture": "textures/boat.png"
+            },
+            {
+                "match": ["minecraft:minecart"],
+                "model": "models/minecart.json",
+                "texture": "textures/minecart.png"
+            }
+        ],
+        "sound_path": "sounds"
+    }
+}

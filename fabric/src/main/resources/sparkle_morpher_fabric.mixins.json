@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.micaftic.morpher.fabric.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "openysm-fabric-fabric-refmap.json",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "client.PlayerRendererHandMixin",
+    "client.PlayerRendererMixin",
+    "client.YSMSoundInstanceFabricMixin"
+  ],
+  "mixins": [
+    "LivingEntityEffectMixin",
+    "PlayerListAccessor"
+  ]
+}

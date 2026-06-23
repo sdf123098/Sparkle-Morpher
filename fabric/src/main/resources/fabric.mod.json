@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "sparkle_morpher",
+  "version": "${version}",
+  "name": "Sparkle's Morpher",
+  "description": "Sparkle's Morpher (花火火的变身器) - Custom player model system for Minecraft.",
+  "authors": ["Micaftic"],
+  "contact": {
+    "homepage": "https://github.com/Micaftic/Sparkle-Morpher",
+    "issues": "https://github.com/Micaftic/Sparkle-Morpher/issues"
+  },
+  "license": "MIT",
+  "icon": "sparkle_morpher.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.micaftic.morpher.fabric.YesSteveModelFabric"
+    ],
+    "client": [
+      "com.micaftic.morpher.fabric.client.YesSteveModelFabricClient"
+    ],
+    "modmenu": [
+      "com.micaftic.morpher.fabric.compat.ModMenuConfigScreenProvider"
+    ],
+    "cardinal-components-entity": [
+      "com.micaftic.morpher.fabric.YsmComponents"
+    ]
+  },
+  "mixins": [
+    "sparkle_morpher.mixins.json",
+    "sparkle_morpher_fabric.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.10",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*",
+    "architectury": ">=13.0.8",
+    "forgeconfigapiport": ">=21.1.0"
+  },
+  "suggests": {
+    "modmenu": "*"
+  },
+  "custom": {
+    "cardinal-components": [
+      "sparkle_morpher:star_models",
+      "sparkle_morpher:auth_models",
+      "sparkle_morpher:model_info",
+      "sparkle_morpher:projectile_model",
+      "sparkle_morpher:vehicle_model"
+    ]
+  }
+}
