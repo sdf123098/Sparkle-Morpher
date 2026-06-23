@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.client.upload.UploadManager;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.client.upload.IResourceLocatable;

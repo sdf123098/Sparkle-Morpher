@@ -1,6 +1,7 @@
-package com.micaftic.morpher.geckolib3.geo.render.built;
+package com.elfmcys.yesstevemodel.geckolib3.geo.render.built;
 
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import it.unimi.dsi.fastutil.ints.IntArrayList;

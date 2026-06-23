@@ -1,11 +1,11 @@
 
 
-package com.micaftic.morpher.geckolib3.geo;
+package com.elfmcys.yesstevemodel.geckolib3.geo;
 
 import com.micaftic.morpher.NativeLibLoader;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.util.log.ChatLogger;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;

@@ -1,4 +1,5 @@
 package com.micaftic.morpher.geckolib3.geo;
+import com.elfmcys.yesstevemodel.geckolib3.geo.NativeModelRenderer;
 
 import com.micaftic.morpher.client.renderer.CustomEntityTranslucentRenderType;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;

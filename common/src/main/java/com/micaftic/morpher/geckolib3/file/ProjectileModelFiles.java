@@ -3,7 +3,7 @@ package com.micaftic.morpher.geckolib3.file;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.geckolib3.file.AnimationFile;
 import com.micaftic.morpher.geckolib3.file.AnimationControllerFile;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 
 public class ProjectileModelFiles {
     private final String[] textureNames;

@@ -33,7 +33,7 @@ import com.micaftic.morpher.geckolib3.util.TicksInterpolator;
 import com.micaftic.morpher.model.format.ServerModelInfo;
 import com.micaftic.morpher.resource.models.*;
 import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import com.micaftic.morpher.util.data.StringMapPair;
