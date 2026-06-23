@@ -1,0 +1,131 @@
+plugins {
+    id "java"
+    id "net.neoforged.moddev" version "2.0.141"
+}
+
+group = mod_group_id
+version = mod_version
+
+base {
+    archivesName = "sparkle-morpher-${project.version}-neo26.1.x"
+}
+
+tasks.named("jar") {
+    archiveFileName = "sparkle-morpher-${project.version}-neo26.1.x.jar"
+}
+
+repositories {
+    def projectLocalMaven = maven {
+        name = "Project Local Maven"
+        url = uri("local-maven")
+    }
+    remove(projectLocalMaven)
+    add(0, projectLocalMaven)
+
+    maven {
+        name = "BMCLAPI Minecraft Libraries"
+        url = "https://bmclapi2.bangbang93.com/maven"
+    }
+    maven {
+        name = "Aliyun Public"
+        url = "https://maven.aliyun.com/repository/public"
+    }
+    maven {
+        name = "Aliyun Central"
+        url = "https://maven.aliyun.com/repository/central"
+    }
+}
+
+["BMCLAPI Minecraft Libraries", "Aliyun Central", "Aliyun Public", "Project Local Maven"].each { repoName ->
+    def repo = repositories.findByName(repoName)
+    if (repo != null) {
+        repositories.remove(repo)
+        repositories.add(0, repo)
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    withSourcesJar()
+}
+
+neoForge {
+    enable {
+        version = neo_version
+        disableRecompilation = true
+    }
+
+    runs {
+        client {
+            client()
+            systemProperty "neoforge.enabledGameTestNamespaces", mod_id
+        }
+
+        server {
+            server()
+            systemProperty "neoforge.enabledGameTestNamespaces", mod_id
+            programArgument "--nogui"
+        }
+
+        data {
+            data()
+            programArguments.addAll "--mod", mod_id, "--all", "--output", file("src/generated/resources").absolutePath, "--existing", file("src/main/resources").absolutePath
+        }
+    }
+
+    mods {
+        yes_steve_model {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+sourceSets.main.resources {
+    srcDir "src/generated/resources"
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+    options.encoding = "UTF-8"
+    options.compilerArgs.addAll([
+            "-Xlint:none",
+            "-Xlint:-deprecation",
+            "-Xlint:-removal",
+            "-Xlint:-unchecked",
+            "-nowarn",
+            "-Xmaxerrs", "10000",
+            "-Xmaxwarns", "10000"
+    ])
+}
+
+processResources {
+    def replaceProperties = [
+            minecraft_version: minecraft_version,
+            neo_version      : neo_version,
+            mod_id           : mod_id,
+            mod_name         : mod_name,
+            mod_license      : mod_license,
+            mod_version      : mod_version,
+            mod_authors      : mod_authors,
+            mod_description  : mod_description
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(["META-INF/neoforge.mods.toml"]) {
+        expand replaceProperties
+    }
+}
+
+dependencies {
+    // zstd-jni dependency removed: project now uses YSM native → pure-Java ZstdUtil → raw-frame fallback chain.
+}
+
+tasks.register("printRepositories") {
+    doLast {
+        repositories.eachWithIndex { repo, index ->
+            println "${index}: ${repo.name} -> ${repo.hasProperty('url') ? repo.url : ''}"
+        }
+    }
+}

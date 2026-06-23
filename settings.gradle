@@ -1,0 +1,38 @@
+pluginManagement {
+    repositories {
+        maven { url = uri("local-maven") }
+        maven { url = "https://maven.aliyun.com/repository/gradle-plugin" }
+        maven { url = "https://maven.neoforged.net/releases" }
+        maven { url = "https://maven.aliyun.com/repository/public" }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        maven {
+            name = "Project Local Maven"
+            url = uri("local-maven")
+        }
+        maven {
+            name = "BMCLAPI Minecraft Libraries"
+            url = "https://bmclapi2.bangbang93.com/maven"
+        }
+        maven {
+            name = "Aliyun Public"
+            url = "https://maven.aliyun.com/repository/public"
+        }
+        maven {
+            name = "Aliyun Central"
+            url = "https://maven.aliyun.com/repository/central"
+        }
+        maven { url = "https://maven.neoforged.net/releases" }
+        maven { url = "https://libraries.minecraft.net/" }
+        mavenCentral()
+        maven { url = "https://jitpack.io" }
+        flatDir { dirs "libs" }
+    }
+}
+
+rootProject.name = "Sparkle-Morpher-NeoForge"
