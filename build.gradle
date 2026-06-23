@@ -1,0 +1,77 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.141'
+}
+
+version = mod_version
+group = maven_group
+
+repositories {
+    mavenLocal()
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://jitpack.io' }
+    mavenCentral()
+}
+
+base {
+    archivesName = archives_name
+}
+
+neoForge {
+    version = project.neoforge_version
+
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+repositories {
+    flatDir { dirs 'libs' }
+}
+
+dependencies {
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+java {
+    withSourcesJar()
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+processResources {
+    def expandProps = [
+            'version'               : mod_version,
+            'mc_version'            : minecraft_version,
+            'neoforge_version'      : neoforge_version,
+            'mod_id'                : mod_id,
+            'loader_version_range'  : loader_version_range,
+            'neoforge_version_range': neoforge_version_range,
+    ]
+
+    inputs.properties expandProps
+
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand expandProps
+    }
+}

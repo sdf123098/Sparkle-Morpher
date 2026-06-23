@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.micaftic.morpher.mixin",
+  "plugin": "com.micaftic.morpher.mixin.plugin.MixinTweaker",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "openysm-common-common-refmap.json",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "client.ArrowEntityAccessor", "client.BufferSourceMixin", "client.EntityRenderDispatcherMixin",
+    "client.FishingHookAccessor", "client.InventoryScreenMixin", "client.LivingEntityAccessor",
+    "client.LivingRendererMixin", "client.PauseScreenMixin", "client.RenderSystemAccessor", "client.ScreenAccessor",
+    "client.ScreenBlurMixin",
+    "client.ThrowableItemProjectileAccessor", "client.WorldRendererMixin", "client.EntityRidingAccessor"
+  ],
+  "mixins": [
+    "AbstractArrowEntityMixin", "ConnectionAccessor", "ProjectileEntityMixin", "ServerCommonPacketListenerImplAccessor", "ServerPlayerMixin"
+  ]
+}

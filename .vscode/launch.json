@@ -1,0 +1,49 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client",
+      "presentation": {
+        "group": "Mod Development - sparkle-morpher",
+        "order": 0
+      },
+      "projectName": "sparkle-morpher",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\SparkleMorpher\\Sparkle-Morpher-Neo1.21.1\\build\\moddev\\clientRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\SparkleMorpher\\Sparkle-Morpher-Neo1.21.1\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dsparkle_morpher%%D:\\SparkleMorpher\\Sparkle-Morpher-Neo1.21.1\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Server",
+      "presentation": {
+        "group": "Mod Development - sparkle-morpher",
+        "order": 1
+      },
+      "projectName": "sparkle-morpher",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\SparkleMorpher\\Sparkle-Morpher-Neo1.21.1\\build\\moddev\\serverRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\SparkleMorpher\\Sparkle-Morpher-Neo1.21.1\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dsparkle_morpher%%D:\\SparkleMorpher\\Sparkle-Morpher-Neo1.21.1\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}

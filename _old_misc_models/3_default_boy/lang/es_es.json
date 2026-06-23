@@ -1,0 +1,18 @@
+{
+    "metadata.name": "Chico predeterminado",
+    "metadata.tips": "Modelo chico predeterminado",
+    "metadata.authors.0.name": "GODZILLA256",
+    "metadata.authors.0.role": "Modelo",
+    "metadata.authors.0.comment": "Autor de modelos MC con muchas ideas y poco tiempo",
+    "metadata.authors.1.name": "Duan Mu",
+    "metadata.authors.1.role": "Animación",
+    "metadata.authors.1.comment": "Siempre en proceso",
+    "properties.extra_animation.extra0": "Paso Moriya",
+    "properties.extra_animation.extra1": "Saludar",
+    "properties.extra_animation.extra2": "Aplaudir",
+    "properties.extra_animation.extra3": "Sí",
+    "properties.extra_animation.extra4": "No",
+    "properties.extra_animation.extra5": "Sí",
+    "properties.extra_animation.extra6": "Balanceo",
+    "properties.extra_animation.extra7": "Baile"
+}

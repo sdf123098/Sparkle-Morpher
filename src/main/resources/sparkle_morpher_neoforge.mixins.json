@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.micaftic.morpher.neoforge.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "openysm-neoforge-refmap.json",
+  "client": [],
+  "mixins": []
+}

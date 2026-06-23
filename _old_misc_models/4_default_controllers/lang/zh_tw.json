@@ -1,0 +1,20 @@
+{
+  "metadata.name": "預設控制器模型",
+  "metadata.tips": "預設控制器測試模型",
+  "metadata.authors.0.name": "哥斯拉",
+  "metadata.authors.0.role": "模型",
+  "metadata.authors.0.comment": "一個MC模型/YSM作者，想法很多，時間很少",
+  "metadata.authors.1.name": "星屑海螺",
+  "metadata.authors.1.role": "動畫",
+  "metadata.authors.1.comment": "漂泊於群星之中",
+  "properties.extra_animation.extra0": "諏訪大舞",
+  "properties.extra_animation.extra1": "揮手",
+  "properties.extra_animation.extra2": "拍手",
+  "properties.extra_animation.extra3": "是",
+  "properties.extra_animation.extra4": "否",
+  "properties.extra_animation.extra5": "耶",
+  "properties.extra_animation.extra6": "擺手",
+  "properties.extra_animation.extra7": "跳舞",
+  "properties.extra_animation_buttons.extra_config.config_forms.0.title": "大小：",
+  "properties.extra_animation_buttons.extra_config.config_forms.0.description": "改變玩家大小"
+}

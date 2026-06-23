@@ -1,0 +1,20 @@
+{
+    "metadata.name": "デフォルトコントローラー モデル",
+    "metadata.tips": "デフォルトコントローラーテストモデル",
+    "metadata.authors.0.name": "GODZILLA256",
+    "metadata.authors.0.role": "モデル",
+    "metadata.authors.0.comment": "アイデアは多いけれど時間が少ないMCモデル作者",
+    "metadata.authors.1.name": "lucia2048",
+    "metadata.authors.1.role": "アニメーション",
+    "metadata.authors.1.comment": "星々の間をさすらう",
+    "properties.extra_animation.extra0": "守矢ステップ",
+    "properties.extra_animation.extra1": "手を振る",
+    "properties.extra_animation.extra2": "拍手",
+    "properties.extra_animation.extra3": "はい",
+    "properties.extra_animation.extra4": "いいえ",
+    "properties.extra_animation.extra5": "うん",
+    "properties.extra_animation.extra6": "振る",
+    "properties.extra_animation.extra7": "ダンス",
+    "properties.extra_animation_buttons.extra_config.config_forms.0.title": "サイズ: ",
+    "properties.extra_animation_buttons.extra_config.config_forms.0.description": "プレイヤーのサイズを変更"
+}

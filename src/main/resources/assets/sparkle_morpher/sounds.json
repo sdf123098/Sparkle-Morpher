@@ -1,0 +1,13 @@
+{
+  "custom": {
+    "category": "neutral",
+    "subtitle": "subtitle.sparkle_morpher.custom",
+    "sounds": [
+      {
+        "name": "sparkle_morpher:empty",
+        "preload": false,
+        "stream": true
+      }
+    ]
+  }
+}
