@@ -1,0 +1,13 @@
+{
+  "replace": false,
+  "values": [
+    {
+      "id": "#minecraft:spears",
+      "required": false
+    },
+    {
+      "id": "#c:tools/spears",
+      "required": false
+    }
+  ]
+}

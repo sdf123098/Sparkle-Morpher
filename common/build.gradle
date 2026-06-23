@@ -1,0 +1,72 @@
+dependencies {
+    modCompileOnly "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+
+    modCompileOnly "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
+
+    compileOnly "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+}
+
+tasks.register('compileNative') {
+    if (true) {
+        return false
+    }
+    def osName = System.getProperty("os.name").toLowerCase(Locale.ROOT)
+    def isWindows = osName.contains("win")
+    def isLinux = osName.contains("linux")
+    def isMac = osName.contains("mac")
+    def isCI = System.getenv("GITHUB_ACTIONS") == "true"
+
+    def generatedBase = file("src/generated/resources/META-INF/native")
+    def cmake = isWindows ? "cmake.exe" : "cmake"
+    if (!isCI && isMac) cmake = "/opt/local/bin/cmake"
+
+    inputs.dir("src/main/native")
+    outputs.dir(generatedBase)
+
+    onlyIf {
+        try {
+            return [cmake, "--version"].execute().waitFor() == 0
+        } catch (ignored) {
+            println "CMake not found."
+            return false
+        }
+    }
+
+    doLast {
+        def configs
+        if (isWindows) configs = [[arch: "x64", folder: "windows-x64"], [arch: "Win32", folder: "windows-x86"]]
+        else if (isMac) configs = [[arch: "x86_64", folder: "macos-x64"], [arch: "arm64", folder: "macos-arm64"]]
+        else if (isLinux) configs = [[arch: "x64", folder: "linux-x64"]]
+        else configs = []
+
+        def libName = isWindows ? "ysm-core.dll" : (isMac ? "libysm-core.dylib" : "libysm-core.so")
+
+        configs.each { conf ->
+            def buildDir = file("${project.buildDir}/cmake-temp/${conf.folder}")
+            def targetDir = file("${generatedBase}/${conf.folder}")
+            buildDir.mkdirs()
+
+            def configArgs = [cmake, "-S", projectDir.absolutePath, "-B", buildDir.absolutePath, "-DCMAKE_BUILD_TYPE=Release"]
+            if (isWindows) {
+                if (isCI) configArgs += ["-G", "Visual Studio 17 2022"]
+                configArgs += ["-A", conf.arch]
+            } else if (isMac) {
+                configArgs += "-DCMAKE_OSX_ARCHITECTURES=${conf.arch}"
+            }
+            exec { commandLine configArgs }
+
+            exec { commandLine cmake, "--build", buildDir.absolutePath, "--config", "Release" }
+
+            def builtFile = isWindows ? file("${buildDir}/Release/${libName}") : file("${buildDir}/${libName}")
+            if (!builtFile.exists()) throw new GradleException("File not found: ${builtFile}")
+
+            targetDir.mkdirs()
+            copy {
+                from builtFile
+                into targetDir
+            }
+        }
+    }
+}
+
+processResources.dependsOn compileNative

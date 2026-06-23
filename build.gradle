@@ -1,0 +1,91 @@
+plugins {
+    id 'fabric-loom' version '1.17.0-alpha.8' apply false
+    id 'com.gradleup.shadow' version '9.0.0-beta4' apply false
+}
+
+allprojects {
+    group = rootProject.maven_group
+    version = rootProject.mod_version
+}
+
+subprojects {
+    apply plugin: 'fabric-loom'
+    apply plugin: 'maven-publish'
+
+    base {
+        archivesName = rootProject.archives_name
+    }
+
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        flatDir {
+            dirs rootProject.file('libs')
+        }
+        maven {
+            name = "Modrinth"
+            url = "https://api.modrinth.com/maven"
+            content {
+                includeGroup "maven.modrinth"
+            }
+        }
+        maven {
+            name = "JitPack"
+            url = "https://jitpack.io"
+            content {
+                includeGroup "com.github.OpenYSM"
+                includeGroup "com.github.TartaricAlkaline"
+            }
+        }
+        maven {
+            name = "Ladysnake"
+            url = "https://maven.ladysnake.org/releases"
+        }
+        maven {
+            name = "Architectury"
+            url = "https://maven.architectury.dev"
+        }
+        maven {
+            name = "Terraformers"
+            url = "https://maven.terraformersmc.com/"
+        }
+    }
+
+    dependencies {
+        minecraft "net.minecraft:minecraft:$rootProject.minecraft_version"
+        mappings loom.layered{
+            mappings file("mappings/mapping.tiny")
+        }
+    }
+
+    java {
+        //withSourcesJar()
+        sourceCompatibility = JavaVersion.VERSION_25
+        targetCompatibility = JavaVersion.VERSION_25
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        it.options.release = 25
+        it.options.compilerArgs.addAll([
+                '-Xlint:none',
+                '-Xlint:-deprecation',
+                '-Xlint:-removal',
+                '-Xlint:-unchecked',
+                '-nowarn',
+                '-Xmaxerrs', '10000',
+                '-Xmaxwarns', '10000'
+        ])
+    }
+
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                artifactId = base.archivesName.get()
+                from components.java
+            }
+        }
+    }
+}

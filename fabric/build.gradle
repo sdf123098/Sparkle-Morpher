@@ -1,0 +1,76 @@
+plugins {
+    id 'com.gradleup.shadow'
+}
+
+configurations {
+    shadowBundle {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+
+def releaseArchiveName = "${rootProject.archives_name}-${project.version}-fa26.1.x"
+
+sourceSets {
+    main {
+        java {
+            srcDir rootProject.file('common/src/main/java')
+        }
+        resources {
+            srcDir rootProject.file('common/src/main/resources')
+            exclude 'native/**'
+        }
+    }
+}
+
+dependencies {
+    modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+
+    modImplementation fabricApi.module("fabric-networking-api-v1", rootProject.fabric_api_version)
+    modImplementation fabricApi.module("fabric-lifecycle-events-v1", rootProject.fabric_api_version)
+    modImplementation fabricApi.module("fabric-entity-events-v1", rootProject.fabric_api_version)
+    modImplementation fabricApi.module("fabric-command-api-v2", rootProject.fabric_api_version)
+    modImplementation fabricApi.module("fabric-resource-loader-v0", rootProject.fabric_api_version)
+    modImplementation fabricApi.module("fabric-rendering-v1", rootProject.fabric_api_version)
+    modImplementation fabricApi.module("fabric-sound-api-v1", rootProject.fabric_api_version)
+    // fabric-key-binding-api-v1 not compatible with custom Mojang mappings
+
+    modImplementation "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
+    include "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
+
+    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
+    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
+    include "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
+    include "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
+
+    modCompileOnly "com.terraformersmc:modmenu:$rootProject.modmenu_version"
+
+    implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+    include "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+
+    // zstd-jni dependency removed: project now uses YSM native → pure-Java ZstdUtil → raw-frame fallback chain.
+}
+
+processResources {
+    inputs.property 'version', project.version
+
+    filesMatching('fabric.mod.json') {
+        expand version: project.version
+    }
+}
+
+shadowJar {
+    configurations = [project.configurations.shadowBundle]
+    archiveClassifier = 'dev-shadow'
+    archiveFileName = "${releaseArchiveName}-dev-shadow.jar"
+    exclude 'net/minecraft/**'
+}
+
+remapJar {
+    input.set shadowJar.archiveFile
+    archiveFileName = "${releaseArchiveName}.jar"
+}
+
+tasks.named('remapSourcesJar') {
+    archiveFileName = "${releaseArchiveName}-sources.jar"
+}

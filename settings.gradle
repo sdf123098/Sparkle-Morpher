@@ -1,0 +1,11 @@
+pluginManagement {
+    repositories {
+        maven { url "https://maven.fabricmc.net/" }
+        maven { url "https://maven.architectury.dev/" }
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'sparkle_morpher'
+
+include 'fabric'
