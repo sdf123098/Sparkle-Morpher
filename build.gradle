@@ -113,4 +113,11 @@ subprojects {
             // retrieving dependencies.
         }
     }
+
+    afterEvaluate {
+        tasks.withType(ProcessResources).configureEach {
+            exclude '**/windows-*/*.dll'
+        }
+    }
 }
+

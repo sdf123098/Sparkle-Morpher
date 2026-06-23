@@ -88,18 +88,65 @@ public final class NativeLibLoader {
             storageDir = Path.of(androidRuntime);
         }
 
-        byte[] data = readResource(platform.getResourcePath());
-        if (data == null) {
-            setUnsatisfiedBuildError();
-            return null;
-        }
-
         Path targetFile = ensureDirectory(storageDir).resolve(platform.fileName).toAbsolutePath().normalize();
         String finalPath = targetFile.toString();
+
+        byte[] data = readResource(platform.getResourcePath());
+        if (data == null) {
+            if (Files.exists(targetFile)) {
+                return finalPath;
+            }
+
+            String version = "1.0.0";
+            try {
+                // Try Architectury first
+                Class<?> platformClass = Class.forName("dev.architectury.platform.Platform");
+                Object mod = platformClass.getMethod("getMod", String.class).invoke(null, "sparkle_morpher");
+                if (mod != null) {
+                    version = (String) mod.getClass().getMethod("getVersion").invoke(mod);
+                }
+            } catch (Throwable t) {
+                try {
+                    // Try NeoForge ModList
+                    Class<?> modListClass = Class.forName("net.neoforged.fml.ModList");
+                    Object modList = modListClass.getMethod("get").invoke(null);
+                    Object optContainer = modListClass.getMethod("getModContainerById", String.class).invoke(modList, "sparkle_morpher");
+                    if (optContainer instanceof java.util.Optional<?> opt && opt.isPresent()) {
+                        Object container = opt.get();
+                        Object modInfo = container.getClass().getMethod("getModInfo").invoke(container);
+                        Object modVersion = modInfo.getClass().getMethod("getVersion").invoke(modInfo);
+                        version = modVersion.toString();
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            if (version.contains("-")) {
+                version = version.substring(0, version.indexOf('-'));
+            }
+
+            String ext = platform.fileName.substring(platform.fileName.lastIndexOf('.') + 1);
+            String remoteFileName = "ysm-core-" + platform.resDir + "." + ext;
+            String githubPath = "sdf123098/Sparkle-Morpher/releases/download/v" + version + "/" + remoteFileName;
+            String downloadUrl = "https://github.com/" + githubPath;
+            String mirrorUrl = "https://mirror.ghproxy.com/https://github.com/" + githubPath;
+
+            YesSteveModel.LOGGER.info("Native library resource not found in jar, attempting download from mirror: {}", mirrorUrl);
+            data = downloadLibrary(mirrorUrl);
+            if (data == null) {
+                YesSteveModel.LOGGER.info("Mirror download failed, falling back to direct GitHub URL: {}", downloadUrl);
+                data = downloadLibrary(downloadUrl);
+            }
+            if (data == null) {
+                setUnsatisfiedBuildError();
+                return null;
+            }
+
+        }
 
         writeIfChanged(finalPath, data);
         return finalPath;
     }
+
 
     private static @Nullable TargetPlatform resolvePlatform() {
         boolean isX86_64 = SystemUtils.OS_ARCH.equals("amd64") || SystemUtils.OS_ARCH.equals("x86_64");
@@ -243,4 +290,17 @@ public final class NativeLibLoader {
     public static String getErrorMessage() {
         return lastError != null ? lastError.logMsg : null;
     }
+
+    private static byte[] downloadLibrary(String urlString) {
+        try {
+            java.net.URL url = new java.net.URI(urlString).toURL();
+            try (InputStream is = url.openStream()) {
+                return IOUtils.toByteArray(is);
+            }
+        } catch (Throwable t) {
+            YesSteveModel.LOGGER.error("Failed to download native library from: " + urlString, t);
+            return null;
+        }
+    }
 }
+
