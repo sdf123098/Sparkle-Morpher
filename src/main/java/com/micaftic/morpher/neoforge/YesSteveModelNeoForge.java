@@ -1,7 +1,7 @@
 package com.micaftic.morpher.neoforge;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.gui.ExtraPlayerConfigScreen;
+import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.core.architectury.event.events.common.LifecycleEvent;
 import net.neoforged.api.distmarker.Dist;
@@ -19,7 +19,7 @@ public final class YesSteveModelNeoForge {
         NeoForgeCapabilityTypes.register(modBus);
         NeoForgeEventBridge.register(modBus);
         if (FMLEnvironment.getDist() == Dist.CLIENT) {
-            container.registerExtensionPoint(IConfigScreenFactory.class, (modContainer, parent) -> new ExtraPlayerConfigScreen(parent));
+            container.registerExtensionPoint(IConfigScreenFactory.class, (modContainer, parent) -> ModernPlayerModelScreen.settings(parent));
             NeoForgeClientEventBridge.register(modBus);
         }
         YesSteveModel.init();

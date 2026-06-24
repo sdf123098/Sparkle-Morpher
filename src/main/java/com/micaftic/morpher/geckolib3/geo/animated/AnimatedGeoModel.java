@@ -3,7 +3,7 @@ package com.micaftic.morpher.geckolib3.geo.animated;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidBoneProcessor;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceMap;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceMaps;

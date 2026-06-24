@@ -26,10 +26,6 @@ vec4 linearFog(vec4 inColor, float vd, float fs, float fe, vec4 fc) {
 }
 
 void main() {
-    if (u_alphaMode != 2 && v_cullable > 0.5 && !gl_FrontFacing) {
-        discard;
-    }
-
     vec4 texColor = texture(Sampler0, v_uv);
     if (texColor.a < 0.1) discard;
     if (u_alphaMode == 1 && texColor.a < 0.99) discard;

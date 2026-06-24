@@ -1,6 +1,8 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.renderer.WorldRenderState;
+import com.micaftic.morpher.config.GeneralConfig;
 import com.mojang.blaze3d.opengl.GlSampler;
 import com.mojang.blaze3d.opengl.GlTexture;
 import com.mojang.blaze3d.opengl.GlTextureView;
@@ -12,7 +14,6 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
@@ -64,38 +65,74 @@ public final class GpuRenderPath {
             Identifier textureLocation,
             boolean translucentTexture
     ) {
-        if (!GpuCapability.isAvailable()) return false;
-        if (!BoneSkinShader.ensureCompiled()) return false;
-        if (model.bakedBones == null || model.bakedBones.isEmpty()) return false;
+        long frameId = GpuDebugLog.nextFrame();
+        if (translucentTexture) {
+            GpuDebugLog.verbose("frame={} fallback: translucent texture={}", frameId, textureLocation);
+            return false;
+        }
+        if (!GpuCapability.isAvailable()) {
+            GpuDebugLog.warn("frame={} fallback: GPU unavailable reason={}", frameId, GpuCapability.getReason());
+            return false;
+        }
+        if (!BoneSkinShader.ensureCompiled()) {
+            GpuDebugLog.warn("frame={} fallback: BoneSkinShader compile unavailable", frameId);
+            return false;
+        }
+        if (model.bakedBones == null || model.bakedBones.isEmpty()) {
+            GpuDebugLog.verbose("frame={} fallback: no baked bones texture={}", frameId, textureLocation);
+            return false;
+        }
         stateCache.invalidate();
 
         if (model.gpuMeshHandle == 0) {
+            GpuDebugLog.info("frame={} building mesh bones={} texture={}", frameId, model.bakedBones.size(), textureLocation);
             GpuMesh mesh = GpuMeshBuilder.build(model);
-            if (mesh == null) return false;
+            if (mesh == null) {
+                GpuDebugLog.warn("frame={} fallback: mesh build returned null texture={}", frameId, textureLocation);
+                return false;
+            }
             model.gpuMeshHandle = encodeMeshRef(mesh);
         }
         GpuMesh mesh = decodeMeshRef(model.gpuMeshHandle);
-        if (mesh == null) return false;
+        if (mesh == null) {
+            GpuDebugLog.warn("frame={} fallback: mesh ref missing ref={} texture={}", frameId, model.gpuMeshHandle, textureLocation);
+            return false;
+        }
 
         int drawCount = mesh.indexDrawCount(renderPartMask);
-        if (drawCount <= 0 && (renderPartMask == 0 || renderPartMask == 3 || mesh.partMask3Count <= 0)) return false;
+        if (drawCount <= 0 && (renderPartMask == 0 || renderPartMask == 3 || mesh.partMask3Count <= 0)) {
+            GpuDebugLog.warn("frame={} fallback: drawCount={} partMask={} meshIndices={} pm1={} pm2={} pm3={}",
+                    frameId, drawCount, renderPartMask, mesh.indexCount, mesh.partMask1Count, mesh.partMask2Count, mesh.partMask3Count);
+            return false;
+        }
 
         Matrix4f rootPose = pose.pose();
         Matrix3f rootNormal = pose.normal();
-        Matrix4f projMat = projMVScratch.identity();
-
-        Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
-        camera.getViewRotationProjectionMatrix(projMat);
+        Matrix4f projMat = projMVScratch;
+        if (!WorldRenderState.getProjectionMatrix(projMat)) {
+            GpuDebugLog.warn("frame={} fallback: missing world projection matrix texture={}", frameId, textureLocation);
+            return false;
+        }
         projMat.get(projScratch);
 
         ByteBuffer boneBuf = mesh.perFrameBoneBuffer;
         boneBuf.clear();
 
-        if (!computeBoneMatricesNative(model, mesh, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
-            boneBuf.clear();
-            if (!computeBoneMatrices(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
-                return false;
+        if (GeneralConfig.safeGet(GeneralConfig.USE_NATIVE_SIMD_RENDERER, false)) {
+            if (!computeBoneMatricesNative(model, mesh, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
+                GpuDebugLog.warn("frame={} native bone matrices failed; using Java fallback bones={} meshPointer={} boneParamsLen={}",
+                        frameId, model.bakedBones.size(), mesh.pointer, boneParams == null ? -1 : boneParams.length);
+                boneBuf.clear();
+                if (!computeBoneMatrices(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
+                    GpuDebugLog.warn("frame={} fallback: Java bone matrices failed bones={} boneParamsLen={}",
+                            frameId, model.bakedBones.size(), boneParams == null ? -1 : boneParams.length);
+                    return false;
+                }
             }
+        } else if (!computeBoneMatrices(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
+            GpuDebugLog.warn("frame={} fallback: Java bone matrices failed bones={} boneParamsLen={}",
+                    frameId, model.bakedBones.size(), boneParams == null ? -1 : boneParams.length);
+            return false;
         }
         boneBuf.position(0);
         boneBuf.limit(mesh.boneCount * 144);
@@ -108,6 +145,8 @@ public final class GpuRenderPath {
         int clampSamplerId = resolveClampSamplerId();
         TextureBinding lightmapTexture = resolveLightmapTexture(mc);
         if (!modelTexture.isValid() || modelSamplerId == 0 || !overlayTexture.isValid() || clampSamplerId == 0 || !lightmapTexture.isValid()) {
+            GpuDebugLog.warn("frame={} fallback: invalid texture binding modelTex={} modelSampler={} overlayTex={} clampSampler={} lightmapTex={} texture={}",
+                    frameId, modelTexture.isValid(), modelSamplerId, overlayTexture.isValid(), clampSamplerId, lightmapTexture.isValid(), textureLocation);
             return false;
         }
 
@@ -158,24 +197,38 @@ public final class GpuRenderPath {
 
         GlStateManager._glBindVertexArray(mesh.vao);
 
-        if (BoneSkinShader.locAlphaMode() >= 0) GL20.glUniform1i(BoneSkinShader.locAlphaMode(), 1);
+        int alphaMode = 1;
+        if (BoneSkinShader.locAlphaMode() >= 0) GL20.glUniform1i(BoneSkinShader.locAlphaMode(), alphaMode);
+        GpuDebugLog.verbose("frame={} draw texture={} translucent={} alphaMode={} partMask={} drawCount={} part3Extra={} vertices={} indices={} proj00={} proj11={} proj22={} root30={} root31={} root32={}",
+                frameId, textureLocation, translucentTexture, alphaMode, renderPartMask, drawCount,
+                (renderPartMask == 1 || renderPartMask == 2) ? mesh.partMask3Count : 0,
+                mesh.vertexCount, mesh.indexCount,
+                projScratch[0], projScratch[5], projScratch[10],
+                rootPose.m30(), rootPose.m31(), rootPose.m32());
         drawMeshParts(mesh, renderPartMask);
-
-        if (translucentTexture) {
-            GlStateManager._enableBlend();
-            GlStateManager._blendFuncSeparate(770, 771, 1, 0);
-            if (BoneSkinShader.locAlphaMode() >= 0) GL20.glUniform1i(BoneSkinShader.locAlphaMode(), 2);
-            drawMeshParts(mesh, renderPartMask);
-            GlStateManager._disableBlend();
-        }
+        GpuDebugLog.glError("draw frame=" + frameId);
 
         stateCache.bindSsboBase(BoneSkinShader.ssbo, 0);
         stateCache.bindSsbo(0);
         stateCache.useProgram(0);
 
         GlStateManager._glBindVertexArray(0);
+        restoreRenderState();
+        GpuDebugLog.glError("restore frame=" + frameId);
 
         return true;
+    }
+
+    private static void restoreRenderState() {
+        stateCache.restoreTextureParameters();
+        GL33.glBindSampler(0, 0);
+        GL33.glBindSampler(1, 0);
+        GL33.glBindSampler(2, 0);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0);
+        GlStateManager._disableBlend();
+        GlStateManager._enableCull();
+        GlStateManager._enableDepthTest();
+        GlStateManager._depthMask(true);
     }
 
     private static void drawMeshParts(GpuMesh mesh, int renderPartMask) {
@@ -218,7 +271,8 @@ public final class GpuRenderPath {
         try {
             GeoModel.nComputeBoneMatrices(mesh.pointer, rootPoseScratch, rootNormalScratch, boneParams, packedLight, out);
             return true;
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            GpuDebugLog.error("native bone matrix computation threw", t);
             return false;
         }
     }
@@ -492,22 +546,23 @@ public final class GpuRenderPath {
     private static final class RenderStateCache {
         private final int[] textureIds = new int[8];
         private final int[] samplerIds = new int[8];
-        private final int[] textureBaseMip = new int[8];
-        private final int[] textureMaxMip = new int[8];
         private final int[] ssboBases = new int[8];
+        private final int[] savedTextureIds = new int[16];
+        private final int[] savedTextureBaseMip = new int[16];
+        private final int[] savedTextureMaxMip = new int[16];
         private int activeTexture = -1;
         private int ssbo = -1;
         private int program = -1;
+        private int savedTextureCount = 0;
 
         void invalidate() {
             Arrays.fill(textureIds, Integer.MIN_VALUE);
             Arrays.fill(samplerIds, Integer.MIN_VALUE);
-            Arrays.fill(textureBaseMip, Integer.MIN_VALUE);
-            Arrays.fill(textureMaxMip, Integer.MIN_VALUE);
             Arrays.fill(ssboBases, Integer.MIN_VALUE);
             activeTexture = -1;
             ssbo = -1;
             program = -1;
+            savedTextureCount = 0;
         }
 
         void useProgram(int id) {
@@ -540,25 +595,14 @@ public final class GpuRenderPath {
             int unit = Math.max(0, activeTexture - GL13.GL_TEXTURE0);
             if (unit >= textureIds.length) {
                 GlStateManager._bindTexture(texture.id);
-                GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, texture.baseMipLevel);
-                GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, texture.maxMipLevel());
+                applyTextureView(texture);
                 return;
             }
             if (textureIds[unit] != texture.id) {
                 GlStateManager._bindTexture(texture.id);
                 textureIds[unit] = texture.id;
-                textureBaseMip[unit] = Integer.MIN_VALUE;
-                textureMaxMip[unit] = Integer.MIN_VALUE;
             }
-            int maxMip = texture.maxMipLevel();
-            if (textureBaseMip[unit] != texture.baseMipLevel) {
-                GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, texture.baseMipLevel);
-                textureBaseMip[unit] = texture.baseMipLevel;
-            }
-            if (textureMaxMip[unit] != maxMip) {
-                GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, maxMip);
-                textureMaxMip[unit] = maxMip;
-            }
+            applyTextureView(texture);
         }
 
         void activeTexture(int texture) {
@@ -577,6 +621,44 @@ public final class GpuRenderPath {
             if (unit >= 0 && unit < samplerIds.length) {
                 samplerIds[unit] = sampler;
             }
+        }
+
+        private void applyTextureView(TextureBinding texture) {
+            rememberTextureParameters(texture.id);
+            GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, texture.baseMipLevel);
+            GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, texture.maxMipLevel());
+        }
+
+        private void rememberTextureParameters(int textureId) {
+            if (textureId == 0) {
+                return;
+            }
+            for (int i = 0; i < savedTextureCount; i++) {
+                if (savedTextureIds[i] == textureId) {
+                    return;
+                }
+            }
+            if (savedTextureCount >= savedTextureIds.length) {
+                return;
+            }
+            savedTextureIds[savedTextureCount] = textureId;
+            savedTextureBaseMip[savedTextureCount] = GL11.glGetTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL);
+            savedTextureMaxMip[savedTextureCount] = GL11.glGetTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL);
+            savedTextureCount++;
+        }
+
+        void restoreTextureParameters() {
+            if (savedTextureCount <= 0) {
+                return;
+            }
+            GlStateManager._activeTexture(GL13.GL_TEXTURE0);
+            for (int i = 0; i < savedTextureCount; i++) {
+                GlStateManager._bindTexture(savedTextureIds[i]);
+                GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, savedTextureBaseMip[i]);
+                GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, savedTextureMaxMip[i]);
+                savedTextureIds[i] = 0;
+            }
+            savedTextureCount = 0;
         }
     }
 

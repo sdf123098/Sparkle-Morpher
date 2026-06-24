@@ -6,12 +6,19 @@ plugins {
 group = mod_group_id
 version = mod_version
 
+def isCurseForgeDist = providers.gradleProperty("dist")
+        .map { it.equalsIgnoreCase("curseforge") }
+        .orElse(false)
+        .get()
+
 base {
     archivesName = "sparkle-morpher-${project.version}-neo26.1.x"
 }
 
 tasks.named("jar") {
-    archiveFileName = "sparkle-morpher-${project.version}-neo26.1.x.jar"
+    archiveFileName = isCurseForgeDist
+            ? "sparkle-morpher-${project.version}-neo26.1.x-curseforge.jar"
+            : "sparkle-morpher-${project.version}-neo26.1.x.jar"
 }
 
 repositories {
@@ -86,6 +93,19 @@ sourceSets.main.resources {
     srcDir "src/generated/resources"
 }
 
+if (isCurseForgeDist) {
+    tasks.named('compileJava', JavaCompile) {
+        source = files(
+                fileTree('src/main/java') {
+                    exclude 'com/micaftic/morpher/NativeLibLoader.java'
+                    exclude 'com/ysm/parser/YSMParser.java'
+                    exclude 'com/ysm/parser/YSMNative.java'
+                },
+                fileTree('src/curseforge/java')
+        )
+    }
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.release = 25
     options.encoding = "UTF-8"
@@ -101,6 +121,7 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 processResources {
+    filteringCharset = 'UTF-8'
     def replaceProperties = [
             minecraft_version: minecraft_version,
             neo_version      : neo_version,
@@ -116,7 +137,17 @@ processResources {
     filesMatching(["META-INF/neoforge.mods.toml"]) {
         expand replaceProperties
     }
+
+    if (isCurseForgeDist) {
+        exclude 'natives/**'
+        exclude '**/*.dll'
+        exclude '**/*.so'
+        exclude '**/*.dylib'
+        exclude '**/*.jnilib'
+        exclude '**/*.exe'
+    }
 }
+
 
 dependencies {
     // zstd-jni dependency removed: project now uses YSM native → pure-Java ZstdUtil → raw-frame fallback chain.

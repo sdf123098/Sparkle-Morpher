@@ -159,6 +159,13 @@ public final class ModelPanelFileActions {
         return Component.translatable(deleteModels ? "gui.sparkle_morpher.model_select.category_deleted" : "gui.sparkle_morpher.model_select.category_deleted_keep_models", safeCategory, deleted);
     }
 
+    public static List<String> listCategories() {
+        List<String> categories = new ArrayList<>();
+        collectCategories(ServerModelManager.CUSTOM, categories);
+        collectCategories(ServerModelManager.AUTH, categories);
+        return categories.stream().distinct().sorted().toList();
+    }
+
     private static Optional<Path> findManageableSource(String modelId) {
         for (Path root : List.of(ServerModelManager.CUSTOM, ServerModelManager.AUTH)) {
             Optional<Path> found = findSource(root, modelId);
@@ -180,6 +187,19 @@ public final class ModelPanelFileActions {
             }
         }
         return Optional.empty();
+    }
+
+    private static void collectCategories(Path root, List<String> categories) {
+        if (!Files.isDirectory(root)) {
+            return;
+        }
+        try (Stream<Path> stream = Files.walk(root)) {
+            stream.filter(path -> !path.equals(root) && Files.isDirectory(path))
+                    .map(path -> root.relativize(path).toString().replace('\\', '/'))
+                    .filter(path -> !path.isBlank())
+                    .forEach(categories::add);
+        } catch (IOException ignored) {
+        }
     }
 
     private static void deletePath(Path path) throws IOException {

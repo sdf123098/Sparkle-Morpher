@@ -32,6 +32,8 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue USE_GPU_RENDERER;
 
+    public static ModConfigSpec.BooleanValue USE_NATIVE_SIMD_RENDERER;
+
     public static ModConfigSpec.BooleanValue MODEL_MEMORY_PROFILER;
 
     public static ModConfigSpec.BooleanValue MODEL_IMPORT_PERFORMANCE_LOG;
@@ -53,6 +55,10 @@ public class GeneralConfig {
     public static ModConfigSpec.BooleanValue RESOURCE_STATION_MONITOR_LOG;
 
     public static ModConfigSpec.BooleanValue NETWORK_ONLINE_DEBUG_LOG;
+
+    public static ModConfigSpec.BooleanValue GPU_DEBUG_LOG;
+
+    public static ModConfigSpec.BooleanValue GPU_DEBUG_VERBOSE_LOG;
 
     public static ModConfigSpec.IntValue MAX_CACHED_GPU_MODELS;
 
@@ -107,6 +113,8 @@ public class GeneralConfig {
         USE_COMPATIBILITY_RENDERER = builder.define("UseCompatibilityRenderer", true);
         builder.comment("Test renderer.");
         USE_GPU_RENDERER = builder.define("UseGpuRenderer", false);
+        builder.comment("Use OpenYSM native SIMD model rendering. Disabled by default on 26.1.2 because the current native renderer has different bone visibility semantics than the Java path.");
+        USE_NATIVE_SIMD_RENDERER = builder.define("UseNativeSimdRenderer", false);
         builder.comment("Render ysmGlow bones with normal entity lighting while a shader pack is active.");
         DISABLE_MODEL_GLOW_IN_SHADERPACK = builder.define("DisableModelGlowInShaderpack", true);
         ROULETTE_CONTENT_MODE = builder.defineEnum("RouletteContentMode", RouletteContentMode.ORIGINAL);
@@ -144,6 +152,10 @@ public class GeneralConfig {
         RESOURCE_STATION_MONITOR_LOG = builder.define("ResourceStationMonitorLog", false);
         builder.comment("Print detailed client/server online model sync diagnostics. Default off.");
         NETWORK_ONLINE_DEBUG_LOG = builder.define("NetworkOnlineDebugLog", false);
+        builder.comment("Print [SM-GPU] diagnostics for GPU renderer path selection, mesh build, draw counts, and GL errors. Intended for diagnostics only.");
+        GPU_DEBUG_LOG = builder.define("GpuDebugLog", false);
+        builder.comment("Print verbose per-draw [SM-GPU] diagnostics. Requires GpuDebugLog and may be noisy.");
+        GPU_DEBUG_VERBOSE_LOG = builder.define("GpuDebugVerboseLog", false);
         builder.comment("Maximum client models allowed to keep GPU/native render caches. 0 disables LRU unloading.");
         MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
         builder.comment("Minimum idle time before an unused client model GPU/native cache can be unloaded by LRU.");

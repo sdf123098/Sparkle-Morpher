@@ -1,12 +1,12 @@
 
 
-package com.micaftic.morpher.geckolib3.geo;
+package com.elfmcys.yesstevemodel.geckolib3.geo;
 
 import com.micaftic.morpher.NativeLibLoader;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.util.log.ChatLogger;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -18,6 +18,7 @@ import org.joml.Vector4f;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.core.compat.optifine.OptiFineDetector;
 import com.micaftic.morpher.core.gpu.GpuCapability;
+import com.micaftic.morpher.core.gpu.GpuDebugLog;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import com.micaftic.morpher.core.gpu.IrisRenderPath;
 
@@ -50,7 +51,13 @@ public class NativeModelRenderer {
 
         // Submit-based world renders must keep the normal geometry path so the
         // entity still reaches the feature/shadow pipeline.
-        boolean useGpuRenderer = allowDirectGpuRenderer && !disableGlow && textureLocation != null && SubmitRenderContext.get() == null && ModelPreviewRenderer.isWorldRender() && !isPreview && !ModelPreviewRenderer.isFirstPerson() && NativeLibLoader.isLoaded() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get() && GeneralConfig.USE_GPU_RENDERER.get();
+        boolean translucentTexture = model.isTranslucentTexture(textureIndex);
+        boolean useGpuRenderer = allowDirectGpuRenderer && !translucentTexture && !disableGlow && textureLocation != null && SubmitRenderContext.get() == null && ModelPreviewRenderer.isWorldRender() && !isPreview && !ModelPreviewRenderer.isFirstPerson() && NativeLibLoader.isLoaded() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get() && GeneralConfig.USE_GPU_RENDERER.get();
+        boolean useNativeSimdRenderer = GeneralConfig.safeGet(GeneralConfig.USE_NATIVE_SIMD_RENDERER, false);
+        GpuDebugLog.verbose("entry texture={} allowGpu={} useGpu={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdCfg={} nativeLoaded={}",
+                textureLocation, allowDirectGpuRenderer, useGpuRenderer, translucentTexture, disableGlow, shaderPackInUse,
+                isPreview, ModelPreviewRenderer.isFirstPerson(), SubmitRenderContext.get() != null, ModelPreviewRenderer.isWorldRender(),
+                GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), GeneralConfig.USE_GPU_RENDERER.get(), useNativeSimdRenderer, NativeLibLoader.isLoaded());
         if (useGpuRenderer) {
             if (!GpuCapability.isAvailable()) {
                 ChatLogger.INSTANCE.logFormatted("Disabled GPU renderer for: " + GpuCapability.getReason());
@@ -58,16 +65,21 @@ public class NativeModelRenderer {
                 GeneralConfig.USE_GPU_RENDERER.save();
             } else if (shaderPackInUse) {
                 if (IrisRenderPath.tryRender(model, pose, boneParams, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation)) {
+                    GpuDebugLog.verbose("entry rendered through IrisRenderPath texture={}", textureLocation);
                     return;
                 }
+                GpuDebugLog.verbose("entry IrisRenderPath fallback texture={}", textureLocation);
             } else {
-                if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, model.isTranslucentTexture(textureIndex))) {
+                if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
+                    GpuDebugLog.verbose("entry rendered through GpuRenderPath texture={}", textureLocation);
                     return;
                 }
+                GpuDebugLog.verbose("entry GpuRenderPath fallback texture={}", textureLocation);
             }
         }
 
-        if (!isPreview && NativeLibLoader.isLoaded() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get() && !disableGlow) { // WIP: SIMD MODEL RENDER
+        if (useNativeSimdRenderer && !isPreview && !ModelPreviewRenderer.isFirstPerson() && !translucentTexture && NativeLibLoader.isLoaded() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get() && !disableGlow) { // WIP: SIMD MODEL RENDER
+            GpuDebugLog.verbose("entry rendered through native SIMD texture={} partMask={}", textureLocation, renderPartMask);
             nativeRenderModel(
                     buffer,
                     pose,
@@ -84,6 +96,9 @@ public class NativeModelRenderer {
                     isPreview
             );
         } else {
+            GpuDebugLog.verbose("entry rendered through Java model path texture={} nativeSimdCfg={} translucent={} preview={} firstPerson={} compat={} disableGlow={}",
+                    textureLocation, useNativeSimdRenderer, translucentTexture, isPreview, ModelPreviewRenderer.isFirstPerson(),
+                    GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), disableGlow);
             renderModel(
                     buffer,
                     pose,

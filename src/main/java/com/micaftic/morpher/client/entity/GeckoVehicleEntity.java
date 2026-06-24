@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.geckolib3.core.controller.controllers.VehicleAnimationController;
 import com.micaftic.morpher.client.model.VehicleModelBundle;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.client.entity.VehicleRotationController;
 import com.micaftic.morpher.client.model.ModelAssembly;

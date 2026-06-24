@@ -3,6 +3,7 @@ package com.micaftic.morpher.mixin.client;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.entity.EntityRenderCache;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.client.renderer.WorldRenderState;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import net.minecraft.client.DeltaTracker;
@@ -21,6 +22,7 @@ public class WorldRendererMixin {
     @Inject(method = {"renderLevel"}, at = @At("HEAD"))
     private void renderLevelPre(GraphicsResourceAllocator allocator, DeltaTracker deltaTracker, boolean renderBlockOutline, CameraRenderState cameraState, Matrix4fc projectionMatrix, GpuBufferSlice fogBuffer, Vector4f fogColor, boolean renderSky, ChunkSectionsToRender chunkSectionsToRender, CallbackInfo ci) {
         if (YesSteveModel.isAvailable()) {
+            WorldRenderState.begin(projectionMatrix);
             ModelPreviewRenderer.setWorldRenderMode(true);
             EntityRenderCache.tick(deltaTracker.getGameTimeDeltaPartialTick(false));
         }
@@ -28,6 +30,7 @@ public class WorldRendererMixin {
 
     @Inject(method = {"renderLevel"}, at = @At("RETURN"))
     private void renderLevelPost(GraphicsResourceAllocator allocator, DeltaTracker deltaTracker, boolean renderBlockOutline, CameraRenderState cameraState, Matrix4fc projectionMatrix, GpuBufferSlice fogBuffer, Vector4f fogColor, boolean renderSky, ChunkSectionsToRender chunkSectionsToRender, CallbackInfo ci) {
+        WorldRenderState.end();
         if (YesSteveModel.isAvailable()) {
             EntityRenderCache.clear();
             ModelPreviewRenderer.setWorldRenderMode(false);

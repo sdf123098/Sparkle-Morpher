@@ -16,7 +16,7 @@ import com.micaftic.morpher.geckolib3.file.AnimationControllerFile;
 import com.micaftic.morpher.geckolib3.file.AnimationFile;
 import com.micaftic.morpher.geckolib3.file.ProjectileModelFiles;
 import com.micaftic.morpher.geckolib3.file.VehicleModelFiles;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.util.FileTypeUtil;
 import it.unimi.dsi.fastutil.objects.*;

@@ -1,4 +1,5 @@
 package com.micaftic.morpher.geckolib3.geo;
+import com.elfmcys.yesstevemodel.geckolib3.geo.NativeModelRenderer;
 
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
@@ -36,6 +37,7 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
 
     default void renderWithBoneAndRenderType(AnimatedGeoModel model, T animatable, float partialTick, RenderType renderType, PoseStack poseStack, @Nullable MultiBufferSource bufferSource, int i, @Nullable VertexConsumer vertexConsumer, int i2, int i3, float f2, float f3, float f4, float f5, Identifier textureLocation) {
         SubmitNodeCollector collector = SubmitRenderContext.get();
+        boolean allowDirectGpuRenderer = !(animatable instanceof GeckoVehicleEntity);
         if (collector != null && vertexConsumer == null) {
             float[] boneParams = model.getMatrixData().clone();
             float[] absPivotData = model.getAbsPivotData().clone();
@@ -44,7 +46,7 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             boolean worldRenderMode = ModelPreviewRenderer.isWorldRender();
             animatable.resetAnimationState();
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                    renderSubmittedGeometry(buffer, pose, model, boneParams, absPivotData, i, i2, i3, f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode, worldRenderMode));
+                    renderSubmittedGeometry(buffer, pose, model, boneParams, absPivotData, i, i2, i3, f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode, worldRenderMode, allowDirectGpuRenderer));
             setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
             return;
         }
@@ -52,12 +54,11 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             vertexConsumer = bufferSource.getBuffer(renderType);
         }
         animatable.resetAnimationState();
-        boolean allowDirectGpuRenderer = !(animatable instanceof GeckoVehicleEntity);
         NativeModelRenderer.renderMesh(vertexConsumer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5, textureLocation, allowDirectGpuRenderer);
         setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
     }
 
-    private static void renderSubmittedGeometry(VertexConsumer buffer, PoseStack.Pose pose, AnimatedGeoModel model, float[] matrixData, float[] absPivotData, int textureIndex, int packedLight, int packedOverlay, float red, float green, float blue, float alpha, Identifier textureLocation, boolean previewMode, boolean extraPlayerMode, boolean worldRenderMode) {
+    private static void renderSubmittedGeometry(VertexConsumer buffer, PoseStack.Pose pose, AnimatedGeoModel model, float[] matrixData, float[] absPivotData, int textureIndex, int packedLight, int packedOverlay, float red, float green, float blue, float alpha, Identifier textureLocation, boolean previewMode, boolean extraPlayerMode, boolean worldRenderMode, boolean allowDirectGpuRenderer) {
         boolean previousPreviewMode = ModelPreviewRenderer.isPreview();
         boolean previousExtraPlayerMode = ModelPreviewRenderer.isExtraPlayer();
         boolean previousWorldRenderMode = ModelPreviewRenderer.isWorldRender();
@@ -65,7 +66,7 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
         ModelPreviewRenderer.setExtraPlayerMode(extraPlayerMode);
         ModelPreviewRenderer.setWorldRenderMode(worldRenderMode);
         try {
-            NativeModelRenderer.renderMesh(buffer, pose, model.getGeoModel(), matrixData, absPivotData, textureIndex, 0, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, false);
+            NativeModelRenderer.renderMesh(buffer, pose, model.getGeoModel(), matrixData, absPivotData, textureIndex, 0, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, allowDirectGpuRenderer);
         } finally {
             ModelPreviewRenderer.setWorldRenderMode(previousWorldRenderMode);
             ModelPreviewRenderer.setExtraPlayerMode(previousExtraPlayerMode);

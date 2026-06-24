@@ -32,16 +32,16 @@ public class PauseScreenButtonBuilder {
         int cx = pauseScreen.width / 2;
 
         Button skinBtn = Button.builder(Component.translatable("gui.sparkle_morpher.skin"), button -> {
-            minecraft.setScreen(new PlayerModelScreen());
+            minecraft.setScreen(new ModernPlayerModelScreen());
         }).bounds(cx - 94, baseY, 138, 30).build();
         skinBtn.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.player_model.desc")));
 
-        Button renderBtn = Button.builder(Component.literal("🔧"), button -> {
+        Button renderBtn = Button.builder(Component.literal("棣冩暋"), button -> {
             minecraft.setScreen(new ExtraPlayerRenderScreen());
         }).bounds(cx - 145, baseY, 50, 30).build();
         renderBtn.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.open_extra_player_render.desc")));
 
-        Button rouletteBtn = Button.builder(Component.literal("😄"), button -> {
+        Button rouletteBtn = Button.builder(Component.literal("棣冩"), button -> {
             if (minecraft.player == null) return;
             PlayerCapability.get(minecraft.player).ifPresent(cap -> {
                 String modelId = cap.getModelId();
@@ -54,7 +54,7 @@ public class PauseScreenButtonBuilder {
         rouletteBtn.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.animation_roulette.desc")));
 
         Button configBtn = Button.builder(Component.literal("sparkle"), button -> {
-            minecraft.setScreen(new ExtraPlayerConfigScreen(pauseScreen));
+            minecraft.setScreen(ModernPlayerModelScreen.settings());
         }).bounds(cx + 96, baseY, 50, 30).build();
         configBtn.setTooltip(Tooltip.create(Component.translatable("gui.sparkle_morpher.config")));
 

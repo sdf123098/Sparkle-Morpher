@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.input;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.gui.ExtraPlayerConfigScreen;
+import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
 import com.micaftic.morpher.client.gui.PlayerModelScreen;
 import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.network.NetworkHandler;
@@ -50,9 +50,9 @@ public final class PlayerModelToggleKey {
             return true;
         }
         if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) {
-            minecraft.setScreen(new ExtraPlayerConfigScreen(null));
+            minecraft.setScreen(ModernPlayerModelScreen.settings());
         } else {
-            minecraft.setScreen(new PlayerModelScreen());
+            minecraft.setScreen(new ModernPlayerModelScreen());
         }
         return true;
     }
