@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.audio.*;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;

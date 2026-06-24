@@ -5,7 +5,7 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;

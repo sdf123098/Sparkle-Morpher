@@ -1,11 +1,9 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import org.lwjgl.opengl.*;
-import org.joml.Vector2f;
-import org.joml.Vector3f;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -18,14 +16,23 @@ public final class GpuMeshBuilder {
         int[] meta = new int[9];
         long handle = GeoModel.nBuildGpuMesh(modelBuf, meta);
         if (handle == 0) {
+            GpuDebugLog.warn("mesh build failed: native handle is 0 bones={}", model.bakedBones.size());
             return null;
         }
+        int vertexCount = meta[0];
+        int indexCount = meta[1];
+        int boneCount = meta[2];
 
-        MeshBuffers meshBuffers = buildMeshBuffers(model);
-        if (meshBuffers == null) {
+        ByteBuffer vbuf = GeoModel.nGetGpuMeshVertexBuffer(handle);
+        ByteBuffer ibuf = GeoModel.nGetGpuMeshIndexBuffer(handle);
+        if (vbuf == null || ibuf == null || vertexCount <= 0 || indexCount <= 0 || boneCount <= 0) {
+            GpuDebugLog.warn("mesh build failed: invalid buffers/meta vertices={} indices={} bones={} vbuf={} ibuf={}",
+                    vertexCount, indexCount, boneCount, vbuf != null, ibuf != null);
             GeoModel.nFreeGpuMesh(handle);
             return null;
         }
+        vbuf.order(ByteOrder.nativeOrder());
+        ibuf.order(ByteOrder.nativeOrder());
 
         int vao = GL30.glGenVertexArrays();
         int vbo = GlStateManager._glGenBuffers();
@@ -34,9 +41,9 @@ public final class GpuMeshBuilder {
 
         GL30.glBindVertexArray(vao);
         GlStateManager._glBindBuffer(GL15.GL_ARRAY_BUFFER, vbo);
-        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, meshBuffers.vertices, GL15.GL_STATIC_DRAW);
+        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, vbuf, GL15.GL_STATIC_DRAW);
         GlStateManager._glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, ibo);
-        GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, meshBuffers.indices, GL15.GL_STATIC_DRAW);
+        GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, ibuf, GL15.GL_STATIC_DRAW);
 
         GL20.glEnableVertexAttribArray(0);
         GL20.glVertexAttribPointer(0, 3, GL15.GL_FLOAT, false, 32, 0L);
@@ -55,152 +62,15 @@ public final class GpuMeshBuilder {
         GlStateManager._glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, 0);
 
         GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, ssbo);
-        GL45.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, (long) meshBuffers.boneCount * 144, GL15.GL_DYNAMIC_DRAW);
+        GL45.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, (long) boneCount * 144, GL15.GL_DYNAMIC_DRAW);
         GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
         GeoModel.nReleaseGpuMeshScratch(handle);
 
-        return new GpuMesh(handle, vao, vbo, ibo, ssbo, meshBuffers.vertexCount, meshBuffers.indexCount, meshBuffers.boneCount, meshBuffers.partMask1Start, meshBuffers.partMask1Count, meshBuffers.partMask2Start, meshBuffers.partMask2Count, meshBuffers.partMask3Start, meshBuffers.partMask3Count);
-    }
+        GpuDebugLog.info("mesh built handle={} vertices={} indices={} bones={} pm1={}+{} pm2={}+{} pm3={}+{}",
+                handle, vertexCount, indexCount, boneCount, meta[3], meta[4], meta[5], meta[6], meta[7], meta[8]);
+        GpuDebugLog.glError("mesh build");
 
-    private static MeshBuffers buildMeshBuffers(GeoModel model) {
-        int totalQuads = 0;
-        for (GeoModel.BakedBone bone : model.bakedBones) {
-            for (GeoModel.BakedCube cube : bone.cubes) {
-                totalQuads += cube.quads.size();
-            }
-        }
-        if (totalQuads <= 0) {
-            return null;
-        }
-
-        int vertexCount = totalQuads * 4;
-        int indexCount = totalQuads * 6;
-        ByteBuffer vertices = ByteBuffer.allocateDirect(vertexCount * 32).order(ByteOrder.nativeOrder());
-        int[] quadBases = new int[totalQuads];
-        int[] quadMasks = new int[totalQuads];
-        int[] partIndexCounts = new int[4];
-
-        int quadIndex = 0;
-        int vertexIndex = 0;
-        for (int boneIdx = 0; boneIdx < model.bakedBones.size(); boneIdx++) {
-            GeoModel.BakedBone bone = model.bakedBones.get(boneIdx);
-            int partMask = normalizePartMask(bone.partMask);
-            for (GeoModel.BakedCube cube : bone.cubes) {
-                for (GeoModel.BakedQuad quad : cube.quads) {
-                    quadBases[quadIndex] = vertexIndex;
-                    quadMasks[quadIndex] = partMask;
-                    partIndexCounts[partMask] += 6;
-                    for (int v = 0; v < 4; v++) {
-                        putVertex(vertices, quad.positions[v], quad.uvs[v], quad.normal, boneIdx, cube.cullable);
-                    }
-                    quadIndex++;
-                    vertexIndex += 4;
-                }
-            }
-        }
-        vertices.flip();
-
-        ByteBuffer indices = ByteBuffer.allocateDirect(indexCount * Integer.BYTES).order(ByteOrder.nativeOrder());
-        int partMask1Start = partIndexCounts[0];
-        int partMask2Start = partMask1Start + partIndexCounts[1];
-        int partMask3Start = partMask2Start + partIndexCounts[2];
-
-        putIndicesForPart(indices, quadBases, quadMasks, 0);
-        putIndicesForPart(indices, quadBases, quadMasks, 1);
-        putIndicesForPart(indices, quadBases, quadMasks, 2);
-        putIndicesForPart(indices, quadBases, quadMasks, 3);
-        indices.flip();
-
-        return new MeshBuffers(
-                vertices,
-                indices,
-                vertexCount,
-                indexCount,
-                model.bakedBones.size(),
-                partMask1Start,
-                partIndexCounts[1],
-                partMask2Start,
-                partIndexCounts[2],
-                partMask3Start,
-                partIndexCounts[3]
-        );
-    }
-
-    private static int normalizePartMask(int partMask) {
-        return partMask >= 1 && partMask <= 3 ? partMask : 0;
-    }
-
-    private static void putVertex(ByteBuffer vertices, Vector3f position, Vector2f uv, Vector3f normal, int boneIdx, boolean cullable) {
-        vertices.putFloat(position.x());
-        vertices.putFloat(position.y());
-        vertices.putFloat(position.z());
-        vertices.putFloat(uv.x());
-        vertices.putFloat(uv.y());
-        vertices.putInt(packNormal(normal));
-        vertices.putShort((short) boneIdx);
-        vertices.put((byte) 0);
-        vertices.put((byte) (cullable ? 1 : 0));
-        vertices.putInt(0);
-    }
-
-    private static int packNormal(Vector3f normal) {
-        int x = packSigned10(normal.x());
-        int y = packSigned10(normal.y());
-        int z = packSigned10(normal.z());
-        return (x & 0x3FF) | ((y & 0x3FF) << 10) | ((z & 0x3FF) << 20);
-    }
-
-    private static int packSigned10(float value) {
-        if (!Float.isFinite(value)) {
-            return 0;
-        }
-        int packed = Math.round(Math.max(-1.0f, Math.min(1.0f, value)) * 511.0f);
-        return Math.max(-512, Math.min(511, packed));
-    }
-
-    private static void putIndicesForPart(ByteBuffer indices, int[] quadBases, int[] quadMasks, int partMask) {
-        for (int i = 0; i < quadBases.length; i++) {
-            if (quadMasks[i] == partMask) {
-                putQuadIndices(indices, quadBases[i]);
-            }
-        }
-    }
-
-    private static void putQuadIndices(ByteBuffer indices, int base) {
-        indices.putInt(base);
-        indices.putInt(base + 1);
-        indices.putInt(base + 2);
-        indices.putInt(base + 2);
-        indices.putInt(base + 3);
-        indices.putInt(base);
-    }
-
-    private static final class MeshBuffers {
-        final ByteBuffer vertices;
-        final ByteBuffer indices;
-        final int vertexCount;
-        final int indexCount;
-        final int boneCount;
-        final int partMask1Start;
-        final int partMask1Count;
-        final int partMask2Start;
-        final int partMask2Count;
-        final int partMask3Start;
-        final int partMask3Count;
-
-        MeshBuffers(ByteBuffer vertices, ByteBuffer indices, int vertexCount, int indexCount, int boneCount, int partMask1Start, int partMask1Count, int partMask2Start, int partMask2Count, int partMask3Start, int partMask3Count) {
-            this.vertices = vertices;
-            this.indices = indices;
-            this.vertexCount = vertexCount;
-            this.indexCount = indexCount;
-            this.boneCount = boneCount;
-            this.partMask1Start = partMask1Start;
-            this.partMask1Count = partMask1Count;
-            this.partMask2Start = partMask2Start;
-            this.partMask2Count = partMask2Count;
-            this.partMask3Start = partMask3Start;
-            this.partMask3Count = partMask3Count;
-        }
+        return new GpuMesh(handle, vao, vbo, ibo, ssbo, vertexCount, indexCount, boneCount, meta[3], meta[4], meta[5], meta[6], meta[7], meta[8]);
     }
 
     private static ByteBuffer serializeModel(GeoModel model) {

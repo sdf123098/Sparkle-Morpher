@@ -7,7 +7,7 @@ import com.micaftic.morpher.audio.IAudioStreamFactory;
 import com.micaftic.morpher.client.event.ClientTickEvent;
 import com.micaftic.morpher.geckolib3.core.enums.AnimationState;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.geckolib3.core.manager.AnimationData;
 import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;

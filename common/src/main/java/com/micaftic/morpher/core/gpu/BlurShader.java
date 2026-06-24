@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.util.log.ChatLogger;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.opengl.GlStateManager;
+import com.mojang.blaze3d.opengl.GlTexture;
 
 import net.minecraft.client.Minecraft;
 import org.lwjgl.opengl.*;
@@ -32,6 +33,7 @@ public final class BlurShader {
     private static int captureTextureId = 0;
     private static int captureWidth = 0;
     private static int captureHeight = 0;
+    private static int readFbo = 0;
     private static long lastCaptureFrame = -1;
 
     private BlurShader() {
@@ -163,21 +165,39 @@ public final class BlurShader {
         return captureHeight;
     }
 
-    public static void captureScreen(long frameKey) {
-        if (frameKey == lastCaptureFrame && frameKey >= 0) return;
-        lastCaptureFrame = frameKey;
-        // MC 26.x: RenderTarget moved to com.mojang.blaze3d.pipeline, field names changed
-        Object main = Minecraft.getInstance().getMainRenderTarget();
-        /* int w = main.viewWidth;
-        int h = main.viewHeight;
-        ensureCaptureTexture(w, h);
+    public static boolean captureScreen(long frameKey) {
+        if (frameKey == lastCaptureFrame && frameKey >= 0) return captureTextureId != 0;
+        try {
+            RenderTarget main = Minecraft.getInstance().getMainRenderTarget();
+            if (main == null || !(main.getColorTexture() instanceof GlTexture colorTexture)) {
+                return false;
+            }
+            int w = Math.max(1, main.width);
+            int h = Math.max(1, main.height);
+            ensureCaptureTexture(w, h);
 
-        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, main.frameBufferId);
-        GlStateManager._activeTexture(GL13.GL_TEXTURE0);
-        GlStateManager._bindTexture(captureTextureId);
-        GL11.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, w, h);
-        GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
-        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, main.frameBufferId); */
+            if (readFbo == 0) {
+                readFbo = GL30.glGenFramebuffers();
+            }
+            int previousReadFbo = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFbo);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, colorTexture.glId(), 0);
+            if (GL30.glCheckFramebufferStatus(GL30.GL_READ_FRAMEBUFFER) != GL30.GL_FRAMEBUFFER_COMPLETE) {
+                GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previousReadFbo);
+                return false;
+            }
+            GlStateManager._activeTexture(GL13.GL_TEXTURE0);
+            GlStateManager._bindTexture(captureTextureId);
+            GL11.glCopyTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 0, 0, w, h);
+            GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, 0, 0);
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previousReadFbo);
+            lastCaptureFrame = frameKey;
+            return true;
+        } catch (Throwable t) {
+            YesSteveModel.LOGGER.warn("Failed to capture screen for blur; using glass tint fallback.", t);
+            return false;
+        }
     }
 
     private static void ensureCaptureTexture(int w, int h) {

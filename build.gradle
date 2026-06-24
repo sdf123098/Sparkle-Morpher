@@ -3,6 +3,11 @@ plugins {
     id 'com.gradleup.shadow' version '9.0.0-beta4' apply false
 }
 
+ext.isCurseForgeDist = providers.gradleProperty("dist")
+        .map { it.equalsIgnoreCase("curseforge") }
+        .orElse(false)
+        .get()
+
 allprojects {
     group = rootProject.maven_group
     version = rootProject.mod_version
@@ -85,6 +90,19 @@ subprojects {
             mavenJava(MavenPublication) {
                 artifactId = base.archivesName.get()
                 from components.java
+            }
+        }
+    }
+
+    afterEvaluate {
+        tasks.withType(ProcessResources).configureEach {
+            if (rootProject.ext.isCurseForgeDist) {
+                exclude 'natives/**'
+                exclude '**/*.dll'
+                exclude '**/*.so'
+                exclude '**/*.dylib'
+                exclude '**/*.jnilib'
+                exclude '**/*.exe'
             }
         }
     }

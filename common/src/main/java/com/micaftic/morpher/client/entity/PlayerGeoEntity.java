@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.client.animation.condition.ArmorConditions;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;

@@ -36,7 +36,7 @@ public class Minecraft {
     public net.minecraft.client.Options options;
     public boolean isWindowActive() { return true; }
     public net.minecraft.client.particle.ParticleEngine particleEngine;
-    public net.minecraft.client.renderer.RenderTarget getMainRenderTarget() { return new net.minecraft.client.renderer.RenderTarget(); }
+    public com.mojang.blaze3d.pipeline.RenderTarget getMainRenderTarget() { return null; }
     public net.minecraft.client.multiplayer.ClientPacketListener getConnection() { return null; }
     public net.minecraft.client.gui.screens.Overlay getOverlay() { return null; }
     public net.minecraft.world.scores.Scoreboard getScoreboard() { return null; }

@@ -38,7 +38,7 @@ public class DisclaimerScreen extends Screen {
             if (this.checkbox.selected()) {
                 GeneralConfig.DISCLAIMER_SHOW.set(false);
                 GeneralConfig.DISCLAIMER_SHOW.save();
-                Minecraft.getInstance().setScreen(new PlayerModelScreen());
+                Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
             } else {
                 Minecraft.getInstance().setScreen(null);
             }

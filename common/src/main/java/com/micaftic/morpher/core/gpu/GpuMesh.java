@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.micaftic.morpher.util.ModelMemoryProfiler;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import org.lwjgl.opengl.*;
 import org.lwjgl.system.MemoryUtil;

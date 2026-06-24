@@ -81,7 +81,10 @@ public final class BlurStack {
         }
 
         frameCounter++;
-        BlurShader.captureScreen(frameCounter);
+        if (!BlurShader.captureScreen(frameCounter)) {
+            regions.clear();
+            return;
+        }
 
         new Matrix4f().mul(new Matrix4f(), mvpScratch);
         // TODO: mvpScratch.mul(graphics.poseStack.last().pose()); // poseStack removed in MC 26.x GuiGraphicsExtractor
