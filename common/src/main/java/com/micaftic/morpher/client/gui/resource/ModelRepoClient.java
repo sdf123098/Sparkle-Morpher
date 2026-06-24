@@ -188,10 +188,10 @@ public final class ModelRepoClient {
         }
         primaryError = tryListGithubTree(path, config, entries, primaryError, "primary");
         if (entries.isEmpty()) {
-            primaryError = tryListJsDelivrFlat(path, config, entries, primaryError, "fallback");
+            primaryError = tryWalkGithub(path, config, entries, primaryError, "fallback");
         }
         if (entries.isEmpty()) {
-            listGithubFallbacks(path, config, entries, primaryError, false);
+            listGithubArchive(path, config, entries, primaryError);
         }
         monitor(config, "GitHub list complete owner={} repo={} branch={} path={} entries={}", path.owner(), path.repo(), path.branch(), path.path(), entries.size());
         return entries;
@@ -221,6 +221,32 @@ public final class ModelRepoClient {
             return suppress(primaryError, error);
         }
         return primaryError;
+    }
+
+    private static Exception tryWalkGithub(GithubPath path, ResourceStationConfig.State config, List<ModelRepoEntry> entries,
+                                           Exception primaryError, String stage) {
+        try {
+            walkGithub(path.owner(), path.repo(), path.branch(), path.path(), config, entries);
+        } catch (Exception error) {
+            YesSteveModel.LOGGER.warn("[SM] GitHub contents listing failed for {}/{}@{}",
+                    path.owner(), path.repo(), path.branch(), error);
+            monitor(config, "GitHub contents {} failed owner={} repo={} branch={} path={} error={}",
+                    stage, path.owner(), path.repo(), path.branch(), path.path(), error.toString());
+            return suppress(primaryError, error);
+        }
+        return primaryError;
+    }
+
+    private static void listGithubArchive(GithubPath path, ResourceStationConfig.State config, List<ModelRepoEntry> entries,
+                                          Exception primaryError) throws Exception {
+        try {
+            listGithubArchive(path.owner(), path.repo(), path.branch(), path.path(), config, entries);
+        } catch (IOException archiveError) {
+            if (primaryError != null) {
+                archiveError.addSuppressed(primaryError);
+            }
+            throw archiveError;
+        }
     }
 
     private static void listGithubFallbacks(GithubPath path, ResourceStationConfig.State config, List<ModelRepoEntry> entries,

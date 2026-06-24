@@ -8,6 +8,11 @@ architectury {
     minecraft = project.minecraft_version
 }
 
+ext.isCurseForgeDist = providers.gradleProperty("dist")
+        .map { it.equalsIgnoreCase("curseforge") }
+        .orElse(false)
+        .get()
+
 allprojects {
     group = rootProject.maven_group
     version = rootProject.mod_version
@@ -116,8 +121,14 @@ subprojects {
 
     afterEvaluate {
         tasks.withType(ProcessResources).configureEach {
-            exclude '**/windows-*/*.dll'
+            if (rootProject.ext.isCurseForgeDist) {
+                exclude 'natives/**'
+                exclude '**/*.dll'
+                exclude '**/*.so'
+                exclude '**/*.dylib'
+                exclude '**/*.jnilib'
+                exclude '**/*.exe'
+            }
         }
     }
 }
-

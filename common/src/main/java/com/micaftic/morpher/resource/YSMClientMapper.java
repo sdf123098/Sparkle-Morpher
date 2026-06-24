@@ -177,12 +177,7 @@ public class YSMClientMapper {
             return null;
         }
 
-        if (imageFormat == 0) {
-            imageFormat = YSMFolderDeserializer.detectFormat(data);
-            if (imageFormat == 0) {
-                imageFormat = 1;
-            }
-        }
+        imageFormat = resolveImageFormat(data, imageFormat);
 
         try {
             if (imageFormat == -1) {
@@ -226,7 +221,19 @@ public class YSMClientMapper {
         return fallbackData;
     }
 
+    private static int resolveImageFormat(byte[] data, int imageFormat) {
+        if (imageFormat == -1 || data == null || data.length == 0) {
+            return imageFormat;
+        }
+        int detectedFormat = YSMFolderDeserializer.detectFormat(data);
+        if (detectedFormat != 0) {
+            return detectedFormat;
+        }
+        return imageFormat == 0 ? 1 : imageFormat;
+    }
+
     public static byte[] toPng(byte[] data, int imageFormat, int width, int height) {
+        imageFormat = resolveImageFormat(data, imageFormat);
         if (imageFormat == 2) {
             return data;
         }
@@ -244,7 +251,7 @@ public class YSMClientMapper {
             BufferedImage img = decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
             imagesList.add(img);
 
-            byte[] processedData = (rt.imageFormat == 2) ? rt.data : encodeToPng(img, rt.data);
+            byte[] processedData = toPng(rt.data, rt.imageFormat, rt.width, rt.height);
             OuterFileTexture tex = new OuterFileTexture(processedData);
 
             Map<ShadersTextureType, OuterFileTexture> suffixTextures = new LinkedHashMap<>();
@@ -748,7 +755,7 @@ public class YSMClientMapper {
             for(RawYsmModel.RawTexture rt : sub.textures.values()) {
                 BufferedImage img = decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
                 imgList.add(img);
-                byte[] processedData = (rt.imageFormat == 2) ? rt.data : encodeToPng(img, rt.data);
+                byte[] processedData = toPng(rt.data, rt.imageFormat, rt.width, rt.height);
                 if (texture == null) {
                     texture = new OuterFileTexture(processedData);
                 }
@@ -790,7 +797,7 @@ public class YSMClientMapper {
             for(RawYsmModel.RawTexture rt : sub.textures.values()) {
                 BufferedImage img = decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
                 imgList.add(img);
-                byte[] processedData = (rt.imageFormat == 2) ? rt.data : encodeToPng(img, rt.data);
+                byte[] processedData = toPng(rt.data, rt.imageFormat, rt.width, rt.height);
                 if (texture == null) {
                     texture = new OuterFileTexture(processedData);
                 }

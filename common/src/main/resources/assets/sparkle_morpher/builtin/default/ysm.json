@@ -221,9 +221,7 @@
             "texture": [
                 {
                     "uv": "textures/xiduo.png"
-                },
-                "textures/default.png",
-                "textures/blue.png"
+                }
             ]
         },
         "projectiles": [

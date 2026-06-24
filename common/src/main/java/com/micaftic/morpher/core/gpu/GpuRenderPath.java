@@ -146,8 +146,17 @@ public final class GpuRenderPath {
         GlStateManager._glBindVertexArray(0);
 
         mc.gameRenderer.lightTexture().turnOffLightLayer();
+        restoreRenderState();
 
         return true;
+    }
+
+    private static void restoreRenderState() {
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0);
+        RenderSystem.disableBlend();
+        RenderSystem.enableCull();
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(true);
     }
 
     private static void refreshLights() {
