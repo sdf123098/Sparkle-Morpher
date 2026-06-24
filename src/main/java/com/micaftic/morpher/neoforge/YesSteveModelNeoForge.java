@@ -1,7 +1,7 @@
 package com.micaftic.morpher.neoforge;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.gui.ExtraPlayerConfigScreen;
+import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.network.NetworkHandler;
@@ -24,7 +24,7 @@ public final class YesSteveModelNeoForge {
         modContainer.registerConfig(ModConfig.Type.SERVER, ServerConfig.buildSpec());
 
         // Register config screen so the Settings button in the Mods menu works
-        modContainer.registerExtensionPoint(IConfigScreenFactory.class, (mc, parentScreen) -> new ExtraPlayerConfigScreen(null));
+        modContainer.registerExtensionPoint(IConfigScreenFactory.class, (mc, parentScreen) -> ModernPlayerModelScreen.settings(parentScreen));
 
         // Init network channel and register packets early (before any player join events)
         YSMChannelImpl.init(NetworkHandler.CHANNEL_ID, NetworkHandler.VERSION);

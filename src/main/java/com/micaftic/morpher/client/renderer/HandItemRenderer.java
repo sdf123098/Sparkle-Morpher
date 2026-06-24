@@ -5,7 +5,7 @@ import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
 import com.micaftic.morpher.geckolib3.geo.LayerTypeConstants;
-import com.micaftic.morpher.geckolib3.geo.NativeModelRenderer;
+import com.elfmcys.yesstevemodel.geckolib3.geo.NativeModelRenderer;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;

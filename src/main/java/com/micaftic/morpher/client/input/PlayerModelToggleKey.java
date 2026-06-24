@@ -22,8 +22,8 @@ public final class PlayerModelToggleKey {
         if (PlatformAPI.isServer()) return;
         if (InputUtil.isPlayerReady() && event.getAction() == 1 && InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), KEY_MAPPING)) {
             if (!YesSteveModel.isAvailable()) { YesSteveModel.sendUnavailableMessage(); return; }
-            if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) Minecraft.getInstance().setScreen(new ExtraPlayerConfigScreen(null));
-            else Minecraft.getInstance().setScreen(new PlayerModelScreen());
+            if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) Minecraft.getInstance().setScreen(ModernPlayerModelScreen.settings());
+            else Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
         }
     }
 }

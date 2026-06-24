@@ -6,6 +6,11 @@ plugins {
 version = mod_version
 group = maven_group
 
+def isCurseForgeDist = providers.gradleProperty("dist")
+        .map { it.equalsIgnoreCase("curseforge") }
+        .orElse(false)
+        .get()
+
 repositories {
     mavenLocal()
     maven { url = 'https://maven.neoforged.net/releases' }
@@ -14,7 +19,13 @@ repositories {
 }
 
 base {
-    archivesName = archives_name
+    archivesName = "sparkle-morpher-${project.version}-neo1.21.1"
+}
+
+tasks.named("jar") {
+    archiveFileName = isCurseForgeDist
+            ? "sparkle-morpher-${project.version}-neo1.21.1-curseforge.jar"
+            : "sparkle-morpher-${project.version}-neo1.21.1.jar"
 }
 
 neoForge {
@@ -41,6 +52,19 @@ neoForge {
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+if (isCurseForgeDist) {
+    tasks.named('compileJava', JavaCompile) {
+        source = files(
+                fileTree('src/main/java') {
+                    exclude 'com/micaftic/morpher/NativeLibLoader.java'
+                    exclude 'com/ysm/parser/YSMParser.java'
+                    exclude 'com/ysm/parser/YSMNative.java'
+                },
+                fileTree('src/curseforge/java')
+        )
+    }
+}
 
 repositories {
     flatDir { dirs 'libs' }
@@ -73,5 +97,14 @@ processResources {
 
     filesMatching(['META-INF/neoforge.mods.toml']) {
         expand expandProps
+    }
+
+    if (isCurseForgeDist) {
+        exclude 'natives/**'
+        exclude '**/*.dll'
+        exclude '**/*.so'
+        exclude '**/*.dylib'
+        exclude '**/*.jnilib'
+        exclude '**/*.exe'
     }
 }

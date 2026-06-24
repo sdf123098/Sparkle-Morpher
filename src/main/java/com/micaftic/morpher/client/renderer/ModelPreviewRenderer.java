@@ -45,7 +45,7 @@ public final class ModelPreviewRenderer {
 
     private static final float MODEL_PREVIEW_MOUSE_PITCH_DEGREES = 15.0f;
 
-    private static final float MODEL_PREVIEW_MOUSE_DEADZONE = 0.02f;
+    private static final float MODEL_PREVIEW_MOUSE_DEADZONE = 0.08f;
 
     private static final float EXTRA_PLAYER_HEAD_YAW_LIMIT = 85.0f;
 

@@ -37,7 +37,7 @@ public class DisclaimerScreen extends Screen {
         addRenderableWidget(new Button.Builder(Component.translatable("gui.sparkle_morpher.disclaimer.close"), button -> {
             if (this.checkbox.selected()) {
                 GeneralConfig.DISCLAIMER_SHOW.set(false);
-                Minecraft.getInstance().setScreen(new PlayerModelScreen());
+                Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
             } else {
                 Minecraft.getInstance().setScreen(null);
             }

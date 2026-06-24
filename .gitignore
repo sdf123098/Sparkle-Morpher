@@ -1,21 +1,26 @@
-.gradle/
+# Build
 build/
-bin/
+dist/
+out/
+
+# Gradle
+.gradle/
+!gradle-wrapper.jar
+
+# IDE
 .idea/
 *.iml
-run/
-libs/
-*.log
-old/
-_old_default_model/
-HSR_Sparkle/
-HSR_Sparkle.ysm
-.qoder/
+.eclipse/
+.settings/
+.classpath
+.project
+
+# CodeGraph
 .codegraph/
-.work/
-tools/out/
-images/
-Release/
-sparkle-morpher-*.jar
-compile-*.log
-use.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
