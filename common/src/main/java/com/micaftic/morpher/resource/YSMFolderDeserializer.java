@@ -346,6 +346,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 }
             }
         }
+        normalizeDefaultTexture();
 
         if (playerObj.has("animation") && playerObj.get("animation").isJsonObject()) {
             JsonObject animObj = playerObj.getAsJsonObject("animation");
@@ -922,6 +923,14 @@ public class YSMFolderDeserializer implements AutoCloseable {
             String fnName = extractFileName(relativePath);
             String hash = sha256Hex(data);
             model.functionFiles.put(fnName, new RawYsmModel.RawDataFile(hash, data));
+        }
+    }
+
+    private void normalizeDefaultTexture() {
+        if (model.mainEntity.textures.isEmpty()) return;
+        String defaultTexture = model.properties.defaultTexture;
+        if (defaultTexture == null || defaultTexture.isBlank() || !model.mainEntity.textures.containsKey(defaultTexture)) {
+            model.properties.defaultTexture = model.mainEntity.textures.keySet().iterator().next();
         }
     }
 

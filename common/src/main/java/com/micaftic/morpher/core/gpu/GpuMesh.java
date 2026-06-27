@@ -2,6 +2,7 @@ package com.micaftic.morpher.core.gpu;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.mojang.blaze3d.platform.GlStateManager;
 import org.lwjgl.opengl.*;
 import org.lwjgl.system.MemoryUtil;
@@ -22,12 +23,13 @@ public final class GpuMesh {
     public final int partMask2Start, partMask2Count;
     public final int partMask3Start, partMask3Count;
     public final ByteBuffer perFrameBoneBuffer;
+    public final long estimatedBytes;
 
     private int xformVbo = 0;
     private int xformVao = 0;
     private boolean disposed = false;
 
-    GpuMesh(long pointer, int vao, int vbo, int ibo, int boneSsbo, int vertexCount, int indexCount, int boneCount, int pm1s, int pm1c, int pm2s, int pm2c, int pm3s, int pm3c) {
+    GpuMesh(long pointer, int vao, int vbo, int ibo, int boneSsbo, int vertexCount, int indexCount, int boneCount, int pm1s, int pm1c, int pm2s, int pm2c, int pm3s, int pm3c, long estimatedBytes) {
         this.pointer = pointer;
         this.vao = vao;
         this.vbo = vbo;
@@ -42,22 +44,28 @@ public final class GpuMesh {
         this.partMask2Count = pm2c;
         this.partMask3Start = pm3s;
         this.partMask3Count = pm3c;
-        this.perFrameBoneBuffer = MemoryUtil.memAlloc(boneCount * 144).order(ByteOrder.nativeOrder());
+        this.estimatedBytes = estimatedBytes;
+        int boneBufferBytes = boneCount * 144;
+        this.perFrameBoneBuffer = MemoryUtil.memAlloc(boneBufferBytes).order(ByteOrder.nativeOrder());
+        ResourceLifecycleStats.onDirectBufferAllocated(null, boneBufferBytes);
+        ResourceLifecycleStats.onGpuMeshCreated(null, estimatedBytes);
         ModelMemoryProfiler.log("gpu-mesh-created", null);
     }
 
     public int indexOffsetBytes(int renderPartMask) {
-        if (renderPartMask == 0 || renderPartMask == 3) return 0;
+        if (renderPartMask == 0) return 0;
         if (renderPartMask == 1) return partMask1Start * Integer.BYTES;
         if (renderPartMask == 2) return partMask2Start * Integer.BYTES;
+        if (renderPartMask == 3) return partMask3Start * Integer.BYTES;
         return 0;
     }
 
     public int indexDrawCount(int renderPartMask) {
         if (renderPartMask == 0) return indexCount;
-        if (renderPartMask == 3) return indexCount;
-        int self = (renderPartMask == 1) ? partMask1Count : (renderPartMask == 2) ? partMask2Count : 0;
-        return self + partMask3Count;
+        if (renderPartMask == 1) return partMask1Count;
+        if (renderPartMask == 2) return partMask2Count;
+        if (renderPartMask == 3) return partMask3Count;
+        return 0;
     }
 
     public int xformVbo() {
@@ -106,7 +114,10 @@ public final class GpuMesh {
         if (pointer != 0) {
             GeoModel.nFreeGpuMesh(pointer);
         }
+        int boneBufferBytes = perFrameBoneBuffer.capacity();
         MemoryUtil.memFree(perFrameBoneBuffer);
+        ResourceLifecycleStats.onDirectBufferFreed(null, boneBufferBytes);
+        ResourceLifecycleStats.onGpuMeshDisposed(null, estimatedBytes);
         ModelMemoryProfiler.log("gpu-mesh-released", null);
     }
 }

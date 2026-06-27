@@ -1,6 +1,7 @@
 package com.micaftic.morpher.audio;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import org.jetbrains.annotations.NotNull;
@@ -25,13 +26,14 @@ public class OggOpusAudioStream implements IAudioStreamSupport {
 
     private boolean endOfStream;
 
-    private final NativeAudioDecoder decoder = ObjectPool.acquire();
+    private final OpusAudioDecoder decoder = ObjectPool.acquire();
 
     private final ByteBuf outputBuffer = PooledByteBufAllocator.DEFAULT.buffer(((int) AUDIO_FORMAT.getSampleRate()) * 2);
 
     public OggOpusAudioStream(ByteBuffer byteBuffer, @Nullable AudioCacheBuilder cacheBuilder2) throws UnsupportedAudioFileException {
         this.cacheBuilder = cacheBuilder2;
         this.outputBuffer.retain();
+        ResourceLifecycleStats.onDirectBufferAllocated(null, this.outputBuffer.capacity());
         this.decoder.openStream(byteBuffer);
     }
 
@@ -69,7 +71,15 @@ public class OggOpusAudioStream implements IAudioStreamSupport {
 
     public void close() throws IOException {
         if (!this.closed) {
-            this.outputBuffer.release();
+            if (this.cacheBuilder != null) {
+                this.cacheBuilder.close();
+            }
+            int capacity = this.outputBuffer.capacity();
+            int refCnt = this.outputBuffer.refCnt();
+            if (refCnt > 0) {
+                this.outputBuffer.release(refCnt);
+                ResourceLifecycleStats.onDirectBufferFreed(null, capacity);
+            }
             ObjectPool.release(this.decoder);
             this.closed = true;
         }

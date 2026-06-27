@@ -97,7 +97,8 @@ subprojects {
                 '-Xlint:-deprecation',
                 '-Xlint:-removal',
                 '-Xlint:-unchecked',
-                '-nowarn'
+                '-nowarn',
+                '--add-modules', 'jdk.incubator.vector'
         ])
     }
 

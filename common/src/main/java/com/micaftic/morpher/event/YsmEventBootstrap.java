@@ -3,6 +3,7 @@ package com.micaftic.morpher.event;
 import com.micaftic.morpher.client.event.AnimationLockEvent;
 import com.micaftic.morpher.client.event.ClientPlayerCloneEvent;
 import com.micaftic.morpher.client.event.ClientPlayerJoinNotification;
+import com.micaftic.morpher.client.event.ClientResourceLifecycleEvent;
 import com.micaftic.morpher.client.event.ClientSetupEvent;
 import com.micaftic.morpher.client.event.ClientTickEvent;
 import com.micaftic.morpher.client.event.PlayerSkinTextureManager;
@@ -33,6 +34,7 @@ public final class YsmEventBootstrap {
             EntityJoinCallbackEvent.register();
 
             ClientSetupEvent.register();
+            ClientResourceLifecycleEvent.register();
             ClientTickEvent.register();
             ClientPlayerJoinNotification.register();
             ClientPlayerCloneEvent.register();

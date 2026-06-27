@@ -1,5 +1,5 @@
 package com.micaftic.morpher.geckolib3.geo;
-import com.elfmcys.yesstevemodel.geckolib3.geo.NativeModelRenderer;
+import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 
 import com.micaftic.morpher.client.renderer.CustomEntityTranslucentRenderType;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
@@ -33,7 +33,7 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
         }
         animatable.resetAnimationState();
         ResourceLocation tex = animatable.getTextureLocation();
-        NativeModelRenderer.renderMesh(vertexConsumer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5, tex);
+        ModelRendererBridge.renderMesh(vertexConsumer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5, tex);
         setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
     }
 

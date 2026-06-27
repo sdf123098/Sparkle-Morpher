@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.texture;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.platform.TextureUtil;
@@ -20,11 +21,17 @@ import java.util.Map;
 public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     private byte[] data;
     private boolean uploaded;
+    private final String modelId;
 
     private Map<ShadersTextureType, OuterFileTexture> suffixTextures = Reference2ReferenceMaps.emptyMap();
 
     public OuterFileTexture(byte[] data) {
+        this(data, null);
+    }
+
+    public OuterFileTexture(byte[] data, String modelId) {
         this.data = data;
+        this.modelId = modelId;
     }
 
     @Override
@@ -51,9 +58,11 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             TextureUtil.prepareImage(this.getId(), 0, width, height);
             imageIn.upload(0, 0, 0, 0, 0, width, height, false, false, false, true);
             uploaded = true;
+            ResourceLifecycleStats.onTextureUploaded(modelId, width, height, textureBytes.length);
             ModelMemoryProfiler.log("texture-uploaded", null);
             if (GeneralConfig.safeGet(GeneralConfig.RELEASE_TEXTURE_BYTES_AFTER_UPLOAD, false)) {
                 data = null;
+                ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, textureBytes.length);
                 ModelMemoryProfiler.log("texture-bytes-released", null);
             }
         } catch (IOException e) {
@@ -67,5 +76,20 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
 
     public Map<ShadersTextureType, ? extends AbstractTexture> getSuffixTextures() {
         return this.suffixTextures;
+    }
+
+    @Override
+    public void close() {
+        for (OuterFileTexture texture : suffixTextures.values()) {
+            texture.close();
+        }
+        suffixTextures = Reference2ReferenceMaps.emptyMap();
+        byte[] retained = data;
+        if (retained != null) {
+            data = null;
+            ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, retained.length);
+        }
+        super.close();
+        ResourceLifecycleStats.onTextureClosed(modelId);
     }
 }

@@ -8,9 +8,12 @@ if (rootProject.ext.isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
                 fileTree('src/main/java') {
-                    exclude 'com/micaftic/morpher/NativeLibLoader.java'
+                    exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'
+                    exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'
+                    exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'
                     exclude 'com/ysm/parser/YSMParser.java'
                     exclude 'com/ysm/parser/YSMNative.java'
+                    exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java'
                 },
                 fileTree('src/curseforge/java')
         )

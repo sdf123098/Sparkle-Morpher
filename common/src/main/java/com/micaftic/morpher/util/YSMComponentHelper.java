@@ -12,7 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.HashMap;
 import java.util.UUID;
 
-public class YSMNativeHelper {
+public class YSMComponentHelper {
     public static Object createTranslatableComponent(String str, @Nullable Object[] objArr) {
         if (objArr == null || objArr.length == 0) {
             return Component.translatable(str);

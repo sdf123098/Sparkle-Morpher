@@ -2,17 +2,19 @@ package com.micaftic.morpher.audio;
 
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import org.gagravarr.ogg.OggFile;
 import org.gagravarr.opus.OpusAudioData;
 import org.gagravarr.opus.OpusFile;
 import org.concentus.OpusDecoder;
+import org.lwjgl.system.MemoryUtil;
 
 import javax.sound.sampled.UnsupportedAudioFileException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 
-public class NativeAudioDecoder {
+public class OpusAudioDecoder {
     private boolean inputSet = false;
     private int channels;
     private OggFile oggFile;
@@ -45,8 +47,15 @@ public class NativeAudioDecoder {
             this.decodePcmArray = new short[5760 * this.channels];
 
             if (this.opusPcmBuffer == null || this.opusPcmBuffer.capacity() < this.decodePcmArray.length * 2) {
-                this.opusPcmBuffer = ByteBuffer.allocateDirect(this.decodePcmArray.length * 2).order(ByteOrder.nativeOrder());
+                if (this.opusPcmBuffer != null) {
+                    int oldCapacity = this.opusPcmBuffer.capacity();
+                    MemoryUtil.memFree(this.opusPcmBuffer);
+                    ResourceLifecycleStats.onDirectBufferFreed(null, oldCapacity);
+                }
+                int capacity = this.decodePcmArray.length * 2;
+                this.opusPcmBuffer = MemoryUtil.memAlloc(capacity).order(ByteOrder.nativeOrder());
                 this.opusPcmShortBuffer = this.opusPcmBuffer.asShortBuffer();
+                ResourceLifecycleStats.onDirectBufferAllocated(null, capacity);
             }
             this.opusPcmBuffer.position(0);
             this.opusPcmBuffer.limit(0);
@@ -142,7 +151,11 @@ public class NativeAudioDecoder {
         this.oggFile = null;
 
         if (this.opusPcmBuffer != null) {
-            this.opusPcmBuffer.clear();
+            int capacity = this.opusPcmBuffer.capacity();
+            MemoryUtil.memFree(this.opusPcmBuffer);
+            ResourceLifecycleStats.onDirectBufferFreed(null, capacity);
+            this.opusPcmBuffer = null;
+            this.opusPcmShortBuffer = null;
         }
     }
 }

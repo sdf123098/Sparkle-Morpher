@@ -36,6 +36,8 @@ public class GeneralConfig {
 
     public static ForgeConfigSpec.BooleanValue ANIMATION_DISTANCE_LOD;
 
+    public static ForgeConfigSpec.BooleanValue EXPERIMENTAL_JAVA_VECTOR_RENDERER;
+
     public static ForgeConfigSpec.EnumValue<RouletteContentMode> ROULETTE_CONTENT_MODE;
 
     public static ForgeConfigSpec.BooleanValue ANIMATION_FRAME_PROFILER;
@@ -55,6 +57,8 @@ public class GeneralConfig {
     public static ForgeConfigSpec.BooleanValue MODEL_IMPORT_PERFORMANCE_LOG;
 
     public static ForgeConfigSpec.BooleanValue RELEASE_TEXTURE_BYTES_AFTER_UPLOAD;
+
+    public static ForgeConfigSpec.IntValue AUDIO_CACHE_MAX_BYTES;
 
     public static ForgeConfigSpec.IntValue MAX_CACHED_GPU_MODELS;
 
@@ -140,6 +144,8 @@ public class GeneralConfig {
         WARN_REPEATED_ANIMATION_EVALUATION = builder.define("WarnRepeatedAnimationEvaluation", true);
         builder.comment("Reduce animation update rates for distant entities. Disabled by default for smoother animation.");
         ANIMATION_DISTANCE_LOD = builder.define("AnimationDistanceLod", false);
+        builder.comment("Use the incubating Java Vector API for part of the Java fallback renderer. Experimental, default off, and requires launching with --add-modules jdk.incubator.vector.");
+        EXPERIMENTAL_JAVA_VECTOR_RENDERER = builder.define("ExperimentalJavaVectorRenderer", false);
         builder.comment("Verbose resource station network/probe logging. Default off.");
         RESOURCE_STATION_MONITOR_LOG = builder.define("ResourceStationMonitorLog", false);
         builder.comment("Verbose client/server online model sync diagnostics. Default off.");
@@ -150,6 +156,8 @@ public class GeneralConfig {
         MODEL_IMPORT_PERFORMANCE_LOG = builder.define("ModelImportPerformanceLog", false);
         builder.comment("Release Java texture byte arrays after successful GPU upload. Default off.");
         RELEASE_TEXTURE_BYTES_AFTER_UPLOAD = builder.define("ReleaseTextureBytesAfterUpload", false);
+        builder.comment("Maximum decoded audio cache bytes retained on the client. 0 disables decoded audio caching.");
+        AUDIO_CACHE_MAX_BYTES = builder.defineInRange("AudioCacheMaxBytes", 64 * 1024 * 1024, 0, 512 * 1024 * 1024);
         builder.comment("Maximum models whose GPU/native render caches stay resident. 0 disables LRU trimming.");
         MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
         builder.comment("Minimum idle time before GPU/native render caches can be trimmed.");

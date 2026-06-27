@@ -127,6 +127,9 @@ public class OggVorbisAudioStream implements IAudioStreamSupport {
 
     public void close() {
         if (!this.isClosed) {
+            if (this.cacheBuilder != null) {
+                this.cacheBuilder.close();
+            }
             STBVorbis.stb_vorbis_close(decoderHandle);
             MemoryUtil.memFree(this.inputBuffer);
             this.isClosed = true;

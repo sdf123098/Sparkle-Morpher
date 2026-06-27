@@ -13,6 +13,8 @@ import org.jetbrains.annotations.NotNull;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -89,6 +91,11 @@ public class GeoModel {
 
     public List<BakedBone> bakedBones;
 
+    public int[] bakedBoneOrder = new int[0];
+    public int[] bakedBoneRenderOrderAll = new int[0];
+    public int[] bakedBoneRenderOrderLeftArm = new int[0];
+    public int[] bakedBoneRenderOrderRightArm = new int[0];
+
     public static class BakedBone {
         public String name;
         public boolean glow;
@@ -110,6 +117,109 @@ public class GeoModel {
         public Vector3f[] positions = new Vector3f[4];
         public Vector2f[] uvs = new Vector2f[4];
         public Vector3f normal;
+        public final float[] packedPositions = new float[12];
+        public final float[] packedUvs = new float[8];
+        public float normalX, normalY, normalZ;
+
+        public void setNormal(float x, float y, float z) {
+            this.normalX = x;
+            this.normalY = y;
+            this.normalZ = z;
+            this.normal = new Vector3f(x, y, z);
+        }
+
+        public void setVertex(int index, float x, float y, float z, float u, float v) {
+            int posOffset = index * 3;
+            packedPositions[posOffset] = x;
+            packedPositions[posOffset + 1] = y;
+            packedPositions[posOffset + 2] = z;
+            int uvOffset = index * 2;
+            packedUvs[uvOffset] = u;
+            packedUvs[uvOffset + 1] = v;
+            positions[index] = new Vector3f(x, y, z);
+            uvs[index] = new Vector2f(u, v);
+        }
+
+        public float x(int index) {
+            return packedPositions[index * 3];
+        }
+
+        public float y(int index) {
+            return packedPositions[index * 3 + 1];
+        }
+
+        public float z(int index) {
+            return packedPositions[index * 3 + 2];
+        }
+
+        public float u(int index) {
+            return packedUvs[index * 2];
+        }
+
+        public float v(int index) {
+            return packedUvs[index * 2 + 1];
+        }
+    }
+
+    public static int[] buildParentFirstBoneOrder(List<BakedBone> bones) {
+        int count = bones == null ? 0 : bones.size();
+        IntArrayList order = new IntArrayList(count);
+        byte[] state = new byte[count];
+        for (int i = 0; i < count; i++) {
+            appendParentFirstBone(i, bones, state, order);
+        }
+        return order.toIntArray();
+    }
+
+    private static void appendParentFirstBone(int idx, List<BakedBone> bones, byte[] state, IntArrayList order) {
+        if (idx < 0 || idx >= bones.size() || state[idx] == 2) {
+            return;
+        }
+        if (state[idx] == 1) {
+            return;
+        }
+        state[idx] = 1;
+        int parentIdx = bones.get(idx).parentIdx;
+        if (parentIdx != idx) {
+            appendParentFirstBone(parentIdx, bones, state, order);
+        }
+        state[idx] = 2;
+        order.add(idx);
+    }
+
+    public void buildPartMaskBoneRenderOrders() {
+        this.bakedBoneRenderOrderAll = buildPartMaskBoneRenderOrder(0);
+        this.bakedBoneRenderOrderLeftArm = buildPartMaskBoneRenderOrder(1);
+        this.bakedBoneRenderOrderRightArm = buildPartMaskBoneRenderOrder(2);
+    }
+
+    public int[] getPartMaskBoneRenderOrder(int renderPartMask) {
+        return switch (renderPartMask) {
+            case 1 -> bakedBoneRenderOrderLeftArm;
+            case 2 -> bakedBoneRenderOrderRightArm;
+            default -> bakedBoneRenderOrderAll;
+        };
+    }
+
+    private int[] buildPartMaskBoneRenderOrder(int renderPartMask) {
+        if (bakedBones == null || bakedBones.isEmpty()) {
+            return new int[0];
+        }
+        int[] baseOrder = bakedBoneOrder;
+        if (baseOrder == null || baseOrder.length != bakedBones.size()) {
+            baseOrder = buildParentFirstBoneOrder(bakedBones);
+        }
+        IntArrayList result = new IntArrayList(baseOrder.length);
+        for (int boneIdx : baseOrder) {
+            if (boneIdx < 0 || boneIdx >= bakedBones.size()) {
+                continue;
+            }
+            BakedBone bone = bakedBones.get(boneIdx);
+            if (renderPartMask == 0 || bone.partMask == renderPartMask || bone.partMask == 3) {
+                result.add(boneIdx);
+            }
+        }
+        return result.toIntArray();
     }
 
 //    static {
@@ -120,29 +230,49 @@ public class GeoModel {
 
     public long gpuMeshHandle = 0;
 
-    public static native long nInitModelCache(ByteBuffer buffer);
+    public static long nInitModelCache(ByteBuffer buffer) {
+        return ModelAccelerationBridge.nInitModelCache(buffer);
+    }
 
-    public static native void nDestroyModelCache(long handle);
+    public static void nDestroyModelCache(long handle) {
+        ModelAccelerationBridge.nDestroyModelCache(handle);
+    }
 
-    public static native void nComputeModelVertices(
+    public static void nComputeModelVertices(
             long handle, Object vertexConsumer,
             float[] matrixTransfer, float[] animTransfer,
             int renderPartMask, int packedLight, int packedOverlay,
-            float r, float g, float b, float a);
+            float r, float g, float b, float a) {
+        ModelAccelerationBridge.nComputeModelVertices(handle, vertexConsumer, matrixTransfer, animTransfer, renderPartMask, packedLight, packedOverlay, r, g, b, a);
+    }
 
-    public static native long nBuildGpuMesh(ByteBuffer buffer, int[] outMeta);
+    public static long nBuildGpuMesh(ByteBuffer buffer, int[] outMeta) {
+        return ModelAccelerationBridge.nBuildGpuMesh(buffer, outMeta);
+    }
 
-    public static native ByteBuffer nGetGpuMeshVertexBuffer(long pointer);
+    public static ByteBuffer nGetGpuMeshVertexBuffer(long pointer) {
+        return ModelAccelerationBridge.nGetGpuMeshVertexBuffer(pointer);
+    }
 
-    public static native ByteBuffer nGetGpuMeshIndexBuffer(long pointer);
+    public static ByteBuffer nGetGpuMeshIndexBuffer(long pointer) {
+        return ModelAccelerationBridge.nGetGpuMeshIndexBuffer(pointer);
+    }
 
-    public static native void nReleaseGpuMeshScratch(long pointer);
+    public static void nReleaseGpuMeshScratch(long pointer) {
+        ModelAccelerationBridge.nReleaseGpuMeshScratch(pointer);
+    }
 
-    public static native void nFreeGpuMesh(long pointer);
+    public static void nFreeGpuMesh(long pointer) {
+        ModelAccelerationBridge.nFreeGpuMesh(pointer);
+    }
 
-    public static native void nComputeBoneMatrices(long pointer, float[] rootPose, float[] rootNormal, float[] anim, int packedLight, ByteBuffer outBoneBuffer);
+    public static void nComputeBoneMatrices(long pointer, float[] rootPose, float[] rootNormal, float[] anim, int packedLight, ByteBuffer outBoneBuffer) {
+        ModelAccelerationBridge.nComputeBoneMatrices(pointer, rootPose, rootNormal, anim, packedLight, outBoneBuffer);
+    }
 
-    public static native void nComputeBoneMatricesLocal(long handle, float[] animArray, int packedLight, ByteBuffer outBoneBuffer);
+    public static void nComputeBoneMatricesLocal(long handle, float[] animArray, int packedLight, ByteBuffer outBoneBuffer) {
+        ModelAccelerationBridge.nComputeBoneMatricesLocal(handle, animArray, packedLight, outBoneBuffer);
+    }
 
     public void buildNativeCache() {
         if (bakedBones == null || bakedBones.isEmpty()) return;
@@ -159,41 +289,46 @@ public class GeoModel {
         }
 
         int initBufferSize = 4 + (totalBones * 25) + (totalCubes * 5) + (totalQuads * 92);
-        ByteBuffer buffer = ByteBuffer.allocateDirect(initBufferSize).order(ByteOrder.nativeOrder());
+        ByteBuffer buffer = MemoryUtil.memAlloc(initBufferSize).order(ByteOrder.nativeOrder());
+        ResourceLifecycleStats.onDirectBufferAllocated(null, initBufferSize);
+        try {
+            buffer.putInt(bakedBones.size());
+            for (BakedBone bone : bakedBones) {
+                buffer.putInt(bone.parentIdx);
+                buffer.putInt(bone.partMask);
+                buffer.put((byte) (bone.glow ? 1 : 0));
+                buffer.putFloat(bone.pivotX);
+                buffer.putFloat(bone.pivotY);
+                buffer.putFloat(bone.pivotZ);
 
-        buffer.putInt(bakedBones.size());
-        for (BakedBone bone : bakedBones) {
-            buffer.putInt(bone.parentIdx);
-            buffer.putInt(bone.partMask);
-            buffer.put((byte) (bone.glow ? 1 : 0));
-            buffer.putFloat(bone.pivotX);
-            buffer.putFloat(bone.pivotY);
-            buffer.putFloat(bone.pivotZ);
-
-            buffer.putInt(bone.cubes.size());
-            for (BakedCube cube : bone.cubes) {
-                buffer.put((byte) (cube.cullable ? 1 : 0));
-                buffer.putInt(cube.quads.size());
-                for (BakedQuad quad : cube.quads) {
-                    for (int v = 0; v < 4; v++) {
-                        buffer.putFloat(quad.positions[v].x());
-                        buffer.putFloat(quad.positions[v].y());
-                        buffer.putFloat(quad.positions[v].z());
+                buffer.putInt(bone.cubes.size());
+                for (BakedCube cube : bone.cubes) {
+                    buffer.put((byte) (cube.cullable ? 1 : 0));
+                    buffer.putInt(cube.quads.size());
+                    for (BakedQuad quad : cube.quads) {
+                        for (int v = 0; v < 4; v++) {
+                            buffer.putFloat(quad.x(v));
+                            buffer.putFloat(quad.y(v));
+                            buffer.putFloat(quad.z(v));
+                        }
+                        for (int v = 0; v < 4; v++) {
+                            buffer.putFloat(quad.u(v));
+                            buffer.putFloat(quad.v(v));
+                        }
+                        // 3 floats *4=12
+                        buffer.putFloat(quad.normalX);
+                        buffer.putFloat(quad.normalY);
+                        buffer.putFloat(quad.normalZ);
                     }
-                    for (int v = 0; v < 4; v++) {
-                        buffer.putFloat(quad.uvs[v].x());
-                        buffer.putFloat(quad.uvs[v].y());
-                    }
-                    // 3 floats *4=12
-                    buffer.putFloat(quad.normal.x());
-                    buffer.putFloat(quad.normal.y());
-                    buffer.putFloat(quad.normal.z());
                 }
             }
-        }
 
-        buffer.position(0);
-        this.nativeModelHandle = nInitModelCache(buffer);
+            buffer.position(0);
+            this.nativeModelHandle = nInitModelCache(buffer);
+        } finally {
+            MemoryUtil.memFree(buffer);
+            ResourceLifecycleStats.onDirectBufferFreed(null, initBufferSize);
+        }
     }
 
     public void freeNativeCache() {
@@ -201,9 +336,15 @@ public class GeoModel {
             nDestroyModelCache(nativeModelHandle);
             nativeModelHandle = 0;
         }
+        freeGpuCache();
+    }
+
+    public boolean freeGpuCache() {
         if (gpuMeshHandle != 0) {
             GpuRenderPath.disposeMesh(this);
+            return true;
         }
+        return false;
     }
 
     public GeoModel(GeoBone[] geoBones, String[][] strArr, boolean[] zArr, @NotNull GeometryDescription properties, boolean[] zArr2) {

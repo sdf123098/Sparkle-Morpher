@@ -63,6 +63,9 @@ processResources {
     }
 
     from(project(':common').sourceSets.main.resources)
+    from(rootProject.file('LICENSE.txt')) {
+        rename { 'LICENSE' }
+    }
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
     if (rootProject.ext.isCurseForgeDist) {
