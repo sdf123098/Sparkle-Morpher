@@ -3,6 +3,7 @@ package com.micaftic.morpher.core.gpu;
 import com.mojang.blaze3d.opengl.GlStateManager;
 
 import com.mojang.blaze3d.vertex.BufferUploader;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
@@ -18,6 +19,10 @@ public final class Pie {
     }
 
     public static void draw(GuiGraphicsExtractor graphics, float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float endAngle, int rgba, float feather) {
+        if (!SmGraphicsBackendDetector.isOpenGlGuiBlurEnabled()) {
+            drawFallback(graphics, centerX, centerY, innerRadius, outerRadius, startAngle, endAngle, rgba);
+            return;
+        }
         if (!PieShader.ensureCompiled()) return;
 
         float pad = feather + 1.0f;
@@ -60,5 +65,57 @@ public final class Pie {
         GlStateManager._glBindVertexArray(0);
 
         GlStateManager._disableBlend();
+    }
+
+    private static void drawFallback(GuiGraphicsExtractor graphics, float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float endAngle, int rgba) {
+        float inner = Math.max(0.0f, innerRadius);
+        float outerSq = outerRadius * outerRadius;
+        float innerSq = inner * inner;
+        int minX = (int) Math.floor(centerX - outerRadius);
+        int maxX = (int) Math.ceil(centerX + outerRadius);
+        int minY = (int) Math.floor(centerY - outerRadius);
+        int maxY = (int) Math.ceil(centerY + outerRadius);
+
+        for (int y = minY; y < maxY; y++) {
+            int runStart = -1;
+            for (int x = minX; x < maxX; x++) {
+                if (contains(x + 0.5f, y + 0.5f, centerX, centerY, innerSq, outerSq, startAngle, endAngle)) {
+                    if (runStart < 0) {
+                        runStart = x;
+                    }
+                } else if (runStart >= 0) {
+                    graphics.fill(runStart, y, x, y + 1, rgba);
+                    runStart = -1;
+                }
+            }
+            if (runStart >= 0) {
+                graphics.fill(runStart, y, maxX, y + 1, rgba);
+            }
+        }
+    }
+
+    private static boolean contains(float x, float y, float centerX, float centerY, float innerSq, float outerSq, float startAngle, float endAngle) {
+        float dx = x - centerX;
+        float dy = y - centerY;
+        float distSq = dx * dx + dy * dy;
+        if (distSq > outerSq || distSq < innerSq) {
+            return false;
+        }
+        float span = endAngle - startAngle;
+        if (Math.abs(span) >= tau - 0.001f) {
+            return true;
+        }
+        float angle = normalize((float) Math.atan2(dy, dx));
+        float start = normalize(startAngle);
+        float end = normalize(endAngle);
+        if (span >= 0.0f) {
+            return start <= end ? angle >= start && angle <= end : angle >= start || angle <= end;
+        }
+        return end <= start ? angle <= start && angle >= end : angle <= start || angle >= end;
+    }
+
+    private static float normalize(float angle) {
+        angle %= tau;
+        return angle < 0.0f ? angle + tau : angle;
     }
 }

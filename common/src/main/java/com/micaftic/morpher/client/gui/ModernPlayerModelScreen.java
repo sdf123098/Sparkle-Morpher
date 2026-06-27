@@ -318,11 +318,14 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int modelLeftW() {
-        return 140;
+        int minList = modelListMinW();
+        int max = Math.max(72, Math.min(140, this.layout.contentWidth - minList - 86 - 28));
+        return clamp(this.layout.contentWidth / 4, 72, max);
     }
 
     private int modelRightW() {
-        return 180;
+        int max = Math.max(72, Math.min(180, this.layout.contentWidth - modelLeftW() - modelListMinW() - 28));
+        return clamp(this.layout.contentWidth / 3, 72, max);
     }
 
     private int modelListX() {
@@ -330,7 +333,11 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int modelListW() {
-        return Math.max(90, this.layout.contentWidth - modelLeftW() - modelRightW() - 28);
+        return Math.max(24, this.layout.contentWidth - modelLeftW() - modelRightW() - 28);
+    }
+
+    private int modelListMinW() {
+        return this.layout.contentWidth < 420 ? 54 : 90;
     }
 
     private int resourceListX() {
@@ -338,11 +345,14 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int resourceRightW() {
-        return Math.max(170, this.layout.contentWidth / 3);
+        int minRight = this.layout.contentWidth < 420 ? 90 : 170;
+        int minList = this.layout.contentWidth < 420 ? 90 : 120;
+        int max = Math.max(minRight, Math.min(260, this.layout.contentWidth - minList - 22));
+        return clamp(this.layout.contentWidth / 3, minRight, max);
     }
 
     private int resourceListW() {
-        return Math.max(120, this.layout.contentWidth - resourceRightW() - 22);
+        return Math.max(60, this.layout.contentWidth - resourceRightW() - 22);
     }
 
     private int resourceToolbarW() {
@@ -350,19 +360,21 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int resourceToolbarX() {
-        return resourceListX() + resourceListW() - resourceToolbarW();
+        return Math.max(resourceListX(), resourceListX() + resourceListW() - resourceToolbarW());
     }
 
     private int resourceSearchW() {
-        return Math.max(80, resourceToolbarX() - resourceListX() - 8);
+        return Math.max(40, resourceToolbarX() - resourceListX() - 8);
     }
 
     private int secondaryPanelW() {
-        return Math.min(this.layout.width - 120, Math.max(520, this.layout.width * 2 / 3));
+        int max = Math.max(120, this.layout.width - 32);
+        return clamp(this.layout.width * 2 / 3, Math.min(520, max), max);
     }
 
     private int secondaryPanelH() {
-        return Math.min(this.layout.height - 120, Math.max(300, this.layout.height * 2 / 3));
+        int max = Math.max(96, this.layout.height - 32);
+        return clamp(this.layout.height * 2 / 3, Math.min(300, max), max);
     }
 
     private int secondaryPanelX() {
