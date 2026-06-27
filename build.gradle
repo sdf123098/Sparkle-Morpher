@@ -22,6 +22,9 @@ tasks.named("jar") {
 }
 
 repositories {
+    maven { url = "https://jitpack.io" }
+    mavenCentral()
+
     def projectLocalMaven = maven {
         name = "Project Local Maven"
         url = uri("local-maven")
@@ -161,6 +164,8 @@ processResources {
 
 dependencies {
     // zstd-jni dependency removed: project now uses YSM native → pure-Java ZstdUtil → raw-frame fallback chain.
+    implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+    jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 }
 
 tasks.register("printRepositories") {
