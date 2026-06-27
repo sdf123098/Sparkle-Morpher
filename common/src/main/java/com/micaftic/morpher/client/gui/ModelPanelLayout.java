@@ -28,8 +28,12 @@ final class ModelPanelLayout {
     }
 
     static ModelPanelLayout create(int screenWidth, int screenHeight) {
-        int panelWidth = clamp(screenWidth - 32, 520, 920);
-        int panelHeight = clamp(screenHeight - 28, 300, 540);
+        int marginX = screenWidth >= 760 ? 32 : 12;
+        int marginY = screenHeight >= 420 ? 28 : 12;
+        int maxWidth = Math.max(1, screenWidth - marginX);
+        int maxHeight = Math.max(1, screenHeight - marginY);
+        int panelWidth = clamp(screenWidth - marginX, Math.min(520, maxWidth), Math.min(920, maxWidth));
+        int panelHeight = clamp(screenHeight - marginY, Math.min(300, maxHeight), Math.min(540, maxHeight));
         return new ModelPanelLayout((screenWidth - panelWidth) / 2, (screenHeight - panelHeight) / 2, panelWidth, panelHeight);
     }
 

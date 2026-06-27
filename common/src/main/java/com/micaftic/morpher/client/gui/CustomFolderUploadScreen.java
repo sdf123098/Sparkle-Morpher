@@ -66,23 +66,23 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
         int buttonY = 10;
         int toolbarX = Math.max(10, this.width - 100);
         this.refreshButton = new IconButton(
-                toolbarX, buttonY, 18, 18, 48, 16,
+                toolbarX, buttonY, 18, 18, 96, 16,
                 button -> refreshList(true));
         this.refreshButton.setTooltipText("gui.sparkle_morpher.upload_custom_folder.refresh");
         addRenderableWidget(this.refreshButton);
 
         addRenderableWidget(new IconButton(
-                toolbarX + 24, buttonY, 18, 18, 128, 48,
+                toolbarX + 24, buttonY, 18, 18, 64, 0,
                 button -> openModelFolder()).setTooltipText("gui.sparkle_morpher.upload_custom_folder.open_folder"));
 
         this.uploadAllButton = new IconButton(
-                toolbarX + 48, buttonY, 18, 18, 96, 16,
+                toolbarX + 48, buttonY, 18, 18, 64, 16,
                 button -> uploadAll());
         this.uploadAllButton.setTooltipText("gui.sparkle_morpher.upload_custom_folder.upload_all");
         addRenderableWidget(this.uploadAllButton);
 
         addRenderableWidget(new IconButton(
-                toolbarX + 72, buttonY, 18, 18, 0, 32,
+                toolbarX + 72, buttonY, 18, 18, 80, 32,
                 button -> InputUtil.setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
 
         rebuildEntries();

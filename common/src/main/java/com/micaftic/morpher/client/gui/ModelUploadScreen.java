@@ -71,9 +71,9 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         ModelUploadSession.addListener(this);
         int buttonY = 10;
         int toolbarX = Math.max(10, this.width - 76);
-        addRenderableWidget(new IconButton(toolbarX, buttonY, 18, 18, 0, 16, button -> openFilePicker()).setTooltipText("gui.sparkle_morpher.import.choose_file"));
-        addRenderableWidget(new IconButton(toolbarX + 24, buttonY, 18, 18, 128, 48, button -> openModelFolder()).setTooltipText("gui.sparkle_morpher.open_model_folder.open"));
-        addRenderableWidget(new IconButton(toolbarX + 48, buttonY, 18, 18, 0, 32, button -> InputUtil.setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
+        addRenderableWidget(new IconButton(toolbarX, buttonY, 18, 18, 48, 0, button -> openFilePicker()).setTooltipText("gui.sparkle_morpher.import.choose_file"));
+        addRenderableWidget(new IconButton(toolbarX + 24, buttonY, 18, 18, 64, 0, button -> openModelFolder()).setTooltipText("gui.sparkle_morpher.open_model_folder.open"));
+        addRenderableWidget(new IconButton(toolbarX + 48, buttonY, 18, 18, 80, 32, button -> InputUtil.setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
     }
 
     @Override

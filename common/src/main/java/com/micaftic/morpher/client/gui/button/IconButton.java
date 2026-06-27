@@ -8,7 +8,7 @@ import net.minecraft.resources.Identifier;
 
 public class IconButton extends FlatColorButton {
 
-    private static final Identifier ICON_TEXTURE = Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/icon.png");
+    private static final Identifier ICON_TEXTURE = Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
 
     private final int iconU;
 
@@ -28,6 +28,6 @@ public class IconButton extends FlatColorButton {
         int iconOffsetY = (this.height - 16) / 2;
         int x = getX() + iconOffsetX;
         int y = getY() + iconOffsetY;
-        guiGraphics.blit(ICON_TEXTURE, x, y, x + 16, y + 16, this.iconU / 256.0f, (this.iconU + 16) / 256.0f, this.iconV / 256.0f, (this.iconV + 16) / 256.0f);
+        guiGraphics.blit(ICON_TEXTURE, x, y, x + 16, y + 16, this.iconU / 128.0f, (this.iconU + 16) / 128.0f, this.iconV / 64.0f, (this.iconV + 16) / 64.0f);
     }
 }

@@ -344,17 +344,37 @@ public class YSMClientMapper {
         return null;
     }
 
+    private static final byte[] TRANSPARENT_PIXEL_PNG = Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAEtAJJXIDTjwAAAABJRU5ErkJggg==");
+
+    private static boolean isPng(byte[] data) {
+        return data != null
+                && data.length >= 8
+                && (data[0] & 0xFF) == 0x89
+                && data[1] == 0x50
+                && data[2] == 0x4E
+                && data[3] == 0x47
+                && data[4] == 0x0D
+                && data[5] == 0x0A
+                && data[6] == 0x1A
+                && data[7] == 0x0A;
+    }
+
     private static byte[] encodeToPng(BufferedImage img, byte[] fallbackData) {
         if (img != null) {
             try {
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(img, "png", baos);
-                return baos.toByteArray();
+                if (ImageIO.write(img, "png", baos)) {
+                    return baos.toByteArray();
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
-        return fallbackData;
+        if (isPng(fallbackData)) {
+            return fallbackData;
+        }
+        System.err.println("[SM] Warning: Texture decode failed; using transparent fallback PNG.");
+        return TRANSPARENT_PIXEL_PNG;
     }
 
     private static int resolveImageFormat(byte[] data, int imageFormat) {
