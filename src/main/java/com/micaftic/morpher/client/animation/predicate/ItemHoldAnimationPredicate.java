@@ -89,9 +89,6 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
     }
 
     private static boolean isLocalSwingTarget(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity) {
-        if (entity instanceof Player && InputStateKey.isLocalAnyHandSwinging()) {
-            return true;
-        }
         return isLocalPlayerModel(event);
     }
 

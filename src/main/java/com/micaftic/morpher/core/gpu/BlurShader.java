@@ -165,6 +165,45 @@ public final class BlurShader {
         return captureHeight;
     }
 
+    public static synchronized void closeAll(String reason) {
+        if (captureTextureId != 0) {
+            GL11.glDeleteTextures(captureTextureId);
+            captureTextureId = 0;
+        }
+        if (readFbo != 0) {
+            GL30.glDeleteFramebuffers(readFbo);
+            readFbo = 0;
+        }
+        if (dummyVao != 0) {
+            GL30.glDeleteVertexArrays(dummyVao);
+            dummyVao = 0;
+        }
+        if (program != 0) {
+            GL20.glDeleteProgram(program);
+            program = 0;
+        }
+        captureWidth = 0;
+        captureHeight = 0;
+        lastCaptureFrame = -1L;
+        locProj = -1;
+        locRect = -1;
+        locScreenSize = -1;
+        locRectSize = -1;
+        locRadius = -1;
+        locCorner = -1;
+        locBlurRadius = -1;
+        locGamma = -1;
+        locTint = -1;
+        locMode = -1;
+        locPieCenter = -1;
+        locPieInner = -1;
+        locPieOuter = -1;
+        locPieStart = -1;
+        locPieEnd = -1;
+        locPieFeather = -1;
+        GpuDebugLog.info("disposed blur shader resources reason={}", reason);
+    }
+
     public static boolean captureScreen(long frameKey) {
         if (frameKey == lastCaptureFrame && frameKey >= 0) return captureTextureId != 0;
         try {

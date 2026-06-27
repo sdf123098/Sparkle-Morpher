@@ -1,6 +1,6 @@
 package com.micaftic.morpher.resource;
 
-import com.micaftic.morpher.NativeLibLoader;
+import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.audio.AudioCodec;
 import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.client.ClientModelInfo;
@@ -256,16 +256,16 @@ public class YSMClientMapper {
             imagesList.add(img);
 
             byte[] processedData = toPng(rt.data, rt.imageFormat, rt.width, rt.height);
-            OuterFileTexture tex = new OuterFileTexture(processedData);
+            OuterFileTexture tex = new OuterFileTexture(processedData, modelId);
 
             Map<ShadersTextureType, OuterFileTexture> suffixTextures = new LinkedHashMap<>();
             for (RawYsmModel.RawTexture.SubTexture sub : rt.subTextures) {
                 if (sub.data == null) continue;
                 byte[] processedSubData = toPng(sub.data, sub.imageFormat, sub.width, sub.height);
                 if (sub.specularType == 1) {
-                    suffixTextures.put(ShadersTextureType.NORMAL, new OuterFileTexture(processedSubData));
+                    suffixTextures.put(ShadersTextureType.NORMAL, new OuterFileTexture(processedSubData, modelId));
                 } else if (sub.specularType == 2) {
-                    suffixTextures.put(ShadersTextureType.SPECULAR, new OuterFileTexture(processedSubData));
+                    suffixTextures.put(ShadersTextureType.SPECULAR, new OuterFileTexture(processedSubData, modelId));
                 }
             }
             tex.setSuffixTextures(suffixTextures);
@@ -275,7 +275,7 @@ public class YSMClientMapper {
         for (RawYsmModel.RawMetadata.Author author : raw.metadata.authors) {
             if (author.avatarImage == null) continue;
             byte[] processedAvatarData = toPng(author.avatarImage.data, author.avatarImage.format, author.avatarImage.width, author.avatarImage.height);
-            OuterFileTexture tex = new OuterFileTexture(processedAvatarData);
+            OuterFileTexture tex = new OuterFileTexture(processedAvatarData, modelId);
             avatarTextures.put(author.avatarImage.name, tex);
         }
         OrderedStringMap<String, OuterFileTexture> textureMap = buildTextureMap(mainTextures);
@@ -451,7 +451,7 @@ public class YSMClientMapper {
         GeoModel mesh = buildMesh(geoBones.toArray(new GeoBone[0]), parentMap, context, translucencyArray);
 
         mesh.bakedBones = bakedBones;
-        if (NativeLibLoader.isLoaded()) mesh.buildNativeCache();
+        if (RuntimeAccelerationLoader.isLoaded()) mesh.buildNativeCache();
         return mesh;
     }
 
@@ -640,7 +640,8 @@ public class YSMClientMapper {
             }
             buttonsList.add(new ExtraAnimationButtons(rBtn.id, rBtn.name, rBtn.description, metaList.toArray(new AbstractConfig[0])));
         }
-        ModelProperties properties = new ModelProperties(rp.heightScale, rp.widthScale, rp.defaultTexture, rp.previewAnimation, new OrderedStringMap<>(new Object2ObjectArrayMap<>(rp.extraAnimations)), buttonsList.toArray(new ExtraAnimationButtons[0]), classifyList.toArray(new StringMapPair[0]), rp.isFree, rp.renderLayersFirst, rp.disablePreviewRotation);
+        String defaultTexture = resolveDefaultTexture(raw);
+        ModelProperties properties = new ModelProperties(rp.heightScale, rp.widthScale, defaultTexture, rp.previewAnimation, new OrderedStringMap<>(new Object2ObjectArrayMap<>(rp.extraAnimations)), buttonsList.toArray(new ExtraAnimationButtons[0]), classifyList.toArray(new StringMapPair[0]), rp.isFree, rp.renderLayersFirst, rp.disablePreviewRotation);
 
         int bones = 0;
         int cubes = 0;
@@ -663,6 +664,16 @@ public class YSMClientMapper {
                 footer.version,
                 rp.sha256 != null ? rp.sha256 : "",
                 footer.extra, footer.time, footer.rand);
+    }
+
+    private static String resolveDefaultTexture(RawYsmModel raw) {
+        String defaultTexture = raw.properties.defaultTexture;
+        if (raw.mainEntity.textures.isEmpty()) {
+            return defaultTexture;
+        }
+        return defaultTexture != null && !defaultTexture.isBlank() && raw.mainEntity.textures.containsKey(defaultTexture)
+                ? defaultTexture
+                : raw.mainEntity.textures.keySet().iterator().next();
     }
 
     private static ModelExtraResourcesFile buildExtraResources(RawYsmModel raw) {
@@ -720,11 +731,7 @@ public class YSMClientMapper {
                 packet = reader.getNextPacket();
             }
 
-            ByteBuffer directBuf = ByteBuffer.allocateDirect(oggData.length);
-            directBuf.put(oggData);
-            directBuf.flip();
-
-            return new AudioTrackData(directBuf, codec.ordinal(), sampleRate, durationSamples);
+            return new AudioTrackData(ByteBuffer.wrap(oggData), codec.ordinal(), sampleRate, durationSamples);
         } catch (Exception e) {
             return null;
         }
@@ -761,7 +768,7 @@ public class YSMClientMapper {
                 imgList.add(img);
                 byte[] processedData = toPng(rt.data, rt.imageFormat, rt.width, rt.height);
                 if (texture == null) {
-                    texture = new OuterFileTexture(processedData);
+                    texture = new OuterFileTexture(processedData, sub.identifier);
                 }
             }
             if (sub.model != null) {
@@ -803,7 +810,7 @@ public class YSMClientMapper {
                 imgList.add(img);
                 byte[] processedData = toPng(rt.data, rt.imageFormat, rt.width, rt.height);
                 if (texture == null) {
-                    texture = new OuterFileTexture(processedData);
+                    texture = new OuterFileTexture(processedData, sub.identifier);
                 }
             }
             if (sub.model != null) {
@@ -839,7 +846,7 @@ public class YSMClientMapper {
         for (RawYsmModel.RawImage img : raw.properties.backgroundImages) {
             if (img.name != null && !img.name.isEmpty()) {
                 byte[] processedData = toPng(img.data, img.format, img.width, img.height);
-                result.put(img.name, new OuterFileTexture(processedData));
+                result.put(img.name, new OuterFileTexture(processedData, img.name));
             }
         }
         return result;

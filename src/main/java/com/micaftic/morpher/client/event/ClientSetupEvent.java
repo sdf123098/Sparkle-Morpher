@@ -32,6 +32,7 @@ public final class ClientSetupEvent {
             }
             checkNativeInitialization();
             ClientModelManager.loadDefaultModel();
+            ClientModelManager.reloadLocalModels(null, false);
         });
     }
 

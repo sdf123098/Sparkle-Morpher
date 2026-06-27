@@ -19,7 +19,7 @@ public class S2CModelSyncPayload {
     }
 
     public static S2CModelSyncPayload decode(FriendlyByteBuf buf) {
-        ByteBuffer data = ByteBuffer.allocateDirect(buf.readableBytes());
+        ByteBuffer data = ByteBuffer.allocate(buf.readableBytes());
         buf.readBytes(data);
         data.flip();
         return new S2CModelSyncPayload(data);

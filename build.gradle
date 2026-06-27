@@ -97,9 +97,14 @@ if (isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
                 fileTree('src/main/java') {
-                    exclude 'com/micaftic/morpher/NativeLibLoader.java'
+                    exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'
+                    exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'
+                    exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'
+                    exclude 'com/micaftic/morpher/util/ClientUiUtil.java'
+                    exclude 'com/micaftic/morpher/util/PlatformUtil.java'
                     exclude 'com/ysm/parser/YSMParser.java'
                     exclude 'com/ysm/parser/YSMNative.java'
+                    exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java'
                 },
                 fileTree('src/curseforge/java')
         )
@@ -115,6 +120,7 @@ tasks.withType(JavaCompile).configureEach {
             "-Xlint:-removal",
             "-Xlint:-unchecked",
             "-nowarn",
+            "--add-modules", "jdk.incubator.vector",
             "-Xmaxerrs", "10000",
             "-Xmaxwarns", "10000"
     ])
@@ -136,6 +142,10 @@ processResources {
 
     filesMatching(["META-INF/neoforge.mods.toml"]) {
         expand replaceProperties
+    }
+
+    from(rootProject.file("LICENSE")) {
+        rename { "LICENSE" }
     }
 
     if (isCurseForgeDist) {

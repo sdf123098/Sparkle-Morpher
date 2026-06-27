@@ -26,9 +26,9 @@ import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
 import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.Metadata;
+import com.micaftic.morpher.util.ClientUiUtil;
 import com.micaftic.morpher.util.ModelIdUtil;
 import net.minecraft.ChatFormatting;
-import com.micaftic.morpher.util.PlatformUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -85,13 +85,13 @@ public class ModernPlayerModelScreen extends Screen {
         return thread;
     });
 
-    private final Screen parentScreen;
     private final List<Hit> hits = new ArrayList<>();
     private final List<ModelRepoEntry> resourceEntries = new ArrayList<>();
     private final Set<String> selectedModelIds = new LinkedHashSet<>();
     private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
     private final Queue<ModelImportFilePicker.PickedFile> pendingImports = new ArrayDeque<>();
     private final PlayerPreviewEntity previewEntity = new PlayerPreviewEntity();
+    private final Screen parentScreen;
     private ModelPanelLayout layout;
     private EditBox modelSearchBox;
     private EditBox resourceSearchBox;
@@ -1308,7 +1308,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void openModelFolder() {
         try {
             Files.createDirectories(ServerModelManager.CUSTOM);
-            PlatformUtil.openFile(ServerModelManager.CUSTOM.toFile());
+            ClientUiUtil.openFile(ServerModelManager.CUSTOM.toFile());
             setStatus(Component.literal(ServerModelManager.CUSTOM.toString()), ChatFormatting.GRAY);
         } catch (IOException e) {
             setStatus(Component.translatable("gui.sparkle_morpher.import.error.open_folder", e.getMessage()), ChatFormatting.RED);
@@ -1414,6 +1414,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility", GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK));
         rows.add(rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.native_simd_renderer", GeneralConfig.USE_NATIVE_SIMD_RENDERER));
+        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.java_vector_renderer", GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.resource_monitor_log", GeneralConfig.RESOURCE_STATION_MONITOR_LOG));

@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.lwjgl.BufferUtils;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 
 import java.nio.ByteBuffer;
 
@@ -14,6 +15,7 @@ public class AudioCacheBuilder {
     private final AudioTrackData trackData;
 
     private final ByteBuf audioBuffer;
+    private final int estimatedCapacity;
 
     private final IntArrayList chunkSizes = new IntArrayList(5);
 
@@ -22,7 +24,9 @@ public class AudioCacheBuilder {
     public AudioCacheBuilder(AudioStreamCache.CachedAudioStreamProvider cacheProvider, AudioTrackData trackData) {
         this.cacheProvider = cacheProvider;
         this.trackData = trackData;
-        this.audioBuffer = PooledByteBufAllocator.DEFAULT.directBuffer(((int) trackData.getDuration()) * 2);
+        this.estimatedCapacity = Math.max(0, ((int) trackData.getDuration()) * 2);
+        this.audioBuffer = PooledByteBufAllocator.DEFAULT.directBuffer(this.estimatedCapacity);
+        ResourceLifecycleStats.onDirectBufferAllocated(null, this.estimatedCapacity);
     }
 
     public synchronized void appendAudio(ByteBuffer byteBuffer) {
@@ -44,6 +48,7 @@ public class AudioCacheBuilder {
             this.audioBuffer.readBytes(byteBuffer);
             byteBuffer.flip();
             this.audioBuffer.release();
+            ResourceLifecycleStats.onDirectBufferFreed(null, this.estimatedCapacity);
             this.cacheProvider.cacheAudioData(this.trackData, byteBuffer, this.chunkSizes);
         }
     }
@@ -52,6 +57,7 @@ public class AudioCacheBuilder {
         if (!this.closed) {
             this.closed = true;
             this.audioBuffer.release();
+            ResourceLifecycleStats.onDirectBufferFreed(null, this.estimatedCapacity);
             this.cacheProvider.cancelAudioData(this.trackData);
         }
     }

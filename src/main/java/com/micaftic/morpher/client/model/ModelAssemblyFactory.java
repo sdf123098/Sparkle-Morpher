@@ -143,7 +143,9 @@ public class ModelAssemblyFactory {
             }
         }
         boolean bbModelImport = isBbModelImport(clientModelInfo);
-        boolean inheritPrimaryAnimations = !isPrimary && !bbModelImport;
+        // 仅当主装配存在时才尝试继承；否则非主模型不再因 default 加载失败而连锁 NPE，
+        // 模型列表至少可以显示出来（仅丢失从 default 继承的动画）。
+        boolean inheritPrimaryAnimations = !isPrimary && !bbModelImport && primaryAssembly != null;
         if (inheritPrimaryAnimations) {
             ObjectIterator<Map.Entry<String, Animation>> it = primaryAssembly.getAnimationBundle().getMainAnimations().entrySet().iterator();
             while (it.hasNext()) {

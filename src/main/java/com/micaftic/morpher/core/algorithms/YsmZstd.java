@@ -1,7 +1,8 @@
 package com.micaftic.morpher.core.algorithms;
 
-import com.micaftic.morpher.NativeLibLoader;
-import com.ysm.parser.YSMNative;
+import com.micaftic.morpher.RuntimeAccelerationLoader;
+import com.micaftic.morpher.core.acceleration.AccelerationCapability;
+
 import com.micaftic.morpher.core.zstd.ZstdUtil;
 
 import java.io.ByteArrayOutputStream;
@@ -22,9 +23,11 @@ public class YsmZstd {
     }
 
     public static byte[] decompress(byte[] rawData, int offset, int length) throws IOException {
-        try {
-            return decompressWithYsmNative(rawData, offset, length);
-        } catch (Throwable ignored) {
+        if (AccelerationCapability.isLoaded()) {
+            try {
+                return decompressWithYsmNative(rawData, offset, length);
+            } catch (Throwable ignored) {
+            }
         }
         YsmZstd.washInPlace(rawData, offset, length);
         return standardDecompress(rawData, offset, length);
@@ -35,26 +38,28 @@ public class YsmZstd {
     }
 
     public static byte[] compress(byte[] rawData, int offset, int length) {
-        try {
-            return compressWithYsmNative(rawData, offset, length, 3);
-        } catch (Throwable ignored) {
+        if (AccelerationCapability.isLoaded()) {
+            try {
+                return compressWithYsmNative(rawData, offset, length, 3);
+            } catch (Throwable ignored) {
+            }
         }
         byte[] zstdData = standardCompress(rawData, offset, length, 3);
         return YsmZstd.obfuscate(zstdData);
     }
 
     private static byte[] decompressWithYsmNative(byte[] rawData, int offset, int length) {
-        if (!NativeLibLoader.isLoaded()) {
+        if (!AccelerationCapability.isLoaded()) {
             throw new UnsatisfiedLinkError("YSM native library is not loaded");
         }
-        return YSMNative.ysmZstdDecompress(copyInput(rawData, offset, length));
+        return YsmAlgorithmBridge.ysmZstdDecompress(copyInput(rawData, offset, length));
     }
 
     private static byte[] compressWithYsmNative(byte[] rawData, int offset, int length, int level) {
-        if (!NativeLibLoader.isLoaded()) {
+        if (!AccelerationCapability.isLoaded()) {
             throw new UnsatisfiedLinkError("YSM native library is not loaded");
         }
-        return YSMNative.ysmZstdCompress(copyInput(rawData, offset, length), level);
+        return YsmAlgorithmBridge.ysmZstdCompress(copyInput(rawData, offset, length), level);
     }
 
     private static byte[] standardDecompress(byte[] rawData, int offset, int length) throws IOException {
@@ -62,16 +67,22 @@ public class YsmZstd {
                 ? rawData
                 : Arrays.copyOfRange(rawData, offset, offset + length);
         Throwable failure = null;
-        try {
-            return decompressWithNative(zstdData);
-        } catch (Throwable nativeError) {
-            failure = nativeError;
+        if (AccelerationCapability.isLoaded()) {
+            try {
+                return decompressWithNative(zstdData);
+            } catch (Throwable nativeError) {
+                failure = nativeError;
+            }
         }
         // zstd-jni layer removed (was: YSM native → zstd-jni → Java); now: YSM native → Java ZstdUtil → raw-frame fallback.
         try {
             return ZstdUtil.decompress(zstdData);
         } catch (Throwable fallbackError) {
-            failure.addSuppressed(fallbackError);
+            if (failure == null) {
+                failure = fallbackError;
+            } else {
+                failure.addSuppressed(fallbackError);
+            }
             try {
                 return decompressRawFrame(zstdData);
             } catch (Throwable rawFrameError) {
@@ -85,38 +96,40 @@ public class YsmZstd {
     }
 
     private static byte[] decompressWithNative(byte[] zstdData) {
-        if (!NativeLibLoader.isLoaded()) {
+        if (!AccelerationCapability.isLoaded()) {
             throw new UnsatisfiedLinkError("YSM native library is not loaded");
         }
-        return YSMNative.zstdDecompress(zstdData);
+        return YsmAlgorithmBridge.zstdDecompress(zstdData);
     }
 
     private static byte[] standardCompress(byte[] rawData, int offset, int length, int level) {
         byte[] input = offset == 0 && length == rawData.length
                 ? rawData
                 : Arrays.copyOfRange(rawData, offset, offset + length);
-        try {
-            return compressWithNative(input, level);
-        } catch (Throwable nativeError) {
-            // zstd-jni compress layer removed; fall back to pure-Java ZstdUtil, then raw-frame as last resort.
-            if (NativeLibLoader.isOnAndroid()) {
-                return compressRawFrame(input);
-            }
+        if (AccelerationCapability.isLoaded()) {
             try {
-                byte[] javaCompressed = ZstdUtil.compress(input, 0, input.length, level);
-                ZstdUtil.decompress(javaCompressed);
-                return javaCompressed;
-            } catch (Throwable fallbackError) {
-                return compressRawFrame(input);
+                return compressWithNative(input, level);
+            } catch (Throwable ignored) {
             }
+        }
+        // zstd-jni compress layer removed; fall back to pure-Java ZstdUtil, then raw-frame as last resort.
+        if (RuntimeAccelerationLoader.isOnAndroid()) {
+            return compressRawFrame(input);
+        }
+        try {
+            byte[] javaCompressed = ZstdUtil.compress(input, 0, input.length, level);
+            ZstdUtil.decompress(javaCompressed);
+            return javaCompressed;
+        } catch (Throwable fallbackError) {
+            return compressRawFrame(input);
         }
     }
 
     private static byte[] compressWithNative(byte[] input, int level) {
-        if (!NativeLibLoader.isLoaded()) {
+        if (!AccelerationCapability.isLoaded()) {
             throw new UnsatisfiedLinkError("YSM native library is not loaded");
         }
-        return YSMNative.zstdCompress(input, level);
+        return YsmAlgorithmBridge.zstdCompress(input, level);
     }
 
     private static byte[] copyInput(byte[] input, int offset, int length) {

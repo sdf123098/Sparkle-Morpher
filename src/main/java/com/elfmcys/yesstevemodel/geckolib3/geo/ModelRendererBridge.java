@@ -2,7 +2,6 @@
 
 package com.elfmcys.yesstevemodel.geckolib3.geo;
 
-import com.micaftic.morpher.NativeLibLoader;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.config.GeneralConfig;
@@ -21,6 +20,10 @@ import com.micaftic.morpher.core.gpu.GpuCapability;
 import com.micaftic.morpher.core.gpu.GpuDebugLog;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import com.micaftic.morpher.core.gpu.IrisRenderPath;
+import com.micaftic.morpher.core.acceleration.AccelerationCapability;
+import com.micaftic.morpher.core.render.RenderBackendDecision;
+import com.micaftic.morpher.core.vector.JdkVectorModelMath;
+import com.micaftic.morpher.core.vector.VectorApiCapability;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -28,7 +31,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.Arrays;
 
-public class NativeModelRenderer {
+public class ModelRendererBridge {
     private static final int FULL_BRIGHT_LIGHT = 0xF000F0;
 
     private static final Matrix4f projectionModelViewMatrix = new Matrix4f();
@@ -52,18 +55,14 @@ public class NativeModelRenderer {
         // Submit-based world renders must keep the normal geometry path so the
         // entity still reaches the feature/shadow pipeline.
         boolean translucentTexture = model.isTranslucentTexture(textureIndex);
-        boolean useGpuRenderer = allowDirectGpuRenderer && !translucentTexture && !disableGlow && textureLocation != null && SubmitRenderContext.get() == null && ModelPreviewRenderer.isWorldRender() && !isPreview && !ModelPreviewRenderer.isFirstPerson() && NativeLibLoader.isLoaded() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get() && GeneralConfig.USE_GPU_RENDERER.get();
         boolean useNativeSimdRenderer = GeneralConfig.safeGet(GeneralConfig.USE_NATIVE_SIMD_RENDERER, false);
-        GpuDebugLog.verbose("entry texture={} allowGpu={} useGpu={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdCfg={} nativeLoaded={}",
-                textureLocation, allowDirectGpuRenderer, useGpuRenderer, translucentTexture, disableGlow, shaderPackInUse,
+        RenderBackendDecision backend = RenderBackendDecision.choose(model, allowDirectGpuRenderer, translucentTexture, disableGlow, textureLocation, useNativeSimdRenderer);
+        GpuDebugLog.verbose("entry texture={} allowGpu={} backend={} reason={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdCfg={} nativeLoaded={} nativeReason={}",
+                textureLocation, allowDirectGpuRenderer, backend.backend, backend.reason, translucentTexture, disableGlow, shaderPackInUse,
                 isPreview, ModelPreviewRenderer.isFirstPerson(), SubmitRenderContext.get() != null, ModelPreviewRenderer.isWorldRender(),
-                GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), GeneralConfig.USE_GPU_RENDERER.get(), useNativeSimdRenderer, NativeLibLoader.isLoaded());
-        if (useGpuRenderer) {
-            if (!GpuCapability.isAvailable()) {
-                ChatLogger.INSTANCE.logFormatted("Disabled GPU renderer for: " + GpuCapability.getReason());
-                GeneralConfig.USE_GPU_RENDERER.set(false);
-                GeneralConfig.USE_GPU_RENDERER.save();
-            } else if (shaderPackInUse) {
+                GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), GeneralConfig.USE_GPU_RENDERER.get(), useNativeSimdRenderer, AccelerationCapability.isLoaded(), AccelerationCapability.getReason());
+        if (backend.backend == RenderBackendDecision.Backend.GPU) {
+            if (shaderPackInUse) {
                 if (IrisRenderPath.tryRender(model, pose, boneParams, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation)) {
                     GpuDebugLog.verbose("entry rendered through IrisRenderPath texture={}", textureLocation);
                     return;
@@ -78,7 +77,7 @@ public class NativeModelRenderer {
             }
         }
 
-        if (useNativeSimdRenderer && !isPreview && !ModelPreviewRenderer.isFirstPerson() && !translucentTexture && NativeLibLoader.isLoaded() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get() && !disableGlow) { // WIP: SIMD MODEL RENDER
+        if (backend.backend == RenderBackendDecision.Backend.NATIVE_SIMD) { // WIP: SIMD MODEL RENDER
             GpuDebugLog.verbose("entry rendered through native SIMD texture={} partMask={}", textureLocation, renderPartMask);
             nativeRenderModel(
                     buffer,
@@ -96,8 +95,11 @@ public class NativeModelRenderer {
                     isPreview
             );
         } else {
-            GpuDebugLog.verbose("entry rendered through Java model path texture={} nativeSimdCfg={} translucent={} preview={} firstPerson={} compat={} disableGlow={}",
-                    textureLocation, useNativeSimdRenderer, translucentTexture, isPreview, ModelPreviewRenderer.isFirstPerson(),
+            GpuDebugLog.verbose("entry rendered through Java model path texture={} nativeSimdCfg={} vectorCfg={} vectorAvailable={} vectorReason={} translucent={} preview={} firstPerson={} compat={} disableGlow={}",
+                    textureLocation, useNativeSimdRenderer,
+                    GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false),
+                    VectorApiCapability.isAvailable(), VectorApiCapability.getReason(),
+                    translucentTexture, isPreview, ModelPreviewRenderer.isFirstPerson(),
                     GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), disableGlow);
             renderModel(
                     buffer,
@@ -167,10 +169,11 @@ public class NativeModelRenderer {
             boolean disableGlow) {
 
         if (mesh.bakedBones == null || mesh.bakedBones.isEmpty()) return;
+        int boneCount = mesh.bakedBones.size();
 
         // TODO: 淇京GC澹撳姏
         RenderScratch scratch = FALLBACK_SCRATCH.get();
-        scratch.ensureBoneCapacity(mesh.bakedBones.size());
+        scratch.ensureBoneCapacity(boneCount);
 
         Matrix4f rootPoseMat = pose.pose();
         Matrix3f rootNormalMC = pose.normal();
@@ -184,13 +187,29 @@ public class NativeModelRenderer {
         Matrix4f[] boneLocalTransforms = scratch.boneLocalTransforms;
         boolean[] boneVisible = scratch.boneVisible;
         boolean[] boneComputed = scratch.boneComputed;
-        Arrays.fill(boneComputed, 0, mesh.bakedBones.size(), false);
-
-        for (int i = 0; i < mesh.bakedBones.size(); i++) {
-            calculateBoneMatrix(i, mesh.bakedBones, boneParams, boneLocalTransforms, boneVisible, boneComputed, identityMat, stateBuffer);
+        boolean useJavaVector = GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false) && VectorApiCapability.isAvailable();
+        int[] boneOrder = mesh.bakedBoneOrder;
+        if (boneOrder != null && boneOrder.length == boneCount) {
+            for (int orderIndex = 0; orderIndex < boneCount; orderIndex++) {
+                calculateBoneMatrixLinear(boneOrder[orderIndex], mesh.bakedBones, boneParams, boneLocalTransforms, boneVisible, identityMat, stateBuffer);
+            }
+        } else {
+            Arrays.fill(boneComputed, 0, boneCount, false);
+            for (int i = 0; i < boneCount; i++) {
+                calculateBoneMatrix(i, mesh.bakedBones, boneParams, boneLocalTransforms, boneVisible, boneComputed, identityMat, stateBuffer);
+            }
         }
 
-        for (int i = 0; i < mesh.bakedBones.size(); i++) {
+        int[] renderBoneOrder = mesh.getPartMaskBoneRenderOrder(renderPartMask);
+        if (renderBoneOrder == null || renderBoneOrder.length == 0) {
+            renderBoneOrder = scratch.fallbackRenderOrder(boneCount);
+        }
+
+        for (int orderIndex = 0; orderIndex < renderBoneOrder.length; orderIndex++) {
+            int i = renderBoneOrder[orderIndex];
+            if (i < 0 || i >= boneCount) {
+                continue;
+            }
             if (!boneVisible[i]) {
                 continue;
             }
@@ -212,14 +231,82 @@ public class NativeModelRenderer {
 
             for (GeoModel.BakedCube cube : bone.cubes) {
                 for (GeoModel.BakedQuad quad : cube.quads) {
-                    tempNorm.set(quad.normal).mul(globalNormalMat).normalize();
-                    for (int v = 0; v < 4; v++) {
-                        tempPos.set(quad.positions[v].x(), quad.positions[v].y(), quad.positions[v].z(), 1.0f).mul(globalBoneMat);
-                        vertexConsumer.addVertex(tempPos.x(), tempPos.y(), tempPos.z(), ((int)(a * 255) << 24) | ((int)(r * 255) << 16) | ((int)(g * 255) << 8) | (int)(b * 255), quad.uvs[v].x(), quad.uvs[v].y(), packedOverlay, currentPackedLight, tempNorm.x(), tempNorm.y(), tempNorm.z());
+                    tempNorm.set(quad.normalX, quad.normalY, quad.normalZ).mul(globalNormalMat).normalize();
+                    if (useJavaVector) {
+                        JdkVectorModelMath.transformQuadPositions(quad, globalBoneMat, scratch.vectorX, scratch.vectorY, scratch.vectorZ);
+                        for (int v = 0; v < 4; v++) {
+                            vertexConsumer.addVertex(scratch.vectorX[v], scratch.vectorY[v], scratch.vectorZ[v], ((int)(a * 255) << 24) | ((int)(r * 255) << 16) | ((int)(g * 255) << 8) | (int)(b * 255), quad.u(v), quad.v(v), packedOverlay, currentPackedLight, tempNorm.x(), tempNorm.y(), tempNorm.z());
+                        }
+                    } else {
+                        for (int v = 0; v < 4; v++) {
+                            tempPos.set(quad.x(v), quad.y(v), quad.z(v), 1.0f).mul(globalBoneMat);
+                            vertexConsumer.addVertex(tempPos.x(), tempPos.y(), tempPos.z(), ((int)(a * 255) << 24) | ((int)(r * 255) << 16) | ((int)(g * 255) << 8) | (int)(b * 255), quad.u(v), quad.v(v), packedOverlay, currentPackedLight, tempNorm.x(), tempNorm.y(), tempNorm.z());
+                        }
                     }
                 }
             }
         }
+    }
+
+    private static void calculateBoneMatrixLinear(int idx, java.util.List<GeoModel.BakedBone> bones, float[] boneParams, Matrix4f[] cache, boolean[] visibleCache, Matrix4f rootPose, float[] stateBuffer) {
+        GeoModel.BakedBone bone = bones.get(idx);
+        Matrix4f parentMatrix = rootPose;
+        boolean isVisible = true;
+
+        if (bone.parentIdx != -1) {
+            parentMatrix = cache[bone.parentIdx];
+            if (!visibleCache[bone.parentIdx]) {
+                isVisible = false;
+            }
+        }
+
+        Matrix4f localMat = cache[idx];
+        if (localMat == null) {
+            localMat = new Matrix4f();
+            cache[idx] = localMat;
+        }
+        localMat.set(parentMatrix);
+
+        int pOffset = idx * 12;
+        float animRx = boneParams[pOffset];
+        float animRy = boneParams[pOffset + 1];
+        float animRz = boneParams[pOffset + 2];
+        float animTx = boneParams[pOffset + 3];
+        float animTy = boneParams[pOffset + 4];
+        float animTz = boneParams[pOffset + 5];
+        float animSx = boneParams[pOffset + 6];
+        float animSy = boneParams[pOffset + 7];
+        float animSz = boneParams[pOffset + 8];
+        float unk3 = boneParams[pOffset + 11];
+
+        if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
+            isVisible = false;
+        }
+
+        localMat.translate(
+                (bone.pivotX - animTx) * 0.0625f,
+                (bone.pivotY + animTy) * 0.0625f,
+                (bone.pivotZ + animTz) * 0.0625f
+        );
+        localMat.rotateZ(animRz);
+        localMat.rotateY(animRy);
+        localMat.rotateX(animRx);
+
+        if (animSx != 1.0f || animSy != 1.0f || animSz != 1.0f) {
+            localMat.scale(animSx, animSy, animSz);
+        }
+
+        if (unk3 == 1.0F && stateBuffer != null && isVisible) {
+            int offset = idx * 4;
+            if (offset + 2 < stateBuffer.length) {
+                stateBuffer[offset + 0] = -localMat.m30() * 16;
+                stateBuffer[offset + 1] = localMat.m31() * 16;
+                stateBuffer[offset + 2] = localMat.m32() * 16;
+            }
+        }
+
+        localMat.translate(-bone.pivotX / 16f, -bone.pivotY / 16f, -bone.pivotZ / 16f);
+        visibleCache[idx] = isVisible;
     }
 
     private static Matrix4f calculateBoneMatrix(int idx, java.util.List<GeoModel.BakedBone> bones, float[] boneParams, Matrix4f[] cache, boolean[] visibleCache, boolean[] computedCache, Matrix4f rootPose, float[] stateBuffer) {
@@ -355,9 +442,13 @@ public class NativeModelRenderer {
         final Matrix3f globalNormalMat = new Matrix3f();
         final Vector4f tempPos = new Vector4f();
         final Vector3f tempNorm = new Vector3f();
+        final float[] vectorX = new float[4];
+        final float[] vectorY = new float[4];
+        final float[] vectorZ = new float[4];
         Matrix4f[] boneLocalTransforms = new Matrix4f[0];
         boolean[] boneVisible = new boolean[0];
         boolean[] boneComputed = new boolean[0];
+        int[] allBoneRenderOrder = new int[0];
 
         void ensureBoneCapacity(int boneCount) {
             if (boneLocalTransforms.length < boneCount) {
@@ -365,6 +456,16 @@ public class NativeModelRenderer {
                 boneVisible = Arrays.copyOf(boneVisible, boneCount);
                 boneComputed = Arrays.copyOf(boneComputed, boneCount);
             }
+        }
+
+        int[] fallbackRenderOrder(int boneCount) {
+            if (allBoneRenderOrder.length < boneCount) {
+                allBoneRenderOrder = new int[boneCount];
+                for (int i = 0; i < boneCount; i++) {
+                    allBoneRenderOrder[i] = i;
+                }
+            }
+            return allBoneRenderOrder;
         }
     }
 }

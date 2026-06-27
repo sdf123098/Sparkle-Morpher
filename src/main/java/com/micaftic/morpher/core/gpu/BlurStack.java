@@ -2,6 +2,9 @@ package com.micaftic.morpher.core.gpu;
 
 import com.mojang.blaze3d.opengl.GlStateManager;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
@@ -10,6 +13,7 @@ import org.lwjgl.opengl.GL20;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 public final class BlurStack {
     private static final List<Region> regions = new ArrayList<>();
@@ -68,12 +72,25 @@ public final class BlurStack {
         regions.clear();
     }
 
+    public static void disposeAll(String reason) {
+        if (!RenderSystem.isOnRenderThread()) {
+            ((Executor) Minecraft.getInstance()).execute(() -> disposeAll(reason));
+            return;
+        }
+        regions.clear();
+        BlurShader.closeAll(reason);
+    }
+
     public static boolean isEmpty() {
         return regions.isEmpty();
     }
 
     public static void flush(GuiGraphicsExtractor graphics) {
         if (regions.isEmpty()) return;
+        if (!SmGraphicsBackendDetector.isOpenGlGuiBlurEnabled()) {
+            regions.clear();
+            return;
+        }
         if (!BlurShader.ensureCompiled()) {
             regions.clear();
             return;

@@ -39,11 +39,11 @@ public class YesSteveModel {
         migrateLegacyConfigDir();
         LOGGER.info("Initializing Sparkle's Morpher, platform: " + PlatformAPI.getPlatformName());
         try {
-            NativeLibLoader.init();
+            RuntimeAccelerationLoader.init();
         } catch (IOException e) {
             LOGGER.error("Failed to initialize native lib", e);
         }
-        if (!NativeLibLoader.isAvailable()) {
+        if (!RuntimeAccelerationLoader.isAvailable()) {
             LOGGER.error(getErrorMessage());
         } else {
             initConfig();
@@ -87,11 +87,11 @@ public class YesSteveModel {
 
     @Keep
     public static boolean isAvailable() {
-        return NativeLibLoader.isAvailable();
+        return RuntimeAccelerationLoader.isAvailable();
     }
 
     public static boolean isOnAndroid() {
-        return NativeLibLoader.isOnAndroid();
+        return RuntimeAccelerationLoader.isOnAndroid();
     }
     public static void sendUnavailableMessage() {
         LocalPlayer localPlayer = Minecraft.getInstance().player;
@@ -101,10 +101,10 @@ public class YesSteveModel {
     }
 
     public static Component getUnavailableComponent() {
-        return NativeLibLoader.getErrorComponent();
+        return RuntimeAccelerationLoader.getErrorComponent();
     }
 
     public static String getErrorMessage() {
-        return NativeLibLoader.getErrorMessage();
+        return RuntimeAccelerationLoader.getErrorMessage();
     }
 }

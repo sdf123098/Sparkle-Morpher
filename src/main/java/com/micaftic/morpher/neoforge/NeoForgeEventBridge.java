@@ -119,4 +119,20 @@ public final class NeoForgeEventBridge {
             }
         }
     }
+
+    @SubscribeEvent
+    public static void onStartTracking(net.neoforged.neoforge.event.entity.player.PlayerEvent.StartTracking event) {
+        if (!com.micaftic.morpher.YesSteveModel.isAvailable()) return;
+        net.minecraft.world.entity.Entity target = event.getTarget();
+        if (!(event.getEntity() instanceof ServerPlayer tracker)) return;
+        if (target instanceof ServerPlayer tracked) {
+            com.micaftic.morpher.event.CapabilityEvent.getModelInfoCap(tracked).ifPresent(c -> {
+                if (com.micaftic.morpher.network.NetworkHandler.isPlayerConnected(tracked) || c.isMandatory()) {
+                    c.createSyncMessage(tracked, false).ifPresent(m -> {
+                        com.micaftic.morpher.network.NetworkHandler.sendToClientPlayer(m, tracker);
+                    });
+                }
+            });
+        }
+    }
 }
