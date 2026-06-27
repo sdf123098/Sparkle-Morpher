@@ -2,6 +2,7 @@ package com.micaftic.morpher.geckolib3.util.json;
 
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.resource.YSMClientMapper;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -48,29 +49,33 @@ public class JsonTextureUtils {
             JsonObject jsonObj = element.getAsJsonObject();
 
             if (jsonObj.has("uv")) {
-                String uvPath = jsonObj.get("uv").toString();
+                String uvPath = jsonObj.get("uv").getAsString();
                 String name = extractTextureName(uvPath);
-                OuterFileTexture texture = new OuterFileTexture(resource.get(uvPath));
+                OuterFileTexture texture = createTexture(resource.get(uvPath));
                 Map<ShadersTextureType, OuterFileTexture> fbo = new HashMap<>();
                 if (jsonObj.has("normal")) {
-                    String normalPath = jsonObj.get("normal").toString();
-                    fbo.put(ShadersTextureType.NORMAL, new OuterFileTexture(resource.get(normalPath)));
+                    String normalPath = jsonObj.get("normal").getAsString();
+                    fbo.put(ShadersTextureType.NORMAL, createTexture(resource.get(normalPath)));
                 }
                 if (jsonObj.has("specular")) {
-                    String specularPath = jsonObj.get("specular").toString();
-                    fbo.put(ShadersTextureType.SPECULAR, new OuterFileTexture(resource.get(specularPath)));
+                    String specularPath = jsonObj.get("specular").getAsString();
+                    fbo.put(ShadersTextureType.SPECULAR, createTexture(resource.get(specularPath)));
                 }
                 texture.setSuffixTextures(fbo);
 
                 return Pair.of(name, texture);
             }
         } else if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
-            String texPath = element.toString();
+            String texPath = element.getAsString();
             String name = extractTextureName(texPath);
-            return Pair.of(name, new OuterFileTexture(resource.get(texPath)));
+            return Pair.of(name, createTexture(resource.get(texPath)));
         }
 
         return null;
+    }
+
+    private static OuterFileTexture createTexture(byte[] data) {
+        return new OuterFileTexture(data == null ? null : YSMClientMapper.toPng(data, 0, 0, 0));
     }
 
     private static String extractTextureName(String path) {

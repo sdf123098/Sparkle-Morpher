@@ -13,7 +13,7 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
-import net.neoforged.fml.config.ModConfig;
+import net.minecraftforge.fml.config.ModConfig;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.micaftic.morpher.core.api.PlatformAPI;
@@ -41,11 +41,11 @@ public class YesSteveModel {
         migrateLegacyConfigDir();
         LOGGER.info("Initializing Sparkle's Morpher, platform: " + PlatformAPI.getPlatformName());
         try {
-            NativeLibLoader.init();
+            RuntimeAccelerationLoader.init();
         } catch (IOException e) {
             LOGGER.error("Failed to initialize native lib", e);
         }
-        if (!NativeLibLoader.isAvailable()) {
+        if (!RuntimeAccelerationLoader.isAvailable()) {
             LOGGER.error(getErrorMessage());
         } else {
             initConfig();
@@ -89,11 +89,11 @@ public class YesSteveModel {
 
     @Keep
     public static boolean isAvailable() {
-        return NativeLibLoader.isAvailable();
+        return RuntimeAccelerationLoader.isAvailable();
     }
 
     public static boolean isOnAndroid() {
-        return NativeLibLoader.isOnAndroid();
+        return RuntimeAccelerationLoader.isOnAndroid();
     }
 
     @Environment(EnvType.CLIENT)
@@ -105,10 +105,10 @@ public class YesSteveModel {
     }
 
     public static Component getUnavailableComponent() {
-        return NativeLibLoader.getErrorComponent();
+        return RuntimeAccelerationLoader.getErrorComponent();
     }
 
     public static String getErrorMessage() {
-        return NativeLibLoader.getErrorMessage();
+        return RuntimeAccelerationLoader.getErrorMessage();
     }
 }

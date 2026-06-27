@@ -1,10 +1,9 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.micaftic.morpher.NativeLibLoader;
-
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GLCapabilities;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 
 public final class GpuCapability {
     private static volatile boolean checked = false;
@@ -29,8 +28,9 @@ public final class GpuCapability {
             reason = "gpu renderer disabled by OYSM_DISABLE_GPU";
             return;
         }
-        if (!NativeLibLoader.isLoaded()) {
-            reason = "native ysm-core not loaded";
+        if (!SmGraphicsBackendDetector.isRawOpenGlAllowed()) {
+            reason = "raw OpenGL disabled for Minecraft backend: " + SmGraphicsBackendDetector.currentBackend()
+                    + " (" + SmGraphicsBackendDetector.reason() + ")";
             return;
         }
         String osName = System.getProperty("os.name", "").toLowerCase();

@@ -3,6 +3,7 @@ package com.micaftic.morpher.core.gpu;
 import com.mojang.blaze3d.opengl.GlStateManager;
 
 import com.mojang.blaze3d.vertex.BufferUploader;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
@@ -18,6 +19,14 @@ public final class Pie {
     }
 
     public static void draw(GuiGraphicsExtractor graphics, float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float endAngle, int rgba, float feather) {
+        if (!SmGraphicsBackendDetector.isOpenGlGuiBlurEnabled()) {
+            int x1 = (int) (centerX - outerRadius);
+            int y1 = (int) (centerY - outerRadius);
+            int x2 = (int) (centerX + outerRadius);
+            int y2 = (int) (centerY + outerRadius);
+            graphics.fill(x1, y1, x2, y2, rgba);
+            return;
+        }
         if (!PieShader.ensureCompiled()) return;
 
         float pad = feather + 1.0f;
@@ -35,7 +44,7 @@ public final class Pie {
         float cb = (rgba & 0xFF) / 255.0f;
         float ca = ((rgba >> 24) & 0xFF) / 255.0f;
 
-        GlStateManager._enableBlend();
+        GlStateManager._enableBlend(0);
         GlStateManager._blendFuncSeparate(770, 771, 1, 0);
         GlStateManager._disableCull();
         GlStateManager._disableDepthTest();
@@ -59,6 +68,6 @@ public final class Pie {
         BufferUploader.invalidate();
         GlStateManager._glBindVertexArray(0);
 
-        GlStateManager._disableBlend();
+        GlStateManager._disableBlend(0);
     }
 }

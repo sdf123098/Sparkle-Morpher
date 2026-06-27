@@ -7,7 +7,6 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.client.Minecraft;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 
@@ -24,7 +23,7 @@ public final class ExtraPlayerRenderKey {
         }
         ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
             if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, KEY_MAPPING)) {
-                Minecraft.getInstance().setScreen(new ExtraPlayerRenderScreen());
+                InputUtil.setScreen(new ExtraPlayerRenderScreen());
             }
             return EventResult.pass();
         });

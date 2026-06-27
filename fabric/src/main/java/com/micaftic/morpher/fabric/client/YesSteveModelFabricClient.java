@@ -5,6 +5,8 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.renderer.AnimationDebugOverlay;
 import com.micaftic.morpher.client.renderer.ExtraPlayerOverlay;
 import com.micaftic.morpher.client.renderer.ModelSyncStateOverlay;
+import com.micaftic.morpher.core.architectury.registry.client.keymappings.KeyMappingRegistry;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
@@ -16,6 +18,8 @@ import com.micaftic.morpher.core.api.client.HudOverlay;
 public final class YesSteveModelFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
+        KeyMappingRegistry.getCustomKeyMappings().forEach(KeyMappingHelper::registerKeyMapping);
+
         HudOverlay debugOverlay = AnimationDebugOverlay.createOverlay();
         HudOverlay loadingOverlay = new ExtraPlayerOverlay();
         HudOverlay syncOverlay = new ModelSyncStateOverlay();
@@ -31,5 +35,6 @@ public final class YesSteveModelFabricClient implements ClientModInitializer {
         });
 
         ClientModelManager.loadDefaultModel();
+        ClientModelManager.reloadLocalModels(null, false);
     }
 }

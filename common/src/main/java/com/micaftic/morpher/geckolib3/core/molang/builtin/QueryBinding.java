@@ -227,7 +227,7 @@ public class QueryBinding extends ContextBinding {
     }
 
     private static float getDistanceFromCamera(IContext<Entity> context) {
-        Vec3 cameraPosition = Minecraft.getInstance().gameRenderer.getMainCamera().position();
+        Vec3 cameraPosition = Minecraft.getInstance().gameRenderer.mainCamera().position();
         return Mth.sqrt((float) context.entity().distanceToSqr(cameraPosition));
     }
 

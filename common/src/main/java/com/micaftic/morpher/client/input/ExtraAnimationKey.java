@@ -75,7 +75,7 @@ public final class ExtraAnimationKey {
                         }
                         if (rouletteKey.startsWith("#") && modelProperties.getExtraAnimationClassify().containsKey(rouletteKey.substring(1))) {
                             UnifiedRouletteScreen.setInitialSubmenu(rouletteKey.substring(1));
-                            Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(cap.getModelId(), modelAssembly, cap));
+                            InputUtil.setScreen(new UnifiedRouletteScreen(cap.getModelId(), modelAssembly, cap));
                             return;
                         }
                         NetworkHandler.sendToServer(new C2SPlayAnimationPacket(index, StringPool.EMPTY));

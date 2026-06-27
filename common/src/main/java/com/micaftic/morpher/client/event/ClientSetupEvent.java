@@ -13,6 +13,7 @@ import net.minecraft.network.chat.Component;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
 import com.micaftic.morpher.core.api.PlatformAPI;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import net.minecraft.client.KeyMapping;
 
 public final class ClientSetupEvent {
@@ -48,6 +49,9 @@ public final class ClientSetupEvent {
     }
 
     public static Object nativeClientInit() {
+        if (!SmGraphicsBackendDetector.isRawOpenGlAllowed()) {
+            return null;
+        }
         try {
             int maxTexSize = GL11.glGetInteger(GL11.GL_MAX_TEXTURE_SIZE);
             if (maxTexSize <= 0) {

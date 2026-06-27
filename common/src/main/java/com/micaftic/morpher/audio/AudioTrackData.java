@@ -1,13 +1,18 @@
 package com.micaftic.morpher.audio;
 
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 
-public class AudioTrackData {
+public class AudioTrackData implements AutoCloseable {
 
     @Nullable
     private final ByteBuffer data;
+    private final boolean nativeAllocated;
+    private final int byteSize;
+    private boolean closed;
 
     private final AudioCodec codec;
 
@@ -18,14 +23,20 @@ public class AudioTrackData {
     public AudioTrackData(@Nullable ByteBuffer byteBuffer, int i, int i2, long j) {
         AudioCodec codec;
         if (byteBuffer != null) {
+            this.byteSize = byteBuffer.remaining();
             if (i == 2) {
-                this.data = ByteBuffer.allocateDirect(byteBuffer.remaining());
+                this.data = MemoryUtil.memAlloc(byteBuffer.remaining());
+                this.nativeAllocated = true;
+                ResourceLifecycleStats.onDirectBufferAllocated(null, this.byteSize);
             } else {
                 this.data = ByteBuffer.allocate(byteBuffer.remaining());
+                this.nativeAllocated = false;
             }
             this.data.duplicate().put(byteBuffer.duplicate());
         } else {
             this.data = null;
+            this.nativeAllocated = false;
+            this.byteSize = 0;
         }
         switch (i) {
             case 1:
@@ -57,6 +68,25 @@ public class AudioTrackData {
 
     @Nullable
     public ByteBuffer getData() {
+        if (this.closed) {
+            return null;
+        }
         return this.data;
+    }
+
+    public int byteSize() {
+        return this.byteSize;
+    }
+
+    @Override
+    public void close() {
+        if (this.closed) {
+            return;
+        }
+        this.closed = true;
+        if (this.nativeAllocated && this.data != null) {
+            ResourceLifecycleStats.onDirectBufferFreed(null, this.byteSize);
+            MemoryUtil.memFree(this.data);
+        }
     }
 }

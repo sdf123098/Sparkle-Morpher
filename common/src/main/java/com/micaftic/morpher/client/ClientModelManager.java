@@ -1,7 +1,9 @@
 package com.micaftic.morpher.client;
 
-import com.micaftic.morpher.NativeLibLoader;
+import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.audio.AudioStreamCache;
+import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.gui.IGuiWidget;
@@ -24,9 +26,11 @@ import com.micaftic.morpher.resource.models.ModelPackData;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.DigestUtil;
 import com.micaftic.morpher.util.FileTypeUtil;
+import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.LocalModelSelectionStore;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
 import com.micaftic.morpher.util.NetworkOnlineDebugLog;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.util.YSMThreadPool;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -852,6 +856,10 @@ public class ClientModelManager {
     }
 
     public static void reloadLocalModels(@Nullable Consumer<Component> callback) {
+        reloadLocalModels(callback, true);
+    }
+
+    public static void reloadLocalModels(@Nullable Consumer<Component> callback, boolean restoreSelection) {
         modelPhraseExecutor.submit(() -> {
             Component error = null;
             try {
@@ -859,7 +867,9 @@ public class ClientModelManager {
                 loadDirectoryModels(ServerModelManager.BUILT);
                 loadDirectoryModels(ServerModelManager.CUSTOM);
                 loadDirectoryModels(ServerModelManager.AUTH);
-                restorePersistedModelSelection();
+                if (restoreSelection) {
+                    restorePersistedModelSelection();
+                }
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to reload local model folders", e);
                 error = Component.translatable("gui.sparkle_morpher.import.error.local_reload_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
@@ -1034,7 +1044,7 @@ public class ClientModelManager {
         ((Executor) Minecraft.getInstance()).execute(() -> {
             Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
             if (removedModelIds != null) {
-                ArrayList<ModelAssembly> removed = new ArrayList<>(removedModelIds.length);
+                ArrayList<Pair<String, ModelAssembly>> removed = new ArrayList<>(removedModelIds.length);
                 for (String str : removedModelIds) {
                     if (localOnlyModelIds.contains(str)) {
                         continue;
@@ -1047,12 +1057,12 @@ public class ClientModelManager {
                     }
                     ModelAssembly assembly = map.remove(str);
                     if (assembly != null) {
-                        removed.add(assembly);
+                        removed.add(Pair.of(str, assembly));
                     }
                 }
                 ((Executor) Minecraft.getInstance()).execute(() -> {
-                    for (ModelAssembly assembly : removed) {
-                        releaseModelAssembly(assembly);
+                    for (Pair<String, ModelAssembly> entry : removed) {
+                        releaseModelAssembly(entry.getLeft(), entry.getRight());
                     }
                 });
             }
@@ -1318,6 +1328,7 @@ public class ClientModelManager {
                 ModelMemoryProfiler.log("assembly-build-start", modelId);
                 ModelAssembly runtimeModel = ModelAssemblyFactory.buildAssembly(parsedBundle, isPrimary, isAuth);
                 ModelMemoryProfiler.log("assembly-build-finished", modelId);
+                ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
                 pendingModelQueue.add(Pair.of(runtimeModel, modelId));
                 touchModel(modelId);
                 if (isPrimary) {
@@ -1400,7 +1411,7 @@ public class ClientModelManager {
                 touchModel(pairPoll.getRight());
                 gpuCacheTrimmedModels.remove(pairPoll.getRight());
                 if (previous != null && previous != pairPoll.getLeft()) {
-                    releaseModelAssembly(previous);
+                    releaseModelAssembly(pairPoll.getRight(), previous);
                 }
             } else {
                 modelAssemblyMap = object2ReferenceOpenHashMap;
@@ -1411,13 +1422,19 @@ public class ClientModelManager {
     }
 
     private static void releaseModelAssembly(ModelAssembly assembly) {
+        releaseModelAssembly(null, assembly);
+    }
+
+    private static void releaseModelAssembly(String modelId, ModelAssembly assembly) {
         if (assembly == null) {
             return;
         }
         if (!RenderSystem.isOnRenderThread()) {
-            ((Executor) Minecraft.getInstance()).execute(() -> releaseModelAssembly(assembly));
+            ((Executor) Minecraft.getInstance()).execute(() -> releaseModelAssembly(modelId, assembly));
             return;
         }
+        ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
+        AudioStreamCache.clearForModel(assembly);
         for (AbstractTexture tex : assembly.getTextures()) {
             UploadManager.removeTexture(tex);
             tex.close();
@@ -1430,7 +1447,12 @@ public class ClientModelManager {
         }
         assembly.getAnimationBundle().getMainModel().freeNativeCache();
         assembly.getAnimationBundle().getArmModel().freeNativeCache();
-        ModelMemoryProfiler.log("assembly-released", null);
+        for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) {
+            if (trackData != null) {
+                trackData.close();
+            }
+        }
+        ModelMemoryProfiler.log("assembly-released", modelId);
     }
 
     public static void trimUnusedGpuCaches() {
@@ -1439,7 +1461,7 @@ public class ClientModelManager {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen != null) {
+        if (InputUtil.getCurrentScreen() != null) {
             return;
         }
         long now = System.currentTimeMillis();
@@ -1488,15 +1510,28 @@ public class ClientModelManager {
             ((Executor) Minecraft.getInstance()).execute(() -> trimGpuCache(modelId, assembly));
             return;
         }
+        int releasedMeshes = 0;
         for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-            entry.getValue().getModel().freeNativeCache();
+            if (entry.getValue().getModel().freeGpuCache()) {
+                releasedMeshes++;
+            }
         }
         for (Map.Entry<Identifier, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-            entry.getValue().getModel().freeNativeCache();
+            if (entry.getValue().getModel().freeGpuCache()) {
+                releasedMeshes++;
+            }
         }
-        assembly.getAnimationBundle().getMainModel().freeNativeCache();
-        assembly.getAnimationBundle().getArmModel().freeNativeCache();
-        ModelMemoryProfiler.log("gpu-cache-trimmed", modelId);
+        if (assembly.getAnimationBundle().getMainModel().freeGpuCache()) {
+            releasedMeshes++;
+        }
+        if (assembly.getAnimationBundle().getArmModel().freeGpuCache()) {
+            releasedMeshes++;
+        }
+        if (releasedMeshes > 0) {
+            ModelMemoryProfiler.log("gpu-cache-trimmed meshes=" + releasedMeshes
+                    + " liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
+                    + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelId);
+        }
     }
 
     private static void touchModel(String modelId) {

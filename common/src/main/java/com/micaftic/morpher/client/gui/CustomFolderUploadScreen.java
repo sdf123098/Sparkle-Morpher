@@ -6,7 +6,8 @@ import com.micaftic.morpher.client.gui.button.IconButton;
 import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.model.ServerModelManager;
-import com.micaftic.morpher.util.PlatformUtil;
+import com.micaftic.morpher.util.ClientUiUtil;
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -82,7 +83,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
         addRenderableWidget(new IconButton(
                 toolbarX + 72, buttonY, 18, 18, 0, 32,
-                button -> Minecraft.getInstance().setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
+                button -> InputUtil.setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
 
         rebuildEntries();
         updateActionButtonsState();
@@ -101,7 +102,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
     @Override
     public void onClose() {
-        Minecraft.getInstance().setScreen(this.parentScreen);
+        InputUtil.setScreen(this.parentScreen);
     }
 
     @Override
@@ -191,7 +192,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
     private void openModelFolder() {
         try {
             Files.createDirectories(ServerModelManager.CUSTOM);
-            PlatformUtil.openFile(ServerModelManager.CUSTOM.toFile());
+            ClientUiUtil.openFile(ServerModelManager.CUSTOM.toFile());
         } catch (IOException e) {
             this.error = Component.translatable("gui.sparkle_morpher.import.error.open_folder", e.getMessage());
         }

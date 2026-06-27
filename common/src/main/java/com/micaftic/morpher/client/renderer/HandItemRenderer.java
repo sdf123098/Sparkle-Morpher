@@ -5,7 +5,7 @@ import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
 import com.micaftic.morpher.geckolib3.geo.LayerTypeConstants;
-import com.elfmcys.yesstevemodel.geckolib3.geo.NativeModelRenderer;
+import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.player.LocalPlayer;
@@ -57,7 +57,7 @@ public class HandItemRenderer {
             boolean previousFirstPersonMode = ModelPreviewRenderer.isFirstPerson();
             ModelPreviewRenderer.setFirstPersonMode(true);
             try {
-                NativeModelRenderer.renderMesh(buffer, pose, model.getGeoModel(), boneParams, absPivotData, textureIndex, renderPartMask, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f, Identifier, false);
+                ModelRendererBridge.renderMesh(buffer, pose, model.getGeoModel(), boneParams, absPivotData, textureIndex, renderPartMask, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f, Identifier, false);
             } finally {
                 ModelPreviewRenderer.setFirstPersonMode(previousFirstPersonMode);
             }

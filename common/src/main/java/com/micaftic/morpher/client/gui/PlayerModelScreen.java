@@ -1,5 +1,6 @@
 package com.micaftic.morpher.client.gui;
 
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -16,7 +17,7 @@ public class PlayerModelScreen extends Screen {
 
     @Override
     protected void init() {
-        Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
+        InputUtil.setScreen(new ModernPlayerModelScreen());
     }
 
     public boolean shouldCloseWithToggleKey() {

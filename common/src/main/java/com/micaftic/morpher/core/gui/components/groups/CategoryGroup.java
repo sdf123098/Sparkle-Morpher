@@ -15,7 +15,7 @@ public class CategoryGroup extends OptionGroup {
     @Override
     public Component getTitle() {
         String key = "gui.sparkle_morpher.animation.category." + catKey;
-        if (I18n.exists(key)) return Component.translatable(key);
+        if (!I18n.get(key).equals(key)) return Component.translatable(key);
         return Component.literal(catKey);
     }
 }

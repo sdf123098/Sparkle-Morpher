@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.api.config.fabric;
 
 import fuzs.forgeconfigapiport.fabric.api.v5.ConfigRegistry;
-import net.neoforged.fml.config.ModConfig;
+import net.minecraftforge.fml.config.ModConfig;
 
 public final class ConfigRegistrationImpl {
 
@@ -9,6 +9,7 @@ public final class ConfigRegistrationImpl {
     }
 
     public static void register(String modId, ModConfig.Type type, Object spec) {
-        ConfigRegistry.INSTANCE.register(modId, type, (net.neoforged.fml.config.IConfigSpec) spec);
+        net.neoforged.fml.config.ModConfig.Type neoType = net.neoforged.fml.config.ModConfig.Type.valueOf(type.name());
+        ConfigRegistry.INSTANCE.register(modId, neoType, (net.neoforged.fml.config.IConfigSpec) spec);
     }
 }

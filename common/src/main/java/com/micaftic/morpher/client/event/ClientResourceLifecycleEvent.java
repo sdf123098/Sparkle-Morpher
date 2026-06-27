@@ -1,0 +1,29 @@
+package com.micaftic.morpher.client.event;
+
+import com.micaftic.morpher.audio.AudioStreamCache;
+import com.micaftic.morpher.core.gpu.BlurStack;
+import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
+import com.micaftic.morpher.core.architectury.event.events.client.ClientPlayerEvent;
+import com.micaftic.morpher.core.gpu.GpuRenderPath;
+import com.micaftic.morpher.capability.fabric.client.PlayerCapabilityClientStore;
+import com.micaftic.morpher.capability.fabric.client.ProjectileCapabilityClientStore;
+import com.micaftic.morpher.capability.fabric.client.VehicleCapabilityClientStore;
+
+public final class ClientResourceLifecycleEvent {
+    private ClientResourceLifecycleEvent() {
+    }
+
+    public static void register() {
+        ClientPlayerEvent.CLIENT_DISCONNECT.register(client -> cleanup("client disconnect"));
+        ClientLifecycleEvent.CLIENT_STOPPING.register(client -> cleanup("client stopping"));
+    }
+
+    private static void cleanup(String reason) {
+        GpuRenderPath.disposeAllMeshes(reason);
+        AudioStreamCache.clearAll(reason);
+        BlurStack.disposeAll(reason);
+        PlayerCapabilityClientStore.clear(reason);
+        ProjectileCapabilityClientStore.clear(reason);
+        VehicleCapabilityClientStore.clear(reason);
+    }
+}

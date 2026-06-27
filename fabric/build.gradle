@@ -9,7 +9,7 @@ configurations {
     }
 }
 
-def releaseArchiveName = "${rootProject.archives_name}-${project.version}-fa26.1.x"
+def releaseArchiveName = "${rootProject.archives_name}-${project.version}-fa26.2"
 
 sourceSets {
     main {
@@ -28,9 +28,14 @@ if (rootProject.ext.isCurseForgeDist) {
         source = files(
                 fileTree('src/main/java'),
                 fileTree(rootProject.file('common/src/main/java')) {
-                    exclude 'com/micaftic/morpher/NativeLibLoader.java'
+                    exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'
+                    exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'
+                    exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'
+                    exclude 'com/micaftic/morpher/util/ClientUiUtil.java'
+                    exclude 'com/micaftic/morpher/util/PlatformUtil.java'
                     exclude 'com/ysm/parser/YSMParser.java'
                     exclude 'com/ysm/parser/YSMNative.java'
+                    exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java'
                 },
                 fileTree(rootProject.file('common/src/curseforge/java'))
         )
@@ -47,10 +52,10 @@ dependencies {
     modImplementation fabricApi.module("fabric-resource-loader-v0", rootProject.fabric_api_version)
     modImplementation fabricApi.module("fabric-rendering-v1", rootProject.fabric_api_version)
     modImplementation fabricApi.module("fabric-sound-api-v1", rootProject.fabric_api_version)
-    // fabric-key-binding-api-v1 not compatible with custom Mojang mappings
+    modImplementation fabricApi.module("fabric-key-mapping-api-v1", rootProject.fabric_api_version)
 
-    modImplementation "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
-    include "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
+    modImplementation "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"
+    include "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"
 
     modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
     modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
@@ -72,6 +77,10 @@ processResources {
         expand version: project.version
     }
 
+    from(rootProject.file('LICENSE')) {
+        rename { 'LICENSE' }
+    }
+
     if (rootProject.ext.isCurseForgeDist) {
         exclude 'natives/**'
         exclude '**/*.dll'
@@ -86,7 +95,18 @@ shadowJar {
     configurations = [project.configurations.shadowBundle]
     archiveClassifier = 'dev-shadow'
     archiveFileName = "${releaseArchiveName}-dev-shadow.jar"
-    exclude 'net/minecraft/**'
+    includeEmptyDirs = false
+    eachFile { details ->
+        def path = details.path
+        if (path == 'com/micaftic/morpher/mixin/client/BufferSourceMixin.class') {
+            details.exclude()
+        }
+        if (path.startsWith('net/minecraft/') &&
+                path != 'net/minecraft/client/renderer/MultiBufferSource.class' &&
+                path != 'net/minecraft/client/renderer/MultiBufferSource$BufferSource.class') {
+            details.exclude()
+        }
+    }
 }
 
 remapJar {

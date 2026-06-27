@@ -26,9 +26,10 @@ import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
 import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.Metadata;
+import com.micaftic.morpher.util.ClientUiUtil;
+import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.ModelIdUtil;
 import net.minecraft.ChatFormatting;
-import com.micaftic.morpher.util.PlatformUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -854,8 +855,33 @@ public class ModernPlayerModelScreen extends Screen {
         ResourceDownloadManager.Snapshot snapshot = ResourceDownloadManager.snapshot();
         Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? snapshot.status() : this.status;
         ChatFormatting color = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? snapshot.statusColor() : this.statusColor;
-        int c = color.getColor() == null ? MUTED : 0xFF000000 | color.getColor();
+        int c = chatColor(color, MUTED);
         g.text(this.font, trim(line.getString(), this.layout.width - 20), this.layout.left + 10, this.layout.footerTop + 8, c, false);
+    }
+
+    private static int chatColor(ChatFormatting color, int fallback) {
+        if (color == null) {
+            return fallback;
+        }
+        return switch (color) {
+            case BLACK -> 0xFF000000;
+            case DARK_BLUE -> 0xFF0000AA;
+            case DARK_GREEN -> 0xFF00AA00;
+            case DARK_AQUA -> 0xFF00AAAA;
+            case DARK_RED -> 0xFFAA0000;
+            case DARK_PURPLE -> 0xFFAA00AA;
+            case GOLD -> 0xFFFFAA00;
+            case GRAY -> 0xFFAAAAAA;
+            case DARK_GRAY -> 0xFF555555;
+            case BLUE -> 0xFF5555FF;
+            case GREEN -> 0xFF55FF55;
+            case AQUA -> 0xFF55FFFF;
+            case RED -> 0xFFFF5555;
+            case LIGHT_PURPLE -> 0xFFFF55FF;
+            case YELLOW -> 0xFFFFFF55;
+            case WHITE -> 0xFFFFFFFF;
+            default -> fallback;
+        };
     }
 
     private void renderTooltip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -1285,7 +1311,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void openModelFolder() {
         try {
             Files.createDirectories(ServerModelManager.CUSTOM);
-            PlatformUtil.openFile(ServerModelManager.CUSTOM.toFile());
+            ClientUiUtil.openFile(ServerModelManager.CUSTOM.toFile());
             setStatus(Component.literal(ServerModelManager.CUSTOM.toString()), ChatFormatting.GRAY);
         } catch (IOException e) {
             setStatus(Component.translatable("gui.sparkle_morpher.import.error.open_folder", e.getMessage()), ChatFormatting.RED);
@@ -1293,7 +1319,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void openCustomFolderUpload() {
-        Minecraft.getInstance().setScreen(new CustomFolderUploadScreen(this));
+        InputUtil.setScreen(new CustomFolderUploadScreen(this));
     }
 
     private Component getCustomFolderUploadTooltip() {
@@ -1372,7 +1398,7 @@ public class ModernPlayerModelScreen extends Screen {
             String modelId = cap.getModelId();
             ModelAssembly modelAssembly = cap.getModelAssembly();
             if (modelAssembly != null && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
-                minecraft.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
+                InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
             }
         });
     }
@@ -1391,6 +1417,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility", GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK));
         rows.add(rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.native_simd_renderer", GeneralConfig.USE_NATIVE_SIMD_RENDERER));
+        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.java_vector_renderer", GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.resource_monitor_log", GeneralConfig.RESOURCE_STATION_MONITOR_LOG));

@@ -35,6 +35,13 @@ subprojects {
             }
         }
         maven {
+            name = "CurseMaven"
+            url = "https://www.cursemaven.com"
+            content {
+                includeGroup "curse.maven"
+            }
+        }
+        maven {
             name = "JitPack"
             url = "https://jitpack.io"
             content {
@@ -80,6 +87,7 @@ subprojects {
                 '-Xlint:-removal',
                 '-Xlint:-unchecked',
                 '-nowarn',
+                '--add-modules', 'jdk.incubator.vector',
                 '-Xmaxerrs', '10000',
                 '-Xmaxwarns', '10000'
         ])

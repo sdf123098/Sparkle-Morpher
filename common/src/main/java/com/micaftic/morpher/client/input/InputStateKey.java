@@ -92,7 +92,7 @@ public class InputStateKey {
     private static void tickAttackKey() {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
-        if (player == null || minecraft.screen != null || !YesSteveModel.isAvailable() || !InputUtil.isPlayerReady()) {
+        if (player == null || InputUtil.getCurrentScreen() != null || !YesSteveModel.isAvailable() || !InputUtil.isPlayerReady()) {
             return;
         }
         boolean attackDown = minecraft.options.keyAttack.isDown();

@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -38,9 +39,9 @@ public class DisclaimerScreen extends Screen {
             if (this.checkbox.selected()) {
                 GeneralConfig.DISCLAIMER_SHOW.set(false);
                 GeneralConfig.DISCLAIMER_SHOW.save();
-                Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
+                InputUtil.setScreen(new ModernPlayerModelScreen());
             } else {
-                Minecraft.getInstance().setScreen(null);
+                InputUtil.setScreen(null);
             }
         }).size(300, 20).pos((this.width - 300) / 2, (this.textHeight + i) - 20).build());
     }

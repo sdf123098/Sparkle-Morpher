@@ -16,6 +16,7 @@ import com.micaftic.morpher.util.InputUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 
 /**
  * Binds the {@code key.sparkle_morpher.animation_roulette.desc} and
@@ -74,10 +75,11 @@ public final class AnimationRouletteKey {
             if (modelAssembly == null || modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
                 return;
             }
-            if (mc.screen == null) {
-                mc.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
-            } else if (mc.screen instanceof UnifiedRouletteScreen) {
-                mc.setScreen(null);
+            Screen screen = InputUtil.getCurrentScreen();
+            if (screen == null) {
+                InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
+            } else if (screen instanceof UnifiedRouletteScreen) {
+                InputUtil.setScreen(null);
             }
         });
     }

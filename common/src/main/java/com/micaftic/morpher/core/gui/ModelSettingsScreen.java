@@ -12,6 +12,7 @@ import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
+import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -124,7 +125,7 @@ public class ModelSettingsScreen extends OptionScreen {
 
     @Override
     public void onClose() {
-        if (this.minecraft != null) this.minecraft.setScreen(parentScreen);
+        if (this.minecraft != null) InputUtil.setScreen(parentScreen);
     }
 
     @Override
@@ -198,6 +199,10 @@ public class ModelSettingsScreen extends OptionScreen {
         if (!ModelPreviewRenderer.isDirectGuiPreviewSupported()) {
             return;
         }
+        MultiBufferSource.BufferSource bufferSource = ModelPreviewRenderer.getLegacyBufferSourceOrNull();
+        if (bufferSource == null) {
+            return;
+        }
         ModelPreviewRenderer.setPreviewMode(true);
         LivingEntity livingEntity = (LivingEntity) animatable.getEntity();
         org.joml.Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
@@ -238,8 +243,6 @@ public class ModelSettingsScreen extends OptionScreen {
         rotationX.conjugate();
         // MC 26.x: overrideCameraOrientation removed
         // MC 26.x: setRenderShadow removed
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
-
         try {
             renderer.renderEntity(animatable, 0.0f, partialTick, poseStack, bufferSource, 15728880);
             bufferSource.endBatch();

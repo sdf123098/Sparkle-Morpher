@@ -1,5 +1,6 @@
 package com.micaftic.morpher.client.gui;
 
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -16,6 +17,6 @@ public class ResourceStationScreen extends Screen {
 
     @Override
     protected void init() {
-        Minecraft.getInstance().setScreen(ModernPlayerModelScreen.resourceStation());
+        InputUtil.setScreen(ModernPlayerModelScreen.resourceStation());
     }
 }

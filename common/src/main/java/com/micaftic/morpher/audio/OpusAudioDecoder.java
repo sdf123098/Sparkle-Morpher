@@ -12,7 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 
-public class NativeAudioDecoder {
+public class OpusAudioDecoder {
     private boolean inputSet = false;
     private int channels;
     private OggFile oggFile;

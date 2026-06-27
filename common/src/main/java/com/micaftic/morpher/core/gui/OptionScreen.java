@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.gui;
 
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -255,12 +256,12 @@ public abstract class OptionScreen extends Screen {
 
     protected void onSave() {
         onApply();
-        Minecraft.getInstance().setScreen(parentScreen);
+        InputUtil.setScreen(parentScreen);
     }
 
     protected void onCancel() {
         for (OptionGroup g : groups) g.undo();
-        Minecraft.getInstance().setScreen(parentScreen);
+        InputUtil.setScreen(parentScreen);
     }
 
     protected void onUndo() {

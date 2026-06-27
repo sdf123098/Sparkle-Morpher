@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -32,12 +33,12 @@ public class PauseScreenButtonBuilder {
         int cx = pauseScreen.width / 2;
 
         Button skinBtn = Button.builder(Component.translatable("gui.sparkle_morpher.skin"), button -> {
-            minecraft.setScreen(new ModernPlayerModelScreen());
+            InputUtil.setScreen(new ModernPlayerModelScreen());
         }).bounds(cx - 94, baseY, 138, 30).build();
         skinBtn.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.player_model.desc")));
 
         Button renderBtn = Button.builder(Component.literal("棣冩暋"), button -> {
-            minecraft.setScreen(new ExtraPlayerRenderScreen());
+            InputUtil.setScreen(new ExtraPlayerRenderScreen());
         }).bounds(cx - 145, baseY, 50, 30).build();
         renderBtn.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.open_extra_player_render.desc")));
 
@@ -47,14 +48,14 @@ public class PauseScreenButtonBuilder {
                 String modelId = cap.getModelId();
                 ModelAssembly modelAssembly = cap.getModelAssembly();
                 if (modelAssembly != null && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
-                    minecraft.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
+                    InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
                 }
             });
         }).bounds(cx + 45, baseY, 50, 30).build();
         rouletteBtn.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.animation_roulette.desc")));
 
         Button configBtn = Button.builder(Component.literal("sparkle"), button -> {
-            minecraft.setScreen(ModernPlayerModelScreen.settings());
+            InputUtil.setScreen(ModernPlayerModelScreen.settings());
         }).bounds(cx + 96, baseY, 50, 30).build();
         configBtn.setTooltip(Tooltip.create(Component.translatable("gui.sparkle_morpher.config")));
 

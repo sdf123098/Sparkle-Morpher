@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.micaftic.morpher.util.ModelMemoryProfiler;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import org.lwjgl.opengl.*;
@@ -21,6 +22,7 @@ public final class GpuMesh {
     public final int partMask1Start, partMask1Count;
     public final int partMask2Start, partMask2Count;
     public final int partMask3Start, partMask3Count;
+    public final long estimatedBytes;
     public final ByteBuffer perFrameBoneBuffer;
 
     private int xformVbo = 0;
@@ -42,8 +44,19 @@ public final class GpuMesh {
         this.partMask2Count = pm2c;
         this.partMask3Start = pm3s;
         this.partMask3Count = pm3c;
+        this.estimatedBytes = estimateBytes(vertexCount, indexCount, boneCount);
         this.perFrameBoneBuffer = MemoryUtil.memAlloc(boneCount * 144).order(ByteOrder.nativeOrder());
+        ResourceLifecycleStats.onDirectBufferAllocated(null, (long) boneCount * 144L);
+        ResourceLifecycleStats.onGpuMeshCreated(null, this.estimatedBytes);
         ModelMemoryProfiler.log("gpu-mesh-built bones=" + boneCount + " vertices=" + vertexCount + " indices=" + indexCount, null);
+    }
+
+    private static long estimateBytes(int vertexCount, int indexCount, int boneCount) {
+        long vertexBytes = (long) vertexCount * 32L;
+        long indexBytes = (long) indexCount * Integer.BYTES;
+        long ssboBytes = (long) boneCount * 144L;
+        long perFrameBoneBytes = (long) boneCount * 144L;
+        return vertexBytes + indexBytes + ssboBytes + perFrameBoneBytes;
     }
 
     public int indexOffsetBytes(int renderPartMask) {
@@ -109,6 +122,8 @@ public final class GpuMesh {
             GeoModel.nFreeGpuMesh(pointer);
         }
         MemoryUtil.memFree(perFrameBoneBuffer);
+        ResourceLifecycleStats.onDirectBufferFreed(null, (long) boneCount * 144L);
+        ResourceLifecycleStats.onGpuMeshDisposed(null, this.estimatedBytes);
         ModelMemoryProfiler.log("gpu-mesh-disposed bones=" + boneCount + " vertices=" + vertexCount + " indices=" + indexCount, null);
     }
 }

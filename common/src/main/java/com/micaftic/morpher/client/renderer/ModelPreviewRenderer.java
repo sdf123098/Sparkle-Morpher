@@ -47,9 +47,10 @@ import com.mojang.math.Axis;
 
 public final class ModelPreviewRenderer {
 
-    // The old YSM preview renderer draws immediately. MC 26.x extracts GUI draw
-    // commands first, so direct entity preview rendering corrupts later GUI batches.
-    private static final boolean DIRECT_GUI_PREVIEWS_SUPPORTED = false;
+    // MC 26.x renders GUI entities through the PIP submit pipeline. The custom
+    // preview bridge is only safe when we can intercept that renderer before
+    // vanilla resolves the queued EntityRenderState.
+    private static final boolean DIRECT_GUI_PREVIEWS_SUPPORTED = isGuiPreviewBridgeMixinEnabledByConfig();
 
     private static final float MODEL_PREVIEW_MOUSE_YAW_DEGREES = 25.0f;
 
@@ -164,6 +165,46 @@ public final class ModelPreviewRenderer {
         return DIRECT_GUI_PREVIEWS_SUPPORTED;
     }
 
+    private static boolean isGuiPreviewBridgeMixinEnabledByConfig() {
+        String property = System.getProperty("sparkle_morpher.mixin.GuiEntityRendererMixin");
+        if (property == null) {
+            property = System.getProperty("ysm.mixin.GuiEntityRendererMixin");
+        }
+        if (property != null && property.equalsIgnoreCase("false")) {
+            return false;
+        }
+        String disabledMixins = System.getProperty("sparkle_morpher.disableMixins");
+        if (disabledMixins == null) {
+            disabledMixins = System.getProperty("ysm.disableMixins");
+        }
+        if (disabledMixins == null) {
+            disabledMixins = System.getenv("SPARKLE_MORPHER_DISABLE_MIXINS");
+        }
+        if (disabledMixins == null) {
+            disabledMixins = System.getenv("YSM_DISABLE_MIXINS");
+        }
+        if (disabledMixins == null) {
+            return true;
+        }
+        for (String disabledMixin : disabledMixins.split(",")) {
+            String normalized = disabledMixin.trim();
+            if (normalized.equalsIgnoreCase("GuiEntityRendererMixin") || normalized.equalsIgnoreCase("com.micaftic.morpher.mixin.client.GuiEntityRendererMixin")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static MultiBufferSource.BufferSource getLegacyBufferSourceOrNull() {
+        try {
+            Object renderBuffers = Minecraft.getInstance().renderBuffers();
+            Object bufferSource = renderBuffers.getClass().getMethod("bufferSource").invoke(renderBuffers);
+            return (MultiBufferSource.BufferSource) bufferSource;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+            return null;
+        }
+    }
+
     public static boolean renderQueuedGuiPreview(EntityRenderState renderState, PoseStack poseStack, SubmitNodeCollector collector, MultiBufferSource.BufferSource bufferSource) {
         GuiPreviewRequest request = GUI_PREVIEWS.remove(renderState);
         if (request == null) {
@@ -178,7 +219,11 @@ public final class ModelPreviewRenderer {
     }
 
     public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, int mouseX, int mouseY) {
-        if (guiGraphics == null || animatable == null || renderer == null || right <= left || bottom <= top) {
+        if (guiGraphics == null || animatable == null || right <= left || bottom <= top || scale <= 0.0f) {
+            return;
+        }
+        if (!isDirectGuiPreviewSupported() || renderer == null) {
+            renderVanillaLivingPreview(guiGraphics, left, top, right, bottom, originX, originY, scale, animatable.getEntity(), disablePreviewRotation, mouseX, mouseY, false);
             return;
         }
         PreviewMouseRotation mouseRotation = getPreviewMouseRotation(left, top, right, bottom, mouseX, mouseY, disablePreviewRotation);
@@ -199,7 +244,13 @@ public final class ModelPreviewRenderer {
     }
 
     public static void renderEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
-        if (guiGraphics == null || animatableEntity == null || renderer == null || right <= left || bottom <= top) {
+        if (guiGraphics == null || animatableEntity == null || right <= left || bottom <= top || scale <= 0.0f) {
+            return;
+        }
+        if (!isDirectGuiPreviewSupported() || renderer == null) {
+            if (animatableEntity.getEntity() instanceof LivingEntity livingEntity) {
+                renderVanillaLivingPreview(guiGraphics, left, top, right, bottom, originX, originY, scale, livingEntity, false, previewMouseXFromYaw(originX, yaw), Math.round(originY - pitch), false);
+            }
             return;
         }
         EntityRenderState state = new EntityRenderState();
@@ -218,6 +269,29 @@ public final class ModelPreviewRenderer {
 
     private static float toModelOffset(float origin, int start, int end, float scale) {
         return (origin - ((start + end) * 0.5f)) / Math.max(1.0f, scale);
+    }
+
+    private static int previewMouseXFromYaw(float originX, float yaw) {
+        return Math.round(originX - ((float) Math.tan((yaw - 180.0f) / 20.0f) * 40.0f));
+    }
+
+    private static void renderVanillaLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, LivingEntity livingEntity, boolean disablePreviewRotation, int mouseX, int mouseY, boolean extraPlayer) {
+        if (livingEntity == null || right <= left || bottom <= top) {
+            return;
+        }
+        int resolvedMouseX = mouseX == Integer.MIN_VALUE ? Math.round(originX) : mouseX;
+        int resolvedMouseY = mouseY == Integer.MIN_VALUE ? Math.round(originY) : mouseY;
+        if (disablePreviewRotation) {
+            resolvedMouseX = Math.round((left + right) * 0.5f);
+            resolvedMouseY = Math.round((top + bottom) * 0.5f);
+        }
+        boolean previousExtraPlayerMode = isExtraPlayer();
+        setExtraPlayerMode(extraPlayer || previousExtraPlayerMode);
+        try {
+            InventoryScreen.extractEntityInInventoryFollowsMouse(guiGraphics, left, top, right, bottom, Math.max(1, Math.round(scale)), resolvedMouseX, resolvedMouseY, 1.0f, livingEntity);
+        } finally {
+            setExtraPlayerMode(previousExtraPlayerMode);
+        }
     }
 
     private interface GuiPreviewRequest {
@@ -342,9 +416,11 @@ public final class ModelPreviewRenderer {
         }
 
         try {
-            Minecraft.getInstance().gameRenderer.getLighting().setupFor(Lighting.Entry.ENTITY_IN_UI);
+            Minecraft.getInstance().gameRenderer.lighting().setupFor(Lighting.Entry.ENTITY_IN_UI);
             renderer.renderEntity(animatable, 0.0f, partialTick, poseStack, bufferSource, 15728880);
-            bufferSource.endBatch();
+            if (bufferSource != null) {
+                bufferSource.endBatch();
+            }
         } finally {
             livingEntity.yBodyRot = oldBodyRot;
             livingEntity.yBodyRotO = oldBodyRotO;
@@ -397,7 +473,7 @@ public final class ModelPreviewRenderer {
         livingEntity.yHeadRotO = -yaw;
 
         try {
-            Minecraft.getInstance().gameRenderer.getLighting().setupFor(Lighting.Entry.ENTITY_IN_UI);
+            Minecraft.getInstance().gameRenderer.lighting().setupFor(Lighting.Entry.ENTITY_IN_UI);
             AnimationTracker animationTracker = getPreviewAnimationTracker(animatableEntity);
             if (isPreviewAnimation(animationTracker, "sleep")) {
                 poseStack.mulPose(Axis.YP.rotationDegrees(yaw - 90.0f));
@@ -423,15 +499,19 @@ public final class ModelPreviewRenderer {
                 poseStack.translate(0.0d, -0.45d, 0.0d);
             }
             try {
-                renderVehicleForAnimation(yaw, animatableEntity, animationTracker, partialTick, poseStack, Minecraft.getInstance().getEntityRenderDispatcher(), bufferSource);
-                if (isPreviewAnimation(animationTracker, "sleep")) {
+                if (bufferSource != null) {
+                    renderVehicleForAnimation(yaw, animatableEntity, animationTracker, partialTick, poseStack, Minecraft.getInstance().getEntityRenderDispatcher(), bufferSource);
+                }
+                if (bufferSource != null && isPreviewAnimation(animationTracker, "sleep")) {
                     renderBedPreview(poseStack, yaw, bufferSource);
                 }
-                if (renderGround) {
+                if (bufferSource != null && renderGround) {
                     renderGroundPreview(poseStack, yaw, bufferSource);
                 }
                 renderer.renderEntity((LivingAnimatable) animatableEntity, 0.0f, partialTick, poseStack, bufferSource, 15728880);
-                bufferSource.endBatch();
+                if (bufferSource != null) {
+                    bufferSource.endBatch();
+                }
             } catch (ExecutionException e) {
                 throw new RuntimeException(e);
             }
@@ -473,6 +553,10 @@ public final class ModelPreviewRenderer {
 
     public static void renderEntityPreview(float x, float y, float scale, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
         if (!isDirectGuiPreviewSupported()) {
+            return;
+        }
+        MultiBufferSource.BufferSource bufferSource = getLegacyBufferSourceOrNull();
+        if (bufferSource == null) {
             return;
         }
         setPreviewMode(true);
@@ -518,8 +602,6 @@ public final class ModelPreviewRenderer {
         // entityRenderDispatcher.overrideCameraOrientation(rotationX);
         // MC 26.x: setRenderShadow removed
         // entityRenderDispatcher.setRenderShadow(false);
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
-
         { // MC 26.x: was RenderSystem.runAsFancy(() -> {
             AnimationTracker animationTracker = getPreviewAnimationTracker(animatableEntity);
             if (isPreviewAnimation(animationTracker, "sleep")) {
@@ -719,6 +801,10 @@ public final class ModelPreviewRenderer {
         if (!isDirectGuiPreviewSupported()) {
             return;
         }
+        MultiBufferSource.BufferSource bufferSource = getLegacyBufferSourceOrNull();
+        if (bufferSource == null) {
+            return;
+        }
         ItemStack[] savedEquipment;
         setPreviewMode(true);
         LivingEntity livingEntity = animatable.getEntity();
@@ -785,8 +871,6 @@ public final class ModelPreviewRenderer {
         // entityRenderDispatcher.overrideCameraOrientation(rotationX);
         // MC 26.x: setRenderShadow removed
         // entityRenderDispatcher.setRenderShadow(false);
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
-
         { // MC 26.x: was RenderSystem.runAsFancy(() -> {
             renderer.renderEntity(animatable, 0.0f, partialTick, poseStack, bufferSource, 15728880);
         } // end was runAsFancy
@@ -866,7 +950,7 @@ public final class ModelPreviewRenderer {
     }
 
     public static boolean renderCustomLocalPlayerPreview(GuiGraphicsExtractor guiGraphics, LocalPlayer localPlayer, int left, int top, int right, int bottom, float originX, float originY, float scale, float yaw, float partialTick, boolean extraPlayer, int mouseX, int mouseY) {
-        if (guiGraphics == null || localPlayer == null || right <= left || bottom <= top || scale <= 0.0f || GeneralConfig.safeGet(GeneralConfig.DISABLE_SELF_MODEL)) {
+        if (!isDirectGuiPreviewSupported() || guiGraphics == null || localPlayer == null || right <= left || bottom <= top || scale <= 0.0f || GeneralConfig.safeGet(GeneralConfig.DISABLE_SELF_MODEL)) {
             return false;
         }
         PlayerCapability capability = PlayerCapability.get(localPlayer).orElse(null);

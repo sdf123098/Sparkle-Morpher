@@ -34,8 +34,7 @@ public final class PlayerModelToggleKey {
         if (action != 1 || !InputUtil.isKeyPressed(keyCode, scanCode, KEY_MAPPING)) {
             return false;
         }
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen instanceof PlayerModelScreen screen) {
+        if (InputUtil.getCurrentScreen() instanceof PlayerModelScreen screen) {
             if (screen.shouldCloseWithToggleKey()) {
                 screen.onClose();
                 return true;
@@ -50,9 +49,9 @@ public final class PlayerModelToggleKey {
             return true;
         }
         if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) {
-            minecraft.setScreen(ModernPlayerModelScreen.settings());
+            InputUtil.setScreen(ModernPlayerModelScreen.settings());
         } else {
-            minecraft.setScreen(new ModernPlayerModelScreen());
+            InputUtil.setScreen(new ModernPlayerModelScreen());
         }
         return true;
     }

@@ -38,8 +38,8 @@ public abstract class LivingRendererMixin extends EntityRenderer<LivingEntity, E
             if (collector != null) {
                 CameraRenderState cameraState = new CameraRenderState();
                 Minecraft mc = Minecraft.getInstance();
-                cameraState.pos = mc.gameRenderer.getMainCamera().position();
-                cameraState.orientation.set(mc.gameRenderer.getMainCamera().rotation());
+                cameraState.pos = mc.gameRenderer.mainCamera().position();
+                cameraState.orientation.set(mc.gameRenderer.mainCamera().rotation());
                 EntityRenderState renderState = this.createRenderState();
                 this.extractRenderState(pEntity, renderState, pPartialTick);
                 pPoseStack.pushPose();

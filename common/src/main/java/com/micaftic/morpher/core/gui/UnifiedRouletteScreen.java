@@ -19,8 +19,8 @@ import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SPlayAnimationPacket;
+import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.data.OrderedStringMap;
-import com.mojang.blaze3d.opengl.GlStateManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -169,7 +169,7 @@ public class UnifiedRouletteScreen extends Screen {
                 RouletteTheme.EDIT_BTN_WIDTH,
                 RouletteTheme.EDIT_BTN_HEIGHT,
                 Component.translatable("gui.sparkle_morpher.roulette.editor.edit"),
-                button -> Minecraft.getInstance().setScreen(new CustomRouletteEditorScreen(lastModelId, renderContext))));
+                button -> InputUtil.setScreen(new CustomRouletteEditorScreen(lastModelId, renderContext))));
     }
 
     // ---- Layout helpers ----------------------------------------------------
@@ -272,10 +272,7 @@ public class UnifiedRouletteScreen extends Screen {
         int size = RouletteTheme.ICON_SIZE_GEAR;
         int ix = centerX + (int) (r * Math.cos(mid)) - size / 2;
         int iy = centerY + (int) (r * Math.sin(mid)) - size / 2;
-        GlStateManager._enableBlend();
-        GlStateManager._blendFuncSeparate(770, 771, 1, 0);
         g.blit(RouletteIcons.SETTINGS, ix, iy, ix + size, iy + size, 0.0f, 1.0f, 0.0f, 1.0f);
-        GlStateManager._disableBlend();
     }
 
     private void renderLabels(GuiGraphicsExtractor g) {
@@ -345,10 +342,7 @@ public class UnifiedRouletteScreen extends Screen {
             int size = RouletteTheme.ICON_SIZE_LOCK;
             int ix = centerX - size / 2;
             int iy = centerY - size / 2;
-            GlStateManager._enableBlend();
-            GlStateManager._blendFuncSeparate(770, 771, 1, 0);
             g.blit(tex, ix, iy, ix + size, iy + size, 0.0f, 1.0f, 0.0f, 1.0f);
-            GlStateManager._disableBlend();
         } else {
             Pie.draw(g, centerX, centerY, 0.0f, RouletteTheme.WHEEL_INNER_R, 0.0f, Pie.tau,
                     RouletteTheme.CENTER_FILL, 1.0f);
@@ -377,10 +371,7 @@ public class UnifiedRouletteScreen extends Screen {
         int size = RouletteTheme.ICON_SIZE_ARROW;
         int ix = (int) cx - size / 2;
         int iy = (int) cy - size / 2;
-        GlStateManager._enableBlend();
-        GlStateManager._blendFuncSeparate(770, 771, 1, 0);
         g.blit(tex, ix, iy, ix + size, iy + size, 0.0f, 1.0f, 0.0f, 1.0f);
-        GlStateManager._disableBlend();
     }
 
     private void renderPathAndPage(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -452,7 +443,7 @@ public class UnifiedRouletteScreen extends Screen {
             if (value.startsWith("#")) {
                 String sub = value.substring(1);
                 if (renderGroups.containsKey(sub)) {
-                    Minecraft.getInstance().setScreen(new ModelSettingsScreen(renderContext, animatableModel, this, sub));
+                    InputUtil.setScreen(new ModelSettingsScreen(renderContext, animatableModel, this, sub));
                     return true;
                 }
             }
@@ -506,7 +497,7 @@ public class UnifiedRouletteScreen extends Screen {
 
     private void navigateTo(int targetIndex) {
         while (navigationStack.size() > targetIndex + 1) navigationStack.removeLast();
-        Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
+        InputUtil.setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
     }
 
     private void navigateToSubmenu(String value) {
@@ -518,17 +509,17 @@ public class UnifiedRouletteScreen extends Screen {
         String sub = value.substring(1);
         if (textProperties.get(sub) != null) {
             navigationStack.addLast(MutablePair.of(sub, 0));
-            Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
+            InputUtil.setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
         }
     }
 
     private void navigateBack() {
         if (navigationStack.size() > 1) {
             navigationStack.removeLast();
-            Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
+            InputUtil.setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
             return;
         }
-        Minecraft.getInstance().setScreen(null);
+        InputUtil.setScreen(null);
     }
 
     private void playAnimation(String key) {
@@ -552,7 +543,7 @@ public class UnifiedRouletteScreen extends Screen {
         if (player != null && GeneralConfig.PRINT_ANIMATION_ROULETTE_MSG.get()) {
             player.sendSystemMessage(Component.translatable("message.sparkle_morpher.model.animation_roulette.play", key));
         }
-        Minecraft.getInstance().setScreen(null);
+        InputUtil.setScreen(null);
     }
 
     private void playClick() {

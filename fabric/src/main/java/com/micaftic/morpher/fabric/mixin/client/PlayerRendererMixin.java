@@ -57,9 +57,7 @@ public abstract class PlayerRendererMixin {
                     capability.beginRenderState(avatarState);
                 }
                 try {
-                    net.minecraft.client.renderer.MultiBufferSource.BufferSource bufferSource = ((MinecraftAccessor) Minecraft.getInstance()).ysm$renderBuffers().bufferSource();
-                    if (ReplacePlayerRenderEvent.onRenderPlayerPre(player, yaw, partialTick, poseStack, bufferSource, collector, packedLight)) {
-                        bufferSource.endBatch();
+                    if (ReplacePlayerRenderEvent.onRenderPlayerPre(player, yaw, partialTick, poseStack, null, collector, packedLight)) {
                         ci.cancel();
                     }
                 } finally {

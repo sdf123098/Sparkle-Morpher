@@ -2,7 +2,10 @@ package com.micaftic.morpher.core.gpu;
 
 import com.mojang.blaze3d.opengl.GlStateManager;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferUploader;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
@@ -11,6 +14,7 @@ import org.lwjgl.opengl.GL20;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 public final class BlurStack {
     private static final List<Region> regions = new ArrayList<>();
@@ -69,12 +73,25 @@ public final class BlurStack {
         regions.clear();
     }
 
+    public static void disposeAll(String reason) {
+        if (!RenderSystem.isOnRenderThread()) {
+            ((Executor) Minecraft.getInstance()).execute(() -> disposeAll(reason));
+            return;
+        }
+        regions.clear();
+        BlurShader.closeAll(reason);
+    }
+
     public static boolean isEmpty() {
         return regions.isEmpty();
     }
 
     public static void flush(GuiGraphicsExtractor graphics) {
         if (regions.isEmpty()) return;
+        if (!SmGraphicsBackendDetector.isOpenGlGuiBlurEnabled()) {
+            regions.clear();
+            return;
+        }
         if (!BlurShader.ensureCompiled()) {
             regions.clear();
             return;
@@ -90,7 +107,7 @@ public final class BlurStack {
         // TODO: mvpScratch.mul(graphics.poseStack.last().pose()); // poseStack removed in MC 26.x GuiGraphicsExtractor
         mvpScratch.get(mvpFloats);
 
-        GlStateManager._enableBlend();
+        GlStateManager._enableBlend(0);
         GlStateManager._blendFuncSeparate(770, 771, 1, 0);
         GlStateManager._disableCull();
         GlStateManager._disableDepthTest();
@@ -136,7 +153,7 @@ public final class BlurStack {
         GlStateManager._glUseProgram(0);
         BufferUploader.invalidate();
         GlStateManager._glBindVertexArray(0);
-        GlStateManager._disableBlend();
+        GlStateManager._disableBlend(0);
 
         regions.clear();
     }
