@@ -1,4 +1,4 @@
-﻿#if defined(__GNUC__) || defined(__clang__)
+#if defined(__GNUC__) || defined(__clang__)
 #pragma GCC optimize("O3,unroll-loops")
 #endif
 
@@ -41,7 +41,7 @@ inline void ms_sincosf(float x, float *s, float *c) {
 #define MADD_PS(a, b, c) _mm_add_ps(_mm_mul_ps((a), (b)), (c))
 #endif
 
-static jclass g_NativeModelRendererClass = nullptr;
+static jclass g_ModelRendererBridgeClass = nullptr;
 static jmethodID g_submitVerticesID = nullptr;
 
 struct FastQuad {
@@ -620,10 +620,10 @@ JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built
     env->ReleasePrimitiveArrayCritical(matrixArray, matricesData, JNI_ABORT);
     env->ReleasePrimitiveArrayCritical(animArray, animData, JNI_ABORT);
 
-    if (actualVertices > 0 && g_NativeModelRendererClass && g_submitVerticesID) {
+    if (actualVertices > 0 && g_ModelRendererBridgeClass && g_submitVerticesID) {
         jobject fBuf = env->NewDirectByteBuffer(fData.data(), static_cast<jlong>(actualVertices) * 12 * sizeof(float));
         jobject iBuf = env->NewDirectByteBuffer(iData.data(), static_cast<jlong>(actualVertices) * 2 * sizeof(int));
-        env->CallStaticVoidMethod(g_NativeModelRendererClass, g_submitVerticesID, vertexConsumer, actualVertices, fBuf,
+        env->CallStaticVoidMethod(g_ModelRendererBridgeClass, g_submitVerticesID, vertexConsumer, actualVertices, fBuf,
                                   iBuf);
         env->DeleteLocalRef(fBuf);
         env->DeleteLocalRef(iBuf);
@@ -1098,10 +1098,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     if (clazzModel == nullptr) return JNI_ERR;
     if (env->RegisterNatives(clazzModel, gMethods, sizeof(gMethods) / sizeof(gMethods[0])) < 0) return JNI_ERR;
 
-    jclass clazzRenderer = env->FindClass("com/elfmcys/yesstevemodel/geckolib3/geo/NativeModelRenderer");
+    jclass clazzRenderer = env->FindClass("com/elfmcys/yesstevemodel/geckolib3/geo/ModelRendererBridge");
     if (clazzRenderer != nullptr) {
-        g_NativeModelRendererClass = (jclass) env->NewGlobalRef(clazzRenderer);
-        g_submitVerticesID = env->GetStaticMethodID(g_NativeModelRendererClass, "submitVertices",
+        g_ModelRendererBridgeClass = (jclass) env->NewGlobalRef(clazzRenderer);
+        g_submitVerticesID = env->GetStaticMethodID(g_ModelRendererBridgeClass, "submitVertices",
                                                     "(Ljava/lang/Object;ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)V");
     }
 

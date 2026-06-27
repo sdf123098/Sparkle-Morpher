@@ -3,6 +3,8 @@ package com.micaftic.morpher.core.gpu;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.client.renderer.WorldRenderState;
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.acceleration.AccelerationCapability;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import com.mojang.blaze3d.opengl.GlSampler;
 import com.mojang.blaze3d.opengl.GlTexture;
 import com.mojang.blaze3d.opengl.GlTextureView;
@@ -25,6 +27,8 @@ import org.lwjgl.opengl.*;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -70,6 +74,12 @@ public final class GpuRenderPath {
             GpuDebugLog.verbose("frame={} fallback: translucent texture={}", frameId, textureLocation);
             return false;
         }
+        if (!SmGraphicsBackendDetector.isRawOpenGlAllowed()) {
+            disposeAllMeshes("raw OpenGL disabled: " + SmGraphicsBackendDetector.currentBackend());
+            GpuDebugLog.warn("frame={} fallback: raw OpenGL disabled backend={} reason={}", frameId,
+                    SmGraphicsBackendDetector.currentBackend(), SmGraphicsBackendDetector.reason());
+            return false;
+        }
         if (!GpuCapability.isAvailable()) {
             GpuDebugLog.warn("frame={} fallback: GPU unavailable reason={}", frameId, GpuCapability.getReason());
             return false;
@@ -96,7 +106,13 @@ public final class GpuRenderPath {
         GpuMesh mesh = decodeMeshRef(model.gpuMeshHandle);
         if (mesh == null) {
             GpuDebugLog.warn("frame={} fallback: mesh ref missing ref={} texture={}", frameId, model.gpuMeshHandle, textureLocation);
-            return false;
+            model.gpuMeshHandle = 0;
+            GpuMesh rebuilt = GpuMeshBuilder.build(model);
+            if (rebuilt == null) {
+                return false;
+            }
+            model.gpuMeshHandle = encodeMeshRef(rebuilt);
+            mesh = rebuilt;
         }
 
         int drawCount = mesh.indexDrawCount(renderPartMask);
@@ -118,7 +134,7 @@ public final class GpuRenderPath {
         ByteBuffer boneBuf = mesh.perFrameBoneBuffer;
         boneBuf.clear();
 
-        if (GeneralConfig.safeGet(GeneralConfig.USE_NATIVE_SIMD_RENDERER, false)) {
+        if (GeneralConfig.safeGet(GeneralConfig.USE_NATIVE_SIMD_RENDERER, false) && AccelerationCapability.isLoaded()) {
             if (!computeBoneMatricesNative(model, mesh, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
                 GpuDebugLog.warn("frame={} native bone matrices failed; using Java fallback bones={} meshPointer={} boneParamsLen={}",
                         frameId, model.bakedBones.size(), mesh.pointer, boneParams == null ? -1 : boneParams.length);
@@ -293,11 +309,18 @@ public final class GpuRenderPath {
         }
 
         ensureBoneScratch(boneCount);
-        Arrays.fill(boneComputedScratch, 0, boneCount, false);
         Arrays.fill(boneVisibleScratch, 0, boneCount, false);
 
-        for (int i = 0; i < boneCount; i++) {
-            computeBoneLocalTransform(i, model.bakedBones, boneParams, stateBuffer);
+        int[] boneOrder = model.bakedBoneOrder;
+        if (boneOrder != null && boneOrder.length == boneCount) {
+            for (int orderIndex = 0; orderIndex < boneCount; orderIndex++) {
+                computeBoneLocalTransformLinear(boneOrder[orderIndex], model.bakedBones, boneParams, stateBuffer);
+            }
+        } else {
+            Arrays.fill(boneComputedScratch, 0, boneCount, false);
+            for (int i = 0; i < boneCount; i++) {
+                computeBoneLocalTransform(i, model.bakedBones, boneParams, stateBuffer);
+            }
         }
 
         for (int i = 0; i < boneCount; i++) {
@@ -337,6 +360,67 @@ public final class GpuRenderPath {
             boneComputedScratch = Arrays.copyOf(boneComputedScratch, boneCount);
             boneVisibleScratch = Arrays.copyOf(boneVisibleScratch, boneCount);
         }
+    }
+
+    private static void computeBoneLocalTransformLinear(int idx, List<GeoModel.BakedBone> bones, float[] boneParams, float[] stateBuffer) {
+        GeoModel.BakedBone bone = bones.get(idx);
+        Matrix4f parentMatrix = identityScratch.identity();
+        boolean isVisible = true;
+
+        if (bone.parentIdx != -1) {
+            parentMatrix = boneLocalScratch[bone.parentIdx];
+            if (!boneVisibleScratch[bone.parentIdx]) {
+                isVisible = false;
+            }
+        }
+
+        Matrix4f localMat = boneLocalScratch[idx];
+        if (localMat == null) {
+            localMat = new Matrix4f();
+            boneLocalScratch[idx] = localMat;
+        }
+        localMat.set(parentMatrix);
+
+        int pOffset = idx * 12;
+        float animRx = boneParams[pOffset];
+        float animRy = boneParams[pOffset + 1];
+        float animRz = boneParams[pOffset + 2];
+        float animTx = boneParams[pOffset + 3];
+        float animTy = boneParams[pOffset + 4];
+        float animTz = boneParams[pOffset + 5];
+        float animSx = boneParams[pOffset + 6];
+        float animSy = boneParams[pOffset + 7];
+        float animSz = boneParams[pOffset + 8];
+        float unk3 = boneParams[pOffset + 11];
+
+        if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
+            isVisible = false;
+        }
+
+        localMat.translate(
+                (bone.pivotX - animTx) * 0.0625f,
+                (bone.pivotY + animTy) * 0.0625f,
+                (bone.pivotZ + animTz) * 0.0625f
+        );
+        localMat.rotateZ(animRz);
+        localMat.rotateY(animRy);
+        localMat.rotateX(animRx);
+
+        if (animSx != 1.0f || animSy != 1.0f || animSz != 1.0f) {
+            localMat.scale(animSx, animSy, animSz);
+        }
+
+        if (unk3 == 1.0F && stateBuffer != null && isVisible) {
+            int stateOffset = idx * 4;
+            if (stateOffset + 2 < stateBuffer.length) {
+                stateBuffer[stateOffset] = -localMat.m30() * 16.0f;
+                stateBuffer[stateOffset + 1] = localMat.m31() * 16.0f;
+                stateBuffer[stateOffset + 2] = localMat.m32() * 16.0f;
+            }
+        }
+
+        localMat.translate(-bone.pivotX / 16.0f, -bone.pivotY / 16.0f, -bone.pivotZ / 16.0f);
+        boneVisibleScratch[idx] = isVisible;
     }
 
     private static Matrix4f computeBoneLocalTransform(int idx, List<GeoModel.BakedBone> bones, float[] boneParams, float[] stateBuffer) {
@@ -523,6 +607,27 @@ public final class GpuRenderPath {
         GpuMesh mesh = meshMap.remove(model.gpuMeshHandle);
         if (mesh != null) mesh.dispose();
         model.gpuMeshHandle = 0;
+    }
+
+    public static void disposeAllMeshes(String reason) {
+        if (!RenderSystem.isOnRenderThread()) {
+            ((Executor) Minecraft.getInstance()).execute(() -> disposeAllMeshes(reason));
+            return;
+        }
+        int releasedMeshes = 0;
+        long releasedBytes = 0L;
+        for (Map.Entry<Long, GpuMesh> entry : meshMap.entrySet()) {
+            GpuMesh mesh = entry.getValue();
+            if (mesh != null && meshMap.remove(entry.getKey(), mesh)) {
+                releasedMeshes++;
+                releasedBytes += mesh.estimatedBytes;
+                mesh.dispose();
+            }
+        }
+        if (releasedMeshes > 0) {
+            GpuDebugLog.info("disposed all GPU meshes reason={} releasedMeshes={} estimatedReleasedBytes={}",
+                    reason, releasedMeshes, releasedBytes);
+        }
     }
 
     public static GpuMesh getOrBuildMesh(GeoModel model) {

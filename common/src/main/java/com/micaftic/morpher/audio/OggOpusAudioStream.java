@@ -25,7 +25,7 @@ public class OggOpusAudioStream implements IAudioStreamSupport {
 
     private boolean endOfStream;
 
-    private final NativeAudioDecoder decoder = ObjectPool.acquire();
+    private final OpusAudioDecoder decoder = ObjectPool.acquire();
 
     private final ByteBuf outputBuffer = PooledByteBufAllocator.DEFAULT.directBuffer(((int) AUDIO_FORMAT.getSampleRate()) * 2);
 

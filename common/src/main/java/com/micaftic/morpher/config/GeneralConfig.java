@@ -1,6 +1,7 @@
 package com.micaftic.morpher.config;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
+import com.micaftic.morpher.core.render.SmRenderBackendMode;
 
 public class GeneralConfig {
 
@@ -34,6 +35,16 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue USE_NATIVE_SIMD_RENDERER;
 
+    public static ModConfigSpec.BooleanValue EXPERIMENTAL_JAVA_VECTOR_RENDERER;
+
+    public static ModConfigSpec.EnumValue<SmRenderBackendMode> GRAPHICS_BACKEND_MODE;
+
+    public static ModConfigSpec.BooleanValue DISABLE_RAW_OPENGL_ON_NON_OPENGL;
+
+    public static ModConfigSpec.BooleanValue ENABLE_OPENGL_LEGACY_GPU_RENDERER;
+
+    public static ModConfigSpec.BooleanValue ENABLE_OPENGL_GUI_BLUR;
+
     public static ModConfigSpec.BooleanValue MODEL_MEMORY_PROFILER;
 
     public static ModConfigSpec.BooleanValue MODEL_IMPORT_PERFORMANCE_LOG;
@@ -64,6 +75,8 @@ public class GeneralConfig {
 
     public static ModConfigSpec.IntValue UNUSED_MODEL_TTL_SECONDS;
 
+    public static ModConfigSpec.IntValue AUDIO_CACHE_MAX_BYTES;
+
     public static ModConfigSpec.BooleanValue DISABLE_MODEL_GLOW_IN_SHADERPACK;
 
     public static ModConfigSpec.BooleanValue ANIMATION_DISTANCE_LOD;
@@ -80,6 +93,10 @@ public class GeneralConfig {
     }
 
     public static boolean safeGet(ModConfigSpec.BooleanValue value, boolean fallback) {
+        try { return value == null ? fallback : value.get(); } catch (IllegalStateException e) { return fallback; }
+    }
+
+    public static <T extends Enum<T>> T safeGet(ModConfigSpec.EnumValue<T> value, T fallback) {
         try { return value == null ? fallback : value.get(); } catch (IllegalStateException e) { return fallback; }
     }
 
@@ -111,8 +128,16 @@ public class GeneralConfig {
         DISABLE_EXTERNAL_FP_ANIM = builder.define("DisableExternalFirstPersonAnim", false);
         builder.comment("If rendering errors occur, try turning on this.");
         USE_COMPATIBILITY_RENDERER = builder.define("UseCompatibilityRenderer", true);
-        builder.comment("Test renderer.");
+        builder.comment("Legacy direct OpenGL GPU renderer master switch. This remains off by default and is additionally gated by GraphicsBackendMode and EnableOpenGlLegacyGpuRenderer.");
         USE_GPU_RENDERER = builder.define("UseGpuRenderer", false);
+        GRAPHICS_BACKEND_MODE = builder.comment("Graphics backend policy. AUTO uses Minecraft's detected device, VANILLA_PIPELINE_ONLY disables raw OpenGL paths, OPENGL_LEGACY_COMPAT permits legacy OpenGL acceleration only on OpenGL, DISABLED_GPU_ACCELERATION disables raw OpenGL acceleration.")
+                .defineEnum("GraphicsBackendMode", SmRenderBackendMode.AUTO);
+        DISABLE_RAW_OPENGL_ON_NON_OPENGL = builder.comment("Prevent raw OpenGL probes/renderers when Minecraft is not using an OpenGL backend.")
+                .define("DisableRawOpenGlOnNonOpenGl", true);
+        ENABLE_OPENGL_LEGACY_GPU_RENDERER = builder.comment("Allow the legacy raw OpenGL model renderer when the detected backend is OpenGL and UseGpuRenderer is also enabled.")
+                .define("EnableOpenGlLegacyGpuRenderer", false);
+        ENABLE_OPENGL_GUI_BLUR = builder.comment("Allow raw OpenGL GUI blur/shader effects on OpenGL. Disabled by default for Vulkan compatibility.")
+                .define("EnableOpenGlGuiBlur", false);
         builder.comment("Use OpenYSM native SIMD model rendering. Disabled by default on 26.1.2 because the current native renderer has different bone visibility semantics than the Java path.");
         USE_NATIVE_SIMD_RENDERER = builder.define("UseNativeSimdRenderer", false);
         builder.comment("Render ysmGlow bones with normal entity lighting while a shader pack is active.");
@@ -146,6 +171,8 @@ public class GeneralConfig {
         WARN_REPEATED_ANIMATION_EVALUATION = builder.define("WarnRepeatedAnimationEvaluation", true);
         builder.comment("Reduce animation update rates for distant entities. Disabled by default for smoother animation.");
         ANIMATION_DISTANCE_LOD = builder.define("AnimationDistanceLod", false);
+        builder.comment("Use the incubating Java Vector API for part of the Java fallback renderer. Experimental and default off; if the module is unavailable, Sparkle Morpher automatically falls back to scalar Java math.");
+        EXPERIMENTAL_JAVA_VECTOR_RENDERER = builder.define("ExperimentalJavaVectorRenderer", false);
         builder.comment("Release original texture byte arrays after successful GPU upload. Disable if resource reloads need to re-decode outer textures.");
         RELEASE_TEXTURE_BYTES_AFTER_UPLOAD = builder.define("ReleaseTextureBytesAfterUpload", false);
         builder.comment("Print detailed [SM-RESOURCE] logs for resource station listing, HTTP, preview, and download diagnostics.");
@@ -160,6 +187,8 @@ public class GeneralConfig {
         MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
         builder.comment("Minimum idle time before an unused client model GPU/native cache can be unloaded by LRU.");
         UNUSED_MODEL_TTL_SECONDS = builder.defineInRange("UnusedModelTtlSeconds", 300, 30, 86400);
+        builder.comment("Maximum decoded audio cache bytes per model. 0 disables decoded audio caching.");
+        AUDIO_CACHE_MAX_BYTES = builder.defineInRange("AudioCacheMaxBytes", 64 * 1024 * 1024, 0, 512 * 1024 * 1024);
         builder.pop();
     }
 }

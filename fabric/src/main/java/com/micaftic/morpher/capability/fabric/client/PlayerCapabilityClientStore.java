@@ -1,5 +1,6 @@
 package com.micaftic.morpher.capability.fabric.client;
 
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -31,6 +32,14 @@ public final class PlayerCapabilityClientStore {
     }
 
     public static void clear() {
+        clear("manual");
+    }
+
+    public static void clear(String reason) {
+        int size = STORE.size();
         STORE.clear();
+        if (size > 0) {
+            YesSteveModel.LOGGER.info("[SM][Lifecycle] event=capabilityClientStoreClear store=player reason={} size={}", reason, size);
+        }
     }
 }

@@ -19,7 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 
-public final class NativeLibLoader {
+public final class RuntimeAccelerationLoader {
     private static boolean available = false;
     private static boolean loaded = false;
     private static boolean isAndroid = false;

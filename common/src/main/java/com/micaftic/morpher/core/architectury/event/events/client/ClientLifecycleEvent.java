@@ -11,10 +11,14 @@ import java.util.function.Consumer;
  */
 public class ClientLifecycleEvent {
     public static final Event<Consumer<Minecraft>> CLIENT_STARTED = new Event<>();
+    public static final Event<Consumer<Minecraft>> CLIENT_STOPPING = new Event<>();
 
     static {
         ClientLifecycleEvents.CLIENT_STARTED.register(client ->
             CLIENT_STARTED.fire(h -> h.accept((Minecraft) client))
+        );
+        ClientLifecycleEvents.CLIENT_STOPPING.register(client ->
+            CLIENT_STOPPING.fire(h -> h.accept((Minecraft) client))
         );
     }
 }

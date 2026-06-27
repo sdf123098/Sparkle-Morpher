@@ -5,9 +5,9 @@ import com.micaftic.morpher.client.gui.button.IconButton;
 import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.util.ClientUiUtil;
 import com.micaftic.morpher.util.ModelIdUtil;
 import com.micaftic.morpher.util.PerformanceProfiler;
-import com.micaftic.morpher.util.PlatformUtil;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -101,7 +101,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
             return;
         }
         this.error = Component.empty();
-        this.lastFlashTime = PlatformUtil.getMillis();
+        this.lastFlashTime = ClientUiUtil.getMillis();
         for (Path path : paths) {
             enqueuePath(path);
         }
@@ -112,7 +112,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         this.error = Component.empty();
         this.localStatus = Component.empty();
         this.serverStatus = Component.empty();
-        this.lastFlashTime = PlatformUtil.getMillis();
+        this.lastFlashTime = ClientUiUtil.getMillis();
         Component err = ModelImportFilePicker.pickYsmFile();
         if (err != null) {
             this.error = err;
@@ -138,7 +138,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
 
     private boolean importPickedFile(ModelImportFilePicker.PickedFile file) {
         this.error = Component.empty();
-        this.lastFlashTime = PlatformUtil.getMillis();
+        this.lastFlashTime = ClientUiUtil.getMillis();
         String fileName = file.fileName() == null ? "imported.bin" : file.fileName();
         if (!ModelImportFilePicker.isImportFileName(fileName)) {
             this.error = Component.translatable("gui.sparkle_morpher.import.error.invalid_extension");
@@ -190,9 +190,9 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
     private void openModelFolder() {
         try {
             Files.createDirectories(ServerModelManager.CUSTOM);
-            PlatformUtil.openFile(ServerModelManager.CUSTOM.toFile());
+            ClientUiUtil.openFile(ServerModelManager.CUSTOM.toFile());
             this.lastModelFolderStamp = modelFolderStamp(ServerModelManager.CUSTOM);
-            this.modelFolderPollUntilMs = PlatformUtil.getMillis() + MODEL_FOLDER_POLL_WINDOW_MS;
+            this.modelFolderPollUntilMs = ClientUiUtil.getMillis() + MODEL_FOLDER_POLL_WINDOW_MS;
             this.nextModelFolderPollMs = 0L;
             this.localStatus = Component.translatable("gui.sparkle_morpher.import.state.folder_polling");
             this.localStatusColor = ChatFormatting.GRAY;
@@ -256,7 +256,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
 
     private boolean uploadLocalModelFile(LocalUploadFile file) {
         this.error = Component.empty();
-        this.lastFlashTime = PlatformUtil.getMillis();
+        this.lastFlashTime = ClientUiUtil.getMillis();
         ModelUploadSession existing = ModelUploadSession.getInstance();
         if (existing != null && !existing.isTerminal()) {
             this.error = Component.translatable("gui.sparkle_morpher.import.error.in_progress");
@@ -314,7 +314,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         if (this.modelFolderPollUntilMs <= 0L || this.modelFolderReloadInProgress) {
             return;
         }
-        long now = PlatformUtil.getMillis();
+        long now = ClientUiUtil.getMillis();
         if (now > this.modelFolderPollUntilMs) {
             this.modelFolderPollUntilMs = 0L;
             if (this.localStatus.getString().isEmpty() || this.localStatusColor == ChatFormatting.GRAY) {
@@ -395,7 +395,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         GuiGraphicsExtractor g = extractor;
         g.fill(0, 0, this.width, this.height, 0xC0000000);
 
-        long sinceFlash = PlatformUtil.getMillis() - this.lastFlashTime;
+        long sinceFlash = ClientUiUtil.getMillis() - this.lastFlashTime;
         int borderColor;
         int borderWidth;
         if (sinceFlash < 900) {
@@ -506,7 +506,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
             guiGraphics.fill(barX, barY, barX + fillW, barY + barH, fillColor);
         }
         if (session.getState() == ModelUploadSession.State.UPLOADING && fillW > 4) {
-            long now = PlatformUtil.getMillis();
+            long now = ClientUiUtil.getMillis();
             int period = 1400;
             int travel = fillW + 40;
             int shimmerX = (int) (((now % period) / (float) period) * travel) - 20;

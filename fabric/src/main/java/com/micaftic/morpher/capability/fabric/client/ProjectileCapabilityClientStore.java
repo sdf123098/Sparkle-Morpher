@@ -1,5 +1,6 @@
 package com.micaftic.morpher.capability.fabric.client;
 
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.ProjectileCapability;
 import net.minecraft.world.entity.projectile.Projectile;
 
@@ -20,6 +21,14 @@ public final class ProjectileCapabilityClientStore {
     }
 
     public static void clear() {
+        clear("manual");
+    }
+
+    public static void clear(String reason) {
+        int size = STORE.size();
         STORE.clear();
+        if (size > 0) {
+            YesSteveModel.LOGGER.info("[SM][Lifecycle] event=capabilityClientStoreClear store=projectile reason={} size={}", reason, size);
+        }
     }
 }

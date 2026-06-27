@@ -28,9 +28,14 @@ if (rootProject.ext.isCurseForgeDist) {
         source = files(
                 fileTree('src/main/java'),
                 fileTree(rootProject.file('common/src/main/java')) {
-                    exclude 'com/micaftic/morpher/NativeLibLoader.java'
+                    exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'
+                    exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'
+                    exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'
+                    exclude 'com/micaftic/morpher/util/ClientUiUtil.java'
+                    exclude 'com/micaftic/morpher/util/PlatformUtil.java'
                     exclude 'com/ysm/parser/YSMParser.java'
                     exclude 'com/ysm/parser/YSMNative.java'
+                    exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java'
                 },
                 fileTree(rootProject.file('common/src/curseforge/java'))
         )
@@ -47,7 +52,7 @@ dependencies {
     modImplementation fabricApi.module("fabric-resource-loader-v0", rootProject.fabric_api_version)
     modImplementation fabricApi.module("fabric-rendering-v1", rootProject.fabric_api_version)
     modImplementation fabricApi.module("fabric-sound-api-v1", rootProject.fabric_api_version)
-    // fabric-key-binding-api-v1 not compatible with custom Mojang mappings
+    modImplementation fabricApi.module("fabric-key-mapping-api-v1", rootProject.fabric_api_version)
 
     modImplementation "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
     include "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
@@ -70,6 +75,10 @@ processResources {
 
     filesMatching('fabric.mod.json') {
         expand version: project.version
+    }
+
+    from(rootProject.file('LICENSE')) {
+        rename { 'LICENSE' }
     }
 
     if (rootProject.ext.isCurseForgeDist) {

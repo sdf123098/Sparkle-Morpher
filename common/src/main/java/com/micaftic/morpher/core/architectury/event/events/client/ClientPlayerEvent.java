@@ -14,6 +14,7 @@ import java.util.function.Consumer;
 public class ClientPlayerEvent {
     public static final Event<Consumer<LocalPlayer>> CLIENT_PLAYER_JOIN = new Event<>();
     public static final Event<Consumer<LocalPlayer>> CLIENT_PLAYER_QUIT = new Event<>();
+    public static final Event<Consumer<Minecraft>> CLIENT_DISCONNECT = new Event<>();
     public static final Event<BiConsumer<LocalPlayer, LocalPlayer>> CLIENT_PLAYER_RESPAWN = new Event<>();
 
     static {
@@ -23,6 +24,7 @@ public class ClientPlayerEvent {
             }
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            CLIENT_DISCONNECT.fire(h -> h.accept((Minecraft) client));
             if (client.player != null) {
                 CLIENT_PLAYER_QUIT.fire(h -> h.accept(client.player));
             }

@@ -27,20 +27,20 @@ import org.gagravarr.ogg.IOUtils;
  * This lets you work with FLAC files that
  *  are contained in a native FLAC Stream
  */
-public class FlacNativeFile extends FlacFile {
+public class FlacStreamFile extends FlacFile {
    private InputStream input;
    
    /**
     * Opens the given file for reading
     */
-   public FlacNativeFile(File f) throws IOException, FileNotFoundException {
+   public FlacStreamFile(File f) throws IOException, FileNotFoundException {
       this(new FileInputStream(f));
    }
    
    /**
     * Opens the given FLAC file
     */
-   public FlacNativeFile(InputStream inp) throws IOException {
+   public FlacStreamFile(InputStream inp) throws IOException {
       // Check the header
       byte[] header = new byte[4];
       IOUtils.readFully(inp, header);

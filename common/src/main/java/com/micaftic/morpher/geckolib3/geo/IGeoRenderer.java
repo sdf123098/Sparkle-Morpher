@@ -1,5 +1,5 @@
 package com.micaftic.morpher.geckolib3.geo;
-import com.elfmcys.yesstevemodel.geckolib3.geo.NativeModelRenderer;
+import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
@@ -56,7 +56,7 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             vertexConsumer = bufferSource.getBuffer(renderType);
         }
         animatable.resetAnimationState();
-        NativeModelRenderer.renderMesh(vertexConsumer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5, textureLocation, allowDirectGpuRenderer);
+        ModelRendererBridge.renderMesh(vertexConsumer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5, textureLocation, allowDirectGpuRenderer);
         setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
     }
 
@@ -68,7 +68,7 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
         ModelPreviewRenderer.setExtraPlayerMode(extraPlayerMode);
         ModelPreviewRenderer.setWorldRenderMode(worldRenderMode);
         try {
-            NativeModelRenderer.renderMesh(buffer, pose, model.getGeoModel(), matrixData, absPivotData, textureIndex, 0, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, allowDirectGpuRenderer);
+            ModelRendererBridge.renderMesh(buffer, pose, model.getGeoModel(), matrixData, absPivotData, textureIndex, 0, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, allowDirectGpuRenderer);
         } finally {
             ModelPreviewRenderer.setWorldRenderMode(previousWorldRenderMode);
             ModelPreviewRenderer.setExtraPlayerMode(previousExtraPlayerMode);
