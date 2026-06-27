@@ -96,9 +96,14 @@ public class YSMFolderDeserializer implements AutoCloseable {
     public RawYsmModel deserialize() {
         byte[] ysmJsonBytes = readResource("ysm.json");
         if (ysmJsonBytes != null) {  // https://ysm.cfpa.team/wiki/struct/#%E6%96%87%E4%BB%B6%E7%9B%AE%E5%BD%95%E7%BB%93%E6%9E%84
-            String jsonStr = new String(ysmJsonBytes, StandardCharsets.UTF_8);
-            JsonObject ysmJson = JsonParser.parseString(jsonStr).getAsJsonObject();
-            parseYsmJson(ysmJson);
+            try {
+                String jsonStr = new String(ysmJsonBytes, StandardCharsets.UTF_8);
+                JsonObject ysmJson = JsonParser.parseString(jsonStr).getAsJsonObject();
+                parseYsmJson(ysmJson);
+            } catch (Exception e) {
+                System.err.println("[SM] Warning: Failed to parse ysm.json, falling back to legacy model scan. " + e.getMessage());
+                parseLegacyFormat();
+            }
         } else parseLegacyFormat();
 
         parseGlobalResources();
@@ -301,7 +306,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 if (texData != null) {
                     ImageMeta meta = parseImageMeta(texData, texPath);
                     RawYsmModel.RawTexture rt = new RawYsmModel.RawTexture();
-                    rt.hash = sha256Hex(texData); // 计算原始数据的 hash
+                    rt.hash = sha256Hex(texData); // hash original texture bytes
                     rt.width = meta.width();
                     rt.height = meta.height();
                     rt.imageFormat = meta.format();
@@ -1236,7 +1241,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
             throw new RuntimeException("arrow.json is present but arrow.png is missing.");
         }
 
-        // 这个可能不存在
+        // Optional legacy resource.
         byte[] infoData = readResource("info.json");
         if (infoData != null) {
             try {
