@@ -1,7 +1,10 @@
 package com.micaftic.morpher.client;
 
-import com.micaftic.morpher.NativeLibLoader;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.audio.AudioStreamCache;
+import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.gui.IGuiWidget;
@@ -25,6 +28,7 @@ import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.DigestUtil;
 import com.micaftic.morpher.util.FileTypeUtil;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.util.LocalModelSelectionStore;
 import com.micaftic.morpher.util.YSMThreadPool;
 import com.micaftic.morpher.util.data.OrderedStringMap;
@@ -794,7 +798,7 @@ public class ClientModelManager {
         }
         Minecraft.getInstance().execute(() -> {
             Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
-            List<ModelAssembly> removed = new ArrayList<>();
+            List<Pair<String, ModelAssembly>> removed = new ArrayList<>();
             for (String modelId : modelIds) {
                 localOnlyModelIds.remove(modelId);
                 localModelSourcePaths.remove(modelId);
@@ -808,12 +812,12 @@ public class ClientModelManager {
                 gpuCacheTrimmedModels.remove(modelId);
                 ModelAssembly assembly = map.remove(modelId);
                 if (assembly != null) {
-                    removed.add(assembly);
+                    removed.add(Pair.of(modelId, assembly));
                 }
             }
             modelAssemblyMap = map;
-            for (ModelAssembly assembly : removed) {
-                releaseModelAssembly(assembly);
+            for (Pair<String, ModelAssembly> pair : removed) {
+                releaseModelAssembly(pair.getLeft(), pair.getRight());
             }
             if (!removed.isEmpty()) {
                 forEachGuiWidget(guiWidget -> guiWidget.onModelsLoaded(map));
@@ -1093,7 +1097,7 @@ public class ClientModelManager {
         Minecraft.getInstance().execute(() -> {
             Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
             if (removedModelIds != null) {
-                ArrayList<ModelAssembly> removed = new ArrayList<>(removedModelIds.length);
+                ArrayList<Pair<String, ModelAssembly>> removed = new ArrayList<>(removedModelIds.length);
                 for (String str : removedModelIds) {
                     if (localOnlyModelIds.contains(str)) {
                         continue;
@@ -1108,12 +1112,12 @@ public class ClientModelManager {
                     }
                     ModelAssembly assembly = map.remove(str);
                     if (assembly != null) {
-                        removed.add(assembly);
+                        removed.add(Pair.of(str, assembly));
                     }
                 }
                 Minecraft.getInstance().execute(() -> {
-                    for (ModelAssembly assembly : removed) {
-                        releaseModelAssembly(assembly);
+                    for (Pair<String, ModelAssembly> pair : removed) {
+                        releaseModelAssembly(pair.getLeft(), pair.getRight());
                     }
                 });
             }
@@ -1188,6 +1192,7 @@ public class ClientModelManager {
                 ModelMemoryProfiler.log("assembly-build-start", modelId);
                 ModelAssembly runtimeModel = ModelAssemblyFactory.buildAssembly(parsedBundle, isPrimary, isAuth);
                 ModelMemoryProfiler.log("assembly-build-finished", modelId);
+                ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
                 pendingModelQueue.add(Pair.of(runtimeModel, modelId));
                 touchModel(modelId);
                 if (isPrimary) {
@@ -1455,7 +1460,7 @@ public class ClientModelManager {
                 touchModel(pairPoll.getRight());
                 gpuCacheTrimmedModels.remove(pairPoll.getRight());
                 if (previous != null && previous != pairPoll.getLeft()) {
-                    releaseModelAssembly(previous);
+                    releaseModelAssembly(pairPoll.getRight(), previous);
                 }
             } else {
                 modelAssemblyMap = object2ReferenceOpenHashMap;
@@ -1466,28 +1471,46 @@ public class ClientModelManager {
     }
 
     private static void releaseModelAssembly(ModelAssembly assembly) {
+        releaseModelAssembly(null, assembly);
+    }
+
+    private static void releaseModelAssembly(String modelId, ModelAssembly assembly) {
         if (assembly == null) {
             return;
         }
         if (!RenderSystem.isOnRenderThread()) {
-            Minecraft.getInstance().execute(() -> releaseModelAssembly(assembly));
+            Minecraft.getInstance().execute(() -> releaseModelAssembly(modelId, assembly));
             return;
         }
+        AudioStreamCache.clearForModel(assembly);
         for (AbstractTexture tex : assembly.getTextures()) {
             UploadManager.removeTexture(tex);
             tex.close();
         }
-        if (NativeLibLoader.isLoaded()) {
-            for (Map.Entry<ResourceLocation, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-                entry.getValue().getModel().freeNativeCache();
-            }
-            for (Map.Entry<ResourceLocation, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-                entry.getValue().getModel().freeNativeCache();
-            }
-            assembly.getAnimationBundle().getMainModel().freeNativeCache();
-            assembly.getAnimationBundle().getArmModel().freeNativeCache();
+        for (Map.Entry<ResourceLocation, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
+            releaseModelCache(entry.getValue().getModel());
         }
-        ModelMemoryProfiler.log("assembly-released", null);
+        for (Map.Entry<ResourceLocation, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
+            releaseModelCache(entry.getValue().getModel());
+        }
+        releaseModelCache(assembly.getAnimationBundle().getMainModel());
+        releaseModelCache(assembly.getAnimationBundle().getArmModel());
+        for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) {
+            trackData.close();
+        }
+        ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
+        ModelMemoryProfiler.log("assembly-released", modelId);
+    }
+
+    private static void releaseModelCache(GeoModel model) {
+        if (model == null) {
+            return;
+        }
+        if (RuntimeAccelerationLoader.isLoaded()) {
+            model.freeNativeCache();
+        } else {
+            model.freeGpuCache();
+        }
     }
 
     public static void trimUnusedGpuCaches() {
@@ -1540,27 +1563,33 @@ public class ClientModelManager {
     }
 
     private static void trimGpuCache(String modelId, ModelAssembly assembly) {
-        if (assembly == null) {
+        if (assembly == null || !gpuCacheTrimmedModels.add(modelId)) {
             return;
         }
         if (!RenderSystem.isOnRenderThread()) {
             Minecraft.getInstance().execute(() -> trimGpuCache(modelId, assembly));
             return;
         }
-        if (!gpuCacheTrimmedModels.add(modelId)) {
-            return;
-        }
-        if (NativeLibLoader.isLoaded()) {
-            for (Map.Entry<ResourceLocation, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-                entry.getValue().getModel().freeNativeCache();
+        int releasedMeshes = 0;
+        for (Map.Entry<ResourceLocation, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
+            if (entry.getValue().getModel().freeGpuCache()) {
+                releasedMeshes++;
             }
-            for (Map.Entry<ResourceLocation, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-                entry.getValue().getModel().freeNativeCache();
-            }
-            assembly.getAnimationBundle().getMainModel().freeNativeCache();
-            assembly.getAnimationBundle().getArmModel().freeNativeCache();
         }
-        ModelMemoryProfiler.log("gpu-cache-trimmed", modelId);
+        for (Map.Entry<ResourceLocation, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
+            if (entry.getValue().getModel().freeGpuCache()) {
+                releasedMeshes++;
+            }
+        }
+        if (assembly.getAnimationBundle().getMainModel().freeGpuCache()) {
+            releasedMeshes++;
+        }
+        if (assembly.getAnimationBundle().getArmModel().freeGpuCache()) {
+            releasedMeshes++;
+        }
+        if (releasedMeshes > 0) {
+            ModelMemoryProfiler.log("gpu-cache-trimmed meshes=" + releasedMeshes, modelId);
+        }
     }
 
     private static void touchModel(String modelId) {

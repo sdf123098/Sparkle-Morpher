@@ -6,27 +6,27 @@ import java.util.LinkedList;
 
 public class ObjectPool {
 
-    private static final LinkedList<PoolEntry<NativeAudioDecoder>> pool = new LinkedList<>();
+    private static final LinkedList<PoolEntry<OpusAudioDecoder>> pool = new LinkedList<>();
 
     private static volatile int activeCount = 0;
 
-    public static NativeAudioDecoder acquire() {
+    public static OpusAudioDecoder acquire() {
         synchronized (pool) {
             if (!pool.isEmpty()) {
-                NativeAudioDecoder decoder = pool.removeLast().value;
+                OpusAudioDecoder decoder = pool.removeLast().value;
                 if (pool.isEmpty()) {
                     activeCount = 0;
                 }
                 return decoder;
             }
-            return new NativeAudioDecoder();
+            return new OpusAudioDecoder();
         }
     }
 
-    public static void release(NativeAudioDecoder decoder) {
+    public static void release(OpusAudioDecoder decoder) {
         decoder.reset();
         synchronized (pool) {
-            PoolEntry<NativeAudioDecoder> poolEntry = new PoolEntry<>(decoder, ClientTickEvent.getTickCount() + 200);
+            PoolEntry<OpusAudioDecoder> poolEntry = new PoolEntry<>(decoder, ClientTickEvent.getTickCount() + 200);
             if (pool.isEmpty()) {
                 activeCount = poolEntry.expirationTick;
             }
@@ -39,7 +39,7 @@ public class ObjectPool {
         if (activeCount != 0 && (i = ClientTickEvent.getTickCount()) > activeCount) {
             synchronized (pool) {
                 while (!pool.isEmpty()) {
-                    PoolEntry<NativeAudioDecoder> first = pool.getFirst();
+                    PoolEntry<OpusAudioDecoder> first = pool.getFirst();
                     if (first.expirationTick <= i) {
                         first.value.destroy();
                         pool.removeFirst();

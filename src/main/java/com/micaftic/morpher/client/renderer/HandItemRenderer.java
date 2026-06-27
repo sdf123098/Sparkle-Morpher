@@ -5,7 +5,7 @@ import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
 import com.micaftic.morpher.geckolib3.geo.LayerTypeConstants;
-import com.elfmcys.yesstevemodel.geckolib3.geo.NativeModelRenderer;
+import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -43,7 +43,7 @@ public class HandItemRenderer {
             poseStack.translate(-0.25d, 1.8d, 0.0d);
         }
         poseStack.scale(-1.0f, -1.0f, 1.0f);
-        NativeModelRenderer.renderMesh(buffer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), textureIndex, renderPartMask, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f, resourceLocation);
+        ModelRendererBridge.renderMesh(buffer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), textureIndex, renderPartMask, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f, resourceLocation);
         poseStack.popPose();
     }
 }

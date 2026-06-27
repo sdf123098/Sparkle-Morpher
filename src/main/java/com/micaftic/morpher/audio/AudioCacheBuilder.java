@@ -3,11 +3,12 @@ package com.micaftic.morpher.audio;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
-import org.lwjgl.BufferUtils;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 
-public class AudioCacheBuilder {
+public class AudioCacheBuilder implements AutoCloseable {
 
     private final AudioStreamCache.CachedAudioStreamProvider cacheProvider;
 
@@ -23,6 +24,7 @@ public class AudioCacheBuilder {
         this.cacheProvider = cacheProvider;
         this.trackData = trackData;
         this.audioBuffer = PooledByteBufAllocator.DEFAULT.directBuffer(((int) trackData.getDuration()) * 2);
+        ResourceLifecycleStats.onDirectBufferAllocated(null, this.audioBuffer.capacity());
     }
 
     public void appendAudio(ByteBuffer byteBuffer) {
@@ -38,10 +40,31 @@ public class AudioCacheBuilder {
     public void flushToCache() {
         if (!this.isClosed) {
             this.isClosed = true;
-            ByteBuffer byteBuffer = BufferUtils.createByteBuffer(this.audioBuffer.readableBytes());
-            this.audioBuffer.readBytes(byteBuffer.duplicate());
+            int readableBytes = this.audioBuffer.readableBytes();
+            ByteBuffer byteBuffer = MemoryUtil.memAlloc(readableBytes);
+            ResourceLifecycleStats.onDirectBufferAllocated(null, readableBytes);
+            boolean cached = false;
+            try {
+                this.audioBuffer.readBytes(byteBuffer.duplicate());
+                this.cacheProvider.cacheAudioData(this.trackData, byteBuffer, this.chunkSizes);
+                cached = true;
+            } finally {
+                if (!cached) {
+                    MemoryUtil.memFree(byteBuffer);
+                    ResourceLifecycleStats.onDirectBufferFreed(null, readableBytes);
+                }
+                ResourceLifecycleStats.onDirectBufferFreed(null, this.audioBuffer.capacity());
+                this.audioBuffer.release();
+            }
+        }
+    }
+
+    @Override
+    public void close() {
+        if (!this.isClosed) {
+            this.isClosed = true;
+            ResourceLifecycleStats.onDirectBufferFreed(null, this.audioBuffer.capacity());
             this.audioBuffer.release();
-            this.cacheProvider.cacheAudioData(this.trackData, byteBuffer, this.chunkSizes);
         }
     }
 }

@@ -8,7 +8,7 @@ import com.micaftic.morpher.client.renderer.CustomPlayerRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
-import com.elfmcys.yesstevemodel.geckolib3.geo.NativeModelRenderer;
+import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -69,7 +69,7 @@ public class RenderFirstPlayerBackground {
                     applyHandTransform(poseStack, partialTick, player);
                 }
                 poseStack.translate(0.0d, -1.5d, 0.0d);
-                NativeModelRenderer.renderMesh(buffer, poseStack.last(), modelAssembly.getAnimationBundle().getArmModel(), modelAssembly.getAnimationBundle().getArmModel().getBoneTransformData(), null, textureIndex, 3, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f, resourceLocationB_);
+                ModelRendererBridge.renderMesh(buffer, poseStack.last(), modelAssembly.getAnimationBundle().getArmModel(), modelAssembly.getAnimationBundle().getArmModel().getBoneTransformData(), null, textureIndex, 3, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f, resourceLocationB_);
                 poseStack.popPose();
             }
         });

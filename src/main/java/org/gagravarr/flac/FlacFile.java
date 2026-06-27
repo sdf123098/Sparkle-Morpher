@@ -59,7 +59,7 @@ public abstract class FlacFile implements Closeable {
       }
       if(header[0] == (byte)'f' && header[1] == (byte)'L' &&
          header[2] == (byte)'a' && header[3] == (byte)'C') {
-         return new FlacNativeFile(inp);
+         return new FlacStreamFile(inp);
       }
       throw new IllegalArgumentException("File type not recognised");
    }

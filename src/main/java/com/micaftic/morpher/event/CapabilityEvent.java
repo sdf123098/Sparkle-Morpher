@@ -30,6 +30,7 @@ public final class CapabilityEvent {
         NeoForge.EVENT_BUS.addListener(CapabilityEvent::onPlayerQuit);
         NeoForge.EVENT_BUS.addListener(CapabilityEvent::onEntityAdd);
         NeoForge.EVENT_BUS.addListener(CapabilityEvent::onServerTick);
+        NeoForge.EVENT_BUS.addListener(CapabilityEvent::onStartTracking);
     }
     private static void onPlayerCloned(PlayerEvent.Clone event) {
         if (!YesSteveModel.isAvailable()) return;
@@ -85,6 +86,22 @@ public final class CapabilityEvent {
     private static void rememberTrackedState(ServerPlayer src, ModelInfoCapability cap) {
         MinecraftServer s = src.serverLevel().getServer(); if (s == null) return;
         for (ServerPlayer r : s.getPlayerList().getPlayers()) if (r != src) SYNCED_PLAYER_MODEL_STATES.computeIfAbsent(r.getUUID(), u -> new ConcurrentHashMap<>()).put(src.getUUID(), cap.getModelId() + "\0" + cap.getSelectTexture() + "\0" + cap.isDisabled());
+    }
+    
+    private static void onStartTracking(PlayerEvent.StartTracking event) {
+        if (!YesSteveModel.isAvailable()) return;
+        Entity target = event.getTarget();
+        if (!(event.getEntity() instanceof ServerPlayer tracker)) return;
+        if (target instanceof ServerPlayer tracked) {
+            getModelInfoCap(tracked).ifPresent(c -> {
+                if (canSyncModel(tracked, c)) {
+                    c.createSyncMessage(tracked, false).ifPresent(m -> {
+                        NetworkHandler.sendToClientPlayer(m, tracker);
+                        rememberTrackedState(tracked, c);
+                    });
+                }
+            });
+        }
     }
     public static void syncProjectileModel(Projectile proj, ServerPlayer sp) {
         ModelInfoCapability.get(sp).ifPresent(c -> { if (!NetworkHandler.isPlayerConnected(sp) && !c.isMandatory()) return; ProjectileModelCapability.get(proj).ifPresent(pc -> c.withMolangVars(v -> { pc.setModel(c.getModelId(), v); S2CSyncProjectileModelPacket pkt = new S2CSyncProjectileModelPacket(proj.getId(), pc); NetworkHandler.sendToClientPlayer(pkt, sp); NetworkHandler.sendToTrackingEntity(pkt, proj); })); });

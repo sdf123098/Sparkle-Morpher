@@ -9,6 +9,6 @@ public final class YsmEventBootstrap {
     public static void register() {
         ServerStartupEvent.register(); EnterServerEvent.register(); PlayerLogoutEvent.register();
         CommandRegistry.register(); CapabilityEvent.register(); LivingEventBridge.register();
-        if (!PlatformAPI.isServer()) { EntityJoinCallbackEvent.register(); PlayerSkinTextureManager.register(); RendererManager.register(); }
+        if (!PlatformAPI.isServer()) { EntityJoinCallbackEvent.register(); ClientResourceLifecycleEvent.register(); PlayerSkinTextureManager.register(); RendererManager.register(); }
     }
 }

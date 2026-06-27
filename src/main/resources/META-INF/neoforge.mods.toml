@@ -4,15 +4,6 @@ license = "MIT"
 issueTrackerURL="https://github.com/Micaftic/Sparkle-Morpher/issues"
 logoFile="sparkle_morpher.png"
 
-[[mixins]]
-config = "sparkle_morpher.mixins.json"
-
-[[mixins]]
-config = "sparkle_morpher_neoforge.mixins.json"
-
-[[accessTransformers]]
-file = "META-INF/accesstransformer.cfg"
-
 [[mods]]
 modId = "${mod_id}"
 version = "${version}"
@@ -25,6 +16,15 @@ authors="Micaftic"
 description='''
 Sparkle's Morpher (花火火的变身器) - Custom player model system for Minecraft.
 '''
+
+[[mixins]]
+config = "sparkle_morpher.mixins.json"
+
+[[mixins]]
+config = "sparkle_morpher_neoforge.mixins.json"
+
+[[accessTransformers]]
+file = "META-INF/accesstransformer.cfg"
 
 [[dependencies.${mod_id}]]
 modId = "neoforge"

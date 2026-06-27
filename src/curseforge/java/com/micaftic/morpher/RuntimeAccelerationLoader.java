@@ -4,8 +4,8 @@ import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 
-public final class NativeLibLoader {
-    private NativeLibLoader() {
+public final class RuntimeAccelerationLoader {
+    private RuntimeAccelerationLoader() {
     }
 
     public static void init() throws IOException {

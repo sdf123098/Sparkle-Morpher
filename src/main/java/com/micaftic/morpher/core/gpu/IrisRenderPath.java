@@ -28,6 +28,7 @@ public final class IrisRenderPath {
 
         GpuMesh mesh = GpuRenderPath.getOrBuildMesh(model);
         if (mesh == null) return false;
+        if (mesh.pointer == 0) return false;
         mesh.ensureXformBuffers();
 
 

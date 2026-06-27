@@ -69,6 +69,15 @@ public final class BlurStack {
         regions.clear();
     }
 
+    public static void disposeAll(String reason) {
+        if (!RenderSystem.isOnRenderThread()) {
+            RenderSystem.recordRenderCall(() -> disposeAll(reason));
+            return;
+        }
+        regions.clear();
+        BlurShader.closeAll(reason);
+    }
+
     public static boolean isEmpty() {
         return regions.isEmpty();
     }

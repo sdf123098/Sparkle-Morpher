@@ -23,8 +23,8 @@ public class YesSteveModel {
     public static void init() {
         migrateLegacyConfigDir();
         LOGGER.info("Initializing Sparkle's Morpher, platform: " + PlatformAPI.getPlatformName());
-        try { NativeLibLoader.init(); } catch (IOException e) { LOGGER.error("Failed to initialize native lib", e); }
-        if (!NativeLibLoader.isAvailable()) LOGGER.error(getErrorMessage());
+        try { RuntimeAccelerationLoader.init(); } catch (IOException e) { LOGGER.error("Failed to initialize native lib", e); }
+        if (!RuntimeAccelerationLoader.isAvailable()) LOGGER.error(getErrorMessage());
         CommonEvent.init();
         YsmEventBootstrap.register();
     }
@@ -52,9 +52,9 @@ public class YesSteveModel {
         ModSoundEvents.REGISTER.register(bus);
         com.micaftic.morpher.neoforge.capability.NeoForgeCapabilities.register(bus);
     }
-    @Keep public static boolean isAvailable() { return NativeLibLoader.isAvailable(); }
-    public static boolean isOnAndroid() { return NativeLibLoader.isOnAndroid(); }
+    @Keep public static boolean isAvailable() { return RuntimeAccelerationLoader.isAvailable(); }
+    public static boolean isOnAndroid() { return RuntimeAccelerationLoader.isOnAndroid(); }
     @OnlyIn(Dist.CLIENT) public static void sendUnavailableMessage() { LocalPlayer p = Minecraft.getInstance().player; if (p != null) p.sendSystemMessage(getUnavailableComponent()); }
-    public static Component getUnavailableComponent() { return NativeLibLoader.getErrorComponent(); }
-    public static String getErrorMessage() { return NativeLibLoader.getErrorMessage(); }
+    public static Component getUnavailableComponent() { return RuntimeAccelerationLoader.getErrorComponent(); }
+    public static String getErrorMessage() { return RuntimeAccelerationLoader.getErrorMessage(); }
 }

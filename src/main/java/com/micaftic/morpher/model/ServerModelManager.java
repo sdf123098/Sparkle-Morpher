@@ -25,7 +25,7 @@ import com.micaftic.morpher.util.NetworkOnlineDebugLog;
 import com.micaftic.morpher.util.PerformanceProfiler;
 import com.micaftic.morpher.util.PlayerDataSaveBridge;
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
-import com.micaftic.morpher.util.YSMNativeHelper;
+import com.micaftic.morpher.util.YSMComponentHelper;
 import com.micaftic.morpher.util.YSMThreadPool;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -1021,7 +1021,7 @@ public final class ServerModelManager {
                 ServerModelData modelData = CACHE_NAME_INFO.get(modelID);
                 if (modelData == null) {
                     if (callback != null) {
-                        callback.accept(new ExportResult(false, (Component) YSMNativeHelper.createTranslatableComponent("commands.sparkle_morpher.export.failure",new Object[]{": " + modelID + "\n Model not found"}), "", "", 0));
+                        callback.accept(new ExportResult(false, (Component) YSMComponentHelper.createTranslatableComponent("commands.sparkle_morpher.export.failure",new Object[]{": " + modelID + "\n Model not found"}), "", "", 0));
                     }
                     return;
                 }

@@ -1,112 +1,208 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import org.lwjgl.opengl.*;
+import org.lwjgl.system.MemoryUtil;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public final class GpuMeshBuilder {
+    private static final int VERTEX_STRIDE = 32;
+
     public static GpuMesh build(GeoModel model) {
         if (model.bakedBones == null || model.bakedBones.isEmpty()) return null;
         RenderSystem.assertOnRenderThread();
-        ByteBuffer modelBuf = serializeModel(model);
-        int[] meta = new int[9];
-        long handle = GeoModel.nBuildGpuMesh(modelBuf, meta);
-        if (handle == 0) {
+        MeshData meshData = buildJavaMesh(model);
+        if (meshData == null || meshData.vertexCount <= 0 || meshData.indexCount <= 0 || meshData.boneCount <= 0) {
             return null;
         }
-        int vertexCount = meta[0];
-        int indexCount = meta[1];
-        int boneCount = meta[2];
 
-        ByteBuffer vbuf = GeoModel.nGetGpuMeshVertexBuffer(handle);
-        ByteBuffer ibuf = GeoModel.nGetGpuMeshIndexBuffer(handle);
-        if (vbuf == null || ibuf == null) {
-            GeoModel.nFreeGpuMesh(handle);
-            return null;
+        try {
+            int vao = GL30.glGenVertexArrays();
+            int vbo = GlStateManager._glGenBuffers();
+            int ibo = GlStateManager._glGenBuffers();
+            int ssbo = GlStateManager._glGenBuffers();
+
+            GL30.glBindVertexArray(vao);
+            GlStateManager._glBindBuffer(GL15.GL_ARRAY_BUFFER, vbo);
+            GL15.glBufferData(GL15.GL_ARRAY_BUFFER, meshData.vertices, GL15.GL_STATIC_DRAW);
+            GlStateManager._glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, ibo);
+            GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, meshData.indices, GL15.GL_STATIC_DRAW);
+
+            GL20.glEnableVertexAttribArray(0);
+            GL20.glVertexAttribPointer(0, 3, GL15.GL_FLOAT, false, VERTEX_STRIDE, 0L);
+            GL20.glEnableVertexAttribArray(1);
+            GL20.glVertexAttribPointer(1, 2, GL15.GL_FLOAT, false, VERTEX_STRIDE, 12L);
+            GL20.glEnableVertexAttribArray(2);
+            GL20.glVertexAttribPointer(2, 4, GL33.GL_INT_2_10_10_10_REV, true, VERTEX_STRIDE, 20L);
+            GL20.glEnableVertexAttribArray(3);
+            GL30.glVertexAttribIPointer(3, 1, GL15.GL_UNSIGNED_SHORT, VERTEX_STRIDE, 24L);
+
+            GL20.glEnableVertexAttribArray(4);
+            GL20.glVertexAttribPointer(4, 1, GL11.GL_UNSIGNED_BYTE, false, VERTEX_STRIDE, 27L);
+
+            GL30.glBindVertexArray(0);
+            GlStateManager._glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+            GlStateManager._glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, 0);
+
+            GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, ssbo);
+            GL45.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, (long) meshData.boneCount * 144, GL15.GL_DYNAMIC_DRAW);
+            GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
+
+            long estimatedBytes = meshData.estimatedBytes();
+            return new GpuMesh(0L, vao, vbo, ibo, ssbo, meshData.vertexCount, meshData.indexCount, meshData.boneCount,
+                    meshData.partMask1Start, meshData.partMask1Count,
+                    meshData.partMask2Start, meshData.partMask2Count,
+                    meshData.partMask3Start, meshData.partMask3Count,
+                    estimatedBytes);
+        } finally {
+            meshData.release();
         }
-        vbuf.order(ByteOrder.nativeOrder());
-        ibuf.order(ByteOrder.nativeOrder());
-
-        int vao = GL30.glGenVertexArrays();
-        int vbo = GlStateManager._glGenBuffers();
-        int ibo = GlStateManager._glGenBuffers();
-        int ssbo = GlStateManager._glGenBuffers();
-
-        GL30.glBindVertexArray(vao);
-        GlStateManager._glBindBuffer(GL15.GL_ARRAY_BUFFER, vbo);
-        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, vbuf, GL15.GL_STATIC_DRAW);
-        GlStateManager._glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, ibo);
-        GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, ibuf, GL15.GL_STATIC_DRAW);
-
-        GL20.glEnableVertexAttribArray(0);
-        GL20.glVertexAttribPointer(0, 3, GL15.GL_FLOAT, false, 32, 0L);
-        GL20.glEnableVertexAttribArray(1);
-        GL20.glVertexAttribPointer(1, 2, GL15.GL_FLOAT, false, 32, 12L);
-        GL20.glEnableVertexAttribArray(2);
-        GL20.glVertexAttribPointer(2, 4, GL33.GL_INT_2_10_10_10_REV, true, 32, 20L);
-        GL20.glEnableVertexAttribArray(3);
-        GL30.glVertexAttribIPointer(3, 1, GL15.GL_UNSIGNED_SHORT, 32, 24L);
-
-        GL20.glEnableVertexAttribArray(4);
-        GL20.glVertexAttribPointer(4, 1, GL11.GL_UNSIGNED_BYTE, false, 32, 27L);
-
-        GL30.glBindVertexArray(0);
-        GlStateManager._glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
-        GlStateManager._glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, 0);
-
-        GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, ssbo);
-        GL45.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, (long) boneCount * 144, GL15.GL_DYNAMIC_DRAW);
-        GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
-        GeoModel.nReleaseGpuMeshScratch(handle);
-
-        return new GpuMesh(handle, vao, vbo, ibo, ssbo, vertexCount, indexCount, boneCount, meta[3], meta[4], meta[5], meta[6], meta[7], meta[8]);
     }
 
-    private static ByteBuffer serializeModel(GeoModel model) {
-        int totalBones = model.bakedBones.size();
-        int totalCubes = 0;
+    private static MeshData buildJavaMesh(GeoModel model) {
         int totalQuads = 0;
         for (GeoModel.BakedBone bone : model.bakedBones) {
-            totalCubes += bone.cubes.size();
             for (GeoModel.BakedCube cube : bone.cubes) {
                 totalQuads += cube.quads.size();
             }
         }
-        int sz = 4 + (totalBones * 25) + (totalCubes * 5) + (totalQuads * 92);
-        ByteBuffer buf = ByteBuffer.allocateDirect(sz).order(ByteOrder.nativeOrder());
-        buf.putInt(totalBones);
-        for (GeoModel.BakedBone bone : model.bakedBones) {
-            buf.putInt(bone.parentIdx);
-            buf.putInt(bone.partMask);
-            buf.put((byte) (bone.glow ? 1 : 0));
-            buf.putFloat(bone.pivotX);
-            buf.putFloat(bone.pivotY);
-            buf.putFloat(bone.pivotZ);
-            buf.putInt(bone.cubes.size());
+
+        int vertexCount = totalQuads * 4;
+        int indexCount = totalQuads * 6;
+        int vertexBytes = vertexCount * VERTEX_STRIDE;
+        ByteBuffer vertices = MemoryUtil.memAlloc(vertexBytes).order(ByteOrder.nativeOrder());
+        ResourceLifecycleStats.onDirectBufferAllocated(null, vertexBytes);
+        List<QuadRecord> quads = new ArrayList<>(totalQuads);
+
+        for (int boneIdx = 0; boneIdx < model.bakedBones.size(); boneIdx++) {
+            GeoModel.BakedBone bone = model.bakedBones.get(boneIdx);
             for (GeoModel.BakedCube cube : bone.cubes) {
-                buf.put((byte) (cube.cullable ? 1 : 0));
-                buf.putInt(cube.quads.size());
                 for (GeoModel.BakedQuad quad : cube.quads) {
+                    int vertexOffset = vertices.position() / VERTEX_STRIDE;
+                    int normal = packNormal(quad.normalX, quad.normalY, quad.normalZ);
                     for (int v = 0; v < 4; v++) {
-                        buf.putFloat(quad.positions[v].x());
-                        buf.putFloat(quad.positions[v].y());
-                        buf.putFloat(quad.positions[v].z());
+                        vertices.putFloat(quad.x(v));
+                        vertices.putFloat(quad.y(v));
+                        vertices.putFloat(quad.z(v));
+                        vertices.putFloat(quad.u(v));
+                        vertices.putFloat(quad.v(v));
+                        vertices.putInt(normal);
+                        vertices.putShort((short) (boneIdx & 0xFFFF));
+                        vertices.put((byte) (bone.partMask & 0xFF));
+                        vertices.put((byte) (cube.cullable ? 1 : 0));
+                        vertices.putInt(0);
                     }
-                    for (int v = 0; v < 4; v++) {
-                        buf.putFloat(quad.uvs[v].x());
-                        buf.putFloat(quad.uvs[v].y());
-                    }
-                    buf.putFloat(quad.normal.x());
-                    buf.putFloat(quad.normal.y());
-                    buf.putFloat(quad.normal.z());
+                    quads.add(new QuadRecord(vertexOffset, bone.partMask));
                 }
             }
         }
-        buf.position(0);
-        return buf;
+        vertices.flip();
+
+        quads.sort(Comparator.comparingInt(q -> q.partMask));
+        int indexBytes = indexCount * Integer.BYTES;
+        ByteBuffer indices = MemoryUtil.memAlloc(indexBytes).order(ByteOrder.nativeOrder());
+        ResourceLifecycleStats.onDirectBufferAllocated(null, indexBytes);
+        MeshData data = new MeshData(vertices, indices, vertexCount, indexCount, model.bakedBones.size(), vertexBytes, indexBytes);
+        int currentPartMask = -1;
+        int rangeStart = 0;
+        int indexOffset = 0;
+        for (QuadRecord quad : quads) {
+            if (quad.partMask != currentPartMask) {
+                closeRange(data, currentPartMask, rangeStart, indexOffset);
+                currentPartMask = quad.partMask;
+                rangeStart = indexOffset;
+            }
+            int v = quad.vertexOffset;
+            indices.putInt(v);
+            indices.putInt(v + 1);
+            indices.putInt(v + 2);
+            indices.putInt(v);
+            indices.putInt(v + 2);
+            indices.putInt(v + 3);
+            indexOffset += 6;
+        }
+        closeRange(data, currentPartMask, rangeStart, indexOffset);
+        indices.flip();
+        return data;
+    }
+
+    private static void closeRange(MeshData data, int partMask, int start, int end) {
+        int count = end - start;
+        if (count <= 0) return;
+        switch (partMask) {
+            case 1 -> {
+                data.partMask1Start = start;
+                data.partMask1Count = count;
+            }
+            case 2 -> {
+                data.partMask2Start = start;
+                data.partMask2Count = count;
+            }
+            case 3 -> {
+                data.partMask3Start = start;
+                data.partMask3Count = count;
+            }
+            default -> {
+            }
+        }
+    }
+
+    private static int packNormal(float x, float y, float z) {
+        return packComponent(x) | (packComponent(y) << 10) | (packComponent(z) << 20);
+    }
+
+    private static int packComponent(float value) {
+        int packed = Math.round(value * 511.0f);
+        if (packed < -512) packed = -512;
+        if (packed > 511) packed = 511;
+        return packed & 0x3FF;
+    }
+
+    private record QuadRecord(int vertexOffset, int partMask) {
+    }
+
+    private static final class MeshData {
+        final ByteBuffer vertices;
+        final ByteBuffer indices;
+        final int vertexCount;
+        final int indexCount;
+        final int boneCount;
+        final int vertexBytes;
+        final int indexBytes;
+        int partMask1Start;
+        int partMask1Count;
+        int partMask2Start;
+        int partMask2Count;
+        int partMask3Start;
+        int partMask3Count;
+
+        MeshData(ByteBuffer vertices, ByteBuffer indices, int vertexCount, int indexCount, int boneCount, int vertexBytes, int indexBytes) {
+            this.vertices = vertices;
+            this.indices = indices;
+            this.vertexCount = vertexCount;
+            this.indexCount = indexCount;
+            this.boneCount = boneCount;
+            this.vertexBytes = vertexBytes;
+            this.indexBytes = indexBytes;
+        }
+
+        long estimatedBytes() {
+            return (long) vertexBytes + indexBytes + ((long) boneCount * 144L);
+        }
+
+        void release() {
+            MemoryUtil.memFree(vertices);
+            ResourceLifecycleStats.onDirectBufferFreed(null, vertexBytes);
+            MemoryUtil.memFree(indices);
+            ResourceLifecycleStats.onDirectBufferFreed(null, indexBytes);
+        }
     }
 }

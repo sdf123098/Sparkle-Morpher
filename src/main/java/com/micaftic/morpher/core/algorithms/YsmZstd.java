@@ -1,7 +1,5 @@
 package com.micaftic.morpher.core.algorithms;
 
-import com.micaftic.morpher.NativeLibLoader;
-import com.ysm.parser.YSMNative;
 import org.apache.commons.io.FileUtils;
 import com.micaftic.morpher.core.zstd.ZstdUtil;
 
@@ -17,10 +15,6 @@ public class YsmZstd {
     }
 
     public static byte[] decompress(byte[] rawData, int offset, int length) throws IOException {
-/*
-        if(NativeLibLoader.isLoaded())
-            return YSMNative.ysmZstdDecompress(rawData);
-*/
         try {
             return decompressStrict(rawData, offset, length);
         } catch (Throwable strictError) {
@@ -52,8 +46,6 @@ public class YsmZstd {
     }
 
     public static byte[] compress(byte[] rawData, int offset, int length) {
-    /*    if(NativeLibLoader.isLoaded())
-            return YSMNative.ysmZstdCompress(rawData,3);*/
         byte[] zstdData = ZstdUtil.compress(rawData, offset, length, 3);
         return YsmZstd.obfuscate(zstdData);
     }

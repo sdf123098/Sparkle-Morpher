@@ -1,6 +1,5 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.micaftic.morpher.NativeLibLoader;
 import com.mojang.blaze3d.systems.RenderSystem;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
@@ -27,10 +26,6 @@ public final class GpuCapability {
 
         if (System.getProperty("OYSM_DISABLE_GPU") != null) {
             reason = "gpu renderer has been disabled";
-            return;
-        }
-        if (!NativeLibLoader.isLoaded()) {
-            reason = "native ysm-core not loaded";
             return;
         }
         String osName = System.getProperty("os.name", "").toLowerCase();

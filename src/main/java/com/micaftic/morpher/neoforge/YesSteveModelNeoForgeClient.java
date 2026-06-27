@@ -17,6 +17,7 @@ public final class YesSteveModelNeoForgeClient {
     @SubscribeEvent public static void onClientSetup(FMLClientSetupEvent event) {
         debugOverlay = AnimationDebugOverlay.createOverlay(); loadingOverlay = new ExtraPlayerOverlay(); syncOverlay = new ModelSyncStateOverlay();
         ClientModelManager.loadDefaultModel();
+        ClientModelManager.reloadLocalModels(null);
     }
 
     @EventBusSubscriber(modid = com.micaftic.morpher.YesSteveModel.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
