@@ -650,7 +650,7 @@
   "gui.sparkle_morpher.upload_custom_folder.upload_one": "上传",
   "gui.sparkle_morpher.url.donate": "赞助",
   "gui.sparkle_morpher.url.home": "主页",
-  "key.category.sparkle_morpher": "花火火的变身器",
+  "key.category.sparkle_morpher": "花火火的变身器",
   "key.category.sparkle_morpher.keys": "花火火的变身器",
   "key.sparkle_morpher.animation_roulette.desc": "打开轮盘动画",
   "key.sparkle_morpher.debug_animation.desc": "打开动画调试",
@@ -781,5 +781,14 @@
   "gui.sparkle_morpher.model_panel.setting_group.misc": "其他",
   "gui.sparkle_morpher.model_panel.applied_model": "已应用 %s",
   "gui.sparkle_morpher.model_panel.add_site": "添加站点",
-  "gui.sparkle_morpher.model_panel.clear_selection": "清空选择"
+  "gui.sparkle_morpher.model_panel.clear_selection": "清空选择",
+  "gui.sparkle_morpher.model_panel.setting.graphics_backend_mode": "图形后端策略",
+  "gui.sparkle_morpher.model_panel.setting.graphics_backend_mode.auto": "自动",
+  "gui.sparkle_morpher.model_panel.setting.graphics_backend_mode.vanilla_pipeline_only": "仅原版管线",
+  "gui.sparkle_morpher.model_panel.setting.graphics_backend_mode.opengl_legacy_compat": "OpenGL 兼容",
+  "gui.sparkle_morpher.model_panel.setting.graphics_backend_mode.disabled_gpu_acceleration": "禁用 GPU 加速",
+  "gui.sparkle_morpher.model_panel.setting.disable_raw_gl_non_gl": "非 OpenGL 禁用 raw GL",
+  "gui.sparkle_morpher.model_panel.setting.opengl_legacy_renderer": "旧版 OpenGL 渲染器",
+  "gui.sparkle_morpher.model_panel.setting.opengl_gui_blur": "OpenGL GUI 模糊",
+  "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Vulkan 能力探测"
 }
