@@ -1,7 +1,6 @@
 package com.micaftic.morpher.client.entity;
 
-import com.micaftic.morpher.geckolib3.core.controller.controllers.PlayerAnimationController;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.ImportedPlayerAnimationController;
+import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
@@ -130,10 +129,7 @@ public abstract class CustomPlayerEntity extends LivingAnimatable<Player> implem
     }
 
     private String getCapControllerKey() {
-        if (isModelReady() && getModelAssembly().getAnimationBundle().isImportedPlayerModel()) {
-            return ImportedPlayerAnimationController.CAP_CONTROLLER_KEY;
-        }
-        return PlayerAnimationController.CAP_CONTROLLER_KEY;
+        return UnifiedPlayerActionController.CAP_CONTROLLER_KEY;
     }
 
     public void executeAnimationExpression(FloatArrayList floatArrayList) {

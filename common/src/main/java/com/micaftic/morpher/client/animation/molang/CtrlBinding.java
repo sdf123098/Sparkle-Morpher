@@ -3,8 +3,7 @@ package com.micaftic.morpher.client.animation.molang;
 import com.micaftic.morpher.client.animation.ControllerActionResolver;
 import com.micaftic.morpher.core.compat.immersivemelodies.ImmersiveMelodiesCompat;
 import com.micaftic.morpher.core.compat.ironsspellbooks.SpellbooksCompat;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.ImportedPlayerAnimationController;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.PlayerAnimationController;
+import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
 import com.micaftic.morpher.client.animation.molang.functions.ctrl.*;
 import com.micaftic.morpher.core.compat.sbackpack.SBackpackCompat;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
@@ -82,11 +81,8 @@ public class CtrlBinding extends ContextBinding {
         if (!(animatableEntity instanceof CustomPlayerEntity customPlayerEntity)) {
             return false;
         }
-        String capControllerKey = customPlayerEntity.isModelReady()
-                && customPlayerEntity.getModelAssembly().getAnimationBundle().isImportedPlayerModel()
-                ? ImportedPlayerAnimationController.CAP_CONTROLLER_KEY
-                : PlayerAnimationController.CAP_CONTROLLER_KEY;
-        return customPlayerEntity.isModelSwitching() && customPlayerEntity.getAnimationState(capControllerKey) != AnimationState.IDLE;
+        return customPlayerEntity.isModelSwitching()
+                && customPlayerEntity.getAnimationState(UnifiedPlayerActionController.CAP_CONTROLLER_KEY) != AnimationState.IDLE;
     }
 
     private void registerState(String name) {

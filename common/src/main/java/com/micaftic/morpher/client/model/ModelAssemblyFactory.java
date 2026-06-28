@@ -63,6 +63,34 @@ public class ModelAssemblyFactory {
             Map.entry("rightItem", "RightHandLocator"),
             Map.entry("rightitem", "RightHandLocator")
     );
+    private static final Map<String, String> FIRST_PERSON_WEAPON_ARM_NORMALIZED_TARGETS = Map.ofEntries(
+            Map.entry("leftarm", "LeftArm"),
+            Map.entry("leftupperarm", "LeftArm"),
+            Map.entry("leftuparm", "LeftArm"),
+            Map.entry("leftshoulder", "LeftArm"),
+            Map.entry("leftbicep", "LeftArm"),
+            Map.entry("leftforearm", "LeftForeArm"),
+            Map.entry("leftlowerarm", "LeftForeArm"),
+            Map.entry("leftelbow", "LeftForeArm"),
+            Map.entry("lefthand", "LeftHand"),
+            Map.entry("leftwrist", "LeftHand"),
+            Map.entry("leftpalm", "LeftHand"),
+            Map.entry("lefthandlocator", "LeftHandLocator"),
+            Map.entry("leftitem", "LeftHandLocator"),
+            Map.entry("rightarm", "RightArm"),
+            Map.entry("rightupperarm", "RightArm"),
+            Map.entry("rightuparm", "RightArm"),
+            Map.entry("rightshoulder", "RightArm"),
+            Map.entry("rightbicep", "RightArm"),
+            Map.entry("rightforearm", "RightForeArm"),
+            Map.entry("rightlowerarm", "RightForeArm"),
+            Map.entry("rightelbow", "RightForeArm"),
+            Map.entry("righthand", "RightHand"),
+            Map.entry("rightwrist", "RightHand"),
+            Map.entry("rightpalm", "RightHand"),
+            Map.entry("righthandlocator", "RightHandLocator"),
+            Map.entry("rightitem", "RightHandLocator")
+    );
 
     private static final String MACE_MAINHAND_HOLD_ID = "hold_mainhand$minecraft:mace";
     private static final String MACE_OFFHAND_HOLD_ID = "hold_offhand$minecraft:mace";
@@ -143,24 +171,13 @@ public class ModelAssemblyFactory {
             }
         }
         boolean bbModelImport = isBbModelImport(clientModelInfo);
-        boolean inheritPrimaryAnimations = !isPrimary && !bbModelImport;
-        if (inheritPrimaryAnimations) {
-            ObjectIterator<Map.Entry<String, Animation>> it = primaryAssembly.getAnimationBundle().getMainAnimations().entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<String, Animation> entry = it.next();
-                object2ReferenceOpenHashMap.computeIfAbsent(entry.getKey(), obj -> {
-                    return entry.getValue();
-                });
-            }
-            ObjectIterator<Map.Entry<String, Animation>> it2 = primaryAssembly.getAnimationBundle().getArmAnimations().entrySet().iterator();
-            while (it2.hasNext()) {
-                Map.Entry<String, Animation> entry2 = it2.next();
-                armAnimations.computeIfAbsent(entry2.getKey(), obj2 -> {
-                    return entry2.getValue();
-                });
-            }
+        boolean externalPlayerModel = !isPrimary;
+        ModelSourceFormat sourceFormat = resolveSourceFormat(bbModelImport, isPrimary);
+        boolean useBuiltinDefaultActionPreset = shouldUseBuiltinDefaultActionPreset(sourceFormat, externalPlayerModel);
+        if (useBuiltinDefaultActionPreset) {
+            applyBuiltinDefaultActionPreset(object2ReferenceOpenHashMap, armAnimations);
         }
-        if (!bbModelImport) {
+        if (!externalPlayerModel || useBuiltinDefaultActionPreset) {
             addWeaponAnimationAliases(object2ReferenceOpenHashMap);
             addWeaponAnimationAliases(armAnimations);
             addFirstPersonWeaponArmAnimations(object2ReferenceOpenHashMap, armAnimations);
@@ -182,6 +199,7 @@ public class ModelAssemblyFactory {
             textureList.addAll(texture.getSuffixTextures().values());
         }
         String defaultTextureName = (StringUtils.isEmpty(clientModelInfo.getInfo().getModelProperties().getDefaultTexture()) || !hierarchyData.getTextureMap().containsKey(clientModelInfo.getInfo().getModelProperties().getDefaultTexture())) ? hierarchyData.getTextureMap().getKeyAt(0) : clientModelInfo.getInfo().getModelProperties().getDefaultTexture();
+        ModelActionProfile actionProfile = resolveActionProfile(sourceFormat);
         return new PlayerModelBundle(
                 mainModel,
                 armModel,
@@ -194,7 +212,68 @@ public class ModelAssemblyFactory {
                 defaultTextureName,
                 hierarchyData.getTextureMap().get(defaultTextureName),
                 resourceBundle,
-                bbModelImport);
+                sourceFormat,
+                actionProfile,
+                buildSemanticSkeleton(mainModel),
+                actionProfile == ModelActionProfile.VANILLA_HUMANOID
+                        ? HandLocatorProfile.VANILLA_EQUIPMENT
+                        : HandLocatorProfile.ysmAuthored(hierarchyData.getSpecialHandLocatorProfile()));
+    }
+
+    private static ModelSourceFormat resolveSourceFormat(boolean bbModelImport, boolean primary) {
+        if (bbModelImport) {
+            return ModelSourceFormat.BBMODEL;
+        }
+        return primary ? ModelSourceFormat.BUILTIN_SAMPLE : ModelSourceFormat.YSM_NATIVE;
+    }
+
+    private static boolean shouldUseBuiltinDefaultActionPreset(ModelSourceFormat sourceFormat, boolean externalPlayerModel) {
+        return externalPlayerModel && sourceFormat == ModelSourceFormat.YSM_NATIVE;
+    }
+
+    private static void applyBuiltinDefaultActionPreset(Object2ReferenceLinkedOpenHashMap<String, Animation> mainAnimations,
+                                                        Object2ReferenceLinkedOpenHashMap<String, Animation> armAnimations) {
+        Object2ReferenceMap<String, Animation> builtinMainAnimations = BuiltinDefaultActionPreset.mainAnimations();
+        for (Object2ReferenceMap.Entry<String, Animation> entry : builtinMainAnimations.object2ReferenceEntrySet()) {
+            mainAnimations.computeIfAbsent(entry.getKey(), key -> entry.getValue());
+        }
+        for (Object2ReferenceMap.Entry<String, Animation> entry : BuiltinDefaultActionPreset.armAnimations().object2ReferenceEntrySet()) {
+            armAnimations.computeIfAbsent(entry.getKey(), key -> entry.getValue());
+        }
+    }
+
+    private static ModelActionProfile resolveActionProfile(ModelSourceFormat sourceFormat) {
+        if (sourceFormat == ModelSourceFormat.BBMODEL || sourceFormat == ModelSourceFormat.FIGURA_BBMODEL) {
+            return ModelActionProfile.VANILLA_HUMANOID;
+        }
+        return ModelActionProfile.YSM_AUTHORED;
+    }
+
+    private static SemanticSkeleton buildSemanticSkeleton(GeoModel mainModel) {
+        LinkedHashMap<String, String> bones = new LinkedHashMap<>();
+        registerSemanticBone(bones, "HEAD", "head", "allhead", "vanillahead");
+        registerSemanticBone(bones, "BODY", "body", "torso", "chest", "upperbody", "vanillabody");
+        registerSemanticBone(bones, "LEFT_UPPER_ARM", "leftarm", "leftupperarm", "leftshoulder", "vanillaleftarm");
+        registerSemanticBone(bones, "RIGHT_UPPER_ARM", "rightarm", "rightupperarm", "rightshoulder", "vanillarightarm");
+        registerSemanticBone(bones, "LEFT_FOREARM", "leftforearm", "leftlowerarm", "leftelbow");
+        registerSemanticBone(bones, "RIGHT_FOREARM", "rightforearm", "rightlowerarm", "rightelbow");
+        registerSemanticBone(bones, "LEFT_HAND", "lefthand", "leftwrist", "leftpalm");
+        registerSemanticBone(bones, "RIGHT_HAND", "righthand", "rightwrist", "rightpalm");
+        registerSemanticBone(bones, "LEFT_UPPER_LEG", "leftleg", "leftupperleg", "leftthigh", "vanillaleftleg");
+        registerSemanticBone(bones, "RIGHT_UPPER_LEG", "rightleg", "rightupperleg", "rightthigh", "vanillarightleg");
+        registerSemanticBone(bones, "LEFT_LOWER_LEG", "leftlowerleg", "leftshin", "leftcalf");
+        registerSemanticBone(bones, "RIGHT_LOWER_LEG", "rightlowerleg", "rightshin", "rightcalf");
+        registerSemanticBone(bones, "LEFT_FOOT", "leftfoot", "leftboot");
+        registerSemanticBone(bones, "RIGHT_FOOT", "rightfoot", "rightboot");
+        registerSemanticBone(bones, "LEFT_HAND_LOCATOR", "lefthandlocator", "leftitem");
+        registerSemanticBone(bones, "RIGHT_HAND_LOCATOR", "righthandlocator", "rightitem");
+        return bones.isEmpty() ? SemanticSkeleton.EMPTY : new SemanticSkeleton(bones);
+    }
+
+    private static void registerSemanticBone(Map<String, String> bones, String semanticName, String... candidates) {
+        for (String candidate : candidates) {
+            bones.putIfAbsent(semanticName, candidate);
+        }
     }
 
     private static boolean isBbModelImport(ClientModelInfo clientModelInfo) {
@@ -350,7 +429,7 @@ public class ModelAssemblyFactory {
         }
         LinkedHashMap<String, BoneAnimation> armBones = new LinkedHashMap<>();
         for (BoneAnimation boneAnimation : source.boneAnimations) {
-            String targetBoneName = FIRST_PERSON_WEAPON_ARM_BONE_TARGETS.get(boneAnimation.boneName);
+            String targetBoneName = firstPersonArmTarget(boneAnimation.boneName);
             if (targetBoneName != null) {
                 BoneAnimation targetAnimation = targetBoneName.equals(boneAnimation.boneName)
                         ? boneAnimation
@@ -381,5 +460,27 @@ public class ModelAssemblyFactory {
         derived.sourceKey = source.sourceKey;
         derived.isFromPrimaryAssembly = source.isFromPrimaryAssembly;
         return derived;
+    }
+
+    private static String firstPersonArmTarget(String boneName) {
+        String direct = FIRST_PERSON_WEAPON_ARM_BONE_TARGETS.get(boneName);
+        if (direct != null) {
+            return direct;
+        }
+        return FIRST_PERSON_WEAPON_ARM_NORMALIZED_TARGETS.get(normalizeBoneName(boneName));
+    }
+
+    private static String normalizeBoneName(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char c = Character.toLowerCase(name.charAt(i));
+            if (Character.isLetterOrDigit(c)) {
+                out.append(c);
+            }
+        }
+        return out.toString();
     }
 }

@@ -1604,6 +1604,10 @@ public class ClientModelManager {
         }
     }
 
+    public static void markModelUsed(String modelId) {
+        touchModel(modelId);
+    }
+
     private static void touchAssembly(ModelAssembly assembly) {
         if (assembly == null) {
             return;

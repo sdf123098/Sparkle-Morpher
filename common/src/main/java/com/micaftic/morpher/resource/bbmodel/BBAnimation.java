@@ -63,6 +63,7 @@ public class BBAnimation {
         public String y = "";
         public String z = "";
         public String w = "";
+        public Map<String, String> values = new LinkedHashMap<>();
     }
 
     public static class BBTimeline {

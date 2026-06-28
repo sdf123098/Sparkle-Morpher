@@ -121,11 +121,21 @@ public class RawYsmModel {
     }
 
     public static class RawKeyframe {
+        public static final int INTERPOLATION_LINEAR = 0;
+        public static final int INTERPOLATION_STEP = 1;
+        public static final int INTERPOLATION_CATMULLROM = 2;
+        public static final int INTERPOLATION_BEZIER = 3;
+
         public float timestamp;
-        public int interpolationMode; // 0: linear, 1: catmullrom
+        public int interpolationMode = INTERPOLATION_LINEAR;
         public Object[] postData = new Object[3];
         public Object[] preData = new Object[3];
         public boolean hasPreData;
+        public float[] bezierLeftValue;
+        public float[] bezierRightValue;
+        public float[] bezierLeftTime;
+        public float[] bezierRightTime;
+        public boolean bezierLinked;
     }
 
     public static class RawTimelineEvent {

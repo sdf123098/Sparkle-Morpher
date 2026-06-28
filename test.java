@@ -1,0 +1,1 @@
+import dev.architectury.event.events.common.PlayerEvent; public class test { public void m() { Object o = PlayerEvent.START_TRACKING; } }

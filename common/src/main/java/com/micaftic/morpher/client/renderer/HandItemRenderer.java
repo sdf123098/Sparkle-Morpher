@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
@@ -28,6 +29,7 @@ public class HandItemRenderer {
         if (this.geoModel.processAnimation(partialTick) == null || (model = this.geoModel.getCurrentModel()) == null) {
             return;
         }
+        ClientModelManager.markModelUsed(this.geoModel.getModelId());
         SpecialPlayerRenderEvent event = new SpecialPlayerRenderEvent(localPlayer, capability, capability.getModelId());
         if (SpecialPlayerRenderEvent.post(event).isFalse()) {
             return;

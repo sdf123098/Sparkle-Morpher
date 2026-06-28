@@ -1,5 +1,8 @@
 package com.micaftic.morpher.resource.bbmodel;
 
+import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.geckolib3.util.Interpolations;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 
 import java.nio.charset.StandardCharsets;
@@ -24,9 +27,11 @@ public class BBToRawConverter {
     /** UV 褰掍竴鍖栨椂鐢ㄧ殑鏈€灏忓垎姣嶏紝閬垮厤闄ら浂銆?*/
     private static final float MIN_RESOLUTION = 1e-6f;
     private static final float IMPORTED_PLAYER_SCALE = 1.0f;
+    private static final int BEZIER_BAKE_SAMPLES_PER_SECOND = 24;
+    private static final int BEZIER_BAKE_MAX_SEGMENT_SAMPLES = 24;
     private static final String IMPORT_SOURCE_EXTRA = "sparkle_morpher:bbmodel_import";
     private static final int IMPORT_FOOTER_VERSION = 32;
-    private static final byte[] IMPORT_CACHE_VERSION = "sparkle_morpher:bbmodel_import:v9".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] IMPORT_CACHE_VERSION = "sparkle_morpher:bbmodel_import:v10".getBytes(StandardCharsets.UTF_8);
     private static final String LEFT_HAND_LOCATOR = "LeftHandLocator";
     private static final String RIGHT_HAND_LOCATOR = "RightHandLocator";
     private static final String[] LEFT_HAND_PARENT_CANDIDATES = {
@@ -839,10 +844,10 @@ public class BBToRawConverter {
         anim.name = name;
         anim.length = 1.0f;
         anim.loopMode = 1;
-        addFallbackBoneAnimation(anim, firstBone(bones, "leftarm", "leftupperarm", "leftshoulder"), swingExpression(armAmplitude, false));
-        addFallbackBoneAnimation(anim, firstBone(bones, "rightarm", "rightupperarm", "rightshoulder"), swingExpression(armAmplitude, true));
-        addFallbackBoneAnimation(anim, firstBone(bones, "leftleg", "leftupperleg", "leftthigh"), swingExpression(legAmplitude, true));
-        addFallbackBoneAnimation(anim, firstBone(bones, "rightleg", "rightupperleg", "rightthigh"), swingExpression(legAmplitude, false));
+        addFallbackBoneAnimation(anim, firstBone(bones, "leftarm", "leftupperarm", "leftshoulder", "leftuparm", "leftbicep", "armleft"), swingExpression(armAmplitude, false));
+        addFallbackBoneAnimation(anim, firstBone(bones, "rightarm", "rightupperarm", "rightshoulder", "rightuparm", "rightbicep", "armright"), swingExpression(armAmplitude, true));
+        addFallbackBoneAnimation(anim, firstBone(bones, "leftleg", "leftupperleg", "leftthigh", "leftupleg", "legleft"), swingExpression(legAmplitude, true));
+        addFallbackBoneAnimation(anim, firstBone(bones, "rightleg", "rightupperleg", "rightthigh", "rightupleg", "legright"), swingExpression(legAmplitude, false));
         return anim;
     }
 
@@ -871,7 +876,7 @@ public class BBToRawConverter {
         boneAnim.boneName = boneName;
         RawYsmModel.RawKeyframe keyframe = new RawYsmModel.RawKeyframe();
         keyframe.timestamp = 0.0f;
-        keyframe.interpolationMode = 0;
+        keyframe.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
         keyframe.postData = new Object[]{xRotation, 0f, 0f};
         boneAnim.rotation.add(keyframe);
         anim.boneAnimations.add(boneAnim);
@@ -894,19 +899,24 @@ public class BBToRawConverter {
         RawYsmModel.RawAnimation rawAnim = new RawYsmModel.RawAnimation();
         rawAnim.name = bbAnim.name;
         rawAnim.length = bbAnim.length;
-        // YSM: 0=once, 1=loop, 2=hold_on_last_frame
+        // YSM: 0=once, 1=loop, 3=hold_on_last_frame
         if ("loop".equalsIgnoreCase(bbAnim.loopMode) || bbAnim.loop) {
             rawAnim.loopMode = 1;
         } else if ("hold".equalsIgnoreCase(bbAnim.loopMode)) {
-            rawAnim.loopMode = 2;
+            rawAnim.loopMode = 3;
         } else {
             rawAnim.loopMode = 0;
         }
 
+        convertTimelines(bbAnim, rawAnim);
+
         if (bbAnim.animators == null) return rawAnim;
         for (Map.Entry<String, BBAnimation.BBAnimator> entry : bbAnim.animators.entrySet()) {
             BBAnimation.BBAnimator animator = entry.getValue();
-            if (!"bone".equals(animator.type)) continue;
+            if (!"bone".equals(animator.type)) {
+                convertEventAnimator(animator, rawAnim);
+                continue;
+            }
 
             RawYsmModel.RawBoneAnimation boneAnim = new RawYsmModel.RawBoneAnimation();
             // 浼樺厛鐢?animator 鑷甫 name锛涙病鏈夊氨鍥炴煡 outliner 鐨?groupUuid鈫抧ame 鏄犲皠锛涢兘娌″氨鐢?key
@@ -916,28 +926,244 @@ public class BBToRawConverter {
                 boneAnim.boneName = groupUuidToName.getOrDefault(entry.getKey(), entry.getKey());
             }
 
-            for (BBAnimation.BBKeyframe kf : animator.keyframes) {
-                RawYsmModel.RawKeyframe rawKf = convertKeyframe(kf);
-                switch (kf.channel) {
-                    case "rotation": boneAnim.rotation.add(rawKf); break;
-                    case "position": boneAnim.position.add(rawKf); break;
-                    case "scale":    boneAnim.scale.add(rawKf); break;
-                    default: break;
-                }
-            }
+            addChannelKeyframes(animator.keyframes, "rotation", boneAnim.rotation);
+            addChannelKeyframes(animator.keyframes, "position", boneAnim.position);
+            addChannelKeyframes(animator.keyframes, "scale", boneAnim.scale);
             rawAnim.boneAnimations.add(boneAnim);
         }
 
         return rawAnim;
     }
 
+    private static void addChannelKeyframes(List<BBAnimation.BBKeyframe> keyframes, String channel,
+                                            List<RawYsmModel.RawKeyframe> out) {
+        if (keyframes == null || keyframes.isEmpty()) {
+            return;
+        }
+        List<BBAnimation.BBKeyframe> channelFrames = new ArrayList<>();
+        for (BBAnimation.BBKeyframe keyframe : keyframes) {
+            if (channel.equals(keyframe.channel)) {
+                channelFrames.add(keyframe);
+            }
+        }
+        channelFrames.sort(Comparator.comparingDouble(kf -> kf.time));
+        for (int i = 0; i < channelFrames.size(); i++) {
+            BBAnimation.BBKeyframe current = channelFrames.get(i);
+            RawYsmModel.RawKeyframe raw = convertKeyframe(current);
+            BBAnimation.BBKeyframe next = i + 1 < channelFrames.size() ? channelFrames.get(i + 1) : null;
+            List<RawYsmModel.RawKeyframe> baked = bakeBezierSegment(current, next, raw);
+            if (baked.isEmpty()) {
+                out.add(raw);
+            } else {
+                out.addAll(baked);
+            }
+        }
+    }
+
+    private static List<RawYsmModel.RawKeyframe> bakeBezierSegment(BBAnimation.BBKeyframe current,
+                                                                  BBAnimation.BBKeyframe next,
+                                                                  RawYsmModel.RawKeyframe currentRaw) {
+        if (!"bezier".equalsIgnoreCase(current.interpolation)) {
+            return Collections.emptyList();
+        }
+        if (next == null || next.time <= current.time) {
+            logBezierRuntimeFallback(current, "there is no following keyframe");
+            return Collections.emptyList();
+        }
+        RawYsmModel.RawKeyframe nextRaw = convertKeyframe(next);
+        Object[] start = currentRaw.postData;
+        Object[] end = nextRaw.hasPreData ? nextRaw.preData : nextRaw.postData;
+        if (!allNumeric(start) || !allNumeric(end)
+                || current.bezier_right_time.length == 0 || current.bezier_right_value.length == 0) {
+            logBezierRuntimeFallback(current, "handles or endpoint values are not numeric");
+            return Collections.emptyList();
+        }
+
+        float duration = next.time - current.time;
+        int samples = Math.max(2, Math.min(BEZIER_BAKE_MAX_SEGMENT_SAMPLES,
+                Math.round(duration * BEZIER_BAKE_SAMPLES_PER_SECOND)));
+        List<RawYsmModel.RawKeyframe> baked = new ArrayList<>(samples);
+        currentRaw.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
+        baked.add(currentRaw);
+        for (int i = 1; i < samples; i++) {
+            float percent = (float) i / samples;
+            RawYsmModel.RawKeyframe sample = new RawYsmModel.RawKeyframe();
+            sample.timestamp = current.time + duration * percent;
+            sample.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
+            sample.postData = sampleBezier(current, next, start, end, duration, percent);
+            baked.add(sample);
+        }
+        return baked;
+    }
+
+    private static Object[] sampleBezier(BBAnimation.BBKeyframe current, BBAnimation.BBKeyframe next,
+                                         Object[] start, Object[] end, float duration, float percent) {
+        Object[] out = new Object[3];
+        for (int axis = 0; axis < 3; axis++) {
+            float startValue = ((Number) start[axis]).floatValue();
+            float endValue = ((Number) end[axis]).floatValue();
+            float rightTime = handleTime(current.bezier_right_time, axis, 0.33f, duration, current.time);
+            float leftTime = handleTime(next.bezier_left_time, axis, 0.66f, duration, current.time);
+            float rightValue = handleValue(current.bezier_right_value, axis, startValue);
+            float leftValue = handleValue(next.bezier_left_value, axis, endValue);
+            float curveT = Interpolations.bezierX(rightTime, leftTime, percent);
+            out[axis] = Interpolations.bezier(startValue, rightValue, leftValue, endValue, curveT);
+        }
+        return out;
+    }
+
+    private static float handleTime(float[] values, int axis, float fallback, float duration, float startTime) {
+        if (values == null || values.length == 0) {
+            return fallback;
+        }
+        float value = values[Math.min(axis, values.length - 1)];
+        if (value < 0f || value > 1f) {
+            value = (value - startTime) / Math.max(1e-6f, duration);
+        }
+        return Math.max(0f, Math.min(1f, value));
+    }
+
+    private static float handleValue(float[] values, int axis, float fallback) {
+        if (values == null || values.length == 0) {
+            return fallback;
+        }
+        return values[Math.min(axis, values.length - 1)];
+    }
+
+    private static boolean allNumeric(Object[] values) {
+        if (values == null || values.length < 3) {
+            return false;
+        }
+        for (int i = 0; i < 3; i++) {
+            if (!(values[i] instanceof Number)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void logBezierRuntimeFallback(BBAnimation.BBKeyframe keyframe, String reason) {
+        if (GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+            YesSteveModel.LOGGER.warn("[SM-ANIM] BBModel Bezier keyframe {} at {}s could not be baked and will use runtime fallback: {}",
+                    keyframe.uuid, keyframe.time, reason);
+        }
+    }
+
+    private static void convertTimelines(BBAnimation bbAnim, RawYsmModel.RawAnimation rawAnim) {
+        if (bbAnim.timelines == null) {
+            return;
+        }
+        for (BBAnimation.BBTimeline timeline : bbAnim.timelines) {
+            if (timeline == null || timeline.entries == null) {
+                continue;
+            }
+            for (BBAnimation.BBTimelineEntry entry : timeline.entries) {
+                addTimelineEvent(rawAnim, entry.time, entry.script);
+            }
+        }
+    }
+
+    private static void convertEventAnimator(BBAnimation.BBAnimator animator, RawYsmModel.RawAnimation rawAnim) {
+        if (animator == null || animator.keyframes == null) {
+            return;
+        }
+        String type = animator.type == null ? "" : animator.type.toLowerCase(Locale.ROOT);
+        for (BBAnimation.BBKeyframe keyframe : animator.keyframes) {
+            String channel = keyframe.channel == null ? "" : keyframe.channel.toLowerCase(Locale.ROOT);
+            if ("sound".equals(type) || "sound".equals(channel)) {
+                String sound = firstDataPointValue(keyframe, "effect", "sound", "name", "file", "id", "value", "x");
+                if (!sound.isEmpty()) {
+                    RawYsmModel.RawSoundEffect rawSound = new RawYsmModel.RawSoundEffect();
+                    rawSound.timestamp = keyframe.time;
+                    rawSound.effectName = sound;
+                    rawAnim.soundEffects.add(rawSound);
+                }
+            } else if ("timeline".equals(channel) || "effect".equals(type) || "particle".equals(type)
+                    || "effect".equals(channel) || "particle".equals(channel)) {
+                String script = keyframeToTimelineScript(keyframe, type.isEmpty() ? channel : type);
+                addTimelineEvent(rawAnim, keyframe.time, script);
+                if (("particle".equals(type) || "particle".equals(channel))
+                        && GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+                    YesSteveModel.LOGGER.warn("[SM-ANIM] BBModel particle keyframe {} at {}s was preserved as a timeline event",
+                            keyframe.uuid, keyframe.time);
+                }
+            }
+        }
+    }
+
+    private static void addTimelineEvent(RawYsmModel.RawAnimation rawAnim, float time, String script) {
+        if (script == null || script.trim().isEmpty()) {
+            return;
+        }
+        RawYsmModel.RawTimelineEvent event = new RawYsmModel.RawTimelineEvent();
+        event.timestamp = time;
+        for (String line : script.split(";")) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                event.events.add(trimmed);
+            }
+        }
+        if (!event.events.isEmpty()) {
+            rawAnim.timelineEvents.add(event);
+        }
+    }
+
+    private static String keyframeToTimelineScript(BBAnimation.BBKeyframe keyframe, String prefix) {
+        if (keyframe.data_points == null || keyframe.data_points.isEmpty()) {
+            return "";
+        }
+        BBAnimation.BBDataPoint data = keyframe.data_points.get(0);
+        String script = firstValue(data, "script", "effect", "particle", "name", "id", "value", "x");
+        if (!script.isEmpty()) {
+            return script;
+        }
+        return prefix + " " + data.values;
+    }
+
+    private static String firstDataPointValue(BBAnimation.BBKeyframe keyframe, String... keys) {
+        if (keyframe.data_points == null || keyframe.data_points.isEmpty()) {
+            return "";
+        }
+        return firstValue(keyframe.data_points.get(0), keys);
+    }
+
+    private static String firstValue(BBAnimation.BBDataPoint data, String... keys) {
+        if (data == null || data.values == null) {
+            return "";
+        }
+        for (String key : keys) {
+            String value = data.values.get(key);
+            if (value != null && !value.isEmpty()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
     private static RawYsmModel.RawKeyframe convertKeyframe(BBAnimation.BBKeyframe bbKf) {
         RawYsmModel.RawKeyframe rawKf = new RawYsmModel.RawKeyframe();
         rawKf.timestamp = bbKf.time;
-        switch (bbKf.interpolation == null ? "" : bbKf.interpolation) {
-            case "catmullrom": rawKf.interpolationMode = 1; break;
-            case "bezier":     rawKf.interpolationMode = 2; break;
-            default:           rawKf.interpolationMode = 0; break; // linear / step
+        switch ((bbKf.interpolation == null ? "" : bbKf.interpolation).toLowerCase(Locale.ROOT)) {
+            case "step":
+                rawKf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_STEP;
+                break;
+            case "catmullrom":
+                rawKf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_CATMULLROM;
+                break;
+            case "bezier":
+                rawKf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_BEZIER;
+                rawKf.bezierLinked = bbKf.bezier_linked;
+                rawKf.bezierLeftValue = copyOrNull(bbKf.bezier_left_value);
+                rawKf.bezierRightValue = copyOrNull(bbKf.bezier_right_value);
+                rawKf.bezierLeftTime = copyOrNull(bbKf.bezier_left_time);
+                rawKf.bezierRightTime = copyOrNull(bbKf.bezier_right_time);
+                if (GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+                    YesSteveModel.LOGGER.warn("[SM-ANIM] BBModel Bezier keyframe {} at {}s is preserved in RawYSM and will be baked to linear samples when possible", bbKf.uuid, bbKf.time);
+                }
+                break;
+            default:
+                rawKf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
+                break;
         }
 
         if (bbKf.data_points != null && !bbKf.data_points.isEmpty()) {
@@ -959,6 +1185,10 @@ public class BBToRawConverter {
             }
         }
         return rawKf;
+    }
+
+    private static float[] copyOrNull(float[] values) {
+        return values == null || values.length == 0 ? null : Arrays.copyOf(values, values.length);
     }
 
     /** 绾暟瀛楀瓧绗︿覆鎶樺彔涓?Float锛涘叾瀹冿紙Molang 琛ㄨ揪寮?/ 绌轰覆锛夊師鏍蜂繚鐣欎负 String銆?*/

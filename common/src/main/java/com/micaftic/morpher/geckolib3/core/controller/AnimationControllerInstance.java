@@ -1,6 +1,8 @@
 package com.micaftic.morpher.geckolib3.core.controller;
 
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
+import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.geckolib3.core.keyframe.*;
 import com.micaftic.morpher.geckolib3.core.event.SoundKeyFrameExecutor;
 import com.micaftic.morpher.geckolib3.core.event.InstructionKeyFrameExecutor;
@@ -23,12 +25,16 @@ import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class  AnimationControllerInstance {
     private final Int2ReferenceOpenHashMap<BoneAnimationQueue> boneAnimationQueues;
 
     private final ReferenceArrayList<BoneAnimationQueue> activeBoneAnimationQueues;
+
+    private final Set<String> reportedMissingAnimationTargets;
 
     private final AnimationControllerContext context;
 
@@ -70,6 +76,7 @@ public class  AnimationControllerInstance {
     public AnimationControllerInstance(AnimatableEntity<?> animatable, float transitionLengthTicks, boolean isScaleTransitionSpecial) {
         this.boneAnimationQueues = new Int2ReferenceOpenHashMap<>();
         this.activeBoneAnimationQueues = new ReferenceArrayList<>();
+        this.reportedMissingAnimationTargets = new HashSet<>();
         this.context = new AnimationControllerContext();
         this.animationState = AnimationState.IDLE;
         this.lastRequestedAnimation = null;
@@ -211,10 +218,10 @@ public class  AnimationControllerInstance {
             float adjustedTick = adjustTick(tick);
             for (BoneAnimationQueue animationQueue : this.activeBoneAnimationQueues) {
                 if (animationQueue.rotationQueue != null && animationQueue.rotationQueue.cachedValue != null) {
-                    animationQueue.positionOutput = new Vector3f(animationQueue.rotationQueue.cachedValue);
+                    animationQueue.rotationOutput = new Vector3f(animationQueue.rotationQueue.cachedValue);
                 }
                 if (animationQueue.positionQueue != null && animationQueue.positionQueue.cachedValue != null) {
-                    animationQueue.rotationOutput = new Vector3f(animationQueue.positionQueue.cachedValue);
+                    animationQueue.positionOutput = new Vector3f(animationQueue.positionQueue.cachedValue);
                 }
                 if (animationQueue.scaleQueue != null && animationQueue.scaleQueue.cachedValue != null) {
                     animationQueue.scaleOutput = new Vector3f(animationQueue.scaleQueue.cachedValue);
@@ -278,11 +285,11 @@ public class  AnimationControllerInstance {
         float fMo1906xaffeef43 = this.currentAnimation.blendWeight != null ? this.currentAnimation.blendWeight.evalAsFloat(evaluator) : 1.0f;
         for (BoneAnimationQueue boneAnimationQueue : this.activeBoneAnimationQueues) {
             boneAnimationQueue.setBlendWeight(fMo1906xaffeef43);
-            if (boneAnimationQueue.positionOutput != null) {
-                boneAnimationQueue.rotationQueue = getConstantPointAtTick(f, boneAnimationQueue.positionOutput, boneAnimationQueue.overrideMode);
-            }
             if (boneAnimationQueue.rotationOutput != null) {
-                boneAnimationQueue.positionQueue = getConstantPointAtTick(f, boneAnimationQueue.rotationOutput, boneAnimationQueue.overrideMode);
+                boneAnimationQueue.rotationQueue = getConstantPointAtTick(f, boneAnimationQueue.rotationOutput, boneAnimationQueue.overrideMode);
+            }
+            if (boneAnimationQueue.positionOutput != null) {
+                boneAnimationQueue.positionQueue = getConstantPointAtTick(f, boneAnimationQueue.positionOutput, boneAnimationQueue.overrideMode);
             }
             if (boneAnimationQueue.scaleOutput != null) {
                 boneAnimationQueue.scaleQueue = getConstantPointAtTick(f, boneAnimationQueue.scaleOutput, boneAnimationQueue.overrideMode);
@@ -329,16 +336,38 @@ public class  AnimationControllerInstance {
         this.currentAnimation = pair.getSecond();
         this.currentAnimationLoop = pair.getFirst();
         this.isAnimationFinished = false;
+        int missingTargets = 0;
         for (BoneAnimation animation : this.currentAnimation.boneAnimations) {
             BoneAnimationQueue queue = this.boneAnimationQueues.get(animation.boneId);
             if (queue != null) {
                 queue.applyAnimation(animation, !animation.scaleKeyFrames.isEmpty());
                 this.activeBoneAnimationQueues.add(queue);
+            } else {
+                missingTargets++;
+                reportMissingAnimationTarget(this.currentAnimation, animation);
             }
+        }
+        if (missingTargets > 0 && GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+            YesSteveModel.LOGGER.warn("[SM-ANIM] animation={} source={} boundChannels={} missingChannels={}",
+                    this.currentAnimation.animationName,
+                    this.currentAnimation.sourceKey,
+                    this.currentAnimation.boneAnimations.size() - missingTargets,
+                    missingTargets);
         }
         this.instructionExecutor = new InstructionKeyFrameExecutor(this.currentAnimation.customInstructionKeyframes);
         this.soundExecutor = new SoundKeyFrameExecutor(this.currentAnimation.soundKeyFrames, this.context.getAudioPlayerManager());
         return true;
+    }
+
+    private void reportMissingAnimationTarget(Animation animation, BoneAnimation boneAnimation) {
+        if (!GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+            return;
+        }
+        String key = animation.sourceKey + "|" + animation.animationName + "|" + boneAnimation.boneName;
+        if (this.reportedMissingAnimationTargets.add(key)) {
+            YesSteveModel.LOGGER.warn("[SM-ANIM] missing target bone animation={} source={} bone={} boneId={}",
+                    animation.animationName, animation.sourceKey, boneAnimation.boneName, boneAnimation.boneId);
+        }
     }
 
     private void clearAnimation() {

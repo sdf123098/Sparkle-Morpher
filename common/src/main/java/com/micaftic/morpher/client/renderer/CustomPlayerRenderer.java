@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
 import com.micaftic.morpher.client.entity.PlayerPreviewEntity;
@@ -45,6 +46,7 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
             return;
         }
         capability.tickModel();
+        ClientModelManager.markModelUsed(capability.getModelId());
         SpecialPlayerRenderEvent renderEvent = new SpecialPlayerRenderEvent(player, capability, capability.getModelId());
         if (SpecialPlayerRenderEvent.post(renderEvent).isFalse()) {
             return;

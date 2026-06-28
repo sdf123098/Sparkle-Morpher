@@ -434,8 +434,132 @@ public class BBModelParser {
                 }
             }
         }
+        if (obj.has("timeline")) {
+            parseTimelineElement(animation, "timeline", "", obj.get("timeline"));
+        }
+        if (obj.has("timelines")) {
+            parseTimelineElement(animation, "timelines", "", obj.get("timelines"));
+        }
 
         return animation;
+    }
+
+    private static void parseTimelineElement(BBAnimation animation, String name, String uuid, JsonElement element) {
+        if (element == null || element.isJsonNull()) {
+            return;
+        }
+        if (element.isJsonArray()) {
+            JsonArray array = element.getAsJsonArray();
+            for (JsonElement item : array) {
+                if (item.isJsonObject()) {
+                    JsonObject obj = item.getAsJsonObject();
+                    String timelineName = obj.has("name") ? obj.get("name").getAsString() : name;
+                    String timelineUuid = obj.has("uuid") ? obj.get("uuid").getAsString() : uuid;
+                    if (obj.has("entries")) {
+                        parseTimelineElement(animation, timelineName, timelineUuid, obj.get("entries"));
+                    } else if (obj.has("keyframes")) {
+                        parseTimelineElement(animation, timelineName, timelineUuid, obj.get("keyframes"));
+                    } else if (obj.has("time") || obj.has("script")) {
+                        BBAnimation.BBTimeline timeline = new BBAnimation.BBTimeline();
+                        timeline.name = timelineName;
+                        timeline.uuid = timelineUuid;
+                        BBAnimation.BBTimelineEntry entry = parseTimelineEntry(obj);
+                        if (entry != null) {
+                            timeline.entries.add(entry);
+                            animation.timelines.add(timeline);
+                        }
+                    } else {
+                        parseTimelineObject(animation, timelineName, timelineUuid, obj);
+                    }
+                }
+            }
+            return;
+        }
+        if (element.isJsonObject()) {
+            parseTimelineObject(animation, name, uuid, element.getAsJsonObject());
+        }
+    }
+
+    private static void parseTimelineObject(BBAnimation animation, String name, String uuid, JsonObject obj) {
+        BBAnimation.BBTimeline timeline = new BBAnimation.BBTimeline();
+        timeline.name = name;
+        timeline.uuid = uuid;
+        for (Map.Entry<String, JsonElement> entry : obj.entrySet()) {
+            if ("name".equals(entry.getKey()) || "uuid".equals(entry.getKey())
+                    || "entries".equals(entry.getKey()) || "keyframes".equals(entry.getKey())) {
+                continue;
+            }
+            Float time = parseFloat(entry.getKey());
+            if (time == null && entry.getValue().isJsonObject()) {
+                BBAnimation.BBTimelineEntry timelineEntry = parseTimelineEntry(entry.getValue().getAsJsonObject());
+                if (timelineEntry != null) {
+                    timeline.entries.add(timelineEntry);
+                }
+                continue;
+            }
+            if (time != null) {
+                addTimelineScripts(timeline, time, entry.getValue());
+            }
+        }
+        if (!timeline.entries.isEmpty()) {
+            animation.timelines.add(timeline);
+        }
+    }
+
+    private static BBAnimation.BBTimelineEntry parseTimelineEntry(JsonObject obj) {
+        if (!obj.has("time")) {
+            return null;
+        }
+        BBAnimation.BBTimelineEntry entry = new BBAnimation.BBTimelineEntry();
+        entry.time = obj.get("time").getAsFloat();
+        if (obj.has("script")) {
+            entry.script = stringifyTimelineScript(obj.get("script"));
+        } else if (obj.has("data_points")) {
+            entry.script = stringifyTimelineScript(obj.get("data_points"));
+        } else if (obj.has("effect")) {
+            entry.script = stringifyTimelineScript(obj.get("effect"));
+        } else if (obj.has("sound")) {
+            entry.script = stringifyTimelineScript(obj.get("sound"));
+        }
+        return entry.script == null || entry.script.isEmpty() ? null : entry;
+    }
+
+    private static void addTimelineScripts(BBAnimation.BBTimeline timeline, float time, JsonElement value) {
+        if (value == null || value.isJsonNull()) {
+            return;
+        }
+        if (value.isJsonArray()) {
+            for (JsonElement script : value.getAsJsonArray()) {
+                addTimelineScripts(timeline, time, script);
+            }
+            return;
+        }
+        String script = stringifyTimelineScript(value);
+        if (script.isEmpty()) {
+            return;
+        }
+        BBAnimation.BBTimelineEntry entry = new BBAnimation.BBTimelineEntry();
+        entry.time = time;
+        entry.script = script;
+        timeline.entries.add(entry);
+    }
+
+    private static String stringifyTimelineScript(JsonElement value) {
+        if (value == null || value.isJsonNull()) {
+            return "";
+        }
+        if (value.isJsonPrimitive()) {
+            return value.getAsString();
+        }
+        return value.toString();
+    }
+
+    private static Float parseFloat(String value) {
+        try {
+            return Float.parseFloat(value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private static BBAnimation.BBAnimator parseAnimator(JsonObject obj) {
@@ -486,6 +610,9 @@ public class BBModelParser {
         dataPoint.y = readMolangScalar(obj, "y");
         dataPoint.z = readMolangScalar(obj, "z");
         dataPoint.w = readMolangScalar(obj, "w");
+        for (Map.Entry<String, JsonElement> entry : obj.entrySet()) {
+            dataPoint.values.put(entry.getKey(), readMolangScalar(obj, entry.getKey()));
+        }
         return dataPoint;
     }
 

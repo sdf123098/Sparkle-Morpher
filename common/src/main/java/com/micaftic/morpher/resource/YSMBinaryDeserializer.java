@@ -464,12 +464,22 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
 
         if (format > 26) {
-            int footerFlag = reader.readVarInt(); // always 01
-            String footerSubModuleName = reader.readString();
-            subEntity.identifier = footerSubModuleName;
-        }
+            int identifierCount = reader.readVarInt();
+            if (identifierCount <= 0 || identifierCount > 128) {
+                throw new RuntimeException("Invalid SubEntity identifier count: " + identifierCount);
+            }
 
-        targetMap.put(subEntity.identifier, subEntity);
+            List<String> identifiers = new ArrayList<>();
+            for (int i = 0; i < identifierCount; i++) {
+                identifiers.add(reader.readString());
+            }
+
+            subEntity.identifier = identifiers.get(0);
+            subEntity.matchIds = identifiers.toArray(new String[0]);
+            targetMap.put(subEntity.identifier, subEntity);
+        } else {
+            targetMap.put(subEntity.identifier, subEntity);
+        }
     }
 
     private RawYsmModel.RawGeometry parseModels() {

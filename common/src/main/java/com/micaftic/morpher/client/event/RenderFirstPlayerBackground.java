@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.CustomEntityTranslucentRenderType;
 import com.micaftic.morpher.client.renderer.CustomPlayerRenderer;
@@ -61,6 +62,7 @@ public class RenderFirstPlayerBackground {
             if (result.isFalse()) {
                 return;
             }
+            ClientModelManager.markModelUsed(modelId);
             ResourceLocation resourceLocationB_ = cap.getTextureLocation();
             int textureIndex = cap.getTextureIndex();
             VertexConsumer buffer = multiBufferSource.getBuffer(CustomEntityTranslucentRenderType.get(resourceLocationB_));

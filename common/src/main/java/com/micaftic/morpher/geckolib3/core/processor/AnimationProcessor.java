@@ -1,6 +1,7 @@
 package com.micaftic.morpher.geckolib3.core.processor;
 
 import com.micaftic.morpher.audio.AudioPlayerManager;
+import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.geckolib3.core.manager.AnimationData;
 import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
@@ -68,6 +69,11 @@ public class AnimationProcessor<TEntity extends Entity> {
     private float currentSeekTime;
     private boolean currentDeprecatedMode;
     private final EulerNlerpScratch rotScratch = new EulerNlerpScratch();
+
+    public boolean isRotationActive(int boneId) {
+        BoneTopLevelSnapshot snapshot = this.boneById.get(boneId);
+        return snapshot != null && snapshot.isCurrentlyRunningRotationAnimation;
+    }
 
     public AnimationProcessor(AnimatableEntity<TEntity> animatable) {
         this.animatable = animatable;
@@ -173,7 +179,13 @@ public class AnimationProcessor<TEntity extends Entity> {
         final ExpressionEvaluator<AnimationContext<?>> evaluator = this.currentEvaluator;
         final float seekTime = this.currentSeekTime;
 
-        TransitionVector3f rot = provider.getRotation(evaluator);
+        TransitionVector3f rot;
+        PhysicsManager.pushScope(snapshot.boneId);
+        try {
+            rot = provider.getRotation(evaluator);
+        } finally {
+            PhysicsManager.popScope();
+        }
         if (rot != null) {
             Vector3f vector3f = snapshot.currentValue;
             if (!snapshot.isCurrentlyRunningRotationAnimation) {
@@ -190,7 +202,13 @@ public class AnimationProcessor<TEntity extends Entity> {
             }
         }
 
-        TransitionVector3f pos = provider.getPosition(evaluator);
+        TransitionVector3f pos;
+        PhysicsManager.pushScope(snapshot.boneId);
+        try {
+            pos = provider.getPosition(evaluator);
+        } finally {
+            PhysicsManager.popScope();
+        }
         if (pos != null) {
             if (!snapshot.isCurrentlyRunningPositionAnimation) {
                 snapshot.isCurrentlyRunningPositionAnimation = true;
@@ -200,7 +218,13 @@ public class AnimationProcessor<TEntity extends Entity> {
             pos.applyLinearBlendTo(snapshot.position);
         }
 
-        TransitionVector3f scale = provider.getScale(evaluator);
+        TransitionVector3f scale;
+        PhysicsManager.pushScope(snapshot.boneId);
+        try {
+            scale = provider.getScale(evaluator);
+        } finally {
+            PhysicsManager.popScope();
+        }
         if (scale != null) {
             if (!snapshot.isCurrentlyRunningScaleAnimation) {
                 snapshot.isCurrentlyRunningScaleAnimation = true;

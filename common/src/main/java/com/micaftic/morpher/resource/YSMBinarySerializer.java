@@ -133,8 +133,13 @@ public class YSMBinarySerializer {
             buf.writeString(sub.model != null && sub.model.sha256 != null ? sub.model.sha256 : "");
             writeGeometry(buf, sub.model, format);
             if (format > 26) {
-                buf.writeVarInt(0x01); // footer
-                buf.writeString(sub.identifier);
+                String[] identifiers = sub.matchIds != null && sub.matchIds.length > 0
+                        ? sub.matchIds
+                        : new String[]{sub.identifier};
+                buf.writeVarInt(identifiers.length);
+                for (String identifier : identifiers) {
+                    buf.writeString(identifier != null ? identifier : "");
+                }
             }
             index++;
         }

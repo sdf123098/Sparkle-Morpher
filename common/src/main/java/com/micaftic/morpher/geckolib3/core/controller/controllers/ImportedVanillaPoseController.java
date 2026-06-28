@@ -9,6 +9,7 @@ import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
+import com.micaftic.morpher.geckolib3.core.processor.AnimationProcessor;
 import com.micaftic.morpher.geckolib3.core.snapshot.BoneTopLevelSnapshot;
 import com.micaftic.morpher.geckolib3.core.util.TransitionVector3f;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
@@ -42,6 +43,10 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
     private static final String[] RIGHT_LOWER_LEG_NAMES = {"rightlowerleg", "rightshin", "rightcalf"};
     private static final String[] LEFT_FOOT_NAMES = {"leftfoot", "leftboot"};
     private static final String[] RIGHT_FOOT_NAMES = {"rightfoot", "rightboot"};
+    private static final float GENERIC_SWING_X = 1.25f;
+    private static final float GENERIC_SWING_Y = 0.35f;
+    private static final float GENERIC_SWING_Z = 0.25f;
+    private static final float GENERIC_SWING_RECOVERY_X = 0.35f;
 
     private final String name;
     private final PartTransformProvider head = new PartTransformProvider(HEAD_NAMES);
@@ -58,10 +63,16 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
     private final PartTransformProvider rightLowerLeg = new PartTransformProvider(RIGHT_LOWER_LEG_NAMES);
     private final PartTransformProvider leftFoot = new PartTransformProvider(LEFT_FOOT_NAMES);
     private final PartTransformProvider rightFoot = new PartTransformProvider(RIGHT_FOOT_NAMES);
+    private final boolean fallbackOnly;
     private String currentPose = "idle";
 
     public ImportedVanillaPoseController(String name) {
+        this(name, false);
+    }
+
+    public ImportedVanillaPoseController(String name, boolean fallbackOnly) {
         this.name = name;
+        this.fallbackOnly = fallbackOnly;
     }
 
     @Override
@@ -101,40 +112,41 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
         if (player == null) {
             return;
         }
+        AnimationProcessor<?> processor = event.getAnimatable().getEvaluationContext();
         PoseValues pose = calculatePose(player, event);
         this.currentPose = pose.name;
-        this.head.setRotation(pose.headX, pose.headY, pose.headZ);
-        this.body.setRotation(pose.bodyX, pose.bodyY, pose.bodyZ);
-        this.leftArm.setRotation(pose.leftArmX, pose.leftArmY, pose.leftArmZ);
-        this.rightArm.setRotation(pose.rightArmX, pose.rightArmY, pose.rightArmZ);
-        this.leftForeArm.setRotation(pose.leftForeArmX, pose.leftForeArmY, pose.leftForeArmZ);
-        this.rightForeArm.setRotation(pose.rightForeArmX, pose.rightForeArmY, pose.rightForeArmZ);
-        this.leftHand.setRotation(pose.leftHandX, pose.leftHandY, pose.leftHandZ);
-        this.rightHand.setRotation(pose.rightHandX, pose.rightHandY, pose.rightHandZ);
-        this.leftLeg.setRotation(pose.leftLegX, pose.leftLegY, pose.leftLegZ);
-        this.rightLeg.setRotation(pose.rightLegX, pose.rightLegY, pose.rightLegZ);
-        this.leftLowerLeg.setRotation(pose.leftLowerLegX, pose.leftLowerLegY, pose.leftLowerLegZ);
-        this.rightLowerLeg.setRotation(pose.rightLowerLegX, pose.rightLowerLegY, pose.rightLowerLegZ);
-        this.leftFoot.setRotation(pose.leftFootX, pose.leftFootY, pose.leftFootZ);
-        this.rightFoot.setRotation(pose.rightFootX, pose.rightFootY, pose.rightFootZ);
+        this.head.setRotation(pose.headX, pose.headY, pose.headZ, processor);
+        this.body.setRotation(pose.bodyX, pose.bodyY, pose.bodyZ, processor);
+        this.leftArm.setRotation(pose.leftArmX, pose.leftArmY, pose.leftArmZ, processor);
+        this.rightArm.setRotation(pose.rightArmX, pose.rightArmY, pose.rightArmZ, processor);
+        this.leftForeArm.setRotation(pose.leftForeArmX, pose.leftForeArmY, pose.leftForeArmZ, processor);
+        this.rightForeArm.setRotation(pose.rightForeArmX, pose.rightForeArmY, pose.rightForeArmZ, processor);
+        this.leftHand.setRotation(pose.leftHandX, pose.leftHandY, pose.leftHandZ, processor);
+        this.rightHand.setRotation(pose.rightHandX, pose.rightHandY, pose.rightHandZ, processor);
+        this.leftLeg.setRotation(pose.leftLegX, pose.leftLegY, pose.leftLegZ, processor);
+        this.rightLeg.setRotation(pose.rightLegX, pose.rightLegY, pose.rightLegZ, processor);
+        this.leftLowerLeg.setRotation(pose.leftLowerLegX, pose.leftLowerLegY, pose.leftLowerLegZ, processor);
+        this.rightLowerLeg.setRotation(pose.rightLowerLegX, pose.rightLowerLegY, pose.rightLowerLegZ, processor);
+        this.leftFoot.setRotation(pose.leftFootX, pose.leftFootY, pose.leftFootZ, processor);
+        this.rightFoot.setRotation(pose.rightFootX, pose.rightFootY, pose.rightFootZ, processor);
     }
 
     @Override
     public void forEachTransform(Consumer<BoneTransformProvider> consumer) {
-        this.head.accept(consumer);
-        this.body.accept(consumer);
-        this.leftArm.accept(consumer);
-        this.rightArm.accept(consumer);
-        this.leftForeArm.accept(consumer);
-        this.rightForeArm.accept(consumer);
-        this.leftHand.accept(consumer);
-        this.rightHand.accept(consumer);
-        this.leftLeg.accept(consumer);
-        this.rightLeg.accept(consumer);
-        this.leftLowerLeg.accept(consumer);
-        this.rightLowerLeg.accept(consumer);
-        this.leftFoot.accept(consumer);
-        this.rightFoot.accept(consumer);
+        this.head.accept(consumer, this.fallbackOnly);
+        this.body.accept(consumer, this.fallbackOnly);
+        this.leftArm.accept(consumer, this.fallbackOnly);
+        this.rightArm.accept(consumer, this.fallbackOnly);
+        this.leftForeArm.accept(consumer, this.fallbackOnly);
+        this.rightForeArm.accept(consumer, this.fallbackOnly);
+        this.leftHand.accept(consumer, this.fallbackOnly);
+        this.rightHand.accept(consumer, this.fallbackOnly);
+        this.leftLeg.accept(consumer, this.fallbackOnly);
+        this.rightLeg.accept(consumer, this.fallbackOnly);
+        this.leftLowerLeg.accept(consumer, this.fallbackOnly);
+        this.rightLowerLeg.accept(consumer, this.fallbackOnly);
+        this.leftFoot.accept(consumer, this.fallbackOnly);
+        this.rightFoot.accept(consumer, this.fallbackOnly);
     }
 
     @Override
@@ -143,6 +155,10 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
     }
 
     private static PoseValues calculatePose(Player player, AnimationEvent<CustomPlayerEntity> event) {
+        VanillaHumanoidPoseSampler.PoseSample vanillaPose = VanillaHumanoidPoseSampler.sample(player, event);
+        if (vanillaPose != null) {
+            return fromVanillaPose(vanillaPose);
+        }
         PoseValues pose = new PoseValues();
         pose.name = "idle";
         pose.headX = (float) Math.toRadians(event.getModelData().headPitch);
@@ -186,6 +202,12 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
             pose.bodyX = 0.5f;
             pose.leftArmX += 0.4f;
             pose.rightArmX += 0.4f;
+        } else if (player.getAbilities().flying) {
+            pose.name = "fly";
+            pose.leftArmX = 0.0f;
+            pose.rightArmX = 0.0f;
+            pose.leftLegX = 0.0f;
+            pose.rightLegX = 0.0f;
         } else if (!player.onGround() && !player.isInWater()) {
             pose.name = "jump";
         } else if (player.isSprinting() && moving) {
@@ -204,6 +226,30 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
         pose.leftArmX += Mth.sin(event.getCurrentTick() * 0.067f) * 0.05f;
         pose.rightArmX -= Mth.sin(event.getCurrentTick() * 0.067f) * 0.05f;
         applyHeldItemPose(player, event, pose);
+        return pose;
+    }
+
+    private static PoseValues fromVanillaPose(VanillaHumanoidPoseSampler.PoseSample vanillaPose) {
+        PoseValues pose = new PoseValues();
+        pose.name = "vanilla";
+        pose.headX = vanillaPose.head.xRot;
+        pose.headY = vanillaPose.head.yRot;
+        pose.headZ = vanillaPose.head.zRot;
+        pose.bodyX = vanillaPose.body.xRot;
+        pose.bodyY = vanillaPose.body.yRot;
+        pose.bodyZ = vanillaPose.body.zRot;
+        pose.leftArmX = vanillaPose.leftArm.xRot;
+        pose.leftArmY = vanillaPose.leftArm.yRot;
+        pose.leftArmZ = vanillaPose.leftArm.zRot;
+        pose.rightArmX = vanillaPose.rightArm.xRot;
+        pose.rightArmY = vanillaPose.rightArm.yRot;
+        pose.rightArmZ = vanillaPose.rightArm.zRot;
+        pose.leftLegX = vanillaPose.leftLeg.xRot;
+        pose.leftLegY = vanillaPose.leftLeg.yRot;
+        pose.leftLegZ = vanillaPose.leftLeg.zRot;
+        pose.rightLegX = vanillaPose.rightLeg.xRot;
+        pose.rightLegY = vanillaPose.rightLeg.yRot;
+        pose.rightLegZ = vanillaPose.rightLeg.zRot;
         return pose;
     }
 
@@ -326,7 +372,7 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
         float ticks = InputStateKey.getTicksUsingItem(player, event.getPartialTick());
         float progress = Mth.clamp(ticks / 10.0f, 0.0f, 1.0f);
         float reach = player.isUsingItem() ? 1.0f : Mth.sin(progress * (float) Math.PI);
-        setArm(pose, arm, 0.85f * reach, arm == HumanoidArm.RIGHT ? 0.15f * reach : -0.15f * reach, arm == HumanoidArm.RIGHT ? 0.08f * reach : -0.08f * reach);
+        applyGenericSwingPose(pose, arm, reach, Mth.sin(progress * (float) Math.PI));
     }
 
     private static void applySwingPose(Player player, AnimationEvent<CustomPlayerEntity> event, PoseValues pose) {
@@ -342,7 +388,14 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
         float swing = Mth.sin(Mth.sqrt(attack) * (float) Math.PI);
         float recovery = Mth.sin(attack * (float) Math.PI);
         pose.name = "swing";
-        addArm(pose, arm, 1.25f * swing + 0.35f * recovery, arm == HumanoidArm.RIGHT ? 0.35f * swing : -0.35f * swing, arm == HumanoidArm.RIGHT ? 0.25f * swing : -0.25f * swing);
+        applyGenericSwingPose(pose, arm, swing, recovery);
+    }
+
+    private static void applyGenericSwingPose(PoseValues pose, HumanoidArm arm, float swing, float recovery) {
+        addArm(pose, arm,
+                GENERIC_SWING_X * swing + GENERIC_SWING_RECOVERY_X * recovery,
+                arm == HumanoidArm.RIGHT ? GENERIC_SWING_Y * swing : -GENERIC_SWING_Y * swing,
+                arm == HumanoidArm.RIGHT ? GENERIC_SWING_Z * swing : -GENERIC_SWING_Z * swing);
     }
 
     @Nullable
@@ -434,6 +487,7 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
         private final int[] candidateIds;
         private final TransitionVector3f rotation = new TransitionVector3f();
         private BoneTopLevelSnapshot target;
+        private AnimationProcessor<?> processor;
 
         private PartTransformProvider(String[] names) {
             this.candidateIds = new int[names.length];
@@ -454,14 +508,15 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
             }
         }
 
-        private void setRotation(float x, float y, float z) {
+        private void setRotation(float x, float y, float z, AnimationProcessor<?> processor) {
             this.rotation.set(x, y, z);
             this.rotation.percentCompleted = 0.0f;
+            this.processor = processor;
         }
 
-        private void accept(Consumer<BoneTransformProvider> consumer) {
+        private void accept(Consumer<BoneTransformProvider> consumer, boolean fallbackOnly) {
             if (this.target != null) {
-                consumer.accept(this);
+                consumer.accept(fallbackOnly ? new FallbackTransformProvider(this) : this);
             }
         }
 
@@ -473,6 +528,41 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
         @Override
         public TransitionVector3f getRotation(ExpressionEvaluator<AnimationContext<?>> evaluator) {
             return this.rotation;
+        }
+
+        @Override
+        @Nullable
+        public TransitionVector3f getPosition(ExpressionEvaluator<AnimationContext<?>> evaluator) {
+            return null;
+        }
+
+        @Override
+        @Nullable
+        public TransitionVector3f getScale(ExpressionEvaluator<AnimationContext<?>> evaluator) {
+            return null;
+        }
+    }
+
+    private static final class FallbackTransformProvider implements BoneTransformProvider {
+        private final PartTransformProvider delegate;
+
+        private FallbackTransformProvider(PartTransformProvider delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public BoneTopLevelSnapshot getBoneTarget() {
+            return this.delegate.getBoneTarget();
+        }
+
+        @Override
+        @Nullable
+        public TransitionVector3f getRotation(ExpressionEvaluator<AnimationContext<?>> evaluator) {
+            BoneTopLevelSnapshot target = this.delegate.getBoneTarget();
+            if (target == null || this.delegate.processor == null || this.delegate.processor.isRotationActive(target.boneId)) {
+                return null;
+            }
+            return this.delegate.getRotation(evaluator);
         }
 
         @Override

@@ -8,6 +8,8 @@ public interface EasingType {
 
     EasingType LINEAR = EasingType::buildLinearKeyFrame;
 
+    EasingType STEP = EasingType::buildStepKeyFrame;
+
     EasingType CATMULLROM = EasingType::buildCatmullRomKeyFrame;
 
     BoneKeyFrame buildKeyFrame(List<RawBoneKeyFrame> keyFrames, int index);
@@ -24,6 +26,15 @@ public interface EasingType {
         RawBoneKeyFrame begin = keyFrames.get(index - 1);
         RawBoneKeyFrame end = keyFrames.get(index);
         return new LinearKeyFrame(begin.startTick(), end.startTick() - begin.startTick(), begin.postValue(), end.preValue(), end.postValue());
+    }
+
+    static BoneKeyFrame buildStepKeyFrame(List<RawBoneKeyFrame> keyFrames, int index) {
+        if (index == 0) {
+            return buildTransitionKeyFrame(keyFrames);
+        }
+        RawBoneKeyFrame begin = keyFrames.get(index - 1);
+        RawBoneKeyFrame end = keyFrames.get(index);
+        return new StepKeyFrame(begin.startTick(), end.startTick() - begin.startTick(), begin.postValue(), end.postValue());
     }
 
     static BoneKeyFrame buildCatmullRomKeyFrame(List<RawBoneKeyFrame> keyFrames, int index) {

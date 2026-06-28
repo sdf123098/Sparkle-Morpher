@@ -1,6 +1,7 @@
 package com.micaftic.morpher.resource;
 
 import com.micaftic.morpher.RuntimeAccelerationLoader;
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.AudioCodec;
 import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.client.ClientModelInfo;
@@ -11,7 +12,9 @@ import com.micaftic.morpher.client.gui.custom.configs.CheckboxConfig;
 import com.micaftic.morpher.client.gui.custom.configs.RadioConfig;
 import com.micaftic.morpher.client.gui.custom.configs.RangeConfig;
 import com.micaftic.morpher.client.model.MainModelData;
+import com.micaftic.morpher.client.model.SpecialHandLocatorProfile;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationState;
@@ -438,7 +441,10 @@ public class YSMClientMapper {
         TranslucencyScanner armScanner = raw.mainEntity.armModel != null ?
                 new TranslucencyScanner(imagesArray, textureCount) : null;
 
-        GeoModel mainMesh = buildMesh(raw.mainEntity.mainModel, context, textureCount, mainScanner, raw.properties.allCutout);
+        Map<String, String> mainParentMap = buildParentMap(raw.mainEntity.mainModel);
+        SpecialHandLocatorProfile specialHandLocatorProfile = detectSpecialHandLocatorProfile(raw, mainParentMap);
+
+        GeoModel mainMesh = buildMesh(raw.mainEntity.mainModel, context, textureCount, mainScanner, raw.properties.allCutout, specialHandLocatorProfile);
         GeoModel armMesh = raw.mainEntity.armModel != null ? buildMesh(raw.mainEntity.armModel, context, textureCount, armScanner, raw.properties.allCutout) : mainMesh;
 
 //        System.out.println(modelId + Arrays.toString(mainMesh.translucentTexture));
@@ -460,7 +466,7 @@ public class YSMClientMapper {
             }
         }
 
-        MainModelData mainModelData = new MainModelData(meshes, animations, controllersList.toArray(new AnimationControllerFile[0]), textureMap);
+        MainModelData mainModelData = new MainModelData(meshes, animations, controllersList.toArray(new AnimationControllerFile[0]), textureMap, specialHandLocatorProfile);
 
         ServerModelInfo modelInfo = buildModelInfo(raw);
         ModelExtraResourcesFile extraResources = buildExtraResources(raw);
@@ -472,9 +478,20 @@ public class YSMClientMapper {
     }
 
     private static GeoModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TranslucencyScanner scanner, boolean allCutout) {
+        return buildMesh(rawGeo, context, textureCount, scanner, allCutout, SpecialHandLocatorProfile.NONE);
+    }
+
+    private static GeoModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TranslucencyScanner scanner, boolean allCutout, SpecialHandLocatorProfile specialHandLocatorProfile) {
+        long bakeStart = System.nanoTime();
+        ModelOptimizationStats stats = new ModelOptimizationStats();
+        stats.textures = textureCount;
         if (rawGeo == null || rawGeo.bones.isEmpty()) {
             boolean[] fallbackArray = scanner != null ? scanner.getResults() : new boolean[Math.max(1, textureCount)];
-            return buildMesh(new GeoBone[0], new HashMap<>(), context, fallbackArray);
+            GeoModel mesh = buildMesh(new GeoBone[0], new HashMap<>(), context, fallbackArray);
+            stats.importBakeMillis = (System.nanoTime() - bakeStart) / 1_000_000L;
+            mesh.optimizationStats = stats;
+            logModelOptimizationStats(stats);
+            return mesh;
         }
 
         List<GeoBone> geoBones = new ArrayList<>();
@@ -482,6 +499,7 @@ public class YSMClientMapper {
         Map<String, String> parentMap = new HashMap<>();
 
         for (RawYsmModel.RawBone rb : rawGeo.bones) {
+            stats.bones++;
             parentMap.put(rb.name, rb.parentName);
             geoBones.add(new GeoBone(rb.name, false, false, false, rb.pivot[0], rb.pivot[1], rb.pivot[2], rb.rotation[0], rb.rotation[1], rb.rotation[2]));
 
@@ -501,24 +519,36 @@ public class YSMClientMapper {
             boolean forceCull = allCutout;
 
             for (RawYsmModel.RawCube rc : rb.cubes) {
+                stats.cubes++;
                 GeoModel.BakedCube bc = new GeoModel.BakedCube();
 
                 int validFaceCount = 0;
                 boolean hasTranslucentFace = false;
 
                 for (RawYsmModel.RawFace rf : rc.faces) {
+                    stats.quadsBefore++;
                     int faceState = scanner != null ? scanner.scan(rf) : TranslucencyScanner.STATE_OPAQUE;
 
                     if (faceState == TranslucencyScanner.STATE_INVISIBLE) {
+                        stats.prunedInvisibleFaces++;
                         continue;
                     }
 
                     if (faceState == TranslucencyScanner.STATE_TRANSLUCENT) {
                         hasTranslucentFace = true;
+                        stats.translucentFaces++;
+                    } else {
+                        stats.opaqueFaces++;
                     }
 
                     if (!forceCull && isNegativeSizedFace(rf)) {
                         forceCull = true;
+                    }
+                    if (forceCull) {
+                        stats.cutoutFaces++;
+                    }
+                    if (bb.glow) {
+                        stats.glowFaces++;
                     }
 
                     GeoModel.BakedQuad bq = new GeoModel.BakedQuad();
@@ -531,6 +561,7 @@ public class YSMClientMapper {
                         bq.setVertex(i, px, py, pz, rf.u[i], rf.v[i]);
                     }
                     bc.quads.add(bq);
+                    stats.quadsAfter++;
                     validFaceCount++;
                 }
 
@@ -569,6 +600,7 @@ public class YSMClientMapper {
                     bc.cullable = false;
                 } else if (isZeroThickness && validFaceCount > 1) {
                     bc.cullable = true;
+                    stats.zeroThicknessFaces += validFaceCount;
                 } else {
                     bc.cullable = validFaceCount >= 5;
                 }
@@ -597,18 +629,187 @@ public class YSMClientMapper {
             else if (b.parentIdx != -1) b.partMask = bakedBones.get(b.parentIdx).partMask;
             else b.partMask = 0;
         }
+        finalizeOptimizationStats(bakedBones, stats);
 
         boolean[] translucencyArray = scanner != null ? scanner.getResults() : new boolean[Math.max(1, textureCount)];
-        GeoModel mesh = buildMesh(geoBones.toArray(new GeoBone[0]), parentMap, context, translucencyArray);
+        GeoModel mesh = buildMesh(geoBones.toArray(new GeoBone[0]), parentMap, context, translucencyArray, specialHandLocatorProfile);
 
         mesh.bakedBones = bakedBones;
         mesh.bakedBoneOrder = GeoModel.buildParentFirstBoneOrder(bakedBones);
         mesh.buildPartMaskBoneRenderOrders();
+        stats.importBakeMillis = (System.nanoTime() - bakeStart) / 1_000_000L;
+        mesh.optimizationStats = stats;
+        logModelOptimizationStats(stats);
         if (RuntimeAccelerationLoader.isLoaded()) mesh.buildNativeCache();
         return mesh;
     }
 
-    private static Map<String, Animation> buildAnimations(RawYsmModel.RawAnimationFile animFile, boolean mergeMultilineExpr) {
+    private static void finalizeOptimizationStats(List<GeoModel.BakedBone> bakedBones, ModelOptimizationStats stats) {
+        int totalQuads = 0;
+        int totalCubes = 0;
+        for (int boneIdx = 0; boneIdx < bakedBones.size(); boneIdx++) {
+            GeoModel.BakedBone bone = bakedBones.get(boneIdx);
+            totalCubes += bone.cubes.size();
+            for (GeoModel.BakedCube cube : bone.cubes) {
+                totalQuads += cube.quads.size();
+                switch (bone.partMask) {
+                    case 1 -> stats.partMaskLeftArmQuads += cube.quads.size();
+                    case 2 -> stats.partMaskRightArmQuads += cube.quads.size();
+                    default -> stats.partMaskAllQuads += cube.quads.size();
+                }
+            }
+        }
+        stats.estimatedBakedBytes = estimateBakedBytes(bakedBones.size(), totalCubes, totalQuads);
+        stats.estimatedGpuMeshBytes = estimateGpuMeshBytes(totalQuads, bakedBones.size());
+        stats.internalFaceCandidatePairs = countConservativeInternalFaceCandidates(bakedBones);
+    }
+
+    private static long estimateBakedBytes(int bones, int cubes, int quads) {
+        return (long) bones * 96L + (long) cubes * 32L + (long) quads * 160L;
+    }
+
+    private static long estimateGpuMeshBytes(int quads, int bones) {
+        long vertexBytes = (long) quads * 4L * 32L;
+        long indexBytes = (long) quads * 6L * Integer.BYTES;
+        long boneBytes = (long) bones * 144L * 2L;
+        return vertexBytes + indexBytes + boneBytes;
+    }
+
+    private static int countConservativeInternalFaceCandidates(List<GeoModel.BakedBone> bakedBones) {
+        Map<FaceAuditKey, int[]> buckets = new HashMap<>();
+        for (int boneIdx = 0; boneIdx < bakedBones.size(); boneIdx++) {
+            GeoModel.BakedBone bone = bakedBones.get(boneIdx);
+            if (bone.glow) {
+                continue;
+            }
+            for (GeoModel.BakedCube cube : bone.cubes) {
+                for (GeoModel.BakedQuad quad : cube.quads) {
+                    int axis = dominantAxis(quad.normalX, quad.normalY, quad.normalZ);
+                    if (axis < 0 || isZeroAreaQuad(quad, axis)) {
+                        continue;
+                    }
+                    int sign = normalSign(quad, axis);
+                    if (sign == 0) {
+                        continue;
+                    }
+                    FaceAuditKey key = FaceAuditKey.from(boneIdx, bone.partMask, axis, quad);
+                    int[] counts = buckets.computeIfAbsent(key, ignored -> new int[2]);
+                    counts[sign > 0 ? 1 : 0]++;
+                }
+            }
+        }
+        int pairs = 0;
+        for (int[] counts : buckets.values()) {
+            pairs += Math.min(counts[0], counts[1]);
+        }
+        return pairs;
+    }
+
+    private static int dominantAxis(float x, float y, float z) {
+        float ax = Math.abs(x);
+        float ay = Math.abs(y);
+        float az = Math.abs(z);
+        if (ax < 0.999f && ay < 0.999f && az < 0.999f) {
+            return -1;
+        }
+        if (ax >= ay && ax >= az) return 0;
+        if (ay >= az) return 1;
+        return 2;
+    }
+
+    private static int normalSign(GeoModel.BakedQuad quad, int axis) {
+        float value = switch (axis) {
+            case 0 -> quad.normalX;
+            case 1 -> quad.normalY;
+            default -> quad.normalZ;
+        };
+        if (value > 0.999f) return 1;
+        if (value < -0.999f) return -1;
+        return 0;
+    }
+
+    private static boolean isZeroAreaQuad(GeoModel.BakedQuad quad, int axis) {
+        float minA = Float.POSITIVE_INFINITY;
+        float maxA = Float.NEGATIVE_INFINITY;
+        float minB = Float.POSITIVE_INFINITY;
+        float maxB = Float.NEGATIVE_INFINITY;
+        for (int i = 0; i < 4; i++) {
+            float a;
+            float b;
+            if (axis == 0) {
+                a = quad.y(i);
+                b = quad.z(i);
+            } else if (axis == 1) {
+                a = quad.x(i);
+                b = quad.z(i);
+            } else {
+                a = quad.x(i);
+                b = quad.y(i);
+            }
+            minA = Math.min(minA, a);
+            maxA = Math.max(maxA, a);
+            minB = Math.min(minB, b);
+            maxB = Math.max(maxB, b);
+        }
+        return Math.abs(maxA - minA) <= 1.0e-4f || Math.abs(maxB - minB) <= 1.0e-4f;
+    }
+
+    private record FaceAuditKey(int boneIndex, int partMask, int axis, int plane, int minA, int maxA, int minB, int maxB) {
+        static FaceAuditKey from(int boneIndex, int partMask, int axis, GeoModel.BakedQuad quad) {
+            float planeValue;
+            float minA = Float.POSITIVE_INFINITY;
+            float maxA = Float.NEGATIVE_INFINITY;
+            float minB = Float.POSITIVE_INFINITY;
+            float maxB = Float.NEGATIVE_INFINITY;
+            if (axis == 0) {
+                planeValue = quad.x(0);
+            } else if (axis == 1) {
+                planeValue = quad.y(0);
+            } else {
+                planeValue = quad.z(0);
+            }
+            for (int i = 0; i < 4; i++) {
+                float a;
+                float b;
+                if (axis == 0) {
+                    a = quad.y(i);
+                    b = quad.z(i);
+                } else if (axis == 1) {
+                    a = quad.x(i);
+                    b = quad.z(i);
+                } else {
+                    a = quad.x(i);
+                    b = quad.y(i);
+                }
+                minA = Math.min(minA, a);
+                maxA = Math.max(maxA, a);
+                minB = Math.min(minB, b);
+                maxB = Math.max(maxB, b);
+            }
+            return new FaceAuditKey(
+                    boneIndex,
+                    partMask,
+                    axis,
+                    quantize(planeValue),
+                    quantize(minA),
+                    quantize(maxA),
+                    quantize(minB),
+                    quantize(maxB)
+            );
+        }
+
+        private static int quantize(float value) {
+            return Math.round(value * 1000.0f);
+        }
+    }
+
+    private static void logModelOptimizationStats(ModelOptimizationStats stats) {
+        if (GeneralConfig.safeGet(GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG, false)) {
+            YesSteveModel.LOGGER.info("[SM][Perf] model optimization {}", stats.toLogString());
+        }
+    }
+
+    public static Map<String, Animation> buildAnimations(RawYsmModel.RawAnimationFile animFile, boolean mergeMultilineExpr) {
         Map<String, Animation> result = new LinkedHashMap<>();
         for (RawYsmModel.RawAnimation ra : animFile.animations.values()) {
             ILoopType loopMode = ILoopType.EDefaultLoopTypes.PLAY_ONCE;
@@ -659,7 +860,7 @@ public class YSMClientMapper {
         for (RawYsmModel.RawKeyframe rk : frames) {
             RawBoneKeyFrame builder = new RawBoneKeyFrame();
             builder.startTick = rk.timestamp * 20.0f;
-            builder.easingType = rk.interpolationMode == 2 ? EasingType.CATMULLROM : EasingType.LINEAR;
+            builder.easingType = easingTypeFor(rk);
             builder.contiguous = !rk.hasPreData;
 
             if (rk.hasPreData) {
@@ -671,6 +872,200 @@ public class YSMClientMapper {
             builders.add(builder);
         }
         return BoneKeyFrameProcessor.process(builders, isRotation);
+    }
+
+    private static EasingType easingTypeFor(RawYsmModel.RawKeyframe keyframe) {
+        switch (keyframe.interpolationMode) {
+            case RawYsmModel.RawKeyframe.INTERPOLATION_STEP:
+                return EasingType.STEP;
+            case RawYsmModel.RawKeyframe.INTERPOLATION_CATMULLROM:
+                return EasingType.CATMULLROM;
+            case RawYsmModel.RawKeyframe.INTERPOLATION_BEZIER:
+                if (GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+                    YesSteveModel.LOGGER.warn("[SM-ANIM] Bezier keyframe at {}s was downgraded to linear because runtime Bezier evaluation is not available yet", keyframe.timestamp);
+                }
+                return EasingType.LINEAR;
+            default:
+                return EasingType.LINEAR;
+        }
+    }
+
+    private static Map<String, String> buildParentMap(RawYsmModel.RawGeometry rawGeo) {
+        Map<String, String> parentMap = new HashMap<>();
+        if (rawGeo == null || rawGeo.bones == null) {
+            return parentMap;
+        }
+        for (RawYsmModel.RawBone bone : rawGeo.bones) {
+            if (bone != null && bone.name != null && !bone.name.isEmpty()) {
+                parentMap.put(bone.name, bone.parentName);
+            }
+        }
+        return parentMap;
+    }
+
+    private static SpecialHandLocatorProfile detectSpecialHandLocatorProfile(RawYsmModel raw, Map<String, String> parentMap) {
+        if (raw == null || raw.mainEntity == null || parentMap == null || parentMap.isEmpty()) {
+            return SpecialHandLocatorProfile.NONE;
+        }
+        if (!hasNormalizedExactBone(parentMap, "LeftHandLocator") || !hasNormalizedExactBone(parentMap, "RightHandLocator")) {
+            return SpecialHandLocatorProfile.NONE;
+        }
+        if (hasNormalizedSwordBone(parentMap, "LeftSword") || hasNormalizedSwordBone(parentMap, "RightSword")) {
+            return SpecialHandLocatorProfile.NONE;
+        }
+        for (int i = 2; i <= 8; i++) {
+            if (hasNormalizedExactBone(parentMap, "LeftHandLocator" + i) || hasNormalizedExactBone(parentMap, "RightHandLocator" + i)) {
+                return SpecialHandLocatorProfile.NONE;
+            }
+        }
+
+        boolean carryOnZero = false;
+        boolean nonCarryOnZero = false;
+        for (RawYsmModel.RawAnimationFile animationFile : raw.mainEntity.animationFiles.values()) {
+            ScaleZeroScanResult result = scanHandLocatorScaleZero(animationFile);
+            if (result.unsafe()) {
+                return SpecialHandLocatorProfile.NONE;
+            }
+            if (result.hasScaleZero()) {
+                if (animationFile.animType == 6) {
+                    carryOnZero = true;
+                } else {
+                    nonCarryOnZero = true;
+                }
+            }
+        }
+        if (!carryOnZero || nonCarryOnZero) {
+            return SpecialHandLocatorProfile.NONE;
+        }
+        return SpecialHandLocatorProfile.HAND_LOCATOR_HIDDEN_BY_CARRYON;
+    }
+
+    private static ScaleZeroScanResult scanHandLocatorScaleZero(RawYsmModel.RawAnimationFile animationFile) {
+        if (animationFile == null || animationFile.animations == null) {
+            return ScaleZeroScanResult.NONE;
+        }
+        boolean found = false;
+        for (RawYsmModel.RawAnimation animation : animationFile.animations.values()) {
+            if (animation == null || animation.boneAnimations == null) {
+                continue;
+            }
+            for (RawYsmModel.RawBoneAnimation boneAnimation : animation.boneAnimations) {
+                if (boneAnimation == null || !isPrimaryHandLocatorName(boneAnimation.boneName) || boneAnimation.scale == null || boneAnimation.scale.isEmpty()) {
+                    continue;
+                }
+                for (RawYsmModel.RawKeyframe keyframe : boneAnimation.scale) {
+                    KeyframeScaleResult result = isZeroScaleKeyframe(keyframe);
+                    if (result == KeyframeScaleResult.UNSAFE) {
+                        return ScaleZeroScanResult.UNSAFE;
+                    }
+                    if (result == KeyframeScaleResult.ZERO) {
+                        found = true;
+                    }
+                }
+            }
+        }
+        return found ? ScaleZeroScanResult.FOUND : ScaleZeroScanResult.NONE;
+    }
+
+    private static KeyframeScaleResult isZeroScaleKeyframe(RawYsmModel.RawKeyframe keyframe) {
+        if (keyframe == null) {
+            return KeyframeScaleResult.NONE;
+        }
+        KeyframeScaleResult post = isZeroScaleData(keyframe.postData);
+        if (post == KeyframeScaleResult.UNSAFE) {
+            return KeyframeScaleResult.UNSAFE;
+        }
+        if (!keyframe.hasPreData) {
+            return post;
+        }
+        KeyframeScaleResult pre = isZeroScaleData(keyframe.preData);
+        if (pre == KeyframeScaleResult.UNSAFE) {
+            return KeyframeScaleResult.UNSAFE;
+        }
+        return pre == KeyframeScaleResult.ZERO || post == KeyframeScaleResult.ZERO ? KeyframeScaleResult.ZERO : KeyframeScaleResult.NONE;
+    }
+
+    private static KeyframeScaleResult isZeroScaleData(Object[] data) {
+        if (data == null || data.length < 3) {
+            return KeyframeScaleResult.NONE;
+        }
+        for (int i = 0; i < 3; i++) {
+            if (!isSafeZeroValue(data[i])) {
+                return data[i] instanceof String ? KeyframeScaleResult.UNSAFE : KeyframeScaleResult.NONE;
+            }
+        }
+        return KeyframeScaleResult.ZERO;
+    }
+
+    private static boolean isSafeZeroValue(Object value) {
+        if (value instanceof Float) {
+            return (Float) value == 0.0f;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue() == 0.0d;
+        }
+        if (value instanceof String) {
+            String text = ((String) value).trim();
+            if (text.isEmpty()) {
+                return false;
+            }
+            try {
+                return Double.parseDouble(text) == 0.0d;
+            } catch (NumberFormatException ignored) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isPrimaryHandLocatorName(String boneName) {
+        String normalized = normalizeBoneName(boneName);
+        return "lefthandlocator".equals(normalized) || "righthandlocator".equals(normalized);
+    }
+
+    private static boolean hasNormalizedExactBone(Map<String, String> parentMap, String targetBone) {
+        return findBoneName(targetBone, parentMap) != null;
+    }
+
+    private static boolean hasNormalizedSwordBone(Map<String, String> parentMap, String baseName) {
+        String normalizedBase = normalizeBoneName(baseName);
+        for (String boneName : parentMap.keySet()) {
+            String normalizedName = normalizeBoneName(boneName);
+            if (normalizedName.equals(normalizedBase)
+                    || (normalizedName.startsWith(normalizedBase)
+                    && normalizedName.substring(normalizedBase.length()).chars().allMatch(Character::isDigit))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private enum ScaleZeroScanResult {
+        NONE(false, false),
+        FOUND(true, false),
+        UNSAFE(false, true);
+
+        private final boolean hasScaleZero;
+        private final boolean unsafe;
+
+        ScaleZeroScanResult(boolean hasScaleZero, boolean unsafe) {
+            this.hasScaleZero = hasScaleZero;
+            this.unsafe = unsafe;
+        }
+
+        private boolean hasScaleZero() {
+            return this.hasScaleZero;
+        }
+
+        private boolean unsafe() {
+            return this.unsafe;
+        }
+    }
+
+    private enum KeyframeScaleResult {
+        NONE,
+        ZERO,
+        UNSAFE
     }
 
     private static void assignToBuilder(RawBoneKeyFrame builder, Object[] data, boolean isPre) {
@@ -1063,6 +1458,21 @@ public class YSMClientMapper {
         return new String[0];
     }
 
+    private static String[] buildSwordPath(Map<String, String> parentMap, String baseName) {
+        String[] path = buildPath(baseName, parentMap);
+        if (path.length > 0) {
+            return path;
+        }
+        String normalizedBase = normalizeBoneName(baseName);
+        for (String boneName : parentMap.keySet()) {
+            String normalizedName = normalizeBoneName(boneName);
+            if (normalizedName.startsWith(normalizedBase) && normalizedName.substring(normalizedBase.length()).chars().allMatch(Character::isDigit)) {
+                return buildPath(boneName, parentMap);
+            }
+        }
+        return new String[0];
+    }
+
     private static String findBoneName(String targetBone, Map<String, String> parentMap) {
         if (parentMap.containsKey(targetBone)) {
             return targetBone;
@@ -1091,7 +1501,11 @@ public class YSMClientMapper {
     }
 
     private static String[][] buildBoneNameArrays(Map<String, String> parentMap) {
-        String[][] arrays = new String[35][];
+        return buildBoneNameArrays(parentMap, SpecialHandLocatorProfile.NONE);
+    }
+
+    private static String[][] buildBoneNameArrays(Map<String, String> parentMap, SpecialHandLocatorProfile specialHandLocatorProfile) {
+        String[][] arrays = new String[37][];
 
         // 模型骨骼大全
         String[] targetLocators = new String[]{
@@ -1129,7 +1543,9 @@ public class YSMClientMapper {
                 "PassengerLocator5",
                 "PassengerLocator6",
                 "PassengerLocator7",
-                "PassengerLocator8"
+                "PassengerLocator8",
+                "LeftSword",
+                "RightSword"
         };
 
         for (int i = 0; i < arrays.length; i++) {
@@ -1141,6 +1557,14 @@ public class YSMClientMapper {
                 arrays[i] = buildPathFirst(parentMap,
                         "RightHandLocator", "RightItem", "RightHand", "RightPalm", "RightWrist",
                         "RightForeArm", "RightLowerArm", "RightArm");
+            } else if (i == 35) {
+                arrays[i] = specialHandLocatorProfile == SpecialHandLocatorProfile.HAND_LOCATOR_HIDDEN_BY_CARRYON
+                        ? buildPath("LeftHandLocator", parentMap)
+                        : buildSwordPath(parentMap, "LeftSword");
+            } else if (i == 36) {
+                arrays[i] = specialHandLocatorProfile == SpecialHandLocatorProfile.HAND_LOCATOR_HIDDEN_BY_CARRYON
+                        ? buildPath("RightHandLocator", parentMap)
+                        : buildSwordPath(parentMap, "RightSword");
             } else if (targetLocators[i] != null && !targetLocators[i].isEmpty()) {
                 arrays[i] = buildPath(targetLocators[i], parentMap);
             } else {
@@ -1152,7 +1576,11 @@ public class YSMClientMapper {
     }
 
     public static GeoModel buildMesh(GeoBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray) {
-        String[][] boneNameArrays = buildBoneNameArrays(parentMap);
+        return buildMesh(bones, parentMap, context, translucencyArray, SpecialHandLocatorProfile.NONE);
+    }
+
+    public static GeoModel buildMesh(GeoBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray, SpecialHandLocatorProfile specialHandLocatorProfile) {
+        String[][] boneNameArrays = buildBoneNameArrays(parentMap, specialHandLocatorProfile);
         boolean[] flags = new boolean[]{parentMap.containsKey("LeftArm"), parentMap.containsKey("RightArm"), parentMap.containsKey("Background")};
         return new GeoModel(bones, boneNameArrays, flags, context, translucencyArray);
     }

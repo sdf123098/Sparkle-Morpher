@@ -4,8 +4,7 @@ import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.animation.condition.ArmorConditions;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.geckolib3.core.controller.controllers.FirstPersonArmAnimationController;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.ImportedPlayerAnimationController;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.PlayerAnimationController;
+import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
@@ -39,7 +38,13 @@ public class PlayerModelBundle {
 
     private final AbstractTexture defaultTexture;
 
-    private final boolean importedPlayerModel;
+    private final ModelSourceFormat sourceFormat;
+
+    private final ModelActionProfile actionProfile;
+
+    private final SemanticSkeleton semanticSkeleton;
+
+    private final HandLocatorProfile handLocatorProfile;
 
     private final Consumer<CustomPlayerEntity> playerControllerInstaller;
 
@@ -55,7 +60,9 @@ public class PlayerModelBundle {
                              ArmorConditions modelProcessor,
                              Object2ReferenceMap<String, AnimationController> animationEntries,
                              OrderedStringMap<String, ? extends AbstractTexture> textures,
-                             String defaultTextureName, AbstractTexture defaultTexture, ModelResourceBundle modelResourceBundle, boolean importedPlayerModel) {
+                             String defaultTextureName, AbstractTexture defaultTexture, ModelResourceBundle modelResourceBundle,
+                             ModelSourceFormat sourceFormat, ModelActionProfile actionProfile,
+                             SemanticSkeleton semanticSkeleton, HandLocatorProfile handLocatorProfile) {
         this.mainModel = mainModel;
         this.armModel = armModel;
         this.mainAnimations = mainAnimations;
@@ -66,10 +73,13 @@ public class PlayerModelBundle {
         this.textures = textures;
         this.defaultTextureName = defaultTextureName;
         this.defaultTexture = defaultTexture;
-        this.importedPlayerModel = importedPlayerModel;
-        this.playerControllerInstaller = importedPlayerModel ? ImportedPlayerAnimationController.buildControllers(this, modelResourceBundle) : PlayerAnimationController.buildControllers(this, modelResourceBundle);
+        this.sourceFormat = sourceFormat;
+        this.actionProfile = actionProfile;
+        this.semanticSkeleton = semanticSkeleton;
+        this.handLocatorProfile = handLocatorProfile;
+        this.playerControllerInstaller = UnifiedPlayerActionController.buildControllers(this, modelResourceBundle);
         this.armControllerInstaller = FirstPersonArmAnimationController.buildControllers(this, modelResourceBundle);
-        this.maidControllerInstaller = importedPlayerModel ? null : TouhouLittleMaidCompat.buildControllers(this, modelResourceBundle);
+        this.maidControllerInstaller = actionProfile == ModelActionProfile.VANILLA_HUMANOID ? null : TouhouLittleMaidCompat.buildControllers(this, modelResourceBundle);
     }
 
     public GeoModel getMainModel() {
@@ -113,7 +123,27 @@ public class PlayerModelBundle {
     }
 
     public boolean isImportedPlayerModel() {
-        return this.importedPlayerModel;
+        return this.sourceFormat == ModelSourceFormat.BBMODEL || this.sourceFormat == ModelSourceFormat.FIGURA_BBMODEL;
+    }
+
+    public boolean hasVanillaPoseFallback() {
+        return this.actionProfile == ModelActionProfile.HYBRID_AUTHORED_WITH_VANILLA_FALLBACK;
+    }
+
+    public ModelSourceFormat getSourceFormat() {
+        return this.sourceFormat;
+    }
+
+    public ModelActionProfile getActionProfile() {
+        return this.actionProfile;
+    }
+
+    public SemanticSkeleton getSemanticSkeleton() {
+        return this.semanticSkeleton;
+    }
+
+    public HandLocatorProfile getHandLocatorProfile() {
+        return this.handLocatorProfile;
     }
 
     public Consumer<CustomPlayerEntity> getPlayerControllerInstaller() {

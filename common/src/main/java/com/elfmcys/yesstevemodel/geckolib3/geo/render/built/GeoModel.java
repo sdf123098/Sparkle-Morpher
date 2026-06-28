@@ -4,6 +4,7 @@ import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.resource.models.GeometryDescription;
+import com.micaftic.morpher.resource.ModelOptimizationStats;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import it.unimi.dsi.fastutil.ints.IntLists;
@@ -33,6 +34,12 @@ public class GeoModel {
 
     @NotNull
     public final IntList rightHandIds;
+
+    @NotNull
+    public final IntList leftSwordIds;
+
+    @NotNull
+    public final IntList rightSwordIds;
 
     @NotNull
     public final IntList elytraIds;
@@ -95,6 +102,8 @@ public class GeoModel {
     public int[] bakedBoneRenderOrderAll = new int[0];
     public int[] bakedBoneRenderOrderLeftArm = new int[0];
     public int[] bakedBoneRenderOrderRightArm = new int[0];
+
+    public ModelOptimizationStats optimizationStats;
 
     public static class BakedBone {
         public String name;
@@ -351,6 +360,8 @@ public class GeoModel {
         this.bones = ObjectLists.unmodifiable(ObjectArrayList.wrap(geoBones));
         this.leftHandIds = resolveBoneIds(strArr[0]);
         this.rightHandIds = resolveBoneIds(strArr[1]);
+        this.leftSwordIds = resolveBoneIds(strArr.length > 35 ? strArr[35] : new String[0]);
+        this.rightSwordIds = resolveBoneIds(strArr.length > 36 ? strArr[36] : new String[0]);
         this.elytraIds = resolveBoneIds(strArr[2]);
         this.tacPistolIds = resolveBoneIds(strArr[3]);
         this.tacRifleIds = resolveBoneIds(strArr[4]);
