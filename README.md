@@ -10,7 +10,7 @@ A comprehensive Minecraft custom model loader that lets players mount custom mod
 
 ### Custom Player Models & Skins
 
-Replace vanilla player models with fully custom 3D models. All custom models are **visible to other players in multiplayer** — no server-side mod required for model visibility.
+Replace vanilla player models with fully custom 3D models. All custom models are **visible to other players in multiplayer**
 
 ### Model Format Support
 
@@ -54,14 +54,7 @@ Designed to work alongside popular mods:
 
 ### Cross-platform
 
-Four build variants covering all major loader and version combinations:
-
-| Variant | Loader | Minecraft Version |
-|---------|--------|-------------------|
-| Sparkle-Morpher-Fa1.21.1 | Fabric | 1.21.1 |
-| Sparkle-Morpher-Fa26.1.2 | Fabric | 26.1.2 |
-| Sparkle-Morpher-Neo1.21.1 | NeoForge | 1.21.1 |
-| Sparkle-Morpher-Neo26.1.2 | NeoForge | 26.1.2 |
+More build variants covering all major loader and version combinations:
 
 ## How It Works
 
