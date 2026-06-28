@@ -26,11 +26,11 @@ public final class RuntimeAccelerationLoader {
     private static ErrorState lastError = null;
 
     private enum TargetPlatform {
-        WINDOWS_X64("windows-x64", "ysm-core.dll", Path.of(System.getProperty("java.io.tmpdir"), "ysm")),
-        WINDOWS_X86("windows-x86", "ysm-core.dll", Path.of(System.getProperty("java.io.tmpdir"), "ysm")),
-        LINUX_X64("linux-x64", "libysm-core.so", Path.of(System.getProperty("user.home"), ".ysm")),
-        MACOS_X64("macos-x64", "libysm-core.dylib", Path.of(System.getProperty("user.home"), ".ysm")),
-        MACOS_ARM64("macos-arm64", "libysm-core.dylib", Path.of(System.getProperty("user.home"), ".ysm")),
+        WINDOWS_X64("windows-x64", "ysm-core.dll", Path.of(System.getProperty("java.io.tmpdir"), "spm")),
+        WINDOWS_X86("windows-x86", "ysm-core.dll", Path.of(System.getProperty("java.io.tmpdir"), "spm")),
+        LINUX_X64("linux-x64", "libysm-core.so", Path.of(System.getProperty("user.home"), ".spm")),
+        MACOS_X64("macos-x64", "libysm-core.dylib", Path.of(System.getProperty("user.home"), ".spm")),
+        MACOS_ARM64("macos-arm64", "libysm-core.dylib", Path.of(System.getProperty("user.home"), ".spm")),
         ANDROID_ARM64("android-arm64", "libysm-core.so", null);
 
         final String resDir;
@@ -294,4 +294,4 @@ public final class RuntimeAccelerationLoader {
             return null;
         }
     }
-}
+}
