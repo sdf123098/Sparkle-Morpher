@@ -71,6 +71,8 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue GPU_DEBUG_VERBOSE_LOG;
 
+    public static ModConfigSpec.BooleanValue VULKAN_EXPERIMENTAL_CAPABILITY_PROBE;
+
     public static ModConfigSpec.IntValue MAX_CACHED_GPU_MODELS;
 
     public static ModConfigSpec.IntValue UNUSED_MODEL_TTL_SECONDS;
@@ -183,6 +185,8 @@ public class GeneralConfig {
         GPU_DEBUG_LOG = builder.define("GpuDebugLog", false);
         builder.comment("Print verbose per-draw [SM-GPU] diagnostics. Requires GpuDebugLog and may be noisy.");
         GPU_DEBUG_VERBOSE_LOG = builder.define("GpuDebugVerboseLog", false);
+        builder.comment("Run a 26.2-only Vulkan backend capability probe at client startup. Diagnostics only: no rendering, no compute dispatch, default off.");
+        VULKAN_EXPERIMENTAL_CAPABILITY_PROBE = builder.define("VulkanExperimentalCapabilityProbe", false);
         builder.comment("Maximum client models allowed to keep GPU/native render caches. 0 disables LRU unloading.");
         MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
         builder.comment("Minimum idle time before an unused client model GPU/native cache can be unloaded by LRU.");

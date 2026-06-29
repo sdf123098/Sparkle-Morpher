@@ -20,6 +20,8 @@ import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.LoadingStateConfig;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.core.gpu.BlurStack;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
+import com.micaftic.morpher.core.render.SmRenderBackendMode;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
@@ -457,6 +459,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderModelGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
         glassPanel(g, x, y, w, h);
+        Set<String> starredModels = starModels();
         List<ModelEntry> entries = collectModelEntries();
         int cellW = Math.max(92, Math.min(150, w / Math.max(1, w / 116)));
         int cols = Math.max(1, w / cellW);
@@ -476,9 +479,13 @@ public class ModernPlayerModelScreen extends Screen {
             int cw = cellW - 6;
             boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
             boolean hover = inside(mouseX, mouseY, cx, cy, cw, cellH - 6);
+            boolean starred = !entry.folder() && starredModels.contains(entry.modelId());
             fill(g, cx, cy, cw, cellH - 6, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
             border(g, cx, cy, cw, cellH - 6, selected ? RED : 0x33FFFFFF);
             drawIcon(g, entry.folder() ? IconGlyph.FOLDER : entry.locked() ? IconGlyph.LOCK : IconGlyph.MODEL, cx + 4, cy + 4);
+            if (starred) {
+                drawIcon(g, IconGlyph.STAR, cx + cw - 16, cy + cellH - 22);
+            }
             drawText(g, Component.literal(trim(entry.title(), cw - 28)), cx + 22, cy + 6);
             drawMuted(g, Component.literal(trim(entry.subtitle(), cw - 12)), cx + 6, cy + 22);
             hit(cx, cy, cw, cellH - 6, Component.literal(entry.title()), () -> clickModelEntry(entry));
@@ -560,7 +567,9 @@ public class ModernPlayerModelScreen extends Screen {
         fill(g, x, y, w, h, GLASS_DARK);
         border(g, x, y, w, h, 0x33FFFFFF);
         String textureId = selectedTextureOrDefault(assembly);
-        if (!Objects.equals(this.previewModelId, modelId) || !Objects.equals(this.previewTextureId, textureId)) {
+        boolean wasTrimmed = ClientModelManager.isGpuCacheTrimmed(modelId);
+        ClientModelManager.markModelUsed(modelId);
+        if (wasTrimmed || !Objects.equals(this.previewModelId, modelId) || !Objects.equals(this.previewTextureId, textureId)) {
             this.previewEntity.initModelWithTexture(modelId, textureId);
             this.previewModelId = modelId;
             this.previewTextureId = textureId;
@@ -1013,7 +1022,10 @@ public class ModernPlayerModelScreen extends Screen {
             boolean locked = assembly.getTextureRegistry().isAuthModel() && !auth.contains(modelId);
             out.add(ModelEntry.model(modelId, displayName(modelId, assembly), modelSubtitle(modelId, assembly), locked));
         }
-        out.sort(Comparator.<ModelEntry, Boolean>comparing(ModelEntry::folder).reversed().thenComparing(e -> e.title().toLowerCase(Locale.ROOT)));
+        out.sort(Comparator
+                .<ModelEntry, Boolean>comparing(e -> !stars.contains(e.modelId()))
+                .thenComparing(Comparator.<ModelEntry, Boolean>comparing(entry -> entry.folder()).reversed())
+                .thenComparing(e -> e.title().toLowerCase(Locale.ROOT)));
         return out;
     }
 
@@ -1427,6 +1439,10 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility", GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK));
+        rows.add(backendModeRow(ModelPanelState.SettingGroup.RENDERING));
+        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_raw_gl_non_gl", GeneralConfig.DISABLE_RAW_OPENGL_ON_NON_OPENGL, SmGraphicsBackendDetector::resetForTests));
+        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.opengl_legacy_renderer", GeneralConfig.ENABLE_OPENGL_LEGACY_GPU_RENDERER, SmGraphicsBackendDetector::resetForTests));
+        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.opengl_gui_blur", GeneralConfig.ENABLE_OPENGL_GUI_BLUR, SmGraphicsBackendDetector::resetForTests));
         rows.add(rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.native_simd_renderer", GeneralConfig.USE_NATIVE_SIMD_RENDERER));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.java_vector_renderer", GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER));
@@ -1437,6 +1453,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.import_performance_log", GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.gpu_debug_log", GeneralConfig.GPU_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.gpu_debug_verbose_log", GeneralConfig.GPU_DEBUG_VERBOSE_LOG));
+        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.vulkan_probe", GeneralConfig.VULKAN_EXPERIMENTAL_CAPABILITY_PROBE));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.animation_frame_profiler", GeneralConfig.ANIMATION_FRAME_PROFILER));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.animation_debug_log", GeneralConfig.ANIMATION_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.input_debug_log", GeneralConfig.INPUT_STATE_DEBUG_LOG));
@@ -1446,10 +1463,17 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private SettingRow bool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value) {
+        return bool(group, labelKey, value, null);
+    }
+
+    private SettingRow bool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value, Runnable afterChange) {
         boolean current = safeBool(value);
         return new SettingRow(group, labelKey, current, "", () -> {
             value.set(!safeBool(value));
             value.save();
+            if (afterChange != null) {
+                afterChange.run();
+            }
         }, null, null, null);
     }
 
@@ -1479,6 +1503,17 @@ public class ModernPlayerModelScreen extends Screen {
                 }, null);
     }
 
+    private SettingRow backendModeRow(ModelPanelState.SettingGroup group) {
+        SmRenderBackendMode current = GeneralConfig.safeGet(GeneralConfig.GRAPHICS_BACKEND_MODE, SmRenderBackendMode.AUTO);
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.graphics_backend_mode", null,
+                Component.translatable("gui.sparkle_morpher.model_panel.setting.graphics_backend_mode."
+                        + current.name().toLowerCase(Locale.ROOT)).getString(),
+                null,
+                () -> setBackendMode(previousBackendMode(current)),
+                () -> setBackendMode(nextBackendMode(current)),
+                null);
+    }
+
     private SettingRow rendererModeRow(ModelPanelState.SettingGroup group) {
         boolean gpu = safeBool(GeneralConfig.USE_GPU_RENDERER);
         boolean compatibility = safeBool(GeneralConfig.USE_COMPATIBILITY_RENDERER);
@@ -1502,6 +1537,22 @@ public class ModernPlayerModelScreen extends Screen {
         GeneralConfig.USE_COMPATIBILITY_RENDERER.save();
         GeneralConfig.USE_GPU_RENDERER.set(useGpuRenderer);
         GeneralConfig.USE_GPU_RENDERER.save();
+    }
+
+    private void setBackendMode(SmRenderBackendMode mode) {
+        GeneralConfig.GRAPHICS_BACKEND_MODE.set(mode);
+        GeneralConfig.GRAPHICS_BACKEND_MODE.save();
+        SmGraphicsBackendDetector.resetForTests();
+    }
+
+    private static SmRenderBackendMode nextBackendMode(SmRenderBackendMode current) {
+        SmRenderBackendMode[] values = SmRenderBackendMode.values();
+        return values[(current.ordinal() + 1) % values.length];
+    }
+
+    private static SmRenderBackendMode previousBackendMode(SmRenderBackendMode current) {
+        SmRenderBackendMode[] values = SmRenderBackendMode.values();
+        return values[(current.ordinal() + values.length - 1) % values.length];
     }
 
     private ModelAssembly selectedAssembly() {

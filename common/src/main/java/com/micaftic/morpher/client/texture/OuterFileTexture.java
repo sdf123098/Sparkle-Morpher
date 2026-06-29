@@ -1,12 +1,11 @@
 package com.micaftic.morpher.client.texture;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
-import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTexture;
@@ -97,10 +96,6 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             device.createCommandEncoder().writeToTexture(this.texture, image);
             this.uploaded = true;
             ResourceLifecycleStats.onTextureUploaded(modelId, width, height, sourceBytes);
-            if (GeneralConfig.safeGet(GeneralConfig.RELEASE_TEXTURE_BYTES_AFTER_UPLOAD, false) && this.data != null) {
-                this.data = null;
-                ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, sourceBytes);
-            }
             ModelMemoryProfiler.log("texture-uploaded", null);
         }
     }
@@ -121,13 +116,18 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
 
     @Override
     public void close() {
+        releaseGpuBinding();
+    }
+
+    public void closeAndReleaseSource() {
         if (closed) {
             return;
         }
         closed = true;
+        releaseGpuBinding();
         for (OuterFileTexture texture : this.suffixTextures.values()) {
             if (texture != null) {
-                texture.close();
+                texture.closeAndReleaseSource();
             }
         }
         this.suffixTextures = Reference2ReferenceMaps.emptyMap();
@@ -136,8 +136,19 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, retainedBytes);
             this.data = null;
         }
+    }
+
+    private void releaseGpuBinding() {
+        for (OuterFileTexture texture : this.suffixTextures.values()) {
+            if (texture != null) {
+                texture.releaseGpuBinding();
+            }
+        }
+        boolean hadGpuBinding = this.uploaded || this.texture != null || this.textureView != null || this.sampler != null;
         super.close();
         this.uploaded = false;
-        ResourceLifecycleStats.onTextureClosed(modelId);
+        if (hadGpuBinding) {
+            ResourceLifecycleStats.onTextureClosed(modelId);
+        }
     }
 }
