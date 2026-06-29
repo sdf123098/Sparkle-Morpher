@@ -843,6 +843,8 @@ public class ClientModelManager {
                     localOnlyModelIds.remove(modelId);
                     throw new IllegalStateException("Failed to build local model");
                 }
+                Path persisted = persistImportedModel(modelId, fileName, importData);
+                rememberLocalModelSource(ServerModelManager.CUSTOM, modelId, persisted);
                 YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelId);
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelId, e);
@@ -853,6 +855,63 @@ public class ClientModelManager {
                 ((Executor) Minecraft.getInstance()).execute(() -> callback.accept(result));
             }
         });
+    }
+
+    private static Path persistImportedModel(String modelId, String fileName, byte[] data) throws IOException {
+        if (modelId == null || modelId.isBlank() || data == null) {
+            return null;
+        }
+        String extension = importExtension(fileName);
+        if (extension.isBlank()) {
+            extension = ".ysm";
+        }
+        Path target = ServerModelManager.CUSTOM.resolve(modelId + extension).normalize();
+        if (!isInside(ServerModelManager.CUSTOM, target)) {
+            throw new IOException("Invalid import target: " + modelId);
+        }
+        Files.createDirectories(target.getParent());
+        Path temp = Files.createTempFile(target.getParent(), target.getFileName().toString(), ".tmp");
+        boolean moved = false;
+        try {
+            Files.write(temp, data);
+            try {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+            moved = true;
+            removeSiblingImportFiles(modelId, target);
+            return target;
+        } finally {
+            if (!moved) {
+                Files.deleteIfExists(temp);
+            }
+        }
+    }
+
+    private static String importExtension(String fileName) {
+        String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+            if (lower.endsWith(extension)) {
+                return extension;
+            }
+        }
+        return "";
+    }
+
+    private static void removeSiblingImportFiles(String modelId, Path keepTarget) throws IOException {
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+            Path sibling = ServerModelManager.CUSTOM.resolve(modelId + extension).normalize();
+            if (isInside(ServerModelManager.CUSTOM, sibling) && !sibling.toAbsolutePath().normalize().equals(keepTarget.toAbsolutePath().normalize())) {
+                Files.deleteIfExists(sibling);
+            }
+        }
+    }
+
+    private static boolean isInside(Path root, Path path) {
+        Path absoluteRoot = root.toAbsolutePath().normalize();
+        Path absolutePath = path.toAbsolutePath().normalize();
+        return absolutePath.startsWith(absoluteRoot);
     }
 
     public static void reloadLocalModels(@Nullable Consumer<Component> callback) {
@@ -1437,7 +1496,11 @@ public class ClientModelManager {
         AudioStreamCache.clearForModel(assembly);
         for (AbstractTexture tex : assembly.getTextures()) {
             UploadManager.removeTexture(tex);
-            tex.close();
+            if (tex instanceof OuterFileTexture outerFileTexture) {
+                outerFileTexture.closeAndReleaseSource();
+            } else {
+                tex.close();
+            }
         }
         for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
             entry.getValue().getModel().freeNativeCache();
@@ -1539,6 +1602,14 @@ public class ClientModelManager {
             modelLastUsedAt.put(modelId, System.currentTimeMillis());
             gpuCacheTrimmedModels.remove(modelId);
         }
+    }
+
+    public static void markModelUsed(String modelId) {
+        touchModel(modelId);
+    }
+
+    public static boolean isGpuCacheTrimmed(String modelId) {
+        return modelId != null && gpuCacheTrimmedModels.contains(modelId);
     }
 
     private static void touchAssembly(ModelAssembly assembly) {

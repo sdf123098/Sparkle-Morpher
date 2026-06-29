@@ -2,13 +2,21 @@ package com.micaftic.morpher.client.gui.resource;
 
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
+import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.network.NetworkHandler;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
+import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -16,6 +24,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionException;
 
 public final class ResourceDownloadManager {
     private static final int HISTORY_LIMIT = 128;
@@ -268,7 +277,7 @@ public final class ResourceDownloadManager {
             finishTask(task, TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.error", rootMessage(error)));
             return;
         }
-        String modelId = ModelRepoClient.safeModelId(task.entry);
+        String modelId = stripKnownImportExtension(ModelRepoClient.safeModelId(task.entry));
         synchronized (LOCK) {
             if (task.cancelRequested || task.state == TaskState.CANCELLED) {
                 finishTask(task, TaskState.CANCELLED, Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
@@ -284,12 +293,33 @@ public final class ResourceDownloadManager {
             statusColor = ChatFormatting.YELLOW;
         }
         notifyListeners();
+        CompletableFuture.runAsync(() -> {
+                    try {
+                        saveDownloadedModel(task.entry.fileName(), modelId, data);
+                    } catch (IOException e) {
+                        throw new CompletionException(e);
+                    }
+                }, DOWNLOAD_EXECUTOR)
+                .whenComplete((ignored, saveError) ->
+                        ((Executor) Minecraft.getInstance()).execute(() -> onLocalSaveFinished(task, modelId, data, saveError)));
+    }
+
+    private static void onLocalSaveFinished(DownloadTask task, String modelId, byte[] data, Throwable saveError) {
+        synchronized (LOCK) {
+            if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
+                return;
+            }
+        }
+        if (saveError != null) {
+            finishTask(task, TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.save_failed", rootMessage(saveError)));
+            return;
+        }
         ClientModelManager.importLocalModel(modelId, task.entry.fileName(), data, localError -> onLocalImportFinished(task, modelId, data, localError));
     }
 
     private static void onLocalImportFinished(DownloadTask task, String modelId, byte[] data, Component localError) {
         synchronized (LOCK) {
-            if (currentTask != task) {
+            if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
                 return;
             }
         }
@@ -297,7 +327,14 @@ public final class ResourceDownloadManager {
             finishTask(task, TaskState.FAILED, localError);
             return;
         }
+        if (!canUploadToServer()) {
+            finishTask(task, TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
+            return;
+        }
         synchronized (LOCK) {
+            if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
+                return;
+            }
             task.state = TaskState.UPLOADING;
             task.progress = 0f;
             task.uploadStartedAtMs = System.currentTimeMillis();
@@ -311,8 +348,76 @@ public final class ResourceDownloadManager {
         notifyListeners();
         Component startError = ModelUploadSession.start(modelId, task.entry.fileName(), data);
         if (startError != null) {
-            finishTask(task, TaskState.FAILED, startError);
+            if (!canUploadToServer()) {
+                finishTask(task, TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
+            } else {
+                finishTask(task, TaskState.FAILED, startError);
+            }
         }
+    }
+
+    private static boolean canUploadToServer() {
+        return NetworkHandler.isClientConnected() && ClientModelManager.isOysmServer() && ClientModelManager.isAllowUpload();
+    }
+
+    private static void saveDownloadedModel(String fileName, String modelId, byte[] data) throws IOException {
+        if (data == null || data.length == 0) {
+            throw new IOException("Empty model file");
+        }
+        Path customRoot = ServerModelManager.CUSTOM.toAbsolutePath().normalize();
+        String extension = extensionForFileName(fileName);
+        Path target = ServerModelManager.CUSTOM.resolve(modelId + extension).normalize();
+        Path absoluteTarget = target.toAbsolutePath().normalize();
+        if (!absoluteTarget.startsWith(customRoot)) {
+            throw new IOException("Rejected model path");
+        }
+        Files.createDirectories(absoluteTarget.getParent());
+        Path temp = Files.createTempFile(absoluteTarget.getParent(), absoluteTarget.getFileName().toString(), ".tmp");
+        boolean moved = false;
+        try {
+            Files.write(temp, data);
+            try {
+                Files.move(temp, absoluteTarget, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, absoluteTarget, StandardCopyOption.REPLACE_EXISTING);
+            }
+            moved = true;
+            removeSiblingModelFiles(customRoot, modelId, absoluteTarget);
+        } finally {
+            if (!moved) {
+                Files.deleteIfExists(temp);
+            }
+        }
+    }
+
+    private static void removeSiblingModelFiles(Path customRoot, String modelId, Path keepTarget) throws IOException {
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+            Path sibling = ServerModelManager.CUSTOM.resolve(modelId + extension).toAbsolutePath().normalize();
+            if (sibling.startsWith(customRoot) && !sibling.equals(keepTarget)) {
+                Files.deleteIfExists(sibling);
+            }
+        }
+    }
+
+    private static String extensionForFileName(String fileName) {
+        String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".zip")) {
+            return ".zip";
+        }
+        if (lower.endsWith(".bbmodel")) {
+            return ".bbmodel";
+        }
+        return ".ysm";
+    }
+
+    private static String stripKnownImportExtension(String modelId) {
+        String lower = modelId == null ? "" : modelId.toLowerCase(Locale.ROOT);
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+            if (lower.endsWith(extension)) {
+                return modelId.substring(0, modelId.length() - extension.length());
+            }
+        }
+        return modelId;
     }
 
     private static void onUploadSessionUpdate(ModelUploadSession session) {
