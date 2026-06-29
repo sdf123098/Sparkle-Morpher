@@ -258,24 +258,44 @@ public class InputStateKey {
         return InteractionHand.MAIN_HAND;
     }
 
-    private static void recordUsePulse(InteractionHand hand) {
-        boolean wasActive = usePulseTicks > 0 && usePulseHand == hand;
-        usePulseHand = hand;
-        usePulseTicks = INTERACTION_PULSE_TICKS;
-        usePulseAge = 1;
-        if (!wasActive) {
-            logInputSnapshot("use-pulse hand=" + hand);
-        }
+    private static void recordUsePulse(InteractionHand hand0) {
+
+        Minecraft mc = Minecraft.getInstance();
+        mc.schedule(() -> {
+            InteractionHand hand = hand0;
+            if(mc.player == null || !mc.player.swinging) return;
+
+            hand = mc.player.swingingArm;
+
+            boolean wasActive = usePulseTicks > 0 && usePulseHand == hand;
+            usePulseHand = hand;
+            usePulseTicks = INTERACTION_PULSE_TICKS;
+            usePulseAge = 1;
+            if (!wasActive) {
+                logInputSnapshot("use-pulse hand=" + hand);
+            }
+        });
+
     }
 
-    private static void recordSwingPulse(InteractionHand hand) {
-        boolean wasActive = swingPulseTicks > 0 && swingPulseHand == hand;
-        swingPulseHand = hand;
-        swingPulseTicks = INTERACTION_PULSE_TICKS;
-        swingPulseAge = 1;
-        if (!wasActive) {
-            logInputSnapshot("swing-pulse hand=" + hand);
-        }
+    private static void recordSwingPulse(InteractionHand hand0) {
+
+        Minecraft mc = Minecraft.getInstance();
+        mc.schedule(() -> {
+            InteractionHand hand = hand0;
+            if(mc.player == null || !mc.player.swinging) return;
+
+            hand = mc.player.swingingArm;
+
+            boolean wasActive = swingPulseTicks > 0 && swingPulseHand == hand;
+            swingPulseHand = hand;
+            swingPulseTicks = INTERACTION_PULSE_TICKS;
+            swingPulseAge = 1;
+            if (!wasActive) {
+                logInputSnapshot("swing-pulse hand=" + hand);
+            }
+        });
+
     }
 
     private static boolean isLocalPlayer(LivingEntity entity) {
