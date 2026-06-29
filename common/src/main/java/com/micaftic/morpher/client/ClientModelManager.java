@@ -1,6 +1,5 @@
 package com.micaftic.morpher.client;
 
-import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.audio.AudioTrackData;
@@ -24,9 +23,7 @@ import com.micaftic.morpher.resource.YSMClientMapper;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
 import com.micaftic.morpher.resource.models.ModelPackData;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
-import com.micaftic.morpher.util.DigestUtil;
 import com.micaftic.morpher.util.FileTypeUtil;
-import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.LocalModelSelectionStore;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
 import com.micaftic.morpher.util.NetworkOnlineDebugLog;
@@ -61,7 +58,6 @@ import com.micaftic.morpher.core.security.YsmCrypt;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
@@ -854,6 +850,17 @@ public class ClientModelManager {
             }
         });
     }
+
+    public static Component writeModel(Path custom, String fileName, byte[] data) {
+        try {
+            Files.write(custom.resolve(fileName), data);
+            loadDirectoryModels(custom);
+        } catch (IOException e) {
+            return Component.literal(e.toString());
+        }
+        return null;
+    }
+
 
     public static void reloadLocalModels(@Nullable Consumer<Component> callback) {
         reloadLocalModels(callback, true);

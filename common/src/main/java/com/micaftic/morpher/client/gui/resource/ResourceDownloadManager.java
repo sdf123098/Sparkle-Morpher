@@ -2,10 +2,14 @@ package com.micaftic.morpher.client.gui.resource;
 
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
+import com.micaftic.morpher.model.ServerModelManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -284,7 +288,8 @@ public final class ResourceDownloadManager {
             statusColor = ChatFormatting.YELLOW;
         }
         notifyListeners();
-        ClientModelManager.importLocalModel(modelId, task.entry.fileName(), data, localError -> onLocalImportFinished(task, modelId, data, localError));
+        // ClientModelManager.importLocalModel(modelId, task.entry.fileName(), data, localError -> onLocalImportFinished(task, modelId, data, localError));
+        onLocalImportFinished(task, modelId, data, ClientModelManager.writeModel(ServerModelManager.CUSTOM, task.entry.fileName(), data));
     }
 
     private static void onLocalImportFinished(DownloadTask task, String modelId, byte[] data, Component localError) {
