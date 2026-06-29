@@ -456,6 +456,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderModelGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
         glassPanel(g, x, y, w, h);
+        Set<String> staredModels = starModels();
         List<ModelEntry> entries = collectModelEntries();
         int cellW = Math.max(92, Math.min(150, w / Math.max(1, w / 116)));
         int cols = Math.max(1, w / cellW);
@@ -475,9 +476,11 @@ public class ModernPlayerModelScreen extends Screen {
             int cw = cellW - 6;
             boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
             boolean hover = inside(mouseX, mouseY, cx, cy, cw, cellH - 6);
+            boolean stared = staredModels.contains(entry.modelId());
             fill(g, cx, cy, cw, cellH - 6, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
             border(g, cx, cy, cw, cellH - 6, selected ? RED : 0x33FFFFFF);
             drawIcon(g, entry.folder() ? IconGlyph.FOLDER : entry.locked() ? IconGlyph.LOCK : IconGlyph.MODEL, cx + 4, cy + 4);
+            if(stared) drawIcon(g, IconGlyph.STAR, cx + cellW - 24, cy + cellH - 24);
             drawText(g, Component.literal(trim(entry.title(), cw - 28)), cx + 22, cy + 6);
             drawMuted(g, Component.literal(trim(entry.subtitle(), cw - 12)), cx + 6, cy + 22);
             hit(cx, cy, cw, cellH - 6, Component.literal(entry.title()), () -> clickModelEntry(entry));
@@ -987,7 +990,7 @@ public class ModernPlayerModelScreen extends Screen {
             boolean locked = assembly.getTextureRegistry().isAuthModel() && !auth.contains(modelId);
             out.add(ModelEntry.model(modelId, displayName(modelId, assembly), modelSubtitle(modelId, assembly), locked));
         }
-        out.sort(Comparator.<ModelEntry, Boolean>comparing(ModelEntry::folder).reversed().thenComparing(e -> e.title().toLowerCase(Locale.ROOT)));
+        out.sort(Comparator.<ModelEntry, Boolean>comparing(e -> !stars.contains(e.modelId())).thenComparing(Comparator.<ModelEntry, Boolean>comparing(ModelEntry::folder).reversed().thenComparing(e -> e.title().toLowerCase(Locale.ROOT))));
         return out;
     }
 
