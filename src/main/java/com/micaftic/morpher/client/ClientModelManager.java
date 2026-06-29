@@ -1485,7 +1485,11 @@ public class ClientModelManager {
         AudioStreamCache.clearForModel(assembly);
         for (AbstractTexture tex : assembly.getTextures()) {
             UploadManager.removeTexture(tex);
-            tex.close();
+            if (tex instanceof OuterFileTexture outerFileTexture) {
+                outerFileTexture.closeAndReleaseSource();
+            } else {
+                tex.close();
+            }
         }
         for (Map.Entry<ResourceLocation, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
             releaseModelCache(entry.getValue().getModel());
@@ -1597,6 +1601,14 @@ public class ClientModelManager {
             modelLastUsedAt.put(modelId, System.currentTimeMillis());
             gpuCacheTrimmedModels.remove(modelId);
         }
+    }
+
+    public static void markModelUsed(String modelId) {
+        touchModel(modelId);
+    }
+
+    public static boolean isGpuCacheTrimmed(String modelId) {
+        return modelId != null && gpuCacheTrimmedModels.contains(modelId);
     }
 
     private static void touchAssembly(ModelAssembly assembly) {

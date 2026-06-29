@@ -1,7 +1,6 @@
 package com.micaftic.morpher.client.texture;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
@@ -21,6 +20,7 @@ import java.util.Map;
 public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     private byte[] data;
     private boolean uploaded;
+    private boolean closed;
     private final String modelId;
 
     private Map<ShadersTextureType, OuterFileTexture> suffixTextures = Reference2ReferenceMaps.emptyMap();
@@ -58,13 +58,9 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             TextureUtil.prepareImage(this.getId(), 0, width, height);
             imageIn.upload(0, 0, 0, 0, 0, width, height, false, false, false, true);
             uploaded = true;
+            closed = false;
             ResourceLifecycleStats.onTextureUploaded(modelId, width, height, textureBytes.length);
             ModelMemoryProfiler.log("texture-uploaded", null);
-            if (GeneralConfig.safeGet(GeneralConfig.RELEASE_TEXTURE_BYTES_AFTER_UPLOAD, false)) {
-                data = null;
-                ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, textureBytes.length);
-                ModelMemoryProfiler.log("texture-bytes-released", null);
-            }
         } catch (IOException e) {
             YesSteveModel.LOGGER.error("[SM] Failed to upload outer file texture", e);
         }
@@ -80,8 +76,17 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
 
     @Override
     public void close() {
+        releaseGpuBinding();
+    }
+
+    public void closeAndReleaseSource() {
+        if (closed) {
+            return;
+        }
+        closed = true;
+        releaseGpuBinding();
         for (OuterFileTexture texture : suffixTextures.values()) {
-            texture.close();
+            texture.closeAndReleaseSource();
         }
         suffixTextures = Reference2ReferenceMaps.emptyMap();
         byte[] retained = data;
@@ -89,7 +94,17 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             data = null;
             ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, retained.length);
         }
+    }
+
+    private void releaseGpuBinding() {
+        for (OuterFileTexture texture : suffixTextures.values()) {
+            texture.releaseGpuBinding();
+        }
+        boolean wasUploaded = uploaded;
         super.close();
-        ResourceLifecycleStats.onTextureClosed(modelId);
+        uploaded = false;
+        if (wasUploaded) {
+            ResourceLifecycleStats.onTextureClosed(modelId);
+        }
     }
 }
