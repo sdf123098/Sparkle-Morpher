@@ -455,6 +455,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderModelGrid(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h) {
         glassPanel(g, x, y, w, h);
+        Set<String> starredModels = starModels();
         List<ModelEntry> entries = collectModelEntries();
         int cellW = Math.max(92, Math.min(150, w / Math.max(1, w / 116)));
         int cols = Math.max(1, w / cellW);
@@ -474,9 +475,13 @@ public class ModernPlayerModelScreen extends Screen {
             int cw = cellW - 6;
             boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
             boolean hover = inside(mouseX, mouseY, cx, cy, cw, cellH - 6);
+            boolean starred = !entry.folder() && starredModels.contains(entry.modelId());
             fill(g, cx, cy, cw, cellH - 6, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
             border(g, cx, cy, cw, cellH - 6, selected ? RED : 0x33FFFFFF);
             drawIcon(g, entry.folder() ? IconGlyph.FOLDER : entry.locked() ? IconGlyph.LOCK : IconGlyph.MODEL, cx + 4, cy + 4);
+            if (starred) {
+                drawIcon(g, IconGlyph.STAR, cx + cw - 16, cy + cellH - 22);
+            }
             drawText(g, Component.literal(trim(entry.title(), cw - 28)), cx + 22, cy + 6);
             drawMuted(g, Component.literal(trim(entry.subtitle(), cw - 12)), cx + 6, cy + 22);
             hit(cx, cy, cw, cellH - 6, Component.literal(entry.title()), () -> clickModelEntry(entry));
@@ -558,7 +563,9 @@ public class ModernPlayerModelScreen extends Screen {
         fill(g, x, y, w, h, GLASS_DARK);
         border(g, x, y, w, h, 0x33FFFFFF);
         String textureId = selectedTextureOrDefault(assembly);
-        if (!Objects.equals(this.previewModelId, modelId) || !Objects.equals(this.previewTextureId, textureId)) {
+        boolean wasTrimmed = ClientModelManager.isGpuCacheTrimmed(modelId);
+        ClientModelManager.markModelUsed(modelId);
+        if (wasTrimmed || !Objects.equals(this.previewModelId, modelId) || !Objects.equals(this.previewTextureId, textureId)) {
             this.previewEntity.initModelWithTexture(modelId, textureId);
             this.previewModelId = modelId;
             this.previewTextureId = textureId;
@@ -983,7 +990,10 @@ public class ModernPlayerModelScreen extends Screen {
             boolean locked = assembly.getTextureRegistry().isAuthModel() && !auth.contains(modelId);
             out.add(ModelEntry.model(modelId, displayName(modelId, assembly), modelSubtitle(modelId, assembly), locked));
         }
-        out.sort(Comparator.<ModelEntry, Boolean>comparing(ModelEntry::folder).reversed().thenComparing(e -> e.title().toLowerCase(Locale.ROOT)));
+        out.sort(Comparator
+                .<ModelEntry, Boolean>comparing(e -> !stars.contains(e.modelId()))
+                .thenComparing(Comparator.<ModelEntry, Boolean>comparing(entry -> entry.folder()).reversed())
+                .thenComparing(e -> e.title().toLowerCase(Locale.ROOT)));
         return out;
     }
 
