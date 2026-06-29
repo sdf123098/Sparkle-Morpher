@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.util.Map;
 
 public class OuterFileTexture extends AbstractTexture implements ITextureMap {
-    private byte[] data;
+    private final byte[] data;
     private final String modelId;
 
     private Map<ShadersTextureType, OuterFileTexture> suffixTextures = Reference2ReferenceMaps.emptyMap();
@@ -98,7 +98,6 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             this.uploaded = true;
             ResourceLifecycleStats.onTextureUploaded(modelId, width, height, sourceBytes);
             if (GeneralConfig.safeGet(GeneralConfig.RELEASE_TEXTURE_BYTES_AFTER_UPLOAD, false) && this.data != null) {
-                this.data = null;
                 ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, sourceBytes);
             }
             ModelMemoryProfiler.log("texture-uploaded", null);
@@ -125,6 +124,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             return;
         }
         closed = true;
+        ;
         for (OuterFileTexture texture : this.suffixTextures.values()) {
             if (texture != null) {
                 texture.close();
@@ -134,7 +134,6 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
         long retainedBytes = this.data == null ? 0L : this.data.length;
         if (retainedBytes > 0L) {
             ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, retainedBytes);
-            this.data = null;
         }
         super.close();
         this.uploaded = false;
