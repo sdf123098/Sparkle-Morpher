@@ -96,11 +96,6 @@ public class ModelSettingsScreen extends OptionScreen {
     }
 
     @Override
-    protected boolean showFooterButtons() {
-        return false;
-    }
-
-    @Override
     protected int computeRowAreaRight() {
         return renderPreview ? panelRight - previewWidth() - 4 : panelRight;
     }
@@ -339,20 +334,6 @@ public class ModelSettingsScreen extends OptionScreen {
         }
         RoulettePanelStyle.secondaryGlassPanel(g, previewLeft, previewTop, previewRight - previewLeft, previewBottom - previewTop);
         renderPreview(g, partialTick);
-    }
-
-    @Override
-    protected void renderHeaderActions(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        RoulettePanelStyle.iconButton(g, mouseX, mouseY, closeX, closeY, RoulettePanelStyle.Glyph.CLOSE, true);
-    }
-
-    @Override
-    protected boolean headerMouseClicked(MouseButtonEvent event, boolean flag) {
-        if (RoulettePanelStyle.inside(event.x(), event.y(), closeX, closeY, RoulettePanelStyle.ICON, RoulettePanelStyle.ICON)) {
-            onClose();
-            return true;
-        }
-        return false;
     }
 
     private void renderPreview(GuiGraphicsExtractor g, float partialTick) {

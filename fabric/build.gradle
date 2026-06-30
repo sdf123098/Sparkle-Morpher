@@ -45,14 +45,16 @@ if (rootProject.ext.isCurseForgeDist) {
 dependencies {
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
 
-    modImplementation fabricApi.module("fabric-networking-api-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-lifecycle-events-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-entity-events-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-command-api-v2", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-resource-loader-v0", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-rendering-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-sound-api-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-key-mapping-api-v1", rootProject.fabric_api_version)
+    // modImplementation fabricApi.module("fabric-networking-api-v1", rootProject.fabric_api_version)
+    // modImplementation fabricApi.module("fabric-lifecycle-events-v1", rootProject.fabric_api_version)
+    // modImplementation fabricApi.module("fabric-entity-events-v1", rootProject.fabric_api_version)
+    // modImplementation fabricApi.module("fabric-command-api-v2", rootProject.fabric_api_version)
+    // modImplementation fabricApi.module("fabric-resource-loader-v0", rootProject.fabric_api_version)
+    // modImplementation fabricApi.module("fabric-rendering-v1", rootProject.fabric_api_version)
+    // modImplementation fabricApi.module("fabric-sound-api-v1", rootProject.fabric_api_version)
+    // modImplementation fabricApi.module("fabric-key-mapping-api-v1", rootProject.fabric_api_version)
+
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
 
     modImplementation "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
     include "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
@@ -63,6 +65,9 @@ dependencies {
     include "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
 
     modCompileOnly "com.terraformersmc:modmenu:$rootProject.modmenu_version"
+
+    implementation "com.electronwill.night-config:core:3.9.0"
+    implementation "com.electronwill.night-config:toml:3.9.0"
 
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     include "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
