@@ -47,14 +47,8 @@ if (rootProject.ext.isCurseForgeDist) {
 dependencies {
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
 
-    modImplementation fabricApi.module("fabric-networking-api-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-lifecycle-events-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-entity-events-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-command-api-v2", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-resource-loader-v0", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-rendering-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-sound-api-v1", rootProject.fabric_api_version)
-    modImplementation fabricApi.module("fabric-key-mapping-api-v1", rootProject.fabric_api_version)
+    modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
+
 
     modImplementation "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"
     include "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"

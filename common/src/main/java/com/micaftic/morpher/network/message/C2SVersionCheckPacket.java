@@ -7,6 +7,7 @@ import com.micaftic.morpher.event.CapabilityEvent;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
+import com.micaftic.morpher.util.PlayerStarModelsStore;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import com.micaftic.morpher.core.api.network.PacketContext;
@@ -39,6 +40,7 @@ public class C2SVersionCheckPacket {
                     cap.addModel(modelId);
                 }
             });
+            PlayerStarModelsStore.restore(sender);
             PlayerModelSelectionStore.restore(sender);
             ServerModelManager.validatePlayerModel(sender);
             ModelInfoCapability.get(sender).ifPresent(cap -> {
