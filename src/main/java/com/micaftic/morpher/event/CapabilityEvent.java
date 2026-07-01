@@ -16,6 +16,7 @@ import com.micaftic.morpher.network.message.S2CSyncStarModelsPacket;
 import com.micaftic.morpher.network.message.S2CSyncVehicleModelPacket;
 import com.micaftic.morpher.network.message.S2CVersionCheckPacket;
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
+import com.micaftic.morpher.util.PlayerStarModelsStore;
 import com.micaftic.morpher.core.architectury.utils.GameInstance;
 import com.micaftic.morpher.core.api.capability.CapabilityLifecycle;
 import com.micaftic.morpher.core.architectury.event.EventResult;
@@ -100,6 +101,7 @@ public final class CapabilityEvent {
                 }
                 NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(authModelsCap.getAuthModels()), player);
             });
+            PlayerStarModelsStore.restore(player);
             PlayerModelSelectionStore.restore(player);
             ServerModelManager.validatePlayerModel(player);
             syncPlayerModelToSelf(player);
