@@ -17,11 +17,11 @@ import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.render.NativeSimdValidator;
 import com.micaftic.morpher.config.LoadingStateConfig;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.core.gpu.BlurStack;
-import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
-import com.micaftic.morpher.core.render.SmRenderBackendMode;
+import com.micaftic.morpher.core.vector.VectorApiCapability;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
@@ -29,7 +29,7 @@ import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.util.ClientUiUtil;
-import com.micaftic.morpher.util.InputUtil;
+import com.micaftic.morpher.util.LocalStarModelsStore;
 import com.micaftic.morpher.util.ModelIdUtil;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -94,6 +94,7 @@ public class ModernPlayerModelScreen extends Screen {
     private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
     private final Queue<ModelImportFilePicker.PickedFile> pendingImports = new ArrayDeque<>();
     private final PlayerPreviewEntity previewEntity = new PlayerPreviewEntity();
+    private final Screen parentScreen;
     private ModelPanelLayout layout;
     private EditBox modelSearchBox;
     private EditBox resourceSearchBox;
@@ -152,11 +153,20 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     public ModernPlayerModelScreen() {
+        this((Screen) null);
+    }
+
+    public ModernPlayerModelScreen(Screen parentScreen) {
         super(Component.translatable("key.sparkle_morpher.player_model.desc"));
+        this.parentScreen = parentScreen;
     }
 
     public ModernPlayerModelScreen(ModelPanelState.Tab tab) {
-        this();
+        this(tab, null);
+    }
+
+    public ModernPlayerModelScreen(ModelPanelState.Tab tab, Screen parentScreen) {
+        this(parentScreen);
         STATE.activeTab = tab;
         if (tab == ModelPanelState.Tab.RESOURCE) {
             STATE.resourceLoaded = false;
@@ -168,7 +178,11 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     public static ModernPlayerModelScreen settings() {
-        return new ModernPlayerModelScreen(ModelPanelState.Tab.SETTINGS);
+        return settings(null);
+    }
+
+    public static ModernPlayerModelScreen settings(Screen parentScreen) {
+        return new ModernPlayerModelScreen(ModelPanelState.Tab.SETTINGS, parentScreen);
     }
 
     public static ModernPlayerModelScreen downloads() {
@@ -227,6 +241,15 @@ public class ModernPlayerModelScreen extends Screen {
         this.screenGeneration++;
         ModelImportFilePicker.cancelPicking();
         super.removed();
+    }
+
+    @Override
+    public void onClose() {
+        if (this.parentScreen != null && this.minecraft != null) {
+            this.minecraft.setScreen(this.parentScreen);
+        } else {
+            super.onClose();
+        }
     }
 
     @Override
@@ -747,16 +770,29 @@ public class ModernPlayerModelScreen extends Screen {
             renderSegmentedOption(g, sx + leftW + 2, y + 2, rightW, 15, segmented.right(), !segmented.leftSelected(), segmented.rightAction());
             return;
         }
-        g.text(this.font, trim(label.getString(), w - 82), x + 6, y + 6, TEXT, false);
         if (row.booleanValue() != null) {
+            g.text(this.font, trim(label.getString(), w - 82), x + 6, y + 6, TEXT, false);
             int bx = x + w - 34;
             fill(g, bx, y + 4, 26, 11, row.booleanValue() ? RED_SOFT : 0x55303030);
             fill(g, bx + (row.booleanValue() ? 15 : 2), y + 5, 9, 9, 0xFFEDE1CC);
             hit(bx - 4, y, 34, 19, label, row.action());
+        } else if (row.decrement() == null && row.increment() == null) {
+            int valueW = Math.min(104, Math.max(48, this.font.width(row.valueText()) + 14));
+            int valueX = x + w - valueW - 8;
+            g.text(this.font, trim(label.getString(), valueX - x - 12), x + 6, y + 6, TEXT, false);
+            renderTextButton(g, mouseX, mouseY, valueX, y + 2, valueW, 15, Component.literal(row.valueText()), row.action());
         } else {
-            renderIconButton(g, mouseX, mouseY, x + w - 50, y + 1, IconGlyph.MINUS, Component.translatable(row.labelKey()), row.decrement());
-            renderIconButton(g, mouseX, mouseY, x + w - 24, y + 1, IconGlyph.PLUS, Component.translatable(row.labelKey()), row.increment());
+            g.text(this.font, trim(label.getString(), w - 82), x + 6, y + 6, TEXT, false);
+            if (row.decrement() != null) {
+                renderIconButton(g, mouseX, mouseY, x + w - 50, y + 1, IconGlyph.MINUS, Component.translatable(row.labelKey()), row.decrement());
+            }
+            if (row.increment() != null) {
+                renderIconButton(g, mouseX, mouseY, x + w - 24, y + 1, IconGlyph.PLUS, Component.translatable(row.labelKey()), row.increment());
+            }
             drawMuted(g, Component.literal(row.valueText()), x + w - 90, y + 6);
+            if (row.action() != null) {
+                hit(x, y, w - 56, 19, label, row.action());
+            }
         }
     }
 
@@ -876,32 +912,22 @@ public class ModernPlayerModelScreen extends Screen {
         ResourceDownloadManager.Snapshot snapshot = ResourceDownloadManager.snapshot();
         Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? snapshot.status() : this.status;
         ChatFormatting color = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? snapshot.statusColor() : this.statusColor;
-        int c = chatColor(color, MUTED);
+        int c = chatColor(color);
         g.text(this.font, trim(line.getString(), this.layout.width - 20), this.layout.left + 10, this.layout.footerTop + 8, c, false);
     }
 
-    private static int chatColor(ChatFormatting color, int fallback) {
+    private int chatColor(ChatFormatting color) {
         if (color == null) {
-            return fallback;
+            return MUTED;
         }
         return switch (color) {
-            case BLACK -> 0xFF000000;
-            case DARK_BLUE -> 0xFF0000AA;
-            case DARK_GREEN -> 0xFF00AA00;
-            case DARK_AQUA -> 0xFF00AAAA;
-            case DARK_RED -> 0xFFAA0000;
-            case DARK_PURPLE -> 0xFFAA00AA;
-            case GOLD -> 0xFFFFAA00;
-            case GRAY -> 0xFFAAAAAA;
-            case DARK_GRAY -> 0xFF555555;
-            case BLUE -> 0xFF5555FF;
-            case GREEN -> 0xFF55FF55;
-            case AQUA -> 0xFF55FFFF;
-            case RED -> 0xFFFF5555;
-            case LIGHT_PURPLE -> 0xFFFF55FF;
-            case YELLOW -> 0xFFFFFF55;
+            case RED, DARK_RED -> 0xFFE05252;
+            case YELLOW, GOLD -> 0xFFFFC857;
+            case GREEN, DARK_GREEN -> 0xFF4CAF50;
+            case AQUA, DARK_AQUA, BLUE, DARK_BLUE -> 0xFF5ECAE8;
             case WHITE -> 0xFFFFFFFF;
-            default -> fallback;
+            case BLACK, DARK_GRAY -> 0xFF6F757A;
+            default -> MUTED;
         };
     }
 
@@ -1132,9 +1158,11 @@ public class ModernPlayerModelScreen extends Screen {
         StarModelsCapability.get(Minecraft.getInstance().player).ifPresent(cap -> {
             if (cap.containsModel(STATE.selectedModelId)) {
                 cap.removeModel(STATE.selectedModelId);
+                LocalStarModelsStore.remove(STATE.selectedModelId);
                 NetworkHandler.sendToServer(C2SSetStarModelPacket.remove(STATE.selectedModelId));
             } else {
                 cap.addModel(STATE.selectedModelId);
+                LocalStarModelsStore.add(STATE.selectedModelId);
                 NetworkHandler.sendToServer(C2SSetStarModelPacket.add(STATE.selectedModelId));
             }
         });
@@ -1343,7 +1371,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void openCustomFolderUpload() {
-        InputUtil.setScreen(new CustomFolderUploadScreen(this));
+        Minecraft.getInstance().setScreen(new CustomFolderUploadScreen(this));
     }
 
     private Component getCustomFolderUploadTooltip() {
@@ -1422,7 +1450,7 @@ public class ModernPlayerModelScreen extends Screen {
             String modelId = cap.getModelId();
             ModelAssembly modelAssembly = cap.getModelAssembly();
             if (modelAssembly != null && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
-                InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
+                minecraft.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
             }
         });
     }
@@ -1434,46 +1462,97 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_self_model", GeneralConfig.DISABLE_SELF_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_other_model", GeneralConfig.DISABLE_OTHER_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_self_hands", GeneralConfig.DISABLE_SELF_HANDS));
-        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_player_render", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER));
+        rows.add(invertedBool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_player_render", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_projectile_model", GeneralConfig.DISABLE_PROJECTILE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility", GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK));
-        rows.add(backendModeRow(ModelPanelState.SettingGroup.RENDERING));
-        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_raw_gl_non_gl", GeneralConfig.DISABLE_RAW_OPENGL_ON_NON_OPENGL, SmGraphicsBackendDetector::resetForTests));
-        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.opengl_legacy_renderer", GeneralConfig.ENABLE_OPENGL_LEGACY_GPU_RENDERER, SmGraphicsBackendDetector::resetForTests));
-        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.opengl_gui_blur", GeneralConfig.ENABLE_OPENGL_GUI_BLUR, SmGraphicsBackendDetector::resetForTests));
         rows.add(rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE));
-        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.native_simd_renderer", GeneralConfig.USE_NATIVE_SIMD_RENDERER));
-        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.java_vector_renderer", GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER));
+        rows.add(nativeSimdPolicyRow(ModelPanelState.SettingGroup.PERFORMANCE));
+        rows.add(nativeSimdValidationRow(ModelPanelState.SettingGroup.DEBUG));
+        rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.resource_monitor_log", GeneralConfig.RESOURCE_STATION_MONITOR_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.model_memory_profiler", GeneralConfig.MODEL_MEMORY_PROFILER));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.import_performance_log", GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG));
+        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.native_simd_compatibility_log", GeneralConfig.NATIVE_SIMD_COMPATIBILITY_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.gpu_debug_log", GeneralConfig.GPU_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.gpu_debug_verbose_log", GeneralConfig.GPU_DEBUG_VERBOSE_LOG));
-        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.vulkan_probe", GeneralConfig.VULKAN_EXPERIMENTAL_CAPABILITY_PROBE));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.animation_frame_profiler", GeneralConfig.ANIMATION_FRAME_PROFILER));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.animation_debug_log", GeneralConfig.ANIMATION_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.input_debug_log", GeneralConfig.INPUT_STATE_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.show_model_id_first", GeneralConfig.SHOW_MODEL_ID_FIRST));
         rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_disabled", LoadingStateConfig.DISABLE_LOADING_STATE_SCREEN));
+        rows.add(loadingPositionRow(ModelPanelState.SettingGroup.MISC));
+        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x", LoadingStateConfig.LOADING_STATE_OFFSET_X, -10000, 10000, 10, "px"));
+        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y", LoadingStateConfig.LOADING_STATE_OFFSET_Y, -10000, 10000, 10, "px"));
+        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide", LoadingStateConfig.LOADING_STATE_AUTO_HIDE_SECONDS, 1, 30, 1, "s"));
         return rows.stream().filter(row -> row.group() == STATE.settingGroup).toList();
     }
 
     private SettingRow bool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value) {
-        return bool(group, labelKey, value, null);
-    }
-
-    private SettingRow bool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value, Runnable afterChange) {
         boolean current = safeBool(value);
         return new SettingRow(group, labelKey, current, "", () -> {
             value.set(!safeBool(value));
             value.save();
-            if (afterChange != null) {
-                afterChange.run();
-            }
+        }, null, null, null);
+    }
+
+    private SettingRow invertedBool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value) {
+        boolean current = !safeBool(value);
+        return new SettingRow(group, labelKey, current, "", () -> {
+            value.set(current);
+            value.save();
+        }, null, null, null);
+    }
+
+    private SettingRow javaVectorRendererRow(ModelPanelState.SettingGroup group) {
+        boolean current = safeBool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER);
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.java_vector_renderer", current, "", () -> {
+            boolean next = !safeBool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER);
+            GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER.set(next);
+            GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER.save();
+            VectorApiCapability.warnIfRequested(next);
+        }, null, null, null);
+    }
+
+    private SettingRow nativeSimdPolicyRow(ModelPanelState.SettingGroup group) {
+        GeneralConfig.NativeSimdPolicy current = GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE);
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.native_simd_policy", null, current.name(), () -> {
+            GeneralConfig.NativeSimdPolicy next = switch (current) {
+                case OFF -> GeneralConfig.NativeSimdPolicy.SAFE;
+                case SAFE -> GeneralConfig.NativeSimdPolicy.AGGRESSIVE;
+                case AGGRESSIVE -> GeneralConfig.NativeSimdPolicy.OFF;
+            };
+            GeneralConfig.NATIVE_SIMD_POLICY.set(next);
+            GeneralConfig.NATIVE_SIMD_POLICY.save();
+            NativeSimdValidator.resetSession();
+        }, null, null, null);
+    }
+
+    private SettingRow nativeSimdValidationRow(ModelPanelState.SettingGroup group) {
+        GeneralConfig.NativeSimdValidationMode current = GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF);
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.native_simd_validation", null, current.name(), () -> {
+            GeneralConfig.NativeSimdValidationMode next = switch (current) {
+                case OFF -> GeneralConfig.NativeSimdValidationMode.LOG_MISMATCH;
+                case LOG_MISMATCH -> GeneralConfig.NativeSimdValidationMode.STRICT_FALLBACK;
+                case STRICT_FALLBACK -> GeneralConfig.NativeSimdValidationMode.CRASH_TEST;
+                case CRASH_TEST -> GeneralConfig.NativeSimdValidationMode.OFF;
+            };
+            GeneralConfig.NATIVE_SIMD_VALIDATION_MODE.set(next);
+            GeneralConfig.NATIVE_SIMD_VALIDATION_MODE.save();
+            NativeSimdValidator.resetSession();
+        }, null, null, null);
+    }
+
+    private SettingRow loadingPositionRow(ModelPanelState.SettingGroup group) {
+        LoadingStateConfig.Position current = GeneralConfig.safeGet(LoadingStateConfig.LOADING_STATE_POSITION, LoadingStateConfig.Position.TOP_CENTER);
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.loading_state_position", null, current.name(), () -> {
+            LoadingStateConfig.Position[] values = LoadingStateConfig.Position.values();
+            LoadingStateConfig.Position next = values[(current.ordinal() + 1) % values.length];
+            LoadingStateConfig.LOADING_STATE_POSITION.set(next);
+            LoadingStateConfig.LOADING_STATE_POSITION.save();
         }, null, null, null);
     }
 
@@ -1503,17 +1582,6 @@ public class ModernPlayerModelScreen extends Screen {
                 }, null);
     }
 
-    private SettingRow backendModeRow(ModelPanelState.SettingGroup group) {
-        SmRenderBackendMode current = GeneralConfig.safeGet(GeneralConfig.GRAPHICS_BACKEND_MODE, SmRenderBackendMode.AUTO);
-        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.graphics_backend_mode", null,
-                Component.translatable("gui.sparkle_morpher.model_panel.setting.graphics_backend_mode."
-                        + current.name().toLowerCase(Locale.ROOT)).getString(),
-                null,
-                () -> setBackendMode(previousBackendMode(current)),
-                () -> setBackendMode(nextBackendMode(current)),
-                null);
-    }
-
     private SettingRow rendererModeRow(ModelPanelState.SettingGroup group) {
         boolean gpu = safeBool(GeneralConfig.USE_GPU_RENDERER);
         boolean compatibility = safeBool(GeneralConfig.USE_COMPATIBILITY_RENDERER);
@@ -1537,22 +1605,6 @@ public class ModernPlayerModelScreen extends Screen {
         GeneralConfig.USE_COMPATIBILITY_RENDERER.save();
         GeneralConfig.USE_GPU_RENDERER.set(useGpuRenderer);
         GeneralConfig.USE_GPU_RENDERER.save();
-    }
-
-    private void setBackendMode(SmRenderBackendMode mode) {
-        GeneralConfig.GRAPHICS_BACKEND_MODE.set(mode);
-        GeneralConfig.GRAPHICS_BACKEND_MODE.save();
-        SmGraphicsBackendDetector.resetForTests();
-    }
-
-    private static SmRenderBackendMode nextBackendMode(SmRenderBackendMode current) {
-        SmRenderBackendMode[] values = SmRenderBackendMode.values();
-        return values[(current.ordinal() + 1) % values.length];
-    }
-
-    private static SmRenderBackendMode previousBackendMode(SmRenderBackendMode current) {
-        SmRenderBackendMode[] values = SmRenderBackendMode.values();
-        return values[(current.ordinal() + values.length - 1) % values.length];
     }
 
     private ModelAssembly selectedAssembly() {

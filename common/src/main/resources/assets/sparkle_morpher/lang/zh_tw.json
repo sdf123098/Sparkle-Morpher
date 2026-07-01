@@ -650,7 +650,7 @@
   "gui.sparkle_morpher.upload_custom_folder.upload_one": "上传",
   "gui.sparkle_morpher.url.donate": "贊助",
   "gui.sparkle_morpher.url.home": "首頁",
-  "key.category.sparkle_morpher": "花火火的變身器",
+  "key.category.sparkle_morpher": "花火火的變身器",
   "key.category.sparkle_morpher.keys": "花火火的變身器",
   "key.sparkle_morpher.animation_roulette.desc": "打開輪盤動畫",
   "key.sparkle_morpher.debug_animation.desc": "打開動畫除錯",
@@ -778,5 +778,17 @@
   "gui.sparkle_morpher.model_panel.applied_model": "已套用 %s",
   "gui.sparkle_morpher.model_panel.add_site": "新增網站",
   "gui.sparkle_morpher.model_panel.clear_selection": "清除選取",
-  "gui.sparkle_morpher.model_panel.settings": "設定"
+  "gui.sparkle_morpher.model_panel.settings": "設定",
+  "gui.sparkle_morpher.sync_hint.failed": "模型載入失敗",
+  "gui.sparkle_morpher.sync_hint.success": "模型載入完成",
+  "gui.sparkle_morpher.sync_hint.completed_models": "已載入 %s 個模型",
+  "gui.sparkle_morpher.sync_hint.loading_models_precise": "正在載入 %1/%2 個模型，%3 個等待處理",
+  "gui.sparkle_morpher.sync_hint.waiting_detail": "等待伺服器模型列表",
+  "gui.sparkle_morpher.sync_hint.loading_detail": "正在接收模型資料",
+  "gui.sparkle_morpher.sync_hint.preparing_detail": "正在準備模型快取",
+  "gui.sparkle_morpher.sync_hint.syncing_models": "正在同步 %1/%2 個模型",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_position": "載入彈窗位置",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x": "載入彈窗 X 偏移",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y": "載入彈窗 Y 偏移",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide": "載入彈窗自動隱藏"
 }

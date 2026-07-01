@@ -1410,7 +1410,7 @@ public class ClientModelManager {
                 syncState.syncedModels++;
                 int loaded = syncState.syncedModels;
                 if (loaded == syncState.totalModels) {
-                    syncState.setState(SyncState.IDLE);
+                    syncState.finishSuccess();
                 }
                 forEachGuiWidget(guiWidget -> {
                     guiWidget.onSyncProgress(syncState.getTotalModels(), loaded);
@@ -1428,7 +1428,7 @@ public class ClientModelManager {
         cachedModelHashes.clear();
 
         ((Executor) Minecraft.getInstance()).execute(() -> {
-            syncState.setState(SyncState.IDLE);
+            syncState.finishSuccess();
             NetworkOnlineDebugLog.info("onSyncComplete: calling resendSelectedServerModel");
             resendSelectedServerModel();
             forEachGuiWidget(IGuiWidget::onSyncComplete);
@@ -1445,7 +1445,7 @@ public class ClientModelManager {
 
     private static void onSyncError(@Nullable Object obj) {
         ((Executor) Minecraft.getInstance()).execute(() -> {
-            syncState.setState(SyncState.IDLE);
+            syncState.finishFailure(obj instanceof Component component ? component : null);
             forEachGuiWidget(guiWidget -> {
                 guiWidget.onSyncMessage(obj == null ? null : (Component) obj);
             });
@@ -1524,7 +1524,7 @@ public class ClientModelManager {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        if (InputUtil.getCurrentScreen() != null) {
+        if (Minecraft.getInstance().screen != null) {
             return;
         }
         long now = System.currentTimeMillis();
@@ -1643,6 +1643,11 @@ public class ClientModelManager {
 
         private int syncedModels = -1;
 
+        private long terminalSinceMillis = 0L;
+
+        @Nullable
+        private Component message = null;
+
         public SyncState getCurrentState() {
             return this.currentState;
         }
@@ -1655,17 +1660,48 @@ public class ClientModelManager {
             return this.totalModels;
         }
 
+        public long getTerminalSinceMillis() {
+            return this.terminalSinceMillis;
+        }
+
+        @Nullable
+        public Component getMessage() {
+            return this.message;
+        }
+
         public void setState(SyncState syncState) {
             System.out.println("Sync state: " + syncState);
             this.currentState = syncState;
             this.totalModels = -1;
             this.syncedModels = -1;
+            this.terminalSinceMillis = 0L;
+            this.message = null;
         }
 
         public void startSyncing(int totalModels) {
             this.currentState = SyncState.SYNCING;
             this.totalModels = totalModels;
             this.syncedModels = 0;
+            this.terminalSinceMillis = 0L;
+            this.message = null;
+        }
+
+        public void finishSuccess() {
+            this.currentState = SyncState.IDLE;
+            if (this.totalModels < 0) {
+                this.totalModels = Math.max(0, this.syncedModels);
+            }
+            if (this.syncedModels < 0) {
+                this.syncedModels = this.totalModels;
+            }
+            this.terminalSinceMillis = System.currentTimeMillis();
+            this.message = null;
+        }
+
+        public void finishFailure(@Nullable Component message) {
+            this.currentState = SyncState.IDLE;
+            this.terminalSinceMillis = System.currentTimeMillis();
+            this.message = message;
         }
     }
 

@@ -42,10 +42,7 @@ const platforms = [_]PlatformSpec{
 };
 
 pub fn build(b: *std.Build) void {
-    if (b.release_mode == .off and b.user_input_options.get("optimize") == null) {
-        b.release_mode = .fast;
-    }
-    const optimize = b.standardOptimizeOption(.{});
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
 
     const platform_filter = b.option(
         []const u8,
@@ -180,14 +177,23 @@ fn buildAndroid(
     base_flags: []const []const u8,
 ) !void {
     const host = ndkHostTag();
+    // Invoke the real clang++.exe directly with --target instead of the NDK's
+    // aarch64-linux-android<api>-clang++.cmd wrapper. The .cmd wrapper forwards
+    // args via batch `%*`, which CMD mis-parses on Windows when args contain
+    // `=`/`+`/`,` (e.g. `-std=c++17`, `--target=...`), failing with
+    // "=-std=c++17 was not expected at this time". Calling clang++.exe hands
+    // zig a proper argv with no CMD re-parse. Functionally identical to the
+    // wrapper, which only prepends `--target=aarch64-linux-android<api>` anyway.
     const clang_exe = b.fmt(
-        "{s}/toolchains/llvm/prebuilt/{s}/bin/aarch64-linux-android{d}-clang++.cmd",
-        .{ ndk_root, host, android_api },
+        "{s}/toolchains/llvm/prebuilt/{s}/bin/clang++.exe",
+        .{ ndk_root, host },
     );
+    const target_arg = b.fmt("--target=aarch64-linux-android{d}", .{android_api});
 
     const out_name = "libysm-core.so";
 
     const cmd = b.addSystemCommand(&.{clang_exe});
+    cmd.addArg(target_arg);
     cmd.addArgs(base_flags);
     cmd.addArg("-shared");
     cmd.addArg("-fPIC");

@@ -1,124 +1,184 @@
 package com.micaftic.morpher.client.renderer;
 
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.config.LoadingStateConfig;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.Font;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import com.micaftic.morpher.core.api.client.HudOverlay;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 public class ModelSyncStateOverlay implements HudOverlay {
-    private static final int TEXT_COLOR = 0xFFFFFFFF;
+    private static final Identifier MODEL_PANEL_ICONS = Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
+    private static final int WIDTH = 190;
+    private static final int HEIGHT = 42;
+    private static final int GLASS = 0xD21F282E;
+    private static final int PANEL = 0xA0405058;
+    private static final int BORDER = 0xB8E4F5FF;
+    private static final int TRACK = 0x66303030;
+    private static final int RED = 0xFFE05252;
+    private static final int GOLD = 0xFFFFC857;
+    private static final int GREEN = 0xFF4CAF50;
+    private static final int BLUE = 0xFF5ECAE8;
+    private static final int TEXT = 0xFFEDE1CC;
+    private static final int MUTED = 0xFF9A9A9A;
 
     @Override
-    public void render(GuiGraphicsExtractor guiGraphics, Font font, float partialTick, int screenWidth, int screenHeight) {
-        int textX;
-        int textY;
-        int barX;
-        int barY;
-
+    public void render(GuiGraphicsExtractor g, Font font, float partialTick, int screenWidth, int screenHeight) {
         if (LoadingStateConfig.DISABLE_LOADING_STATE_SCREEN.get().booleanValue()) {
             return;
         }
 
-        switch (LoadingStateConfig.LOADING_STATE_POSITION.get()) {
-            case TOP_LEFT:
-                textX = 10;
-                textY = 10;
-                barX = 10;
-                barY = 22;
-                break;
-            case TOP_CENTER:
-                textX = screenWidth / 2;
-                textY = 10;
-                barX = (screenWidth - 150) / 2;
-                barY = 22;
-                break;
-            case TOP_RIGHT:
-                textX = screenWidth - 10;
-                textY = 10;
-                barX = (screenWidth - 10) - 150;
-                barY = 22;
-                break;
-            case BOTTOM_LEFT:
-                textX = 10;
-                textY = screenHeight - 30;
-                barX = 10;
-                barY = (screenHeight - 8) - 10;
-                break;
-            case BOTTOM_CENTER:
-                textX = screenWidth / 2;
-                textY = screenHeight - 85;
-                barX = (screenWidth - 150) / 2;
-                barY = (screenHeight - 63) - 10;
-                break;
-            case BOTTOM_RIGHT:
-                textX = screenWidth - 10;
-                textY = screenHeight - 30;
-                barX = (screenWidth - 10) - 150;
-                barY = (screenHeight - 8) - 10;
-                break;
-            default:
-                textX = screenWidth / 2;
-                textY = 10;
-                barX = (screenWidth - 150) / 2;
-                barY = 22;
-                break;
-        }
-
-        ClientModelManager.SyncStatus syncStatus = ClientModelManager.getSyncStatus();
-
-        if (syncStatus.getCurrentState() == ClientModelManager.SyncState.IDLE) {
-            int pendingModelCount = ClientModelManager.getPendingModelCount();
-            if (pendingModelCount > 0) {
-                int loadedModelCount = ClientModelManager.getModelAssemblyMap().size();
-                int totalModelCount = loadedModelCount + pendingModelCount;
-                MutableComponent loadingText = Component.translatable("gui.sparkle_morpher.sync_hint.title").append(Component.translatable("gui.sparkle_morpher.sync_hint.loading_models", pendingModelCount, totalModelCount).withStyle(ChatFormatting.YELLOW));
-                renderSyncText(font, guiGraphics, loadingText, textX, textY, screenWidth);
-                guiGraphics.fill(barX, barY, barX + 150, barY + 10, -11184811);
-                int progressWidth = (int) (150.0f * ((float) loadedModelCount / totalModelCount));
-                guiGraphics.fill(barX, barY, barX + progressWidth, barY + 10, -256);
-            }
+        PopupState state = resolveState();
+        if (state == null) {
             return;
         }
 
-        MutableComponent prefixText = Component.translatable("gui.sparkle_morpher.sync_hint.title");
+        int x = anchorX(screenWidth) + safeInt(LoadingStateConfig.LOADING_STATE_OFFSET_X.get(), 0);
+        int y = anchorY(screenHeight) + safeInt(LoadingStateConfig.LOADING_STATE_OFFSET_Y.get(), 0);
+        x = Math.max(4, Math.min(screenWidth - WIDTH - 4, x));
+        y = Math.max(4, Math.min(screenHeight - HEIGHT - 4, y));
 
-        switch (syncStatus.getCurrentState()) {
-            case WAITING:
-                prefixText.append(Component.translatable("gui.sparkle_morpher.sync_hint.waiting").withStyle(ChatFormatting.AQUA));
-                break;
-            case LOADING:
-                prefixText.append(Component.translatable("gui.sparkle_morpher.sync_hint.loading").withStyle(ChatFormatting.GOLD));
-                break;
-            case PREPARING:
-                prefixText.append(Component.translatable("gui.sparkle_morpher.sync_hint.preparing").withStyle(ChatFormatting.LIGHT_PURPLE));
-                break;
-            case SYNCING:
-                if (syncStatus.getSyncedModels() == 0) {
-                    prefixText.append(Component.translatable("gui.sparkle_morpher.sync_hint.syncing").withStyle(ChatFormatting.RED));
-                } else {
-                    prefixText.append(Component.literal(String.format("%s/%s", syncStatus.getSyncedModels(), syncStatus.getTotalModels())).withStyle(ChatFormatting.GREEN));
-                    guiGraphics.fill(barX, barY, barX + 150, barY + 10, -11184811);
-                    int progressWidth = (int) (150.0f * ((float) syncStatus.getSyncedModels() / syncStatus.getTotalModels()));
-                    guiGraphics.fill(barX, barY, barX + progressWidth, barY + 10, -16711936);
-                }
-                break;
-        }
-        renderSyncText(font, guiGraphics, prefixText, textX, textY, screenWidth);
+        fill(g, x, y, WIDTH, HEIGHT, GLASS);
+        fill(g, x + 1, y + 1, WIDTH - 2, HEIGHT - 2, PANEL);
+        border(g, x, y, WIDTH, HEIGHT, BORDER);
+        drawStatusIcon(g, x + 11, y + 12, state.color(), state.kind());
+        g.text(font, state.title(), x + 32, y + 8, TEXT, false);
+        Component detail = trim(font, state.detail(), WIDTH - 42);
+        g.text(font, detail, x + 32, y + 21, MUTED, false);
+        drawProgress(g, x + 32, y + 34, WIDTH - 44, 3, state.progress(), state.color());
     }
 
-    private void renderSyncText(Font font, GuiGraphicsExtractor guiGraphics, MutableComponent textComponent, int baseX, int textY, int screenWidth) {
-        int drawX;
-        int textWidth = font.width(textComponent);
-
-        drawX = switch (LoadingStateConfig.LOADING_STATE_POSITION.get()) {
-            case TOP_LEFT, BOTTOM_LEFT -> baseX;
-            case TOP_CENTER, BOTTOM_CENTER -> (screenWidth - textWidth) / 2;
-            case TOP_RIGHT, BOTTOM_RIGHT -> baseX - textWidth;
+    private static PopupState resolveState() {
+        ClientModelManager.SyncStatus syncStatus = ClientModelManager.getSyncStatus();
+        int pending = ClientModelManager.getPendingModelCount();
+        long terminalSince = syncStatus.getTerminalSinceMillis();
+        if (terminalSince > 0L) {
+            int seconds = safeInt(LoadingStateConfig.LOADING_STATE_AUTO_HIDE_SECONDS.get(), 4);
+            if (System.currentTimeMillis() - terminalSince > seconds * 1000L) {
+                return null;
+            }
+            if (syncStatus.getMessage() != null) {
+                return new PopupState(Kind.FAILURE,
+                        Component.translatable("gui.sparkle_morpher.sync_hint.failed"),
+                        syncStatus.getMessage(),
+                        RED,
+                        1.0f);
+            }
+            int total = Math.max(0, syncStatus.getTotalModels());
+            return new PopupState(Kind.SUCCESS,
+                    Component.translatable("gui.sparkle_morpher.sync_hint.success"),
+                    Component.translatable("gui.sparkle_morpher.sync_hint.completed_models", total),
+                    GREEN,
+                    1.0f);
+        }
+        if (pending > 0) {
+            int loaded = ClientModelManager.getModelAssemblyMap().size();
+            int total = Math.max(1, loaded + pending);
+            return new PopupState(Kind.ACTIVE,
+                    Component.translatable("gui.sparkle_morpher.sync_hint.loading"),
+                    Component.translatable("gui.sparkle_morpher.sync_hint.loading_models_precise", loaded, total, pending),
+                    GOLD,
+                    (float) loaded / total);
+        }
+        return switch (syncStatus.getCurrentState()) {
+            case WAITING -> new PopupState(Kind.ACTIVE,
+                    Component.translatable("gui.sparkle_morpher.sync_hint.waiting"),
+                    Component.translatable("gui.sparkle_morpher.sync_hint.waiting_detail"),
+                    BLUE,
+                    0.0f);
+            case LOADING -> new PopupState(Kind.ACTIVE,
+                    Component.translatable("gui.sparkle_morpher.sync_hint.loading"),
+                    Component.translatable("gui.sparkle_morpher.sync_hint.loading_detail"),
+                    GOLD,
+                    0.18f);
+            case PREPARING -> new PopupState(Kind.ACTIVE,
+                    Component.translatable("gui.sparkle_morpher.sync_hint.preparing"),
+                    Component.translatable("gui.sparkle_morpher.sync_hint.preparing_detail"),
+                    BLUE,
+                    0.34f);
+            case SYNCING -> {
+                int total = Math.max(1, syncStatus.getTotalModels());
+                int synced = Math.max(0, syncStatus.getSyncedModels());
+                yield new PopupState(Kind.ACTIVE,
+                        Component.translatable("gui.sparkle_morpher.sync_hint.syncing"),
+                        Component.translatable("gui.sparkle_morpher.sync_hint.syncing_models", synced, total),
+                        GREEN,
+                        (float) synced / total);
+            }
+            case IDLE -> null;
         };
-        guiGraphics.text(font, textComponent, drawX, textY, TEXT_COLOR);
+    }
+
+    private static int anchorX(int screenWidth) {
+        return switch (LoadingStateConfig.LOADING_STATE_POSITION.get()) {
+            case TOP_LEFT, BOTTOM_LEFT -> 10;
+            case TOP_CENTER, BOTTOM_CENTER -> (screenWidth - WIDTH) / 2;
+            case TOP_RIGHT, BOTTOM_RIGHT -> screenWidth - WIDTH - 10;
+        };
+    }
+
+    private static int anchorY(int screenHeight) {
+        return switch (LoadingStateConfig.LOADING_STATE_POSITION.get()) {
+            case TOP_LEFT, TOP_CENTER, TOP_RIGHT -> 10;
+            case BOTTOM_LEFT, BOTTOM_CENTER, BOTTOM_RIGHT -> screenHeight - HEIGHT - 10;
+        };
+    }
+
+    private static Component trim(Font font, Component component, int maxWidth) {
+        String text = component.getString();
+        if (font.width(text) <= maxWidth) {
+            return component;
+        }
+        String ellipsis = "...";
+        int keep = text.length();
+        while (keep > 0 && font.width(text.substring(0, keep) + ellipsis) > maxWidth) {
+            keep--;
+        }
+        return Component.literal(text.substring(0, Math.max(0, keep)) + ellipsis);
+    }
+
+    private static void drawProgress(GuiGraphicsExtractor g, int x, int y, int w, int h, float progress, int color) {
+        fill(g, x, y, w, h, TRACK);
+        int fillW = Math.max(0, Math.min(w, Math.round(w * progress)));
+        if (fillW > 0) {
+            fill(g, x, y, fillW, h, color);
+        }
+    }
+
+    private static void drawStatusIcon(GuiGraphicsExtractor g, int x, int y, int color, Kind kind) {
+        fill(g, x, y, 14, 14, 0x55303030);
+        border(g, x, y, 14, 14, color);
+        int u = switch (kind) {
+            case ACTIVE -> 80;
+            case SUCCESS -> 112;
+            case FAILURE -> 64;
+        };
+        int v = kind == Kind.ACTIVE ? 0 : kind == Kind.SUCCESS ? 48 : 32;
+        g.blit(MODEL_PANEL_ICONS, x - 1, y - 1, x + 15, y + 15, u / 128.0f, (u + 16) / 128.0f, v / 64.0f, (v + 16) / 64.0f);
+    }
+
+    private static void fill(GuiGraphicsExtractor g, int x, int y, int w, int h, int color) {
+        g.fillGradient(x, y, x + w, y + h, color, color);
+    }
+
+    private static void border(GuiGraphicsExtractor g, int x, int y, int w, int h, int color) {
+        fill(g, x, y, w, 1, color);
+        fill(g, x, y + h - 1, w, 1, color);
+        fill(g, x, y, 1, h, color);
+        fill(g, x + w - 1, y, 1, h, color);
+    }
+
+    private static int safeInt(Integer value, int fallback) {
+        return value == null ? fallback : value;
+    }
+
+    private record PopupState(Kind kind, Component title, Component detail, int color, float progress) {}
+
+    private enum Kind {
+        ACTIVE,
+        SUCCESS,
+        FAILURE
     }
 }

@@ -102,7 +102,7 @@ public abstract class OptionScreen extends Screen {
             rowAreaLeft = panelLeft;
             rowAreaTop = panelTop + 6 + 18;
             rowAreaRight = computeRowAreaRight();
-            rowAreaBottom = panelBottom - 60;
+            rowAreaBottom = panelBottom - footerReservedHeight();
         } else if (compactTabs) {
             tabAreaLeft = panelLeft;
             tabAreaRight = panelRight;
@@ -112,17 +112,17 @@ public abstract class OptionScreen extends Screen {
             rowAreaLeft = panelLeft;
             rowAreaTop = tabAreaBottom + 4;
             rowAreaRight = computeRowAreaRight();
-            rowAreaBottom = panelBottom - 60;
+            rowAreaBottom = panelBottom - footerReservedHeight();
         } else {
             tabAreaLeft = panelLeft;
             tabAreaTop = panelTop + 6 + 18;
             tabAreaRight = panelLeft + 110;
-            tabAreaBottom = panelBottom - 60;
+            tabAreaBottom = panelBottom - footerReservedHeight();
 
             rowAreaLeft = panelLeft + 110 + 6;
             rowAreaTop = panelTop + 6 + 18;
             rowAreaRight = computeRowAreaRight();
-            rowAreaBottom = panelBottom - 60;
+            rowAreaBottom = panelBottom - footerReservedHeight();
         }
 
         tabContentHeight = 0;
@@ -152,18 +152,25 @@ public abstract class OptionScreen extends Screen {
         tabScrollOffset = 0;
         tabScrollDisplay = 0;
 
-        int footerY = panelBottom - 56;
-        int btnW = 70;
-        int btnH = 20;
-        int gap = 4;
-        cancelBtn = new FooterButton(panelRight - btnW, footerY, btnW, btnH, Component.translatable("gui.sparkle_morpher.config.cancel"), this::onCancel);
-        saveBtn = new FooterButton(cancelBtn.getX() - btnW - gap, footerY, btnW, btnH, Component.translatable("gui.sparkle_morpher.config.save"), this::onSave);
-        applyBtn = new FooterButton(saveBtn.getX() - btnW - gap, footerY, btnW, btnH, Component.translatable("gui.sparkle_morpher.config.apply"), this::onApply);
-        undoBtn = new FooterButton(panelLeft, footerY, btnW, btnH, Component.translatable("gui.sparkle_morpher.config.undo"), this::onUndo);
-        addRenderableWidget(undoBtn);
-        addRenderableWidget(applyBtn);
-        addRenderableWidget(saveBtn);
-        addRenderableWidget(cancelBtn);
+        if (showFooterButtons()) {
+            int footerY = panelBottom - 56;
+            int btnW = RoulettePanelStyle.ICON;
+            int btnH = RoulettePanelStyle.ICON;
+            int gap = 6;
+            cancelBtn = new FooterButton(panelRight - btnW, footerY, btnW, btnH, Component.translatable("gui.sparkle_morpher.config.cancel"), this::onCancel, RoulettePanelStyle.Glyph.CANCEL);
+            saveBtn = new FooterButton(cancelBtn.getX() - btnW - gap, footerY, btnW, btnH, Component.translatable("gui.sparkle_morpher.config.save"), this::onSave, RoulettePanelStyle.Glyph.SAVE);
+            applyBtn = new FooterButton(saveBtn.getX() - btnW - gap, footerY, btnW, btnH, Component.translatable("gui.sparkle_morpher.config.apply"), this::onApply, RoulettePanelStyle.Glyph.APPLY);
+            undoBtn = new FooterButton(panelLeft, footerY, btnW, btnH, Component.translatable("gui.sparkle_morpher.config.undo"), this::onUndo, RoulettePanelStyle.Glyph.RELOAD);
+            addRenderableWidget(undoBtn);
+            addRenderableWidget(applyBtn);
+            addRenderableWidget(saveBtn);
+            addRenderableWidget(cancelBtn);
+        } else {
+            cancelBtn = null;
+            saveBtn = null;
+            applyBtn = null;
+            undoBtn = null;
+        }
 
         if (!groups.isEmpty()) {
             OptionGroup toSelect = groups.get(0);
@@ -192,8 +199,16 @@ public abstract class OptionScreen extends Screen {
         return panelRight;
     }
 
+    protected int footerReservedHeight() {
+        return showFooterButtons() ? 60 : 12;
+    }
+
     protected boolean shouldUseCompactTabs() {
         return this.width < 500;
+    }
+
+    protected boolean showFooterButtons() {
+        return true;
     }
 
     protected boolean showTabs() {
@@ -271,12 +286,12 @@ public abstract class OptionScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
         GuiGraphicsExtractor g = extractor;
-        extractTransparentBackground(extractor);
+        g.fill(0, 0, this.width, this.height, RoulettePanelStyle.BG);
 
         renderPanelBackdrop(g);
 
-        g.fill(panelLeft, panelTop, panelRight, panelTop + 18, 0x90000000);
-        g.text(this.font, this.title, panelLeft + 6, panelTop + 5, 0xFFFFFFFF, false);
+        g.fill(panelLeft, panelTop, panelRight, panelTop + 18, RoulettePanelStyle.PANEL_ACTIVE);
+        g.text(this.font, this.title, panelLeft + 6, panelTop + 5, RoulettePanelStyle.TEXT, false);
 
         long now = System.nanoTime();
         if (lastFrameNanos == 0L) lastFrameNanos = now;
@@ -304,10 +319,11 @@ public abstract class OptionScreen extends Screen {
         }
 
         boolean dirty = anyDirty();
-        applyBtn.active = dirty;
-        undoBtn.active = activeGroup != null && activeGroup.isDirty();
+        if (applyBtn != null) applyBtn.active = dirty;
+        if (undoBtn != null) undoBtn.active = activeGroup != null && activeGroup.isDirty();
 
         super.extractRenderState(extractor, mouseX, mouseY, partialTick);
+        renderHeaderActions(g, mouseX, mouseY, partialTick);
 
         if (!tabButtons.isEmpty()) {
             boolean inTabArea = mouseX >= tabAreaLeft && mouseX < tabAreaRight && mouseY >= tabAreaTop && mouseY < tabAreaBottom;
@@ -354,6 +370,9 @@ public abstract class OptionScreen extends Screen {
     protected void renderExtras(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
     }
 
+    protected void renderHeaderActions(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+    }
+
     protected void collectBlurRegions(List<int[]> out) {
         out.add(new int[]{panelLeft, panelTop, panelRight - panelLeft, 18});
         int tabScroll = Math.round(tabScrollDisplay);
@@ -396,8 +415,7 @@ public abstract class OptionScreen extends Screen {
     }
 
     private void renderPanelBackdrop(GuiGraphicsExtractor g) {
-        // Blur GUI was retired alongside the Modern/Classic mode split;
-        // the panel currently renders without a blurred backdrop.
+        RoulettePanelStyle.glassPanel(g, panelLeft, panelTop, panelRight - panelLeft, panelBottom - panelTop);
     }
 
     private void renderRowScrollbar(GuiGraphicsExtractor g) {
@@ -472,6 +490,9 @@ public abstract class OptionScreen extends Screen {
             updateTabScrollFromMouse(event.x(), event.y());
             return true;
         }
+        if (headerMouseClicked(event, flag)) {
+            return true;
+        }
         if (event.x() >= tabAreaLeft && event.x() < tabAreaRight && event.y() >= tabAreaTop && event.y() < tabAreaBottom) {
             double adjX = compactTabs ? event.x() + tabScrollDisplay : event.x();
             double adjY = compactTabs ? event.y() : event.y() + tabScrollDisplay;
@@ -494,6 +515,10 @@ public abstract class OptionScreen extends Screen {
             return true;
         }
         return super.mouseClicked(event, flag);
+    }
+
+    protected boolean headerMouseClicked(MouseButtonEvent event, boolean flag) {
+        return false;
     }
 
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {

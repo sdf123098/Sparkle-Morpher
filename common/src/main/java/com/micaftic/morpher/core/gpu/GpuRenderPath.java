@@ -134,7 +134,7 @@ public final class GpuRenderPath {
         ByteBuffer boneBuf = mesh.perFrameBoneBuffer;
         boneBuf.clear();
 
-        if (GeneralConfig.safeGet(GeneralConfig.USE_NATIVE_SIMD_RENDERER, false) && AccelerationCapability.isLoaded()) {
+        if (GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE) != GeneralConfig.NativeSimdPolicy.OFF && AccelerationCapability.isLoaded()) {
             if (!computeBoneMatricesNative(model, mesh, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
                 GpuDebugLog.warn("frame={} native bone matrices failed; using Java fallback bones={} meshPointer={} boneParamsLen={}",
                         frameId, model.bakedBones.size(), mesh.pointer, boneParams == null ? -1 : boneParams.length);

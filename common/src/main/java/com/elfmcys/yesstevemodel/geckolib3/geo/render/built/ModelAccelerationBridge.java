@@ -6,6 +6,8 @@ final class ModelAccelerationBridge {
     private ModelAccelerationBridge() {
     }
 
+    static native int nGetAbiVersion();
+
     static native long nInitModelCache(ByteBuffer buffer);
 
     static native void nDestroyModelCache(long handle);

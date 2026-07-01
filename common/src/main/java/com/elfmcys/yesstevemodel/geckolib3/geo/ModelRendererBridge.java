@@ -22,6 +22,7 @@ import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import com.micaftic.morpher.core.gpu.IrisRenderPath;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.RenderBackendDecision;
+import com.micaftic.morpher.core.render.NativeSimdValidator;
 import com.micaftic.morpher.core.vector.JdkVectorModelMath;
 import com.micaftic.morpher.core.vector.VectorApiCapability;
 
@@ -55,12 +56,14 @@ public class ModelRendererBridge {
         // Submit-based world renders must keep the normal geometry path so the
         // entity still reaches the feature/shadow pipeline.
         boolean translucentTexture = model.isTranslucentTexture(textureIndex);
-        boolean useNativeSimdRenderer = GeneralConfig.safeGet(GeneralConfig.USE_NATIVE_SIMD_RENDERER, false);
-        RenderBackendDecision backend = RenderBackendDecision.choose(model, allowDirectGpuRenderer, translucentTexture, disableGlow, textureLocation, useNativeSimdRenderer);
-        GpuDebugLog.verbose("entry texture={} allowGpu={} backend={} reason={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdCfg={} nativeLoaded={} nativeReason={}",
+        GeneralConfig.NativeSimdPolicy nativePolicy = GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE);
+        RenderBackendDecision backend = RenderBackendDecision.choose(model, allowDirectGpuRenderer, translucentTexture, disableGlow, textureLocation, nativePolicy);
+        GpuDebugLog.verbose("entry texture={} allowGpu={} backend={} reason={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdPolicy={} validationMode={} nativeLoaded={} nativeReason={}",
                 textureLocation, allowDirectGpuRenderer, backend.backend, backend.reason, translucentTexture, disableGlow, shaderPackInUse,
                 isPreview, ModelPreviewRenderer.isFirstPerson(), SubmitRenderContext.get() != null, ModelPreviewRenderer.isWorldRender(),
-                GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), GeneralConfig.USE_GPU_RENDERER.get(), useNativeSimdRenderer, AccelerationCapability.isLoaded(), AccelerationCapability.getReason());
+                GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), GeneralConfig.USE_GPU_RENDERER.get(), nativePolicy,
+                GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF),
+                AccelerationCapability.isLoaded(), AccelerationCapability.getReason());
         if (backend.backend == RenderBackendDecision.Backend.GPU) {
             if (shaderPackInUse) {
                 if (IrisRenderPath.tryRender(model, pose, boneParams, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation)) {
@@ -79,6 +82,10 @@ public class ModelRendererBridge {
 
         if (backend.backend == RenderBackendDecision.Backend.NATIVE_SIMD) { // WIP: SIMD MODEL RENDER
             GpuDebugLog.verbose("entry rendered through native SIMD texture={} partMask={}", textureLocation, renderPartMask);
+            // Phase 2: run validation diagnostics (may force Java for the session
+            // under STRICT_FALLBACK, or throw under CRASH_TEST). Does not change the
+            // rendered path under LOG_MISMATCH.
+            NativeSimdValidator.onNativeSimdRender(model, boneParams, renderPartMask, textureLocation);
             nativeRenderModel(
                     buffer,
                     pose,
@@ -95,8 +102,8 @@ public class ModelRendererBridge {
                     isPreview
             );
         } else {
-            GpuDebugLog.verbose("entry rendered through Java model path texture={} nativeSimdCfg={} vectorCfg={} vectorAvailable={} vectorReason={} translucent={} preview={} firstPerson={} compat={} disableGlow={}",
-                    textureLocation, useNativeSimdRenderer,
+            GpuDebugLog.verbose("entry rendered through Java model path texture={} nativeSimdPolicy={} vectorCfg={} vectorAvailable={} vectorReason={} translucent={} preview={} firstPerson={} compat={} disableGlow={}",
+                    textureLocation, nativePolicy,
                     GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false),
                     VectorApiCapability.isAvailable(), VectorApiCapability.getReason(),
                     translucentTexture, isPreview, ModelPreviewRenderer.isFirstPerson(),
@@ -171,7 +178,7 @@ public class ModelRendererBridge {
         if (mesh.bakedBones == null || mesh.bakedBones.isEmpty()) return;
         int boneCount = mesh.bakedBones.size();
 
-        // TODO: 淇京GC澹撳姏
+        // TODO: reduce GC pressure.
         RenderScratch scratch = FALLBACK_SCRATCH.get();
         scratch.ensureBoneCapacity(boneCount);
 
@@ -187,7 +194,9 @@ public class ModelRendererBridge {
         Matrix4f[] boneLocalTransforms = scratch.boneLocalTransforms;
         boolean[] boneVisible = scratch.boneVisible;
         boolean[] boneComputed = scratch.boneComputed;
-        boolean useJavaVector = GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false) && VectorApiCapability.isAvailable();
+        boolean javaVectorRequested = GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false);
+        VectorApiCapability.warnIfRequested(javaVectorRequested);
+        boolean useJavaVector = javaVectorRequested && VectorApiCapability.isAvailable();
         int[] boneOrder = mesh.bakedBoneOrder;
         if (boneOrder != null && boneOrder.length == boneCount) {
             for (int orderIndex = 0; orderIndex < boneCount; orderIndex++) {
@@ -223,7 +232,7 @@ public class ModelRendererBridge {
             globalBoneMat.set(rootPoseMat).mul(localBoneMat);
             projBoneMat.identity().mul(globalBoneMat);
 
-            // 娉曠窔鍏ㄥ煙鐭╅櫍
+            // Compute global normal matrix.
             localBoneMat.normal(localNormalMat);
             globalNormalMat.set(rootNormalMC).mul(localNormalMat);
 
@@ -389,6 +398,38 @@ public class ModelRendererBridge {
         return localMat;
     }
 
+    /**
+     * Phase 1.3: populate stateBuffer for locator bones (unk3 == 1.0F) using the
+     * same Java math as the fallback path, before direct Native SIMD rendering.
+     * Only locator bones and their ancestors are computed (recursive, cached), so
+     * the cost is small relative to the full model. Values written here match
+     * calculateBoneMatrixLinear exactly (model-local space, pre-inner-pivot).
+     */
+    private static void computeStateBufferForNative(GeoModel mesh, float[] boneParams, float[] stateBuffer, PoseStack.Pose pose) {
+        if (mesh.bakedBones == null || mesh.bakedBones.isEmpty() || stateBuffer == null || boneParams == null) return;
+        int boneCount = mesh.bakedBones.size();
+        if (boneCount == 0) return;
+        RenderScratch scratch = FALLBACK_SCRATCH.get();
+        scratch.ensureBoneCapacity(boneCount);
+        Matrix4f identityMat = scratch.identityMat.identity();
+        Arrays.fill(scratch.boneComputed, 0, boneCount, false);
+        int[] boneOrder = mesh.bakedBoneOrder;
+        if (boneOrder != null && boneOrder.length == boneCount) {
+            for (int idx : boneOrder) {
+                if (idx < 0 || idx >= boneCount) continue;
+                if (boneParams[idx * 12 + 11] == 1.0f) {
+                    calculateBoneMatrix(idx, mesh.bakedBones, boneParams, scratch.boneLocalTransforms, scratch.boneVisible, scratch.boneComputed, identityMat, stateBuffer);
+                }
+            }
+        } else {
+            for (int idx = 0; idx < boneCount; idx++) {
+                if (boneParams[idx * 12 + 11] == 1.0f) {
+                    calculateBoneMatrix(idx, mesh.bakedBones, boneParams, scratch.boneLocalTransforms, scratch.boneVisible, scratch.boneComputed, identityMat, stateBuffer);
+                }
+            }
+        }
+    }
+
     private static final float[] matrixTransferArray = new float[48];
     @SuppressWarnings("unused") // TODO: native writes vertices directly to VertexConsumer buffer
     public static void submitVertices(Object v, int vertexCount, ByteBuffer fBuf, ByteBuffer iBuf) {
@@ -418,6 +459,13 @@ public class ModelRendererBridge {
             float r, float g, float b, float a, boolean isPreview) {
 
         if (mesh.nativeModelHandle == 0) return;
+
+        // Phase 1.3: direct Native SIMD does not update stateBuffer. Run a targeted
+        // Java prepass for locator bones (unk3 == 1.0F) so held-item / backpack /
+        // elytra locator state matches the Java fallback. Only locator bones and
+        // their ancestors are computed, so the cost is small.
+        // See NATIVE_SIMD_26X_AGGRESSIVE_ROLLOUT_PLAN Phase 1.3.
+        computeStateBufferForNative(mesh, boneVertex, stateBuffer, pose);
 
         pose.pose().get(matrixTransferArray, 0);
         pose.normal().get(matrixTransferArray, 16);
