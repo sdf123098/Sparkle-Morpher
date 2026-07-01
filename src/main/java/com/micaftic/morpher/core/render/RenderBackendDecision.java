@@ -29,7 +29,7 @@ public final class RenderBackendDecision {
             boolean translucentTexture,
             boolean disableGlow,
             Object textureLocation,
-            boolean useNativeSimdRenderer
+            GeneralConfig.NativeSimdPolicy nativePolicy
     ) {
         boolean isPreview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
         boolean firstPerson = ModelPreviewRenderer.isFirstPerson();
@@ -44,58 +44,58 @@ public final class RenderBackendDecision {
             return new RenderBackendDecision(Backend.JAVA, "java fallback: graphics backend mode VANILLA_PIPELINE_ONLY");
         }
         if (backendMode == SmRenderBackendMode.DISABLED_GPU_ACCELERATION) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "raw OpenGL GPU acceleration disabled by backend mode");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "raw OpenGL GPU acceleration disabled by backend mode");
         }
         if (!SmGraphicsBackendDetector.isRawOpenGlAllowed()) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow,
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow,
                     "raw OpenGL disabled for mcBackend=" + graphicsBackend + " (" + SmGraphicsBackendDetector.reason() + ")");
         }
         if (!SmGraphicsBackendDetector.isOpenGlLegacyGpuRendererEnabled()) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow,
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow,
                     "OpenGL legacy GPU renderer config disabled; mcBackend=" + graphicsBackend);
         }
 
         if (!allowDirectGpuRenderer) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled by caller");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled by caller");
         }
         if (textureLocation == null) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu missing texture");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu missing texture");
         }
         if (model.bakedBones == null || model.bakedBones.isEmpty()) {
             return new RenderBackendDecision(Backend.JAVA, "java fallback: no baked bones");
         }
         if (translucentTexture) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu unsupported translucent texture");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu unsupported translucent texture");
         }
         if (disableGlow) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled by shaderpack glow compatibility");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled by shaderpack glow compatibility");
         }
         if (hasSubmitContext) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled inside submit render context");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled inside submit render context");
         }
         if (!worldRender) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled outside world render");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled outside world render");
         }
         if (isPreview) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled for preview");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled for preview");
         }
         if (firstPerson) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, true, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled for first person");
+            return nativeOrJava(nativePolicy, isPreview, true, translucentTexture, compatibilityRenderer, disableGlow, "gpu disabled for first person");
         }
         if (compatibilityRenderer) {
             return new RenderBackendDecision(Backend.JAVA, "java fallback: compatibility renderer enabled");
         }
         if (!gpuConfigured) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, false, disableGlow, "gpu config disabled");
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, false, disableGlow, "gpu config disabled");
         }
         if (!GpuCapability.isAvailable()) {
-            return nativeOrJava(useNativeSimdRenderer, isPreview, firstPerson, translucentTexture, false, disableGlow, "gpu unavailable: " + GpuCapability.getReason());
+            return nativeOrJava(nativePolicy, isPreview, firstPerson, translucentTexture, false, disableGlow, "gpu unavailable: " + GpuCapability.getReason());
         }
         return new RenderBackendDecision(Backend.GPU, OculusCompat.isShaderPackInUse() ? "gpu iris path" : "gpu direct path");
     }
 
     private static RenderBackendDecision nativeOrJava(
-            boolean useNativeSimdRenderer,
+            GeneralConfig.NativeSimdPolicy nativePolicy,
             boolean isPreview,
             boolean firstPerson,
             boolean translucentTexture,
@@ -103,9 +103,38 @@ public final class RenderBackendDecision {
             boolean disableGlow,
             String gpuReason
     ) {
-        if (!useNativeSimdRenderer) {
-            return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD config disabled");
+        // OFF: kill switch - always Java when the GPU path is not used.
+        if (nativePolicy == GeneralConfig.NativeSimdPolicy.OFF) {
+            return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD policy OFF");
         }
+
+        // AGGRESSIVE: prefer Native SIMD whenever the native runtime is loaded and
+        // the compatibility renderer is disabled, except documented unsafe cases
+        // kept on Java until validated (NATIVE_SIMD_26X_AGGRESSIVE_ROLLOUT_PLAN Phase 4).
+        if (nativePolicy == GeneralConfig.NativeSimdPolicy.AGGRESSIVE) {
+            if (compatibilityRenderer) {
+                return new RenderBackendDecision(Backend.JAVA, "java fallback: compatibility renderer enabled");
+            }
+            if (!AccelerationCapability.canRenderSimd()) {
+                return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD unavailable: " + AccelerationCapability.getReason());
+            }
+            if (isPreview) {
+                return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD disabled for preview (unvalidated)");
+            }
+            if (translucentTexture) {
+                return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD disabled for translucent texture (unvalidated)");
+            }
+            if (disableGlow) {
+                return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD disabled by shaderpack glow compatibility (unvalidated)");
+            }
+            // STRICT_FALLBACK validation can force Java at runtime; see NativeSimdValidator.
+            if (NativeSimdValidator.shouldForceJavaForSession()) {
+                return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD disabled by STRICT_FALLBACK validation");
+            }
+            return new RenderBackendDecision(Backend.NATIVE_SIMD, "native SIMD aggressive path: " + gpuReason);
+        }
+
+        // SAFE: keep the current 26.x conservative gates.
         if (isPreview) {
             return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD disabled for preview");
         }
@@ -124,6 +153,9 @@ public final class RenderBackendDecision {
         if (!AccelerationCapability.canRenderSimd()) {
             return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD unavailable: " + AccelerationCapability.getReason());
         }
-        return new RenderBackendDecision(Backend.NATIVE_SIMD, "native SIMD path: " + gpuReason);
+        if (NativeSimdValidator.shouldForceJavaForSession()) {
+            return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD disabled by STRICT_FALLBACK validation");
+        }
+        return new RenderBackendDecision(Backend.NATIVE_SIMD, "native SIMD safe path: " + gpuReason);
     }
 }

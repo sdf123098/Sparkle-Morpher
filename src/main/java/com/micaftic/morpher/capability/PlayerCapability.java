@@ -2,6 +2,7 @@ package com.micaftic.morpher.capability;
 
 import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingSyncBatch;
+import com.micaftic.morpher.capability.client.PlayerCapabilityClientStore;
 import com.micaftic.morpher.core.compat.bettercombat.BetterCombatCompat;
 import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
 import com.micaftic.morpher.client.entity.PlayerEntityFrameState;
@@ -26,7 +27,6 @@ import it.unimi.dsi.fastutil.objects.Object2FloatArrayMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayFIFOQueue;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -35,25 +35,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 public final class PlayerCapability extends CustomPlayerEntity {
 
-    private static final ConcurrentMap<UUID, PlayerCapability> STORE = new ConcurrentHashMap<>();
-
     public static Optional<PlayerCapability> get(Player player) {
-        if (!(player instanceof AbstractClientPlayer)) {
-            return Optional.empty();
-        }
-        UUID uuid = player.getUUID();
-        PlayerCapability existing = STORE.get(uuid);
-        if (existing != null && existing.entity == player) {
-            return Optional.of(existing);
-        }
-        PlayerCapability fresh = new PlayerCapability(player);
-        STORE.put(uuid, fresh);
-        return Optional.of(fresh);
+        return PlayerCapabilityClientStore.get(player);
     }
 
     public static Optional<PlayerCapability> get(Entity entity) {

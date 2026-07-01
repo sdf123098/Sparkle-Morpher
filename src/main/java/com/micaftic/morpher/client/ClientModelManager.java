@@ -1,5 +1,6 @@
 package com.micaftic.morpher.client;
 
+import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.audio.AudioTrackData;
@@ -25,8 +26,10 @@ import com.micaftic.morpher.resource.models.ModelPackData;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.DigestUtil;
 import com.micaftic.morpher.util.FileTypeUtil;
+import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.LocalModelSelectionStore;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
+import com.micaftic.morpher.util.NetworkOnlineDebugLog;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.util.YSMThreadPool;
 import com.micaftic.morpher.util.data.OrderedStringMap;
@@ -35,6 +38,7 @@ import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
 import net.minecraft.client.Minecraft;
+import com.micaftic.morpher.mixin.client.MinecraftAccessor;
 import java.util.concurrent.Executor;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.AbstractTexture;
@@ -42,6 +46,8 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -65,6 +71,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+
+@OnlyIn(Dist.CLIENT)
 public class ClientModelManager {
     private static int syncStep = 1;
     private static byte[] key1;
@@ -103,6 +111,8 @@ public class ClientModelManager {
     private static final SyncStatus syncState = new SyncStatus();
     private static volatile boolean isOysmServer = false;
     private static volatile boolean allowUpload = false;
+    private static volatile String selectedModelId;
+    private static volatile String selectedTextureId;
     private static volatile String selectedLocalOnlyModelId;
     private static volatile String selectedLocalOnlyTextureId;
 
@@ -141,28 +151,25 @@ public class ClientModelManager {
         defaultModelLoadAttempted = true;
         YesSteveModel.LOGGER.info("[SM] Loading builtin default model...");
         try {
-            // Resolve a known file inside the default model directory — Class.getResource()
-            // on a directory path returns null in JAR contexts (no guaranteed directory entry).
-            String anchorFile = "/assets/sparkle_morpher/builtin/default/ysm.json";
-            URL anchorUrl = YesSteveModel.class.getResource(anchorFile);
-            if (anchorUrl == null) {
-                YesSteveModel.LOGGER.error("[SM] Builtin default model not found in classpath: " + anchorFile);
+            String resourcePath = "/assets/sparkle_morpher/builtin/default";
+            URL resourceUrl = YesSteveModel.class.getResource(resourcePath);
+            if (resourceUrl == null) {
+                YesSteveModel.LOGGER.error("[SM] Builtin default model not found in classpath: " + resourcePath);
                 return;
             }
-            URI fileUri = anchorUrl.toURI();
-            Path filePath;
+            URI uri = resourceUrl.toURI();
+            Path defaultPath;
             FileSystem jarFs = null;
-            if ("jar".equals(fileUri.getScheme())) {
+            if ("jar".equals(uri.getScheme())) {
                 try {
-                    jarFs = FileSystems.getFileSystem(fileUri);
+                    jarFs = FileSystems.getFileSystem(uri);
                 } catch (FileSystemNotFoundException e) {
-                    jarFs = FileSystems.newFileSystem(fileUri, Collections.emptyMap());
+                    jarFs = FileSystems.newFileSystem(uri, Collections.emptyMap());
                 }
-                filePath = jarFs.getPath(anchorFile);
+                defaultPath = jarFs.getPath(resourcePath);
             } else {
-                filePath = Paths.get(fileUri);
+                defaultPath = Paths.get(uri);
             }
-            Path defaultPath = filePath.getParent();
 
             try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(defaultPath)) {
                 RawYsmModel rawModel = deserializer.deserialize();
@@ -284,7 +291,7 @@ public class ClientModelManager {
             boolean isAuth = buf.readVarInt() == 1;// isAuth
             int isCustomSkinModel = buf.readVarInt();// is default
 //            System.out.println("Received model hash: " + mHash + ", id: " + modelId + ", unk1: " + isAuth + ", unk2: " + isCustomSkinModel);
-            int version = buf.readVarInt(); // 閻庣敻?娑氳壘闁哄倸娲ｅ▎銏″緞鐟欏嫭寮撻柛鏃傚Т閻︽垿鎯冮崟顑熶線宕圭€ｅ墎绀夊☉?5535
+            int version = buf.readVarInt(); // 鐎甸€涚艾閺傚洣娆㈡径瑙勬弓閸旂姴鐦戦惃鍕侀崹瀣剁礉娑?5535
 
             ServerModelContext ctx = new ServerModelContext(hash1, hash2, modelId, isAuth, isCustomSkinModel, version);
             serverModels.put(ctx.uuid, ctx);
@@ -302,7 +309,7 @@ public class ClientModelManager {
                     updatedModelIds.add(modelId);
                     isModelReadyList.add(isAuth);
                 } else {
-                    // 闁告稒鍨濋懙鎴犵磽閹惧磭鎽?
+                    // 閸涙垝鑵戠紓鎾崇摠
                     modelPhraseExecutor.submit(() -> {
                         if (clientKey == null) return;
                         try {
@@ -565,7 +572,7 @@ public class ClientModelManager {
                 if (preview.getTexture() != null) {
                     Identifier loc = FileTypeUtil.getPackIconLocation(preview.getPath());
                     ((Executor) Minecraft.getInstance()).execute(() -> {
-                        Minecraft.getInstance().getTextureManager().release(loc);
+                        ((MinecraftAccessor) Minecraft.getInstance()).ysm$getTextureManager().release(loc);
                     });
                 }
             }
@@ -635,10 +642,12 @@ public class ClientModelManager {
     }
 
     public static boolean isSelectedLocalOnlyModel(String modelId) {
-        return modelId != null && modelId.equals(selectedLocalOnlyModelId) && isLocalOnlyModel(modelId);
+        return modelId != null && modelId.equals(selectedModelId) && isLocalOnlyModel(modelId);
     }
 
     public static void rememberSelectedModel(String modelId, String textureId) {
+        selectedModelId = modelId;
+        selectedTextureId = textureId;
         if (isLocalOnlyModel(modelId)) {
             selectedLocalOnlyModelId = modelId;
             selectedLocalOnlyTextureId = textureId;
@@ -652,17 +661,13 @@ public class ClientModelManager {
     /**
      * 恢复本地玩家之前选择的模型。
      * <p>
-     * 优先使用内存中的 selectedLocalOnlyModelId/selectedLocalOnlyTextureId，
-     * 如果内存中无有效选择（非仅本地模型场景），则从 LocalModelSelectionStore 文件读取。
-     * <p>
-     * 只恢复在本地 modelAssemblyMap 中仍然可用的模型。
-     * 在无模组服务器上，这意味着仅本地导入的模型可以被恢复；
-     * 在 BungeeCord 子服务器切换场景下（没有触发 resetSync），服务器同步的模型也可能仍在缓存中。
+     * 优先从内存中恢复，如果内存中的选择在断开 YSM 服务器后可能已不可用，
+     * 则从本地文件恢复持久化的选择。
      */
     public static void restorePersistedModelSelection() {
         // 1. 先尝试内存中的选择
-        String modelId = selectedLocalOnlyModelId;
-        String textureId = selectedLocalOnlyTextureId;
+        String modelId = selectedModelId;
+        String textureId = selectedTextureId;
 
         // 2. 如果内存中的选择不是仅本地模型（在断开YSM服务器后可能已不可用），尝试从文件恢复
         if (modelId == null || (!isLocalOnlyModel(modelId) && !modelAssemblyMap.containsKey(modelId))) {
@@ -690,7 +695,7 @@ public class ClientModelManager {
         // 6. 在渲染线程上应用
         ((Executor) Minecraft.getInstance()).execute(() -> {
             // 再次检查，防止在 execute 延迟期间选择已改变
-            if (!finalModelId.equals(selectedLocalOnlyModelId) && !isLocalOnlyModel(finalModelId) && !modelAssemblyMap.containsKey(finalModelId)) {
+            if (!finalModelId.equals(selectedModelId) && !isLocalOnlyModel(finalModelId) && !modelAssemblyMap.containsKey(finalModelId)) {
                 // 内存中的选择已经变了，且持久化的模型也不再可用，放弃恢复
                 return;
             }
@@ -701,19 +706,17 @@ public class ClientModelManager {
             PlayerCapability.get(player).ifPresent(cap -> {
                 if (!finalModelId.equals(cap.getModelId())) {
                     cap.initModelWithTexture(finalModelId, finalTextureId);
-                    rememberSelectedModel(finalModelId, finalTextureId);
                 }
             });
         });
     }
 
     /**
-     * 在无模组服务器上，每 tick 检查本地玩家是否需要恢复模型选择。
+     * 在无模组服务器（vanilla server）上，通过 tick 事件持续检测并恢复持久化的模型选择。
      * <p>
-     * 条件：当前不在 YSM 连接上（即服务器没有安装 YSM 模组），
-     * 且本地玩家的模型被重置为 "default"，但之前有持久化的非 default 选择。
-     * <p>
-     * 此方法设计为只触发一次恢复：恢复后 modelId 不再是 "default"，条件不再满足。
+     * 当玩家加入 vanilla 服务器时，模型会被重置为 default。
+     * 此方法在每个 tick 中检查：如果当前模型是 default 且有持久化的选择，
+     * 则自动恢复之前的模型。
      */
     public static void restorePersistedModelSelectionOnVanillaServer() {
         // 仅在无模组服务器上执行（YSM 连接未建立 = 服务器没有 YSM 模组）
@@ -740,8 +743,8 @@ public class ClientModelManager {
                 return;
             }
             cap.initModelWithTexture(modelId, textureId);
-            selectedLocalOnlyModelId = modelId;
-            selectedLocalOnlyTextureId = textureId;
+            selectedModelId = modelId;
+            selectedTextureId = textureId;
         });
     }
 
@@ -765,11 +768,29 @@ public class ClientModelManager {
             PlayerCapability.get(player).ifPresent(cap -> {
                 if (modelId.equals(cap.getModelId())) {
                     String textureId = cap.getCurrentTextureName();
-                    clearSelectedLocalOnlyModel();
+                    rememberSelectedModel(modelId, textureId);
                     NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(modelId, textureId));
                 }
             });
         }
+    }
+
+    public static void resendSelectedServerModel() {
+        String modelId = selectedModelId;
+        String textureId = selectedTextureId;
+        NetworkOnlineDebugLog.info("resendSelected: modelId={} textureId={} connected={}", modelId, textureId, NetworkHandler.isClientConnected());
+        if (modelId == null || modelId.isBlank() || textureId == null || isLocalOnlyModel(modelId) || !NetworkHandler.isClientConnected()) {
+            NetworkOnlineDebugLog.info("resendSelected: EARLY_RETURN (null/blank/localOnly/disconnected)");
+            return;
+        }
+        ((Executor) Minecraft.getInstance()).execute(() -> {
+            String currentModelId = selectedModelId;
+            String currentTextureId = selectedTextureId;
+            if (!modelId.equals(currentModelId) || currentTextureId == null || isLocalOnlyModel(modelId) || !modelAssemblyMap.containsKey(modelId)) {
+                return;
+            }
+            NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(modelId, currentTextureId));
+        });
     }
 
     public static void removeLocalModels(Collection<String> modelIds) {
@@ -784,6 +805,9 @@ public class ClientModelManager {
                 localModelSourcePaths.remove(modelId);
                 if (modelId.equals(selectedLocalOnlyModelId)) {
                     clearSelectedLocalOnlyModel();
+                }
+                if (modelId.equals(selectedModelId)) {
+                    clearSelectedModel();
                 }
                 modelLastUsedAt.remove(modelId);
                 gpuCacheTrimmedModels.remove(modelId);
@@ -903,7 +927,7 @@ public class ClientModelManager {
                 loadDirectoryModels(ServerModelManager.CUSTOM);
                 loadDirectoryModels(ServerModelManager.AUTH);
                 if (restoreSelection) {
-                    restoreSelectedLocalOnlyModel();
+                    restorePersistedModelSelection();
                 }
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to reload local model folders", e);
@@ -926,7 +950,7 @@ public class ClientModelManager {
             return model;
         }
 
-        loadDefaultModel();
+        // 鐟欙箑褰傛０鍕鏉?        loadDefaultModel();
         model = localModelContext;
         if (model != null) {
             touchAssembly(model);
@@ -1022,7 +1046,7 @@ public class ClientModelManager {
     }
 
     public static void onSyncConnected() {
-        if (Minecraft.getInstance().isLocalServer()) {
+        if (((MinecraftAccessor) Minecraft.getInstance()).ysm$isLocalServer()) {
             syncState.setState(SyncState.LOADING);
         } else {
             syncState.setState(SyncState.IDLE);
@@ -1061,7 +1085,7 @@ public class ClientModelManager {
                     Identifier location2 = FileTypeUtil.getPackIconLocation(packData.getPath());
                     ((Executor) Minecraft.getInstance()).execute(() -> {
                         iconTexture.doLoad();
-                        Minecraft.getInstance().getTextureManager().register(location2, iconTexture);
+                        ((MinecraftAccessor) Minecraft.getInstance()).ysm$getTextureManager().register(location2, iconTexture);
                     });
                 }
             }
@@ -1069,7 +1093,7 @@ public class ClientModelManager {
         for (ModelPackData packData : modelPackMap.values()) {
             if (!newPackMap.containsKey(packData.getPath()) && packData.getTexture() != null) {
                 Identifier location = FileTypeUtil.getPackIconLocation(packData.getPath());
-                ((Executor) Minecraft.getInstance()).execute(() -> Minecraft.getInstance().getTextureManager().release(location));
+                ((Executor) Minecraft.getInstance()).execute(() -> ((MinecraftAccessor) Minecraft.getInstance()).ysm$getTextureManager().release(location));
             }
         }
         modelPackMap = newPackMap;
@@ -1086,6 +1110,9 @@ public class ClientModelManager {
                     }
                     if (str.equals(selectedLocalOnlyModelId)) {
                         clearSelectedLocalOnlyModel();
+                    }
+                    if (str.equals(selectedModelId)) {
+                        clearSelectedModel();
                     }
                     ModelAssembly assembly = map.remove(str);
                     if (assembly != null) {
@@ -1104,6 +1131,9 @@ public class ClientModelManager {
                     localOnlyModelIds.remove(previousModelIds[i]);
                     if (previousModelIds[i].equals(selectedLocalOnlyModelId)) {
                         clearSelectedLocalOnlyModel();
+                    }
+                    if (previousModelIds[i].equals(selectedModelId)) {
+                        selectedModelId = updatedModelIds[i];
                     }
                     modelAssemblies[i] = map.remove(previousModelIds[i]);
                 }
@@ -1127,6 +1157,12 @@ public class ClientModelManager {
     private static void clearSelectedLocalOnlyModel() {
         selectedLocalOnlyModelId = null;
         selectedLocalOnlyTextureId = null;
+    }
+
+    private static void clearSelectedModel() {
+        selectedModelId = null;
+        selectedTextureId = null;
+        clearSelectedLocalOnlyModel();
     }
 
     private static void onModelDataReceived(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) throws Exception {
@@ -1374,7 +1410,7 @@ public class ClientModelManager {
                 syncState.syncedModels++;
                 int loaded = syncState.syncedModels;
                 if (loaded == syncState.totalModels) {
-                    syncState.setState(SyncState.IDLE);
+                    syncState.finishSuccess();
                 }
                 forEachGuiWidget(guiWidget -> {
                     guiWidget.onSyncProgress(syncState.getTotalModels(), loaded);
@@ -1385,12 +1421,16 @@ public class ClientModelManager {
     }
 
     private static void onSyncComplete() {
+        NetworkOnlineDebugLog.info("onSyncComplete: selectedModelId={} selectedTextureId={} assemblyMapSize={}",
+                selectedModelId, selectedTextureId, modelAssemblyMap.size());
         syncStep = 1;
         serverModels.clear();
         cachedModelHashes.clear();
 
         ((Executor) Minecraft.getInstance()).execute(() -> {
-            syncState.setState(SyncState.IDLE);
+            syncState.finishSuccess();
+            NetworkOnlineDebugLog.info("onSyncComplete: calling resendSelectedServerModel");
+            resendSelectedServerModel();
             forEachGuiWidget(IGuiWidget::onSyncComplete);
         });
     }
@@ -1405,7 +1445,7 @@ public class ClientModelManager {
 
     private static void onSyncError(@Nullable Object obj) {
         ((Executor) Minecraft.getInstance()).execute(() -> {
-            syncState.setState(SyncState.IDLE);
+            syncState.finishFailure(obj instanceof Component component ? component : null);
             forEachGuiWidget(guiWidget -> {
                 guiWidget.onSyncMessage(obj == null ? null : (Component) obj);
             });
@@ -1484,7 +1524,7 @@ public class ClientModelManager {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen != null) {
+        if (Minecraft.getInstance().screen != null) {
             return;
         }
         long now = System.currentTimeMillis();
@@ -1603,6 +1643,11 @@ public class ClientModelManager {
 
         private int syncedModels = -1;
 
+        private long terminalSinceMillis = 0L;
+
+        @Nullable
+        private Component message = null;
+
         public SyncState getCurrentState() {
             return this.currentState;
         }
@@ -1615,17 +1660,48 @@ public class ClientModelManager {
             return this.totalModels;
         }
 
+        public long getTerminalSinceMillis() {
+            return this.terminalSinceMillis;
+        }
+
+        @Nullable
+        public Component getMessage() {
+            return this.message;
+        }
+
         public void setState(SyncState syncState) {
             System.out.println("Sync state: " + syncState);
             this.currentState = syncState;
             this.totalModels = -1;
             this.syncedModels = -1;
+            this.terminalSinceMillis = 0L;
+            this.message = null;
         }
 
         public void startSyncing(int totalModels) {
             this.currentState = SyncState.SYNCING;
             this.totalModels = totalModels;
             this.syncedModels = 0;
+            this.terminalSinceMillis = 0L;
+            this.message = null;
+        }
+
+        public void finishSuccess() {
+            this.currentState = SyncState.IDLE;
+            if (this.totalModels < 0) {
+                this.totalModels = Math.max(0, this.syncedModels);
+            }
+            if (this.syncedModels < 0) {
+                this.syncedModels = this.totalModels;
+            }
+            this.terminalSinceMillis = System.currentTimeMillis();
+            this.message = null;
+        }
+
+        public void finishFailure(@Nullable Component message) {
+            this.currentState = SyncState.IDLE;
+            this.terminalSinceMillis = System.currentTimeMillis();
+            this.message = message;
         }
     }
 
@@ -1644,7 +1720,7 @@ public class ClientModelManager {
 
                 if (!cacheDir.exists() || !cacheDir.isDirectory()) {
                     if (callback != null) {
-                        callback.accept(new ExportResult(false, Component.literal("閻忓繑纰嶅﹢顓㈡偨閻旂鐏囧ù鐘侯唺缂嶅秶绱撻幘宕囨憼闁瑰瓨鐗滅槐锔?娑櫳戦弸鍐╃鐠烘亽浠氬☉鎾崇Т閻°劑宕? " + folder), "", "", 0));
+                        callback.accept(new ExportResult(false, Component.literal("鐏忔碍婀悽鐔稿灇娴犺缍嶇紓鎾崇摠閹存牜绱︾€涙ɑ鏋冩禒璺恒仚娑撳秴鐡ㄩ崷? " + folder), "", "", 0));
                     }
                     return;
                 }
@@ -1729,7 +1805,7 @@ public class ClientModelManager {
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Error during batch export", e);
                 if (callback != null) {
-                    callback.accept(new ExportResult(false, Component.literal("闁归潧缍婇崳铏?鐢靛帶閸ゎ厽娼婚崶鈹炬煠闁告瑦鍨归弫鎾寸▔閵夆晛娅㈤梺鎸庣懆椤? " + e.getMessage()), "", "", 0));
+                    callback.accept(new ExportResult(false, Component.literal("閹靛綊鍣虹€电厧鍤潻鍥┾柤閸欐垹鏁撴稉銉╁櫢闁挎瑨顕? " + e.getMessage()), "", "", 0));
                 }
             }
         });

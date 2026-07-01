@@ -650,7 +650,7 @@
   "gui.sparkle_morpher.upload_custom_folder.upload_one": "Загрузить",
   "gui.sparkle_morpher.url.donate": "Пожертвовать",
   "gui.sparkle_morpher.url.home": "Главная страница",
-  "key.category.sparkle_morpher": "Морфер Спарки",
+  "key.category.sparkle_morpher": "Морфер Спарки",
   "key.category.sparkle_morpher.keys": "Морфер Спарки",
   "key.sparkle_morpher.animation_roulette.desc": "Открыть рулетку анимаций",
   "key.sparkle_morpher.debug_animation.desc": "Открыть меню отладки анимаций",
@@ -778,5 +778,17 @@
   "gui.sparkle_morpher.model_panel.applied_model": "Применено: %s",
   "gui.sparkle_morpher.model_panel.add_site": "Добавить сайт",
   "gui.sparkle_morpher.model_panel.clear_selection": "Снять выделение",
-  "gui.sparkle_morpher.model_panel.settings": "Настройки"
+  "gui.sparkle_morpher.model_panel.settings": "Настройки",
+  "gui.sparkle_morpher.sync_hint.failed": "Model loading failed",
+  "gui.sparkle_morpher.sync_hint.success": "Model loading complete",
+  "gui.sparkle_morpher.sync_hint.completed_models": "Loaded %s models",
+  "gui.sparkle_morpher.sync_hint.loading_models_precise": "Loading %1/%2 models, %3 pending",
+  "gui.sparkle_morpher.sync_hint.waiting_detail": "Waiting for server model list",
+  "gui.sparkle_morpher.sync_hint.loading_detail": "Receiving model data",
+  "gui.sparkle_morpher.sync_hint.preparing_detail": "Preparing model cache",
+  "gui.sparkle_morpher.sync_hint.syncing_models": "Syncing %1/%2 models",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_position": "Loading popup position",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x": "Loading popup X offset",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y": "Loading popup Y offset",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide": "Loading popup auto-hide"
 }

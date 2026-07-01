@@ -3,6 +3,8 @@ plugins {
     id "net.neoforged.moddev" version "2.0.141"
 }
 
+apply from: rootProject.file('gradle/verify-native-abi.gradle')
+
 group = mod_group_id
 version = mod_version
 
@@ -163,7 +165,7 @@ processResources {
 
 
 dependencies {
-    // zstd-jni dependency removed: project now uses YSM native â†’ pure-Java ZstdUtil â†’ raw-frame fallback chain.
+    // zstd-jni dependency removed: project now uses YSM native â†?pure-Java ZstdUtil â†?raw-frame fallback chain.
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 }

@@ -650,7 +650,7 @@
   "gui.sparkle_morpher.upload_custom_folder.upload_one": "Unggah",
   "gui.sparkle_morpher.url.donate": "Donasi",
   "gui.sparkle_morpher.url.home": "Halaman Utama",
-  "key.category.sparkle_morpher": "Pengubah Bentuk Sparkle",
+  "key.category.sparkle_morpher": "Pengubah Bentuk Sparkle",
   "key.category.sparkle_morpher.keys": "Pengubah Bentuk Sparkle",
   "key.sparkle_morpher.animation_roulette.desc": "Buka Rolet Animasi",
   "key.sparkle_morpher.debug_animation.desc": "Buka Permasalahan Animasi",
@@ -777,5 +777,17 @@
   "gui.sparkle_morpher.model_panel.setting_group.misc": "Misc",
   "gui.sparkle_morpher.model_panel.applied_model": "Applied %s",
   "gui.sparkle_morpher.model_panel.add_site": "Add site",
-  "gui.sparkle_morpher.model_panel.clear_selection": "Clear selection"
+  "gui.sparkle_morpher.model_panel.clear_selection": "Clear selection",
+  "gui.sparkle_morpher.sync_hint.failed": "Model loading failed",
+  "gui.sparkle_morpher.sync_hint.success": "Model loading complete",
+  "gui.sparkle_morpher.sync_hint.completed_models": "Loaded %s models",
+  "gui.sparkle_morpher.sync_hint.loading_models_precise": "Loading %1/%2 models, %3 pending",
+  "gui.sparkle_morpher.sync_hint.waiting_detail": "Waiting for server model list",
+  "gui.sparkle_morpher.sync_hint.loading_detail": "Receiving model data",
+  "gui.sparkle_morpher.sync_hint.preparing_detail": "Preparing model cache",
+  "gui.sparkle_morpher.sync_hint.syncing_models": "Syncing %1/%2 models",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_position": "Loading popup position",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x": "Loading popup X offset",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y": "Loading popup Y offset",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide": "Loading popup auto-hide"
 }
