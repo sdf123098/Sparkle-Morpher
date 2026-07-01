@@ -1,5 +1,8 @@
 package com.micaftic.morpher.capability;
 
+import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.capability.fabric.PlayerCapabilityImpl;
+import com.micaftic.morpher.capability.fabric.client.PlayerCapabilityClientStore;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingSyncBatch;
 import net.fabricmc.api.EnvType;
@@ -44,27 +47,12 @@ import java.util.concurrent.ConcurrentMap;
 @Environment(EnvType.CLIENT)
 public final class PlayerCapability extends CustomPlayerEntity {
 
-    private static final ConcurrentMap<UUID, PlayerCapability> STORE = new ConcurrentHashMap<>();
-
     public static Optional<PlayerCapability> get(Player player) {
-        if (!(player instanceof AbstractClientPlayer)) {
-            return Optional.empty();
-        }
-        UUID uuid = player.getUUID();
-        PlayerCapability existing = STORE.get(uuid);
-        if (existing != null && existing.entity == player) {
-            return Optional.of(existing);
-        }
-        PlayerCapability fresh = new PlayerCapability(player);
-        STORE.put(uuid, fresh);
-        return Optional.of(fresh);
+        return PlayerCapabilityImpl.get(player);
     }
 
     public static Optional<PlayerCapability> get(Entity entity) {
-        if (!(entity instanceof Player player)) {
-            return Optional.empty();
-        }
-        return get(player);
+        return PlayerCapabilityImpl.get(entity);
     }
 
     private final Int2ReferenceOpenHashMap<MolangVarHolder> molangVarsMap;
