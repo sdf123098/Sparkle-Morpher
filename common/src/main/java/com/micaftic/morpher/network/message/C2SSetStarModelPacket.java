@@ -1,6 +1,8 @@
 package com.micaftic.morpher.network.message;
 
 import com.micaftic.morpher.capability.StarModelsCapability;
+import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.util.PlayerStarModelsStore;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import com.micaftic.morpher.core.api.network.PacketContext;
@@ -52,6 +54,8 @@ public class C2SSetStarModelPacket {
             } else {
                 cap.removeModel(message.modelId);
             }
+            PlayerStarModelsStore.save(sender, cap);
+            NetworkHandler.sendToClientPlayer(new S2CSyncStarModelsPacket(cap.getStarModels()), sender);
         });
     }
 }
