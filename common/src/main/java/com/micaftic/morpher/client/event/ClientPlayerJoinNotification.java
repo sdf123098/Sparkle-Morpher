@@ -61,5 +61,6 @@ public final class ClientPlayerJoinNotification {
             }
             ClientModelManager.resetSync();
         }
+        ClientModelManager.reloadLocalModels(null);
     }
 }
