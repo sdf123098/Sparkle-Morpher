@@ -17,6 +17,10 @@ public final class ClientTickEvent {
 
     private static int refreshRate = 60;
 
+    private static final int REFRESH_RATE_UPDATE_INTERVAL_TICKS = 20;
+
+    private static final int OBJECT_POOL_CLEANUP_INTERVAL_TICKS = 10;
+
     private ClientTickEvent() {
     }
 
@@ -35,8 +39,12 @@ public final class ClientTickEvent {
         ClientModelManager.flushPendingModels();
         ClientModelManager.restorePersistedModelSelectionOnVanillaServer();
         ClientModelManager.trimUnusedGpuCaches();
-        ObjectPool.cleanup();
-        refreshRate = client.getWindow().getRefreshRate();
+        if (tickCount % OBJECT_POOL_CLEANUP_INTERVAL_TICKS == 0) {
+            ObjectPool.cleanup();
+        }
+        if (tickCount % REFRESH_RATE_UPDATE_INTERVAL_TICKS == 0) {
+            refreshRate = client.getWindow().getRefreshRate();
+        }
         LocalPlayer localPlayer = client.player;
         if (localPlayer != null) {
             PlayerCapability.get(localPlayer).ifPresent(cap -> cap.tickAnimations());

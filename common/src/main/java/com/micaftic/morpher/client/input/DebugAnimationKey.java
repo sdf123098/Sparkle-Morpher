@@ -22,14 +22,25 @@ public final class DebugAnimationKey {
             return;
         }
         ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
-            if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, KEY_MAPPING)) {
-                if (!AnimationDebugOverlay.isDebugActive()) {
-                    AnimationDebugOverlay.tryUpdateFromHitResult();
-                } else {
-                    AnimationDebugOverlay.clearActiveModel();
-                }
+            if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, modifiers, KEY_MAPPING)) {
+                handlePress();
             }
             return EventResult.pass();
         });
+        ClientRawInputEvent.MOUSE_CLICKED_PRE.register((client, button, action, modifiers) -> {
+            if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && action == 1 && InputUtil.isMousePressed(button, KEY_MAPPING)) {
+                handlePress();
+                return EventResult.interruptFalse();
+            }
+            return EventResult.pass();
+        });
+    }
+
+    private static void handlePress() {
+        if (!AnimationDebugOverlay.isDebugActive()) {
+            AnimationDebugOverlay.tryUpdateFromHitResult();
+        } else {
+            AnimationDebugOverlay.clearActiveModel();
+        }
     }
 }

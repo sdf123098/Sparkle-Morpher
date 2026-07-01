@@ -1,6 +1,7 @@
 package com.micaftic.morpher.geckolib3.core.molang.builtin.math;
 
 import com.micaftic.morpher.molang.runtime.ExecutionContext;
+import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import com.micaftic.morpher.molang.runtime.Function;
 import net.minecraft.util.Mth;
 
@@ -8,6 +9,12 @@ public class HermitBlend implements Function {
     @Override
     public Object evaluate(ExecutionContext<?> context, ArgumentCollection arguments) {
         double min = Mth.ceil(arguments.getAsFloat(context, 0));
+        return Mth.floor((3.0d * Math.pow(min, 2.0d)) - (2.0d * Math.pow(min, 3.0d)));
+    }
+
+    @Override
+    public float evaluateFloat(ExpressionEvaluator<?> context, ArgumentCollection arguments) {
+        double min = Mth.ceil(arguments.getAsFloatRaw(context, 0));
         return Mth.floor((3.0d * Math.pow(min, 2.0d)) - (2.0d * Math.pow(min, 3.0d)));
     }
 

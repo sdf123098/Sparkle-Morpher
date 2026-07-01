@@ -235,6 +235,24 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
                     ? evalFloat(te.trueExpression())
                     : evalFloat(te.falseExpression());
         }
+        // 函数调用走 primitive evaluateFloat，整棵子树避免落回 Object/visit 装箱路径
+        if (expr instanceof CallExpression ce) {
+            return ce.function().evaluateFloat(this, ce.arguments());
+        }
+        // 变量读取走 primitive evaluateFloat（query/scoped 变量）
+        if (expr instanceof VariableExpression ve) {
+            return ve.target().evaluateFloat(this);
+        }
+        if (expr instanceof AssignableVariableExpression ave) {
+            return ave.target().evaluateFloat(this);
+        }
+        if (expr instanceof StructAccessExpression se) {
+            Object value = se.left().visit(this);
+            if (value instanceof Struct) {
+                return ValueConversions.asFloat(((Struct) value).getProperty(se.path()));
+            }
+            return 0.0f;
+        }
         return ValueConversions.asFloat(expr.visit(this));
     }
 

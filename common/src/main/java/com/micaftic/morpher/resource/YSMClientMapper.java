@@ -919,22 +919,17 @@ public class YSMClientMapper {
             }
         }
 
-        boolean carryOnZero = false;
-        boolean nonCarryOnZero = false;
+        boolean handLocatorZero = false;
         for (RawYsmModel.RawAnimationFile animationFile : raw.mainEntity.animationFiles.values()) {
             ScaleZeroScanResult result = scanHandLocatorScaleZero(animationFile);
             if (result.unsafe()) {
                 return SpecialHandLocatorProfile.NONE;
             }
             if (result.hasScaleZero()) {
-                if (animationFile.animType == 6) {
-                    carryOnZero = true;
-                } else {
-                    nonCarryOnZero = true;
-                }
+                handLocatorZero = true;
             }
         }
-        if (!carryOnZero || nonCarryOnZero) {
+        if (!handLocatorZero) {
             return SpecialHandLocatorProfile.NONE;
         }
         return SpecialHandLocatorProfile.HAND_LOCATOR_HIDDEN_BY_CARRYON;

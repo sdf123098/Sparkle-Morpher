@@ -213,7 +213,13 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     @Override
     @NotNull
     public ResourceLocation getTextureLocation() {
-        return isModelReady() ? ((TexturedModelWrapper) getRenderShape()).currentTexture.getResourceLocation().get() : ClientModelManager.getDefaultTexture();
+        if (isModelReady()) {
+            ResourceLocation location = ((TexturedModelWrapper) getRenderShape()).currentTexture.getResourceLocationOrNull();
+            if (location != null) {
+                return location;
+            }
+        }
+        return ClientModelManager.getDefaultTexture();
     }
 
     @Override
@@ -281,7 +287,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
 
         @Override
         public boolean isValid() {
-            return this.currentTexture.getResourceLocation().isPresent();
+            return this.currentTexture.getResourceLocationOrNull() != null;
         }
     }
 }

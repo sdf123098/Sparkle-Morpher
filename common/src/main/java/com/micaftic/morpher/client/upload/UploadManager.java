@@ -79,6 +79,10 @@ public class UploadManager {
 
     public static void processPendingUploads() {
         RenderSystem.assertOnRenderThread();
+        // Fast idle path: most ticks have no queued GPU texture work.
+        if (pendingUploads.isEmpty() && pendingReleases.isEmpty() && expiredTextures.isEmpty()) {
+            return;
+        }
         if (!expiredTextures.isEmpty()) {
             Iterator<Map.Entry<AbstractTexture, ReferenceIntMutablePair<ResourceLocation>>> it = expiredTextures.entrySet().iterator();
             while (it.hasNext()) {
@@ -146,6 +150,11 @@ public class UploadManager {
         @Override
         public Optional<ResourceLocation> getResourceLocation() {
             return this.registered ? Optional.of(this.resourceLocation) : Optional.empty();
+        }
+
+        @Override
+        public ResourceLocation getResourceLocationOrNull() {
+            return this.registered ? this.resourceLocation : null;
         }
 
         public void markRegistered() {

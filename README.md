@@ -40,6 +40,18 @@ Play model-bundled voice lines and sound effects triggered by skills or actions.
 - A configurable blacklist (`config/sparkle_morpher/blacklist.txt`) lets servers restrict specific models.
 - Client-server model state synchronization via Cardinal Components entity data.
 
+### Server Bandwidth Limit
+
+Server operators can configure the global model-transfer limiter in `config/sparkle_morpher-server.toml`:
+
+```toml
+[server_scheduler]
+EnableGlobalBandwidthLimit = true
+BandwidthLimit = 5
+```
+
+`BandwidthLimit` is in Mbps. When `EnableGlobalBandwidthLimit` is enabled, the limit is shared globally by server-to-client model sync packets and client-to-server model upload chunks. Small control packets, including favorite sync, are not throttled.
+
 ### Mod Compatibility
 
 Designed to work alongside popular mods:

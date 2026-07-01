@@ -1,8 +1,6 @@
 package com.micaftic.morpher.geckolib3.geo;
 
 import com.micaftic.morpher.capability.VehicleCapability;
-import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.client.entity.GeoEntity;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.util.Color;
@@ -73,7 +71,6 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
 
     @Override
     public void renderEarly(T animatable, PoseStack poseStack, float partialTick, MultiBufferSource bufferSource, VertexConsumer buffer, int packedLight, int packedOverlayIn, float red, float green, float blue, float alpha) {
-        // 使用 .set 来避免每次渲染创建新的 Matrix4f, 减少 allocation rate
         this.renderEarlyMat.set(poseStack.last().pose());
         IGeoRenderer.super.renderEarly(animatable, poseStack, partialTick, bufferSource, buffer, packedLight, packedOverlayIn, red, green, blue, alpha);
     }
@@ -92,7 +89,6 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         Minecraft minecraft = Minecraft.getInstance();
         if (event != null && minecraft.player != null) {
             EntityModelData modelData = event.getModelData();
-            // 使用 .set 来避免每次渲染创建新的 Matrix4f, 减少 allocation rate
             this.dispatchedMat.set(poseStack.last().pose());
             setCurrentModelRenderCycle(EModelRenderCycle.INITIAL);
             poseStack.pushPose();
@@ -112,9 +108,6 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             preRenderCallback(entity, poseStack, partialTick);
             poseStack.translate(0.0f, 0.01f, 0.0f);
             AnimatedGeoModel animatedGeoModel = t.getCurrentModel();
-            if (t instanceof GeoEntity<?> geoEntity) {
-                ClientModelManager.markModelUsed(geoEntity.getModelId());
-            }
             int textureIndex = resourceLocation == null ? t.getTextureIndex() : 0;
             RenderType renderType = getRenderType(resourceLocation == null ? t.getTextureLocation() : resourceLocation, isBodyVisible(entity) && !entity.isInvisibleTo(minecraft.player), minecraft.shouldEntityAppearGlowing(entity), t.getCurrentModel().getGeoModel().isTranslucentTexture(textureIndex));
             boolean useExtraPlayer = t.isRenderLayersFirst();

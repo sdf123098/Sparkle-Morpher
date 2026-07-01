@@ -19,4 +19,12 @@ public final class KeyMappingFactoryImpl {
     public static boolean isActiveAndMatches(KeyMapping keyMapping, int keyCode, int scanCode) {
         return keyMapping.matches(keyCode, scanCode);
     }
+
+    public static boolean isActiveAndMatches(KeyMapping keyMapping, int keyCode, int scanCode, int modifiers) {
+        return keyMapping.matches(keyCode, scanCode);
+    }
+
+    public static boolean isMouseActiveAndMatches(KeyMapping keyMapping, int button) {
+        return keyMapping.matchesMouse(button);
+    }
 }

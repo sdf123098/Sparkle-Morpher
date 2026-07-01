@@ -378,8 +378,9 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                 int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
                 int boneCount = getEvaluationContext().getBoneCount();
                 int controllerCount = this.manager.getAnimationControllers().size();
-                boolean canReuseEvaluation = !ModelPreviewRenderer.isPreview()
-                        && !ModelPreviewRenderer.isExtraPlayer()
+                // Extra-player HUD rendering is a second view of the same model in the same frame.
+                // Reuse the already evaluated pose instead of running Molang/physics twice.
+                boolean canReuseEvaluation = (!ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer())
                         && this.lastAnimationEvaluationFrameId == renderFrameId
                         && Float.compare(this.lastAnimationEvaluationSeekTime, this.seekTime) == 0
                         && this.lastAnimationEvaluationActive == z

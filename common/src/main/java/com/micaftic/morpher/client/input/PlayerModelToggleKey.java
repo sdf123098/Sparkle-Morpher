@@ -25,22 +25,40 @@ public final class PlayerModelToggleKey {
             return;
         }
         ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
-            onKeyInput(action, keyCode, scanCode);
-            return EventResult.pass();
+            return onKeyInput(action, keyCode, scanCode, modifiers) ? EventResult.interruptFalse() : EventResult.pass();
+        });
+        ClientRawInputEvent.MOUSE_CLICKED_PRE.register((client, button, action, modifiers) -> {
+            return onMouseInput(action, button) ? EventResult.interruptFalse() : EventResult.pass();
         });
     }
 
-    private static void onKeyInput(int action, int keyCode, int scanCode) {
-        if (InputUtil.isPlayerReady() && action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, KEY_MAPPING)) {
-            if (!YesSteveModel.isAvailable()) {
-                YesSteveModel.sendUnavailableMessage();
-                return;
-            }
-            if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) {
-                Minecraft.getInstance().setScreen(ModernPlayerModelScreen.settings());
-            } else {
-                Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
-            }
+    private static boolean onKeyInput(int action, int keyCode, int scanCode, int modifiers) {
+        if (action != 1 || !InputUtil.isKeyPressed(keyCode, scanCode, modifiers, KEY_MAPPING)) {
+            return false;
         }
+        return openModelScreen();
+    }
+
+    private static boolean onMouseInput(int action, int button) {
+        if (action != 1 || !InputUtil.isMousePressed(button, KEY_MAPPING)) {
+            return false;
+        }
+        return openModelScreen();
+    }
+
+    private static boolean openModelScreen() {
+        if (!InputUtil.isPlayerReady()) {
+            return false;
+        }
+        if (!YesSteveModel.isAvailable()) {
+            YesSteveModel.sendUnavailableMessage();
+            return true;
+        }
+        if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) {
+            Minecraft.getInstance().setScreen(ModernPlayerModelScreen.settings());
+        } else {
+            Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
+        }
+        return true;
     }
 }

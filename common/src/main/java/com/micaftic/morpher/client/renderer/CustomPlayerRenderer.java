@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.event.ClientTickEvent;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
 import com.micaftic.morpher.client.entity.PlayerPreviewEntity;
@@ -27,10 +28,21 @@ import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.Team;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, CustomPlayerEntity> {
 
+    private static final int TEXTURE_EVENT_CACHE_TICKS = 20;
+    private static final int MAX_TEXTURE_EVENT_CACHE_SIZE = 256;
+
     private ResourceLocation currentTexture;
+
+    private final Map<UUID, CachedRenderTexture> renderTextureCache = new HashMap<>();
 
     public CustomPlayerRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -41,25 +53,67 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
     }
 
     public void render(Player player, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
-        PlayerCapability capability;
-        if (SWarfareCompat.isPlayerAiming(player) || (capability = PlayerCapability.get(player).orElse(null)) == null) {
+        if (SWarfareCompat.isPlayerAiming(player)) {
             return;
         }
+        PlayerCapability capability = PlayerCapability.get(player).orElse(null);
+        if (capability == null) {
+            return;
+        }
+        render(capability, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+    }
+
+    public void render(PlayerCapability capability, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
+        Player player = (Player) capability.entity;
         capability.tickModel();
-        ClientModelManager.markModelUsed(capability.getModelId());
-        SpecialPlayerRenderEvent renderEvent = new SpecialPlayerRenderEvent(player, capability, capability.getModelId());
-        if (SpecialPlayerRenderEvent.post(renderEvent).isFalse()) {
+        String modelId = capability.getModelId();
+        ClientModelManager.markModelUsed(modelId);
+        CachedRenderTexture renderTexture = getRenderTexture(player, capability, modelId);
+        if (!renderTexture.allowed) {
+            this.currentTexture = null;
             return;
         }
-        this.currentTexture = renderEvent.getTextureLocation();
+        this.currentTexture = renderTexture.location;
         capability.beginRenderState(entityYaw, partialTick);
         try {
-            renderEntityWithTexture(capability, renderEvent.getTextureLocation(), entityYaw, partialTick, poseStack, bufferSource, packedLight);
+            renderEntityWithTexture(capability, renderTexture.location, entityYaw, partialTick, poseStack, bufferSource, packedLight);
         } finally {
             capability.endRenderState();
             this.currentTexture = null;
         }
     }
+
+    private CachedRenderTexture getRenderTexture(Player player, PlayerCapability capability, String modelId) {
+        int tick = ClientTickEvent.getTickCount();
+        UUID uuid = player.getUUID();
+        CachedRenderTexture cached = this.renderTextureCache.get(uuid);
+        if (cached != null && Objects.equals(cached.modelId, modelId) && tick - cached.tick < TEXTURE_EVENT_CACHE_TICKS) {
+            return cached;
+        }
+        SpecialPlayerRenderEvent renderEvent = new SpecialPlayerRenderEvent(player, capability, modelId);
+        CachedRenderTexture resolved = new CachedRenderTexture(modelId, tick, !SpecialPlayerRenderEvent.post(renderEvent).isFalse(), renderEvent.getTextureLocation());
+        if (this.renderTextureCache.size() >= MAX_TEXTURE_EVENT_CACHE_SIZE) {
+            this.renderTextureCache.clear();
+        }
+        this.renderTextureCache.put(uuid, resolved);
+        return resolved;
+    }
+
+    private static final class CachedRenderTexture {
+        private final String modelId;
+        private final int tick;
+        private final boolean allowed;
+        @Nullable
+        private final ResourceLocation location;
+
+        private CachedRenderTexture(String modelId, int tick, boolean allowed, @Nullable ResourceLocation location) {
+            this.modelId = modelId;
+            this.tick = tick;
+            this.allowed = allowed;
+            this.location = location;
+        }
+    }
+
 
     @Override
     public boolean shouldShowName(Player entity) {

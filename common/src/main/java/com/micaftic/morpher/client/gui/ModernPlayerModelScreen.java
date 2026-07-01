@@ -26,6 +26,7 @@ import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
 import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.Metadata;
+import com.micaftic.morpher.util.LocalStarModelsStore;
 import com.micaftic.morpher.util.ModelIdUtil;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
@@ -1100,9 +1101,11 @@ public class ModernPlayerModelScreen extends Screen {
         StarModelsCapability.get(Minecraft.getInstance().player).ifPresent(cap -> {
             if (cap.containsModel(STATE.selectedModelId)) {
                 cap.removeModel(STATE.selectedModelId);
+                LocalStarModelsStore.remove(STATE.selectedModelId);
                 NetworkHandler.sendToServer(C2SSetStarModelPacket.remove(STATE.selectedModelId));
             } else {
                 cap.addModel(STATE.selectedModelId);
+                LocalStarModelsStore.add(STATE.selectedModelId);
                 NetworkHandler.sendToServer(C2SSetStarModelPacket.add(STATE.selectedModelId));
             }
         });
@@ -1419,6 +1422,10 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.input_debug_log", GeneralConfig.INPUT_STATE_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.show_model_id_first", GeneralConfig.SHOW_MODEL_ID_FIRST));
         rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_disabled", LoadingStateConfig.DISABLE_LOADING_STATE_SCREEN));
+        rows.add(loadingPositionRow(ModelPanelState.SettingGroup.MISC));
+        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x", LoadingStateConfig.LOADING_STATE_OFFSET_X, -10000, 10000, 10, "px"));
+        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y", LoadingStateConfig.LOADING_STATE_OFFSET_Y, -10000, 10000, 10, "px"));
+        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide", LoadingStateConfig.LOADING_STATE_AUTO_HIDE_SECONDS, 1, 30, 1, "s"));
         return rows.stream().filter(row -> row.group() == STATE.settingGroup).toList();
     }
 
@@ -1472,6 +1479,22 @@ public class ModernPlayerModelScreen extends Screen {
                         () -> setRendererMode(true),
                         () -> setRendererMode(false)
                 ));
+    }
+
+    private SettingRow loadingPositionRow(ModelPanelState.SettingGroup group) {
+        LoadingStateConfig.Position current;
+        try {
+            current = LoadingStateConfig.LOADING_STATE_POSITION.get();
+        } catch (Exception e) {
+            current = LoadingStateConfig.Position.TOP_CENTER;
+        }
+        final LoadingStateConfig.Position selected = current;
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.loading_state_position", null, selected.name(), () -> {
+            LoadingStateConfig.Position[] values = LoadingStateConfig.Position.values();
+            LoadingStateConfig.Position next = values[(selected.ordinal() + 1) % values.length];
+            LoadingStateConfig.LOADING_STATE_POSITION.set(next);
+            LoadingStateConfig.LOADING_STATE_POSITION.save();
+        }, null, null, null);
     }
 
     private void setRendererMode(boolean useGpuRenderer) {

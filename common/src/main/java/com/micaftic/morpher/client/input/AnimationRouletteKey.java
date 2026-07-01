@@ -46,11 +46,26 @@ public final class AnimationRouletteKey {
         if (PlatformAPI.isServer()) return;
         ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
             if (!YesSteveModel.isAvailable() || !InputUtil.isPlayerReady() || action != 1) return EventResult.pass();
-            if (InputUtil.isKeyPressed(keyCode, scanCode, KEY_LOCK)) {
+            if (InputUtil.isKeyPressed(keyCode, scanCode, modifiers, KEY_LOCK)) {
                 AnimationLockEvent.toggleLock();
                 return EventResult.interruptFalse();
             }
-            if (InputUtil.isKeyPressed(keyCode, scanCode, KEY_ROULETTE)) {
+            if (InputUtil.isKeyPressed(keyCode, scanCode, modifiers, KEY_ROULETTE)) {
+                if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) {
+                    return EventResult.pass();
+                }
+                handleRoulettePress();
+                return EventResult.interruptFalse();
+            }
+            return EventResult.pass();
+        });
+        ClientRawInputEvent.MOUSE_CLICKED_PRE.register((client, button, action, modifiers) -> {
+            if (!YesSteveModel.isAvailable() || !InputUtil.isPlayerReady() || action != 1) return EventResult.pass();
+            if (InputUtil.isMousePressed(button, KEY_LOCK)) {
+                AnimationLockEvent.toggleLock();
+                return EventResult.interruptFalse();
+            }
+            if (InputUtil.isMousePressed(button, KEY_ROULETTE)) {
                 if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) {
                     return EventResult.pass();
                 }

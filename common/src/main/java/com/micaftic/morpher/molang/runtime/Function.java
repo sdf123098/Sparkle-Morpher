@@ -23,6 +23,14 @@ public interface Function {
      */
     @Nullable Object evaluate(final @NotNull ExecutionContext<?> context, final @NotNull ArgumentCollection arguments);
 
+    /**
+     * 原始 float 求值路径，用于避免在「每帧 × 每 bone」的热路径上把结果装箱成 {@link Float}。
+     * 默认实现回退到 {@link #evaluate} 并转换；返回数值的内置函数应重写此方法直接返回 float。
+     */
+    default float evaluateFloat(final @NotNull ExpressionEvaluator<?> context, final @NotNull ArgumentCollection arguments) {
+        return ValueConversions.asFloat(evaluate(context, arguments));
+    }
+
     default boolean validateArgumentSize(int size) {
         return true;
     }
@@ -66,6 +74,18 @@ public interface Function {
 
         public boolean getAsBoolean(@NotNull ExecutionContext<?> ctx, final int index) {
             return ValueConversions.asBoolean(ctx.evalSafe(this.arguments.get(index)));
+        }
+
+        /**
+         * 原始 float 参数读取：走 {@link ExpressionEvaluator#evalAsFloat} 的 primitive 递归路径，
+         * 跳过 {@code evalSafe} 的 try/catch 与中间 Float 装箱。仅当 ctx 是 {@link ExpressionEvaluator} 时可用。
+         */
+        public float getAsFloatRaw(@NotNull ExpressionEvaluator<?> ctx, final int index) {
+            return ctx.evalAsFloat(this.arguments.get(index));
+        }
+
+        public boolean getAsBooleanRaw(@NotNull ExpressionEvaluator<?> ctx, final int index) {
+            return ctx.evalAsBoolean(this.arguments.get(index));
         }
 
         @Nullable

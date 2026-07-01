@@ -23,4 +23,14 @@ public final class KeyMappingFactory {
     public static boolean isActiveAndMatches(KeyMapping keyMapping, int keyCode, int scanCode) {
         throw new AssertionError();
     }
+
+    @ExpectPlatform
+    public static boolean isActiveAndMatches(KeyMapping keyMapping, int keyCode, int scanCode, int modifiers) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
+    public static boolean isMouseActiveAndMatches(KeyMapping keyMapping, int button) {
+        throw new AssertionError();
+    }
 }

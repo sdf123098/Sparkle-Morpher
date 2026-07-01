@@ -2,6 +2,8 @@ plugins {
     id 'com.github.johnrengelman.shadow'
 }
 
+apply from: rootProject.file('gradle/verify-native-abi.gradle')
+
 architectury {
     platformSetupLoomIde()
     fabric()

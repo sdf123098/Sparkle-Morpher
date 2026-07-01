@@ -748,7 +748,7 @@
   "gui.sparkle_morpher.model_panel.setting.disable_self_model": "Disable self model",
   "gui.sparkle_morpher.model_panel.setting.disable_other_model": "Disable other model",
   "gui.sparkle_morpher.model_panel.setting.disable_self_hands": "Disable self hands",
-  "gui.sparkle_morpher.model_panel.setting.disable_player_render": "Disable player render",
+  "gui.sparkle_morpher.model_panel.setting.disable_player_render": "Disable extra player render",
   "gui.sparkle_morpher.model_panel.setting.disable_projectile_model": "Disable projectile model",
   "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model": "Disable vehicle model",
   "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim": "Disable external first-person animation",
@@ -776,5 +776,17 @@
   "gui.sparkle_morpher.model_panel.setting_group.misc": "Misc",
   "gui.sparkle_morpher.model_panel.applied_model": "Applied %s",
   "gui.sparkle_morpher.model_panel.add_site": "Add site",
-  "gui.sparkle_morpher.model_panel.clear_selection": "Clear selection"
+  "gui.sparkle_morpher.model_panel.clear_selection": "Clear selection",
+  "gui.sparkle_morpher.sync_hint.failed": "Model loading failed",
+  "gui.sparkle_morpher.sync_hint.success": "Model loading complete",
+  "gui.sparkle_morpher.sync_hint.completed_models": "Loaded %s models",
+  "gui.sparkle_morpher.sync_hint.loading_models_precise": "Loading %1/%2 models, %3 pending",
+  "gui.sparkle_morpher.sync_hint.waiting_detail": "Waiting for server model list",
+  "gui.sparkle_morpher.sync_hint.loading_detail": "Receiving model data",
+  "gui.sparkle_morpher.sync_hint.preparing_detail": "Preparing model cache",
+  "gui.sparkle_morpher.sync_hint.syncing_models": "Syncing %1/%2 models",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_position": "Loading popup position",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x": "Loading popup X offset",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y": "Loading popup Y offset",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide": "Loading popup auto-hide"
 }
