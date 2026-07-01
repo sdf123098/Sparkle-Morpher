@@ -1,0 +1,81 @@
+def isNativeAbiVerificationEnabled = {
+    def dist = providers.gradleProperty("dist").orElse("").get()
+    return !dist.equalsIgnoreCase("curseforge")
+}
+
+def nativeAbiDirs = []
+def projectNativeDir = file('src/main/resources/natives')
+if (projectNativeDir.isDirectory()) {
+    nativeAbiDirs << projectNativeDir
+}
+def commonNativeDir = file('common/src/main/resources/natives')
+if (commonNativeDir.isDirectory()) {
+    nativeAbiDirs << commonNativeDir
+}
+if (findProject(':common') != null) {
+    def commonProjectNativeDir = project(':common').file('src/main/resources/natives')
+    if (commonProjectNativeDir.isDirectory()) {
+        nativeAbiDirs << commonProjectNativeDir
+    }
+}
+def rootCommonNativeDir = rootProject.file('common/src/main/resources/natives')
+if (rootCommonNativeDir.isDirectory()) {
+    nativeAbiDirs << rootCommonNativeDir
+}
+nativeAbiDirs = nativeAbiDirs.unique { it.canonicalPath }
+
+tasks.register('verifyNativeAbi') {
+    group = 'verification'
+    description = 'Verifies packaged OpenYSM native libraries expose the expected JNI ABI.'
+
+    onlyIf { isNativeAbiVerificationEnabled() }
+    inputs.files(nativeAbiDirs)
+
+    doLast {
+        if (nativeAbiDirs.isEmpty()) {
+            throw new GradleException('Native ABI verification expected native resources, but no natives directory was found.')
+        }
+
+        def required = [
+                'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge',
+                'com/elfmcys/yesstevemodel/geckolib3/geo/ModelRendererBridge',
+                'nGetAbiVersion',
+                'nInitModelCache'
+        ]
+        def forbidden = [
+                'com/elfmcys/yesstevemodel/geckolib3/geo/NativeModelRenderer'
+        ]
+        def expectedFiles = [
+                'windows-x64/ysm-core.dll',
+                'windows-x86/ysm-core.dll',
+                'linux-x64/libysm-core.so',
+                'macos-x64/libysm-core.dylib',
+                'macos-arm64/libysm-core.dylib',
+                'android-arm64/libysm-core.so'
+        ]
+
+        nativeAbiDirs.each { nativeDir ->
+            expectedFiles.each { relPath ->
+                def nativeFile = new File(nativeDir, relPath)
+                if (!nativeFile.isFile()) {
+                    throw new GradleException("Missing native library: ${nativeFile}")
+                }
+                def text = nativeFile.getText('ISO-8859-1')
+                required.each { marker ->
+                    if (!text.contains(marker)) {
+                        throw new GradleException("Native ABI marker '${marker}' missing from ${nativeFile}")
+                    }
+                }
+                forbidden.each { marker ->
+                    if (text.contains(marker)) {
+                        throw new GradleException("Forbidden stale native ABI marker '${marker}' found in ${nativeFile}")
+                    }
+                }
+            }
+        }
+    }
+}
+
+tasks.named('processResources') {
+    dependsOn tasks.named('verifyNativeAbi')
+}

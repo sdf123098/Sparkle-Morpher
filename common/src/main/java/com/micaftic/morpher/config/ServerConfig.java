@@ -11,6 +11,8 @@ public class ServerConfig {
 
     public static ModConfigSpec.IntValue BANDWIDTH_LIMIT;
 
+    public static ModConfigSpec.BooleanValue ENABLE_GLOBAL_BANDWIDTH_LIMIT;
+
     public static ModConfigSpec.IntValue PLAYER_SYNC_TIMEOUT;
 
     public static ModConfigSpec.BooleanValue LOW_BANDWIDTH_USAGE;
@@ -56,7 +58,10 @@ public class ServerConfig {
         builder.push("server_scheduler");
         builder.comment("Concurrent level for processing models. Value 0 means AUTO.");
         THREAD_COUNT = builder.defineInRange("ThreadCount", 0, 0, Math.max(2, Runtime.getRuntime().availableProcessors() - 1));
-        builder.comment("Bandwidth limitation during distributing models to players.(In Mbps)");
+        builder.comment("Whether to enable the global model transfer bandwidth limit");
+        builder.comment("When enabled, the limit is shared by server-to-client model sync and client-to-server model upload chunks.");
+        ENABLE_GLOBAL_BANDWIDTH_LIMIT = builder.define("EnableGlobalBandwidthLimit", true);
+        builder.comment("Global model transfer bandwidth limit in Mbps");
         BANDWIDTH_LIMIT = builder.defineInRange("BandwidthLimit", 5, 1, 999);
         builder.comment("Timeout for players to respond to synchronization. Value not greater than 10 means AUTO.(In seconds)");
         PLAYER_SYNC_TIMEOUT = builder.defineInRange("PlayerSyncTimeout", 0, 0, 120);

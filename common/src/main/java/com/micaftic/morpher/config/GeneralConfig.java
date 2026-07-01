@@ -33,7 +33,9 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue USE_GPU_RENDERER;
 
-    public static ModConfigSpec.BooleanValue USE_NATIVE_SIMD_RENDERER;
+    public static ModConfigSpec.EnumValue<NativeSimdPolicy> NATIVE_SIMD_POLICY;
+
+    public static ModConfigSpec.EnumValue<NativeSimdValidationMode> NATIVE_SIMD_VALIDATION_MODE;
 
     public static ModConfigSpec.BooleanValue EXPERIMENTAL_JAVA_VECTOR_RENDERER;
 
@@ -88,6 +90,35 @@ public class GeneralConfig {
         CUSTOM
     }
 
+    /**
+     * Native SIMD renderer policy (NATIVE_SIMD_26X_AGGRESSIVE_ROLLOUT_PLAN Phase 3).
+     * OFF       - always Java fallback when the GPU path is not used (kill switch).
+     * SAFE      - current 26.x conservative gates (troubleshooting / rollback).
+     * AGGRESSIVE - prefer Native SIMD whenever the native runtime is loaded and the
+     *             compatibility renderer is disabled, except documented unsafe cases.
+     *             Intended release default.
+     */
+    public enum NativeSimdPolicy {
+        OFF,
+        SAFE,
+        AGGRESSIVE
+    }
+
+    /**
+     * Validation diagnostics comparing Java and native model state without changing
+     * the rendered path (Phase 2). Used to hunt mismatches around the AGGRESSIVE flip.
+     * OFF             - no comparison.
+     * LOG_MISMATCH    - render normally, log a compact mismatch summary.
+     * STRICT_FALLBACK - disable Native SIMD for the session when mismatches occur.
+     * CRASH_TEST      - development only; throws on mismatch.
+     */
+    public enum NativeSimdValidationMode {
+        OFF,
+        LOG_MISMATCH,
+        STRICT_FALLBACK,
+        CRASH_TEST
+    }
+
     public static boolean safeGet(ModConfigSpec.BooleanValue value) {
         return safeGet(value, false);
     }
@@ -138,8 +169,10 @@ public class GeneralConfig {
                 .define("EnableOpenGlLegacyGpuRenderer", false);
         ENABLE_OPENGL_GUI_BLUR = builder.comment("Allow raw OpenGL GUI blur/shader effects on OpenGL. Disabled by default for Vulkan compatibility.")
                 .define("EnableOpenGlGuiBlur", false);
-        builder.comment("Use OpenYSM native SIMD model rendering. Disabled by default on 26.1.2 because the current native renderer has different bone visibility semantics than the Java path.");
-        USE_NATIVE_SIMD_RENDERER = builder.define("UseNativeSimdRenderer", false);
+        builder.comment("Native SIMD renderer policy. AGGRESSIVE prefers the OpenYSM native renderer whenever the native runtime is loaded and the compatibility renderer is disabled (intended default). SAFE keeps the conservative 26.x gates. OFF always uses the Java fallback. SAFE and OFF are retained as kill switches.");
+        NATIVE_SIMD_POLICY = builder.defineEnum("NativeSimdPolicy", NativeSimdPolicy.AGGRESSIVE);
+        builder.comment("Compare Java and native model state to hunt mismatches without changing the rendered path. OFF disables. LOG_MISMATCH logs a compact summary. STRICT_FALLBACK disables Native SIMD for the session on mismatch. CRASH_TEST throws on mismatch (development only).");
+        NATIVE_SIMD_VALIDATION_MODE = builder.defineEnum("NativeSimdValidationMode", NativeSimdValidationMode.OFF);
         builder.comment("Render ysmGlow bones with normal entity lighting while a shader pack is active.");
         DISABLE_MODEL_GLOW_IN_SHADERPACK = builder.define("DisableModelGlowInShaderpack", true);
         ROULETTE_CONTENT_MODE = builder.defineEnum("RouletteContentMode", RouletteContentMode.ORIGINAL);

@@ -2,6 +2,8 @@ plugins {
     id 'com.gradleup.shadow'
 }
 
+apply from: rootProject.file('gradle/verify-native-abi.gradle')
+
 configurations {
     shadowBundle {
         canBeResolved = true
@@ -67,7 +69,7 @@ dependencies {
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     include "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 
-    // zstd-jni dependency removed: project now uses YSM native â†’ pure-Java ZstdUtil â†’ raw-frame fallback chain.
+    // zstd-jni dependency removed: project now uses YSM native â†?pure-Java ZstdUtil â†?raw-frame fallback chain.
 }
 
 processResources {

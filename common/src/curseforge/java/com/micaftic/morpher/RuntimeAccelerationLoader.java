@@ -24,10 +24,10 @@ public final class RuntimeAccelerationLoader {
     }
 
     public static Component getErrorComponent() {
-        return null;
+        return Component.literal("Native SIMD is unavailable in the CurseForge distribution.");
     }
 
     public static String getErrorMessage() {
-        return null;
+        return "[SM] Native SIMD unavailable: CurseForge distribution excludes native libraries";
     }
 }
