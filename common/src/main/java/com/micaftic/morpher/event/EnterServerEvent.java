@@ -7,6 +7,7 @@ import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
 import com.micaftic.morpher.network.message.S2CSyncStarModelsPacket;
 import com.micaftic.morpher.network.message.S2CVersionCheckPacket;
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
+import com.micaftic.morpher.util.PlayerStarModelsStore;
 import dev.architectury.event.events.common.PlayerEvent;
 
 public final class EnterServerEvent {
@@ -26,6 +27,7 @@ public final class EnterServerEvent {
                 }
                 NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(authModelsCap.getAuthModels()), player);
             });
+            PlayerStarModelsStore.restore(player);
             PlayerModelSelectionStore.restore(player);
             ServerModelManager.validatePlayerModel(player);
             CapabilityEvent.syncPlayerModelToSelf(player);

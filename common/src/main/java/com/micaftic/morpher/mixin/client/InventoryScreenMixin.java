@@ -16,10 +16,12 @@ public class InventoryScreenMixin {
     @Inject(at = {@At("HEAD")}, method = {"renderEntityInInventory(Lnet/minecraft/client/gui/GuiGraphics;FFFLorg/joml/Vector3f;Lorg/joml/Quaternionf;Lorg/joml/Quaternionf;Lnet/minecraft/world/entity/LivingEntity;)V"})
     private static void renderEntityInInventoryPre(GuiGraphics guiGraphics, float x, float y, float scale, Vector3f offset, Quaternionf angle, Quaternionf entityAngle, LivingEntity entity, CallbackInfo ci) {
         ModelPreviewRenderer.setPreviewMode(true);
+        ModelPreviewRenderer.setInventoryPreviewFrontFacing(true);
     }
 
     @Inject(at = {@At("RETURN")}, method = {"renderEntityInInventory(Lnet/minecraft/client/gui/GuiGraphics;FFFLorg/joml/Vector3f;Lorg/joml/Quaternionf;Lorg/joml/Quaternionf;Lnet/minecraft/world/entity/LivingEntity;)V"})
     private static void renderEntityInInventoryPost(GuiGraphics guiGraphics, float x, float y, float scale, Vector3f offset, Quaternionf angle, Quaternionf entityAngle, LivingEntity entity, CallbackInfo ci) {
         ModelPreviewRenderer.setPreviewMode(false);
+        ModelPreviewRenderer.setInventoryPreviewFrontFacing(false);
     }
 }
