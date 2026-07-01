@@ -321,22 +321,38 @@ public class ModernPlayerModelScreen extends Screen {
         return this.layout.contentLeft + 8;
     }
 
+    private boolean compactModelLayout() {
+        return this.layout.contentWidth < 560 || this.layout.contentHeight < 250;
+    }
+
     private int modelLeftW() {
+        if (compactModelLayout()) {
+            return 0;
+        }
         int minList = modelListMinW();
         int max = Math.max(72, Math.min(140, this.layout.contentWidth - minList - 86 - 28));
         return clamp(this.layout.contentWidth / 4, 72, max);
     }
 
     private int modelRightW() {
+        if (compactModelLayout()) {
+            return 0;
+        }
         int max = Math.max(72, Math.min(180, this.layout.contentWidth - modelLeftW() - modelListMinW() - 28));
         return clamp(this.layout.contentWidth / 3, 72, max);
     }
 
     private int modelListX() {
+        if (compactModelLayout()) {
+            return this.layout.contentLeft + 8;
+        }
         return modelLeftX() + modelLeftW() + 10;
     }
 
     private int modelListW() {
+        if (compactModelLayout()) {
+            return Math.max(60, this.layout.contentWidth - 16);
+        }
         return Math.max(24, this.layout.contentWidth - modelLeftW() - modelRightW() - 28);
     }
 
@@ -390,6 +406,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderModelTab(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        boolean compact = compactModelLayout();
         int x = modelLeftX();
         int y = this.layout.contentTop + 8;
         int leftW = modelLeftW();
@@ -399,32 +416,54 @@ public class ModernPlayerModelScreen extends Screen {
         int detailX = listX + listW + 10;
         int contentBottom = this.layout.footerTop - 6;
 
-        glassPanel(g, x, y, leftW, contentBottom - y);
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.model"), x + 8, y + 8);
-        renderCurrentModelSummary(g, x + 8, y + 26, leftW - 16);
-        drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.filters"), x + 8, y + 88);
-        renderChip(g, x + 8, y + 104, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.all"), STATE.modelFilter == ModelPanelState.ModelFilter.ALL, () -> setModelFilter(ModelPanelState.ModelFilter.ALL));
-        renderChip(g, x + 50, y + 104, 42, Component.translatable("gui.sparkle_morpher.model_panel.filter.auth"), STATE.modelFilter == ModelPanelState.ModelFilter.AUTH, () -> setModelFilter(ModelPanelState.ModelFilter.AUTH));
-        renderChip(g, x + 96, y + 104, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.star"), STATE.modelFilter == ModelPanelState.ModelFilter.STAR, () -> setModelFilter(ModelPanelState.ModelFilter.STAR));
-        drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.actions"), x + 8, y + 136);
-        renderIconButton(g, mouseX, mouseY, x + 8, y + 152, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.tooltip"), () -> openImportPanel());
-        renderIconButton(g, mouseX, mouseY, x + 32, y + 152, IconGlyph.FOLDER, Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
-        renderIconButton(g, mouseX, mouseY, x + 56, y + 152, IconGlyph.ROULETTE, Component.translatable("key.sparkle_morpher.animation_roulette.desc"), this::openRoulette);
-        renderIconButton(g, mouseX, mouseY, x + 80, y + 152, IconGlyph.CATEGORY, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
-        renderIconButton(g, mouseX, mouseY, x + 104, y + 152, IconGlyph.MULTI, Component.translatable("gui.sparkle_morpher.model_panel.multi_select"), () -> {
-            STATE.multiSelectMode = !STATE.multiSelectMode;
-            this.selectedModelIds.clear();
-        });
+        if (compact) {
+            int filtersY = y + 24;
+            renderChip(g, listX, filtersY, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.all"), STATE.modelFilter == ModelPanelState.ModelFilter.ALL, () -> setModelFilter(ModelPanelState.ModelFilter.ALL));
+            renderChip(g, listX + 42, filtersY, 42, Component.translatable("gui.sparkle_morpher.model_panel.filter.auth"), STATE.modelFilter == ModelPanelState.ModelFilter.AUTH, () -> setModelFilter(ModelPanelState.ModelFilter.AUTH));
+            renderChip(g, listX + 88, filtersY, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.star"), STATE.modelFilter == ModelPanelState.ModelFilter.STAR, () -> setModelFilter(ModelPanelState.ModelFilter.STAR));
+            boolean stackedControls = listW < 260;
+            int actionsX = stackedControls ? listX : Math.max(listX, Math.min(listX + listW - 120, listX + 132));
+            int actionsY = stackedControls ? y + 42 : y + 22;
+            renderIconButton(g, mouseX, mouseY, actionsX, actionsY, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.tooltip"), () -> openImportPanel());
+            renderIconButton(g, mouseX, mouseY, actionsX + 24, actionsY, IconGlyph.FOLDER, Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
+            renderIconButton(g, mouseX, mouseY, actionsX + 48, actionsY, IconGlyph.ROULETTE, Component.translatable("key.sparkle_morpher.animation_roulette.desc"), this::openRoulette);
+            renderIconButton(g, mouseX, mouseY, actionsX + 72, actionsY, IconGlyph.CATEGORY, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
+            renderIconButton(g, mouseX, mouseY, actionsX + 96, actionsY, IconGlyph.MULTI, Component.translatable("gui.sparkle_morpher.model_panel.multi_select"), () -> {
+                STATE.multiSelectMode = !STATE.multiSelectMode;
+                this.selectedModelIds.clear();
+            });
+        } else {
+            glassPanel(g, x, y, leftW, contentBottom - y);
+            drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.model"), x + 8, y + 8);
+            renderCurrentModelSummary(g, x + 8, y + 26, leftW - 16);
+            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.filters"), x + 8, y + 88);
+            renderChip(g, x + 8, y + 104, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.all"), STATE.modelFilter == ModelPanelState.ModelFilter.ALL, () -> setModelFilter(ModelPanelState.ModelFilter.ALL));
+            renderChip(g, x + 50, y + 104, 42, Component.translatable("gui.sparkle_morpher.model_panel.filter.auth"), STATE.modelFilter == ModelPanelState.ModelFilter.AUTH, () -> setModelFilter(ModelPanelState.ModelFilter.AUTH));
+            renderChip(g, x + 96, y + 104, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.star"), STATE.modelFilter == ModelPanelState.ModelFilter.STAR, () -> setModelFilter(ModelPanelState.ModelFilter.STAR));
+            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.actions"), x + 8, y + 136);
+            renderIconButton(g, mouseX, mouseY, x + 8, y + 152, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.tooltip"), () -> openImportPanel());
+            renderIconButton(g, mouseX, mouseY, x + 32, y + 152, IconGlyph.FOLDER, Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
+            renderIconButton(g, mouseX, mouseY, x + 56, y + 152, IconGlyph.ROULETTE, Component.translatable("key.sparkle_morpher.animation_roulette.desc"), this::openRoulette);
+            renderIconButton(g, mouseX, mouseY, x + 80, y + 152, IconGlyph.CATEGORY, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
+            renderIconButton(g, mouseX, mouseY, x + 104, y + 152, IconGlyph.MULTI, Component.translatable("gui.sparkle_morpher.model_panel.multi_select"), () -> {
+                STATE.multiSelectMode = !STATE.multiSelectMode;
+                this.selectedModelIds.clear();
+            });
+        }
 
         if (this.modelSearchBox != null) {
             this.modelSearchBox.render(g, mouseX, mouseY, partialTick);
         }
-        renderPathBar(g, listX, y + 30, listW);
-        int gridY = y + 50;
-        int gridH = Math.max(50, contentBottom - 28 - gridY - 4);
+        boolean stackedControls = compact && listW < 260;
+        int pathY = compact ? stackedControls ? y + 68 : y + 48 : y + 30;
+        renderPathBar(g, listX, pathY, listW);
+        int gridY = pathY + 20;
+        int gridH = Math.max(compact ? 34 : 50, contentBottom - 28 - gridY - 4);
         renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
         renderModelBottomActions(g, mouseX, mouseY, listX, contentBottom - 28, listW);
-        renderModelDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
+        if (!compact) {
+            renderModelDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
+        }
     }
 
     private void renderCurrentModelSummary(GuiGraphics g, int x, int y, int w) {
@@ -464,7 +503,7 @@ public class ModernPlayerModelScreen extends Screen {
         List<ModelEntry> entries = collectModelEntries();
         int cellW = Math.max(92, Math.min(150, w / Math.max(1, w / 116)));
         int cols = Math.max(1, w / cellW);
-        int cellH = 50;
+        int cellH = h < 90 ? 42 : 50;
         int rows = Math.max(1, h / cellH);
         int maxScroll = Math.max(0, (entries.size() + cols - 1) / cols - rows);
         STATE.modelScroll = clamp(STATE.modelScroll, 0, maxScroll);

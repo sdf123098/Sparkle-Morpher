@@ -5,6 +5,7 @@ import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.*;
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
+import com.micaftic.morpher.util.PlayerStarModelsStore;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
@@ -16,6 +17,7 @@ public final class EnterServerEvent {
         if (!YesSteveModel.isAvailable()) return;
         NetworkHandler.sendToClientPlayer(new S2CVersionCheckPacket(), p);
         CapabilityEvent.getAuthModelsCap(p).ifPresent(c -> { for (String m : ServerModelManager.getAuthModels()) c.addModel(m); NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(c.getAuthModels()), p); });
+        PlayerStarModelsStore.restore(p);
         PlayerModelSelectionStore.restore(p); ServerModelManager.validatePlayerModel(p);
         CapabilityEvent.syncPlayerModelToSelf(p); CapabilityEvent.syncPlayerModelToTracking(p, false);
         CapabilityEvent.getStarModelsCap(p).ifPresent(c -> NetworkHandler.sendToClientPlayer(new S2CSyncStarModelsPacket(c.getStarModels()), p));

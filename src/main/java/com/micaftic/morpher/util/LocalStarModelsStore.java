@@ -131,7 +131,10 @@ public final class LocalStarModelsStore {
     private static String currentScopeKey() {
         Minecraft minecraft = Minecraft.getInstance();
         String serverKey = GLOBAL_KEY;
-        ServerData serverData = minecraft.getCurrentServer();
+        ServerData serverData = minecraft.getConnection() == null ? null : minecraft.getConnection().getServerData();
+        if (serverData == null) {
+            serverData = minecraft.getCurrentServer();
+        }
         if (serverData != null && serverData.ip != null && !serverData.ip.isBlank()) {
             serverKey = serverData.ip.trim().toLowerCase(java.util.Locale.ROOT);
         } else if (minecraft.isLocalServer()) {

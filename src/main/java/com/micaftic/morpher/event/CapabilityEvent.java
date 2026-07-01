@@ -54,6 +54,7 @@ public final class CapabilityEvent {
         if (!l.isClientSide() && e instanceof Projectile proj && proj.getOwner() instanceof ServerPlayer owner) syncProjectileModel(proj, owner);
         if (e instanceof ServerPlayer p) {
             getAuthModelsCap(p).ifPresent(c -> { for (String m : ServerModelManager.getAuthModels()) c.addModel(m); NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(c.getAuthModels()), p); });
+            PlayerStarModelsStore.restore(p);
             PlayerModelSelectionStore.restore(p);
             ServerModelManager.validatePlayerModel(p);
             syncPlayerModelToSelf(p); syncPlayerModelToTracking(p, false);
