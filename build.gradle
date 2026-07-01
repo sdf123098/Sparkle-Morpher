@@ -3,6 +3,8 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.141'
 }
 
+apply from: rootProject.file('gradle/verify-native-abi.gradle')
+
 version = mod_version
 group = maven_group
 

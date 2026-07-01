@@ -36,7 +36,9 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
-import net.neoforged.api.distmarker.Dist;import net.neoforged.api.distmarker.OnlyIn;import net.minecraft.client.Minecraft;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.network.Connection;
@@ -1215,7 +1217,7 @@ public class ClientModelManager {
                 syncState.syncedModels++;
                 int loaded = syncState.syncedModels;
                 if (loaded == syncState.totalModels) {
-                    syncState.setState(SyncState.IDLE);
+                    syncState.finishSuccess();
                 }
                 forEachGuiWidget(guiWidget -> {
                     guiWidget.onSyncProgress(syncState.getTotalModels(), loaded);
@@ -1419,7 +1421,7 @@ public class ClientModelManager {
         cachedModelHashes.clear();
 
         Minecraft.getInstance().execute(() -> {
-            syncState.setState(SyncState.IDLE);
+            syncState.finishSuccess();
             resendSelectedServerModel();
             forEachGuiWidget(IGuiWidget::onSyncComplete);
         });
@@ -1435,7 +1437,7 @@ public class ClientModelManager {
 
     private static void onSyncError(@Nullable Object obj) {
         Minecraft.getInstance().execute(() -> {
-            syncState.setState(SyncState.IDLE);
+            syncState.finishFailure(obj instanceof Component component ? component : null);
             forEachGuiWidget(guiWidget -> {
                 guiWidget.onSyncMessage(obj == null ? null : (Component) obj);
             });
@@ -1634,6 +1636,11 @@ public class ClientModelManager {
 
         private int syncedModels = -1;
 
+        private long terminalSinceMillis = 0L;
+
+        @Nullable
+        private Component message = null;
+
         public SyncState getCurrentState() {
             return this.currentState;
         }
@@ -1646,17 +1653,48 @@ public class ClientModelManager {
             return this.totalModels;
         }
 
+        public long getTerminalSinceMillis() {
+            return this.terminalSinceMillis;
+        }
+
+        @Nullable
+        public Component getMessage() {
+            return this.message;
+        }
+
         public void setState(SyncState syncState) {
             System.out.println("Sync state: " + syncState);
             this.currentState = syncState;
             this.totalModels = -1;
             this.syncedModels = -1;
+            this.terminalSinceMillis = 0L;
+            this.message = null;
         }
 
         public void startSyncing(int totalModels) {
             this.currentState = SyncState.SYNCING;
             this.totalModels = totalModels;
             this.syncedModels = 0;
+            this.terminalSinceMillis = 0L;
+            this.message = null;
+        }
+
+        public void finishSuccess() {
+            this.currentState = SyncState.IDLE;
+            if (this.totalModels < 0) {
+                this.totalModels = Math.max(0, this.syncedModels);
+            }
+            if (this.syncedModels < 0) {
+                this.syncedModels = this.totalModels;
+            }
+            this.terminalSinceMillis = System.currentTimeMillis();
+            this.message = null;
+        }
+
+        public void finishFailure(@Nullable Component message) {
+            this.currentState = SyncState.IDLE;
+            this.terminalSinceMillis = System.currentTimeMillis();
+            this.message = message;
         }
     }
 

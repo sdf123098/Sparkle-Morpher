@@ -1,42 +1,45 @@
 package com.micaftic.morpher.config;
 
 import com.google.common.collect.Lists;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.List;
 
 public class ServerConfig {
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.IntValue THREAD_COUNT;
+    public static ModConfigSpec.IntValue THREAD_COUNT;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.IntValue BANDWIDTH_LIMIT;
+    public static ModConfigSpec.IntValue BANDWIDTH_LIMIT;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.IntValue PLAYER_SYNC_TIMEOUT;
+    public static ModConfigSpec.BooleanValue ENABLE_GLOBAL_BANDWIDTH_LIMIT;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue LOW_BANDWIDTH_USAGE;
+    public static ModConfigSpec.IntValue PLAYER_SYNC_TIMEOUT;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue CAN_SWITCH_MODEL;
+    public static ModConfigSpec.BooleanValue LOW_BANDWIDTH_USAGE;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue ALLOW_MODEL_UPLOAD;
+    public static ModConfigSpec.BooleanValue CAN_SWITCH_MODEL;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.IntValue MODEL_UPLOAD_MAX_MB;
+    public static ModConfigSpec.BooleanValue ALLOW_MODEL_UPLOAD;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.IntValue MODEL_UPLOAD_CHUNKS_PER_TICK;
+    public static ModConfigSpec.IntValue MODEL_UPLOAD_MAX_MB;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.ConfigValue<String> DEFAULT_MODEL_ID;
+    public static ModConfigSpec.IntValue MODEL_UPLOAD_CHUNKS_PER_TICK;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.ConfigValue<String> DEFAULT_MODEL_TEXTURE;
+    public static ModConfigSpec.ConfigValue<String> DEFAULT_MODEL_ID;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.IntValue ACCEPT_SOUND_FX;
+    public static ModConfigSpec.ConfigValue<String> DEFAULT_MODEL_TEXTURE;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.ConfigValue<List<String>> CLIENT_NOT_DISPLAY_MODELS;
+    public static ModConfigSpec.IntValue ACCEPT_SOUND_FX;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec buildSpec() {
-        net.neoforged.neoforge.common.ModConfigSpec.Builder builder = new net.neoforged.neoforge.common.ModConfigSpec.Builder();
+    public static ModConfigSpec.ConfigValue<List<String>> CLIENT_NOT_DISPLAY_MODELS;
+
+    public static ModConfigSpec buildSpec() {
+        ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
         defineOptions(builder);
         return builder.build();
     }
 
-    private static void defineOptions(net.neoforged.neoforge.common.ModConfigSpec.Builder builder) {
+    private static void defineOptions(ModConfigSpec.Builder builder) {
         builder.comment("The default model ID when a player first enters the game");
         DEFAULT_MODEL_ID = builder.define("DefaultModelId", "default");
         builder.comment("The default model texture when a player first enters the game");
@@ -55,7 +58,10 @@ public class ServerConfig {
         builder.push("server_scheduler");
         builder.comment("Concurrent level for processing models. Value 0 means AUTO.");
         THREAD_COUNT = builder.defineInRange("ThreadCount", 0, 0, Math.max(2, Runtime.getRuntime().availableProcessors() - 1));
-        builder.comment("Bandwidth limitation during distributing models to players.(In Mbps)");
+        builder.comment("Whether to enable the global model transfer bandwidth limit");
+        builder.comment("When enabled, the limit is shared by server-to-client model sync and client-to-server model upload chunks.");
+        ENABLE_GLOBAL_BANDWIDTH_LIMIT = builder.define("EnableGlobalBandwidthLimit", true);
+        builder.comment("Global model transfer bandwidth limit in Mbps");
         BANDWIDTH_LIMIT = builder.defineInRange("BandwidthLimit", 5, 1, 999);
         builder.comment("Timeout for players to respond to synchronization. Value not greater than 10 means AUTO.(In seconds)");
         PLAYER_SYNC_TIMEOUT = builder.defineInRange("PlayerSyncTimeout", 0, 0, 120);

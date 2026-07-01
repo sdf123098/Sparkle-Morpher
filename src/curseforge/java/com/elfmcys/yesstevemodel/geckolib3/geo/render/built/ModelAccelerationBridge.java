@@ -6,6 +6,10 @@ final class ModelAccelerationBridge {
     private ModelAccelerationBridge() {
     }
 
+    static int nGetAbiVersion() {
+        return 0;
+    }
+
     static long nInitModelCache(ByteBuffer buffer) {
         return 0L;
     }

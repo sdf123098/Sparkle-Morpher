@@ -780,5 +780,17 @@
   "gui.sparkle_morpher.model_panel.setting_group.misc": "其他",
   "gui.sparkle_morpher.model_panel.applied_model": "已应用 %s",
   "gui.sparkle_morpher.model_panel.add_site": "添加站点",
-  "gui.sparkle_morpher.model_panel.clear_selection": "清空选择"
+  "gui.sparkle_morpher.model_panel.clear_selection": "清空选择",
+  "gui.sparkle_morpher.sync_hint.failed": "模型加载失败",
+  "gui.sparkle_morpher.sync_hint.success": "模型加载完成",
+  "gui.sparkle_morpher.sync_hint.completed_models": "已加载 %s 个模型",
+  "gui.sparkle_morpher.sync_hint.loading_models_precise": "正在加载 %1/%2 个模型，%3 个等待处理",
+  "gui.sparkle_morpher.sync_hint.waiting_detail": "等待服务器模型列表",
+  "gui.sparkle_morpher.sync_hint.loading_detail": "正在接收模型数据",
+  "gui.sparkle_morpher.sync_hint.preparing_detail": "正在准备模型缓存",
+  "gui.sparkle_morpher.sync_hint.syncing_models": "正在同步 %1/%2 个模型",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_position": "加载弹窗位置",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x": "加载弹窗 X 偏移",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y": "加载弹窗 Y 偏移",
+  "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide": "加载弹窗自动隐藏"
 }

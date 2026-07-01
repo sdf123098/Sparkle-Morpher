@@ -1,5 +1,6 @@
 package com.micaftic.morpher;
 
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.sun.jna.NativeLibrary;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.StringUtil;
@@ -20,6 +21,8 @@ import java.nio.file.Path;
 import java.util.Arrays;
 
 public final class RuntimeAccelerationLoader {
+    private static final int EXPECTED_NATIVE_ABI_VERSION = 3;
+
     private static boolean available = false;
     private static boolean loaded = false;
     private static boolean isAndroid = false;
@@ -182,6 +185,13 @@ public final class RuntimeAccelerationLoader {
             long start = System.currentTimeMillis();
             YesSteveModel.LOGGER.info("Begin load native library");
             System.load(path);
+            int actualAbi = GeoModel.nGetAbiVersion();
+            if (actualAbi != EXPECTED_NATIVE_ABI_VERSION) {
+                String msg = "native ABI mismatch: expected " + EXPECTED_NATIVE_ABI_VERSION + ", got " + actualAbi;
+                YesSteveModel.LOGGER.error("Failed to load native lib: {}", msg);
+                setUnsatisfiedRuntimeError(msg);
+                return false;
+            }
             YesSteveModel.LOGGER.info("Successfully load native library in {}ms", System.currentTimeMillis() - start);
             return true;
         } catch (Throwable th) {

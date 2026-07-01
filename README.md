@@ -10,7 +10,7 @@ A comprehensive Minecraft custom model loader that lets players mount custom mod
 
 ### Custom Player Models & Skins
 
-Replace vanilla player models with fully custom 3D models. All custom models are **visible to other players in multiplayer** — no server-side mod required for model visibility.
+Replace vanilla player models with fully custom 3D models. All custom models are **visible to other players in multiplayer**
 
 ### Model Format Support
 
@@ -40,6 +40,18 @@ Play model-bundled voice lines and sound effects triggered by skills or actions.
 - A configurable blacklist (`config/sparkle_morpher/blacklist.txt`) lets servers restrict specific models.
 - Client-server model state synchronization via Cardinal Components entity data.
 
+### Server Bandwidth Limit
+
+Server operators can configure the global model-transfer limiter in `config/sparkle_morpher-server.toml`:
+
+```toml
+[server_scheduler]
+EnableGlobalBandwidthLimit = true
+BandwidthLimit = 5
+```
+
+`BandwidthLimit` is in Mbps. When `EnableGlobalBandwidthLimit` is enabled, the limit is shared globally by server-to-client model sync packets and client-to-server model upload chunks. Small control packets, including favorite sync, are not throttled.
+
 ### Mod Compatibility
 
 Designed to work alongside popular mods:
@@ -54,14 +66,7 @@ Designed to work alongside popular mods:
 
 ### Cross-platform
 
-Four build variants covering all major loader and version combinations:
-
-| Variant | Loader | Minecraft Version |
-|---------|--------|-------------------|
-| Sparkle-Morpher-Fa1.21.1 | Fabric | 1.21.1 |
-| Sparkle-Morpher-Fa26.1.2 | Fabric | 26.1.2 |
-| Sparkle-Morpher-Neo1.21.1 | NeoForge | 1.21.1 |
-| Sparkle-Morpher-Neo26.1.2 | NeoForge | 26.1.2 |
+More build variants covering all major loader and version combinations:
 
 ## How It Works
 

@@ -3,6 +3,7 @@ package com.elfmcys.yesstevemodel.geckolib3.geo.render.built;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.resource.ModelOptimizationStats;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
@@ -67,6 +68,12 @@ public class GeoModel {
     @NotNull
     public final IntList backpackIds;
 
+    @NotNull
+    public final IntList leftSwordIds;
+
+    @NotNull
+    public final IntList rightSwordIds;
+
     public final boolean hasCustomLeftHand;
 
     public final boolean hasCustomRightHand;
@@ -95,6 +102,8 @@ public class GeoModel {
     public int[] bakedBoneRenderOrderAll = new int[0];
     public int[] bakedBoneRenderOrderLeftArm = new int[0];
     public int[] bakedBoneRenderOrderRightArm = new int[0];
+
+    public ModelOptimizationStats optimizationStats;
 
     public static class BakedBone {
         public String name;
@@ -158,6 +167,18 @@ public class GeoModel {
 
         public float v(int index) {
             return packedUvs[index * 2 + 1];
+        }
+
+        public float normalX() {
+            return normalX;
+        }
+
+        public float normalY() {
+            return normalY;
+        }
+
+        public float normalZ() {
+            return normalZ;
         }
     }
 
@@ -229,6 +250,10 @@ public class GeoModel {
     public long nativeModelHandle = 0;
 
     public long gpuMeshHandle = 0;
+
+    public static int nGetAbiVersion() {
+        return ModelAccelerationBridge.nGetAbiVersion();
+    }
 
     public static long nInitModelCache(ByteBuffer buffer) {
         return ModelAccelerationBridge.nInitModelCache(buffer);
@@ -362,6 +387,8 @@ public class GeoModel {
         this.sheathIds = resolveBoneIds(strArr[10]);
         this.headIds = resolveBoneIds(strArr[11]);
         this.backpackIds = resolveBoneIds(strArr[12]);
+        this.leftSwordIds = strArr.length > 35 ? resolveBoneIds(strArr[35]) : IntLists.emptyList();
+        this.rightSwordIds = strArr.length > 36 ? resolveBoneIds(strArr[36]) : IntLists.emptyList();
         for (int i = 13; i <= 19; i++) {
             String[] strArr2 = strArr[i];
             if (strArr2.length > 0) {

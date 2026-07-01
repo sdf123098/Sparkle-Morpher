@@ -120,29 +120,46 @@ public final class ServerModelManager {
     private static volatile boolean initialized = false;
 
     private static RateLimiter bandwidthLimiter = null;
+    private static boolean bandwidthLimitEnabled = true;
+    private static int bandwidthLimitMbps = 5;
     private static Semaphore threadLimiter = null;
+    private static int threadLimit = -1;
     private static boolean limitsInitialized = false;
 
     private static void initRateLimit() {
-        if (!limitsInitialized) {
-            try {
-                int mbps = ServerConfig.BANDWIDTH_LIMIT.get();
-                double bytesPerSec = Math.max(1.0, mbps * 131072.0);
-                bandwidthLimiter = RateLimiter.create(bytesPerSec);
-
-                int threads = ServerConfig.THREAD_COUNT.get();
-                if (threads <= 0) {
-                    threads = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
-                }
-                threadLimiter = new Semaphore(threads);
-
-                limitsInitialized = true;
-            } catch (Exception e) {
-                YesSteveModel.LOGGER.error("[SM] Failed to initialize limits from config", e);
-                bandwidthLimiter = RateLimiter.create(5 * 131072.0);
-                threadLimiter = new Semaphore(Math.max(2, Runtime.getRuntime().availableProcessors() - 1));
-                limitsInitialized = true;
+        try {
+            boolean enabled = ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT.get();
+            int mbps = Math.max(1, ServerConfig.BANDWIDTH_LIMIT.get());
+            if (!limitsInitialized || enabled != bandwidthLimitEnabled || mbps != bandwidthLimitMbps) {
+                bandwidthLimitEnabled = enabled;
+                bandwidthLimitMbps = mbps;
+                bandwidthLimiter = enabled ? RateLimiter.create(Math.max(1.0, mbps * 131072.0)) : null;
             }
+            int threads = ServerConfig.THREAD_COUNT.get();
+            if (threads <= 0) {
+                threads = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
+            }
+            if (!limitsInitialized || threadLimiter == null || threads != threadLimit) {
+                threadLimit = threads;
+                threadLimiter = new Semaphore(threads);
+            }
+            limitsInitialized = true;
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.error("[SM] Failed to initialize limits from config", e);
+            bandwidthLimitEnabled = true;
+            bandwidthLimitMbps = 5;
+            bandwidthLimiter = RateLimiter.create(5 * 131072.0);
+            threadLimit = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
+            threadLimiter = new Semaphore(threadLimit);
+            limitsInitialized = true;
+        }
+    }
+
+    private static void acquireGlobalBandwidth(int bytes) {
+        initRateLimit();
+        RateLimiter limiter = bandwidthLimiter;
+        if (bandwidthLimitEnabled && limiter != null && bytes > 0) {
+            limiter.acquire(bytes);
         }
     }
 
@@ -994,7 +1011,7 @@ public final class ServerModelManager {
                             outBuf.getRawBuf().writeBytes(fileData, offset, length);
                             YsmCrypt.EncryptedPacket result = YsmCrypt.encrypt(outBuf.toArray(), state.key1, false);
 
-//                            bandwidthLimiter.acquire(result.data().length); //TODO
+                            acquireGlobalBandwidth(result.data().length);
 
 
                             // Stream chunks
@@ -1153,6 +1170,7 @@ public final class ServerModelManager {
         if (state == null || sender == null || !state.owner.equals(sender.getUUID())) {
             return;
         }
+        acquireGlobalBandwidth(data == null ? 0 : data.length);
         state.touch();
         if (data == null || offset < 0 || offset + data.length > state.data.length || offset != state.receivedBytes) {
             state.failed = true;

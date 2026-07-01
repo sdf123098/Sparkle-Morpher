@@ -1,8 +1,12 @@
 package com.micaftic.morpher.network.message;
 
 import com.micaftic.morpher.capability.StarModelsCapability;
+import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.util.LocalStarModelsStore;
 import com.google.common.collect.Sets;
-import net.neoforged.api.distmarker.Dist;import net.neoforged.api.distmarker.OnlyIn;import net.minecraft.client.Minecraft;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
@@ -43,7 +47,16 @@ public class S2CSyncStarModelsPacket {
     public static void handleCapability(S2CSyncStarModelsPacket message) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
-            StarModelsCapability.get(minecraft.player).ifPresent(cap -> cap.setStarModels(message.starModels));
+            Set<String> merged = Sets.newHashSet(message.starModels);
+            Set<String> local = LocalStarModelsStore.load();
+            merged.addAll(local);
+            LocalStarModelsStore.save(merged);
+            StarModelsCapability.get(minecraft.player).ifPresent(cap -> cap.setStarModels(merged));
+            for (String modelId : local) {
+                if (!message.starModels.contains(modelId) && NetworkHandler.isClientConnected()) {
+                    NetworkHandler.sendToServer(C2SSetStarModelPacket.add(modelId));
+                }
+            }
         }
     }
 }

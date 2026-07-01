@@ -22,6 +22,12 @@ public final class ClientPlayerJoinNotification {
         t.setDaemon(true); t.start();
     }
     @SubscribeEvent public static void onQuit(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
-        if (notified) { notified = false; if (YesSteveModel.isAvailable()) ClientModelManager.resetSync(); }
+        if (notified) {
+            notified = false;
+            if (YesSteveModel.isAvailable()) {
+                ClientModelManager.resetSync();
+                ClientModelManager.reloadLocalModels(null);
+            }
+        }
     }
 }

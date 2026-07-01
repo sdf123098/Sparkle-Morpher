@@ -156,7 +156,9 @@ public class ModelRendererBridge {
         Matrix4f[] boneLocalTransforms = scratch.boneLocalTransforms;
         boolean[] boneVisible = scratch.boneVisible;
         boolean[] boneComputed = scratch.boneComputed;
-        boolean useJavaVector = GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false) && VectorApiCapability.isAvailable();
+        boolean javaVectorRequested = GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false);
+        VectorApiCapability.warnIfRequested(javaVectorRequested);
+        boolean useJavaVector = javaVectorRequested && VectorApiCapability.isAvailable();
         int[] boneOrder = mesh.bakedBoneOrder;
         if (boneOrder != null && boneOrder.length == boneCount) {
             for (int orderIndex = 0; orderIndex < boneCount; orderIndex++) {
