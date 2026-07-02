@@ -143,6 +143,12 @@ public class StarModelsCapability {
             super.deserializeNBT(listTag);
         }
 
+        @Override
+        public void setStarModels(Set<String> set) {
+            disableLocal = true; // 从服务器获取到的收藏模型, 不要写到本地
+            super.setStarModels(set);
+        }
+
     }
 
 }
