@@ -2,6 +2,8 @@ package com.micaftic.morpher.capability.fabric;
 
 import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.fabric.YsmComponents;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.Optional;
@@ -15,4 +17,9 @@ public final class StarModelsCapabilityImpl {
         StarModelsComponent component = YsmComponents.STAR_MODELS.getNullable(player);
         return component == null ? Optional.empty() : Optional.of(component.capability());
     }
+
+    public static boolean isClientSide() {
+        return FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT;
+    }
+
 }
