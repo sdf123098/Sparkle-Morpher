@@ -6,6 +6,8 @@ import com.google.gson.JsonParser;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.fabric.StarModelsCapabilityImpl;
 import com.micaftic.morpher.core.architectury.platform.Platform;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -29,16 +31,18 @@ public class StarModelsCapability {
 
     public static Optional<StarModelsCapability> get(Player player) {
         Optional<StarModelsCapability> cap = StarModelsCapabilityImpl.get(player);
-        if(player instanceof LocalPlayer) {
-            if(cap.isEmpty()) return Optional.empty();
+        if(FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+            if(player instanceof LocalPlayer) {
+                if(cap.isEmpty()) return Optional.empty();
 
-            StarModelsCapability temp = cap.get();
-            if(cache != temp) {
-                cache = temp;
-                localInstance = new LocalStarModelsCapability();
+                StarModelsCapability temp = cap.get();
+                if(cache != temp) {
+                    cache = temp;
+                    localInstance = new LocalStarModelsCapability();
+                }
+
+                return Optional.of(localInstance);
             }
-
-            return Optional.of(localInstance);
         }
         return cap;
     }
