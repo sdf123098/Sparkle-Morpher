@@ -1,22 +1,24 @@
 package com.micaftic.morpher.client.entity;
 
-import com.micaftic.morpher.geckolib3.core.controller.controllers.PlayerAnimationController;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.ImportedPlayerAnimationController;
+import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
 import com.micaftic.morpher.geckolib3.core.enums.AnimationState;
+import com.micaftic.morpher.resource.models.ModelProperties;
 import com.micaftic.morpher.molang.runtime.Struct;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SPlayAnimationPacket;
+import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.Map;
 
 public abstract class CustomPlayerEntity extends LivingAnimatable<Player> implements RoamingPropertyHolder {
 
@@ -83,13 +85,48 @@ public abstract class CustomPlayerEntity extends LivingAnimatable<Player> implem
     }
 
     public void requestModelSwitch(String str) {
-        if (getAnimation(str) != null) {
-            this.selectedModelId = str;
+        String animationName = resolvePlayableAnimation(str);
+        if (animationName != null) {
+            this.selectedModelId = animationName;
             this.isModelSwitching = true;
             this.isDisabled = true;
             return;
         }
         this.isModelSwitching = false;
+    }
+
+    private @Nullable String resolvePlayableAnimation(String animationName) {
+        if (animationName == null || animationName.isBlank()) {
+            return null;
+        }
+        if (getAnimation(animationName) != null) {
+            return animationName;
+        }
+        ModelProperties properties = getModelAssembly().getModelData().getModelProperties();
+        String resolved = resolveExtraAnimationValue(properties.getExtraAnimation(), animationName);
+        if (resolved != null) {
+            return resolved;
+        }
+        for (OrderedStringMap<String, String> group : properties.getExtraAnimationClassify().values()) {
+            resolved = resolveExtraAnimationValue(group, animationName);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+        return null;
+    }
+
+    private @Nullable String resolveExtraAnimationValue(OrderedStringMap<String, String> animations, String key) {
+        if (animations == null || key == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> entry : animations.entrySet()) {
+            if (key.equals(entry.getKey())) {
+                String value = entry.getValue();
+                return value != null && getAnimation(value) != null ? value : null;
+            }
+        }
+        return null;
     }
 
     public void enableModel() {
@@ -130,10 +167,7 @@ public abstract class CustomPlayerEntity extends LivingAnimatable<Player> implem
     }
 
     private String getCapControllerKey() {
-        if (isModelReady() && getModelAssembly().getAnimationBundle().isImportedPlayerModel()) {
-            return ImportedPlayerAnimationController.CAP_CONTROLLER_KEY;
-        }
-        return PlayerAnimationController.CAP_CONTROLLER_KEY;
+        return UnifiedPlayerActionController.CAP_CONTROLLER_KEY;
     }
 
     public void executeAnimationExpression(FloatArrayList floatArrayList) {

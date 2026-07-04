@@ -8,6 +8,7 @@ public final class ModelOptimizationStats {
     public int internalFaceCandidatePairs;
     public int translucentFaces;
     public int zeroThicknessFaces;
+    public int negativeSizedFaces;
     public int bones;
     public int cubes;
     public int textures;
@@ -29,6 +30,7 @@ public final class ModelOptimizationStats {
                 + " internalFaceCandidatePairs=" + internalFaceCandidatePairs
                 + " translucentFaces=" + translucentFaces
                 + " zeroThicknessFaces=" + zeroThicknessFaces
+                + " negativeSizedFaces=" + negativeSizedFaces
                 + " bones=" + bones
                 + " cubes=" + cubes
                 + " textures=" + textures

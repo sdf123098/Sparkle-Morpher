@@ -26,12 +26,42 @@ public final class PlayerModelToggleKey {
             return;
         }
         ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
-            return onKeyInput(action, keyCode, scanCode) ? EventResult.interruptFalse() : EventResult.pass();
+            return onKeyInput(action, keyCode, scanCode, modifiers) ? EventResult.interruptFalse() : EventResult.pass();
+        });
+        ClientRawInputEvent.MOUSE_CLICKED_PRE.register((client, button, action, modifiers) -> {
+            return onMouseInput(action, button, modifiers) ? EventResult.interruptFalse() : EventResult.pass();
         });
     }
 
-    private static boolean onKeyInput(int action, int keyCode, int scanCode) {
-        if (action != 1 || !InputUtil.isKeyPressed(keyCode, scanCode, KEY_MAPPING)) {
+    private static boolean onKeyInput(int action, int keyCode, int scanCode, int modifiers) {
+        if (action != 1 || !InputUtil.isKeyPressed(keyCode, scanCode, modifiers, KEY_MAPPING)) {
+            return false;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof PlayerModelScreen screen) {
+            if (screen.shouldCloseWithToggleKey()) {
+                screen.onClose();
+                return true;
+            }
+            return false;
+        }
+        if (!InputUtil.isPlayerReady()) {
+            return false;
+        }
+        if (!YesSteveModel.isAvailable()) {
+            YesSteveModel.sendUnavailableMessage();
+            return true;
+        }
+        if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) {
+            minecraft.setScreen(ModernPlayerModelScreen.settings());
+        } else {
+            minecraft.setScreen(new ModernPlayerModelScreen());
+        }
+        return true;
+    }
+
+    private static boolean onMouseInput(int action, int button, int modifiers) {
+        if (action != 1 || !InputUtil.isMousePressed(button, modifiers, KEY_MAPPING)) {
             return false;
         }
         Minecraft minecraft = Minecraft.getInstance();

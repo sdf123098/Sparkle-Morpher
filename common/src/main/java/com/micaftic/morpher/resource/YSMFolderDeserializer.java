@@ -52,13 +52,35 @@ public class YSMFolderDeserializer implements AutoCloseable {
         } else if (sourcePath.toString().endsWith(".zip") || sourcePath.toString().endsWith(".ysm")) {
             URI uri = URI.create("jar:" + sourcePath.toUri());
             this.zipFileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
-            this.rootPath = this.zipFileSystem.getPath("/");
+            this.rootPath = resolveArchiveModelRoot(this.zipFileSystem.getPath("/"));
         } else {
             throw new IllegalArgumentException("Unsupported file type. Expected directory or .zip");
         }
 
         this.model = new RawYsmModel();
         this.model.formatVersion = 65535;
+    }
+
+    private static Path resolveArchiveModelRoot(Path archiveRoot) throws IOException {
+        if (isModelFolder(archiveRoot)) {
+            return archiveRoot;
+        }
+
+        Path detectedRoot = null;
+        try (Stream<Path> stream = Files.list(archiveRoot)) {
+            Iterator<Path> iterator = stream.iterator();
+            while (iterator.hasNext()) {
+                Path child = iterator.next();
+                if (!Files.isDirectory(child) || !isModelFolder(child)) {
+                    continue;
+                }
+                if (detectedRoot != null) {
+                    return archiveRoot;
+                }
+                detectedRoot = child;
+            }
+        }
+        return detectedRoot != null ? detectedRoot : archiveRoot;
     }
 
     public YSMFolderDeserializer(Map<String, byte[]> memoryFiles) {
@@ -666,7 +688,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
         return node;
     }
 
-    private RawYsmModel.RawAnimationFile parseAnimations(byte[] data) {
+    public static RawYsmModel.RawAnimationFile parseAnimationFile(byte[] data) {
         String json = new String(data, StandardCharsets.UTF_8);
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
         RawYsmModel.RawAnimationFile raf = new RawYsmModel.RawAnimationFile();
@@ -742,14 +764,18 @@ public class YSMFolderDeserializer implements AutoCloseable {
         return raf;
     }
 
-    private void parseChannelToKeyframes(JsonObject bObj, String channel, List<RawYsmModel.RawKeyframe> targetList) {
+    private RawYsmModel.RawAnimationFile parseAnimations(byte[] data) {
+        return parseAnimationFile(data);
+    }
+
+    private static void parseChannelToKeyframes(JsonObject bObj, String channel, List<RawYsmModel.RawKeyframe> targetList) {
         if (!bObj.has(channel)) return;
         JsonElement cElem = bObj.get(channel);
 
         if (!cElem.isJsonObject()) {
             RawYsmModel.RawKeyframe kf = new RawYsmModel.RawKeyframe();
             kf.timestamp = 0.0f;
-            kf.interpolationMode = 0; // linear
+            kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
             kf.hasPreData = false;
             kf.postData = jsonElementToMolangArray(cElem);
             targetList.add(kf);
@@ -763,17 +789,17 @@ public class YSMFolderDeserializer implements AutoCloseable {
         for (Map.Entry<String, JsonElement> entry : sorted) {
             RawYsmModel.RawKeyframe kf = new RawYsmModel.RawKeyframe();
             kf.timestamp = Float.parseFloat(entry.getKey());
-            kf.interpolationMode = 0;
+            kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
 
             JsonElement valElem = entry.getValue();
             if (valElem.isJsonObject()) {
                 JsonObject obj = valElem.getAsJsonObject();
                 if (obj.has("lerp_mode")) {
                     String lm = getJsonString(obj.get("lerp_mode"));
-                    if ("catmullrom".equals(lm)) kf.interpolationMode = 2;
-                    else if ("step".equals(lm)) kf.interpolationMode = 1;
+                    if ("catmullrom".equals(lm)) kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_CATMULLROM;
+                    else if ("step".equals(lm)) kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_STEP;
                 } else
-                    kf.interpolationMode = 1;
+                    kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_STEP;
 
                 if (obj.has("pre") && obj.has("post")) {
                     kf.hasPreData = true;
@@ -791,7 +817,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
         }
     }
 
-    private Object[] jsonElementToMolangArray(JsonElement elem) {
+    private static Object[] jsonElementToMolangArray(JsonElement elem) {
         Object[] arr = new Object[]{0f, 0f, 0f};
         if (elem == null || elem.isJsonNull()) return arr;
 

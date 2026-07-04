@@ -107,3 +107,4 @@ remapJar {
 tasks.named('remapSourcesJar') {
     archiveFileName = "${releaseArchiveName}-sources.jar"
 }
+

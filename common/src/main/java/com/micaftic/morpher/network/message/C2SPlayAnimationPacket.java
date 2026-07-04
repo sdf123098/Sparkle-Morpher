@@ -10,6 +10,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
 import java.util.Map;
@@ -22,32 +23,44 @@ public class C2SPlayAnimationPacket {
 
     private final int entityId;
 
-    public C2SPlayAnimationPacket(int animationIndex, String category, int entityId) {
+    private final String animationKey;
+
+    public C2SPlayAnimationPacket(int animationIndex, String category, int entityId, String animationKey) {
         this.animationIndex = animationIndex;
         this.category = category;
         this.entityId = entityId;
+        this.animationKey = animationKey == null ? StringPool.EMPTY : animationKey;
+    }
+
+    public C2SPlayAnimationPacket(int animationIndex, String category, int entityId) {
+        this(animationIndex, category, entityId, StringPool.EMPTY);
+    }
+
+    public C2SPlayAnimationPacket(int animationIndex, String category, String animationKey) {
+        this(animationIndex, category, -1, animationKey);
     }
 
     public C2SPlayAnimationPacket(int animationIndex, String category) {
-        this(animationIndex, category, -1);
+        this(animationIndex, category, -1, StringPool.EMPTY);
     }
 
     public static C2SPlayAnimationPacket createDefault() {
-        return new C2SPlayAnimationPacket(-1, StringPool.EMPTY);
+        return new C2SPlayAnimationPacket(-1, StringPool.EMPTY, -1, StringPool.EMPTY);
     }
 
     public static C2SPlayAnimationPacket createWithIndex(int entityId) {
-        return new C2SPlayAnimationPacket(-1, StringPool.EMPTY, entityId);
+        return new C2SPlayAnimationPacket(-1, StringPool.EMPTY, entityId, StringPool.EMPTY);
     }
 
     public static void encode(C2SPlayAnimationPacket message, FriendlyByteBuf buf) {
         buf.writeVarInt(message.animationIndex);
         buf.writeUtf(message.category);
         buf.writeVarInt(message.entityId);
+        buf.writeUtf(message.animationKey);
     }
 
     public static C2SPlayAnimationPacket decode(FriendlyByteBuf buf) {
-        return new C2SPlayAnimationPacket(buf.readVarInt(), buf.readUtf(), buf.readVarInt());
+        return new C2SPlayAnimationPacket(buf.readVarInt(), buf.readUtf(), buf.readVarInt(), buf.readUtf());
     }
 
     public static void handle(C2SPlayAnimationPacket message, PacketContext ctx) {
@@ -76,7 +89,7 @@ public class C2SPlayAnimationPacket {
             if (message.animationIndex == -1) {
                 modelInfoCap.stopAnimation(sender);
             } else {
-                ServerModelManager.getModelDefinition(modelInfoCap.getModelId()).ifPresent(serverModelCap -> {
+                ServerModelManager.getModelDefinition(modelInfoCap.getModelId()).ifPresentOrElse(serverModelCap -> {
                     OrderedStringMap<String, String> extraAnimations;
                     ModelProperties modelProperties = serverModelCap.getLoadedModelData().getModelProperties();
                     Map<String, OrderedStringMap<String, String>> extraAnimationClassify = modelProperties.getExtraAnimationClassify();
@@ -85,8 +98,13 @@ public class C2SPlayAnimationPacket {
                     } else {
                         extraAnimations = modelProperties.getExtraAnimation();
                     }
-                    if (extraAnimations.size() > message.animationIndex) {
+                    if (message.animationIndex >= 0 && extraAnimations.size() > message.animationIndex) {
                         modelInfoCap.playAnimation(sender, extraAnimations.getKeyAt(message.animationIndex));
+                    }
+                }, () -> {
+                    Pair<String, String> defaultConfig = ServerModelManager.getDefaultModelConfig();
+                    if (modelInfoCap.getModelId().equals(defaultConfig.getLeft()) && StringUtils.isNotBlank(message.animationKey)) {
+                        modelInfoCap.playAnimation(sender, message.animationKey);
                     }
                 });
             }

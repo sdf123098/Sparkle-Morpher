@@ -3,6 +3,8 @@ package com.micaftic.morpher.core.api.client.fabric;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.resources.Identifier;
 
 import java.util.Map;
@@ -29,6 +31,18 @@ public final class KeyMappingFactoryImpl {
     }
 
     public static boolean isActiveAndMatches(KeyMapping keyMapping, int keyCode, int scanCode) {
-        return keyMapping.matches(new KeyEvent(keyCode, scanCode, 0));
+        return isActiveAndMatches(keyMapping, keyCode, scanCode, 0);
+    }
+
+    public static boolean isActiveAndMatches(KeyMapping keyMapping, int keyCode, int scanCode, int modifiers) {
+        return keyMapping.matches(new KeyEvent(keyCode, scanCode, modifiers));
+    }
+
+    public static boolean isMouseActiveAndMatches(KeyMapping keyMapping, int button) {
+        return isMouseActiveAndMatches(keyMapping, button, 0);
+    }
+
+    public static boolean isMouseActiveAndMatches(KeyMapping keyMapping, int button, int modifiers) {
+        return keyMapping.matchesMouse(new MouseButtonEvent(0.0d, 0.0d, new MouseButtonInfo(button, modifiers)));
     }
 }

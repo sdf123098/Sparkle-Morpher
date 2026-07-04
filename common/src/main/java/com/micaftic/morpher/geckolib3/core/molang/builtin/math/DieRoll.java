@@ -3,6 +3,7 @@ package com.micaftic.morpher.geckolib3.core.molang.builtin.math;
 import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
 import com.micaftic.morpher.geckolib3.core.molang.funciton.ContextFunction;
 import com.micaftic.morpher.molang.runtime.ExecutionContext;
+import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import net.minecraft.util.RandomSource;
 
 public class DieRoll extends ContextFunction<Object> {
@@ -16,7 +17,27 @@ public class DieRoll extends ContextFunction<Object> {
         int i = arguments.getAsInt(context, 0);
         float min = arguments.getAsFloat(context, 1);
         float range = arguments.getAsFloat(context, 2);
-        if(min > range) {
+        if (min > range) {
+            float temp = min;
+            min = range;
+            range = temp - range;
+        } else {
+            range -= min;
+        }
+        float total = 0;
+        RandomSource rnd = context.entity().random();
+        while (i-- > 0) {
+            total += min + rnd.nextFloat() * range;
+        }
+        return total;
+    }
+
+    @Override
+    protected float evalFloat(ExpressionEvaluator<IContext<Object>> context, ArgumentCollection arguments) {
+        int i = arguments.getAsInt(context, 0);
+        float min = arguments.getAsFloatRaw(context, 1);
+        float range = arguments.getAsFloatRaw(context, 2);
+        if (min > range) {
             float temp = min;
             min = range;
             range = temp - range;
