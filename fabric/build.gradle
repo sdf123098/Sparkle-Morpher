@@ -58,12 +58,15 @@ dependencies {
     include "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
     include "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
 
+    implementation "com.electronwill.night-config:core:3.9.0"
+    implementation "com.electronwill.night-config:toml:3.9.0"
+
     modCompileOnly "com.terraformersmc:modmenu:$rootProject.modmenu_version"
 
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     include "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 
-    // zstd-jni dependency removed: project now uses YSM native â†?pure-Java ZstdUtil â†?raw-frame fallback chain.
+    // zstd-jni dependency removed: project now uses YSM native ï¿½?pure-Java ZstdUtil ï¿½?raw-frame fallback chain.
 }
 
 processResources {
