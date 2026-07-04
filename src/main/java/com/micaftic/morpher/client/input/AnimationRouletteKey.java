@@ -50,13 +50,29 @@ public final class AnimationRouletteKey {
     public static void onKey(InputEvent.Key event) {
         if (PlatformAPI.isServer() || !InputUtil.isPlayerReady() || event.getAction() != 1) return;
         if (!YesSteveModel.isAvailable()) return;
-        if (InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), KEY_LOCK)) {
+        if (InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), event.getModifiers(), KEY_LOCK)) {
             AnimationLockEvent.toggleLock();
             return;
         }
-        if (InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), KEY_ROULETTE)) {
+        if (InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), event.getModifiers(), KEY_ROULETTE)) {
             if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) return;
             handleRoulettePress();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onMouse(InputEvent.MouseButton.Pre event) {
+        if (PlatformAPI.isServer() || !InputUtil.isPlayerReady() || event.getAction() != 1) return;
+        if (!YesSteveModel.isAvailable()) return;
+        if (InputUtil.isMousePressed(event.getButton(), KEY_LOCK)) {
+            AnimationLockEvent.toggleLock();
+            event.setCanceled(true);
+            return;
+        }
+        if (InputUtil.isMousePressed(event.getButton(), KEY_ROULETTE)) {
+            if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) return;
+            handleRoulettePress();
+            event.setCanceled(true);
         }
     }
 

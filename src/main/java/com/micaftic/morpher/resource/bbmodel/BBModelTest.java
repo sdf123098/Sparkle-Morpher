@@ -1,6 +1,13 @@
 package com.micaftic.morpher.resource.bbmodel;
 
+import com.micaftic.morpher.geckolib3.core.keyframe.bone.BoneKeyFrame;
+import com.micaftic.morpher.geckolib3.core.keyframe.bone.BoneKeyFrameProcessor;
+import com.micaftic.morpher.geckolib3.core.keyframe.bone.EasingType;
+import com.micaftic.morpher.geckolib3.core.keyframe.bone.RawBoneKeyFrame;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
+import org.joml.Vector3f;
+
+import java.util.List;
 
 /**
  * BBModel 解析器自检。
@@ -25,6 +32,11 @@ public class BBModelTest {
         runStatesAsArrayTest();
         runMeshTriangulationTest();
         runZipSnifferTest();
+        runHoldLoopModeTest();
+        runInterpolationCompatibilityTest();
+        runRuntimeStepKeyframeTest();
+        runTimelineAndEffectConversionTest();
+        runBezierBakeTest();
 
         System.out.println();
         System.out.println("================");
@@ -209,7 +221,170 @@ public class BBModelTest {
         check("anim: pos.postData all Float", posKf.postData[0] instanceof Float
                 && posKf.postData[1] instanceof Float
                 && posKf.postData[2] instanceof Float);
-        check("anim: pos interpolation = catmullrom (1)", posKf.interpolationMode == 1);
+        check("anim: pos interpolation = catmullrom (2)",
+                posKf.interpolationMode == RawYsmModel.RawKeyframe.INTERPOLATION_CATMULLROM);
+    }
+
+    private static void runHoldLoopModeTest() {
+        String json = """
+        {
+          "resolution": {"width": 16, "height": 16},
+          "elements": [],
+          "outliner": [],
+          "animations": [
+            { "uuid": "a1", "name": "anim.hold", "loop": "hold", "length": 1.0, "animators": {} }
+          ]
+        }
+        """;
+        RawYsmModel.RawAnimation anim = BBToRawConverter.convert(BBModelParser.parse(json))
+                .mainEntity.animationFiles.values().iterator().next().animations.get("anim.hold");
+        check("anim: hold loopMode = 3", anim != null && anim.loopMode == 3);
+    }
+
+    private static void runInterpolationCompatibilityTest() {
+        String json = """
+        {
+          "resolution": {"width": 16, "height": 16},
+          "elements": [],
+          "outliner": [{"name":"g", "uuid":"u-g", "children":[]}],
+          "animations": [
+            {
+              "uuid": "a1", "name": "anim.interpolation",
+              "loop": "once", "length": 1.0,
+              "animators": {
+                "u-g": {
+                  "name": "g", "type": "bone",
+                  "keyframes": [
+                    { "channel": "rotation", "time": 0, "interpolation": "linear",
+                      "data_points": [{"x": "0", "y": "0", "z": "0"}] },
+                    { "channel": "rotation", "time": 0.25, "interpolation": "step",
+                      "data_points": [{"x": "1", "y": "0", "z": "0"}] },
+                    { "channel": "rotation", "time": 0.5, "interpolation": "catmullrom",
+                      "data_points": [{"x": "2", "y": "0", "z": "0"}] },
+                    { "channel": "rotation", "time": 0.75, "interpolation": "bezier",
+                      "bezier_linked": true,
+                      "bezier_left_value": [0.1, 0.2, 0.3],
+                      "bezier_right_value": [0.4, 0.5, 0.6],
+                      "bezier_left_time": [0.1, 0.1, 0.1],
+                      "bezier_right_time": [0.2, 0.2, 0.2],
+                      "data_points": [{"x": "3", "y": "0", "z": "0"}] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+        """;
+        RawYsmModel raw = BBToRawConverter.convert(BBModelParser.parse(json));
+        RawYsmModel.RawBoneAnimation ba = raw.mainEntity.animationFiles.values().iterator().next()
+                .animations.get("anim.interpolation").boneAnimations.get(0);
+        check("interp: linear", ba.rotation.get(0).interpolationMode == RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR);
+        check("interp: step", ba.rotation.get(1).interpolationMode == RawYsmModel.RawKeyframe.INTERPOLATION_STEP);
+        check("interp: catmullrom", ba.rotation.get(2).interpolationMode == RawYsmModel.RawKeyframe.INTERPOLATION_CATMULLROM);
+        RawYsmModel.RawKeyframe bezier = ba.rotation.get(3);
+        check("interp: bezier mode", bezier.interpolationMode == RawYsmModel.RawKeyframe.INTERPOLATION_BEZIER);
+        check("interp: bezier handles preserved", bezier.bezierLinked
+                && bezier.bezierLeftValue != null && bezier.bezierLeftValue.length == 3
+                && Math.abs(bezier.bezierRightTime[0] - 0.2f) < 1e-4);
+    }
+
+    private static void runRuntimeStepKeyframeTest() {
+        RawBoneKeyFrame first = rawFrame(0, EasingType.STEP, 1f);
+        RawBoneKeyFrame second = rawFrame(20, EasingType.LINEAR, 5f);
+        List<BoneKeyFrame> frames = BoneKeyFrameProcessor.process(List.of(first, second), false);
+        Vector3f mid = frames.get(1).evaluate(null, 0.5f);
+        Vector3f end = frames.get(1).evaluate(null, 1.0f);
+        check("runtime: step holds previous value", Math.abs(mid.x - 1f) < 1e-4);
+        check("runtime: step reaches boundary value", Math.abs(end.x - 5f) < 1e-4);
+    }
+
+    private static RawBoneKeyFrame rawFrame(double tick, EasingType easingType, double value) {
+        RawBoneKeyFrame frame = new RawBoneKeyFrame();
+        frame.startTick = tick;
+        frame.easingType = easingType;
+        frame.preX = value;
+        frame.preY = 0;
+        frame.preZ = 0;
+        frame.contiguous = true;
+        return frame;
+    }
+
+    private static void runTimelineAndEffectConversionTest() {
+        String json = """
+        {
+          "resolution": {"width": 16, "height": 16},
+          "elements": [],
+          "outliner": [{"name":"g", "uuid":"u-g", "children":[]}],
+          "animations": [
+            {
+              "uuid": "a1", "name": "anim.events", "length": 1.0,
+              "timeline": {
+                "0.25": "query.foo = 1;",
+                "0.5": ["query.bar = 2;", "query.baz = 3;"]
+              },
+              "animators": {
+                "sound-track": {
+                  "type": "sound",
+                  "keyframes": [
+                    { "channel": "sound", "time": 0.75,
+                      "data_points": [{"effect": "sparkle:test"}] }
+                  ]
+                },
+                "effect-track": {
+                  "type": "effect",
+                  "keyframes": [
+                    { "channel": "timeline", "time": 0.9,
+                      "data_points": [{"script": "query.effect = 4;"}] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+        """;
+        RawYsmModel.RawAnimation anim = BBToRawConverter.convert(BBModelParser.parse(json))
+                .mainEntity.animationFiles.values().iterator().next().animations.get("anim.events");
+        check("events: timeline entries converted", anim.timelineEvents.size() == 3);
+        check("events: timeline split", anim.timelineEvents.get(1).events.size() == 2);
+        check("events: sound converted", anim.soundEffects.size() == 1
+                && "sparkle:test".equals(anim.soundEffects.get(0).effectName));
+    }
+
+    private static void runBezierBakeTest() {
+        String json = """
+        {
+          "resolution": {"width": 16, "height": 16},
+          "elements": [],
+          "outliner": [{"name":"g", "uuid":"u-g", "children":[]}],
+          "animations": [
+            {
+              "uuid": "a1", "name": "anim.bezier", "length": 1.0,
+              "animators": {
+                "u-g": {
+                  "name": "g", "type": "bone",
+                  "keyframes": [
+                    { "channel": "position", "time": 0, "interpolation": "bezier",
+                      "bezier_right_value": [0.4, 0, 0],
+                      "bezier_right_time": [0.25, 0.25, 0.25],
+                      "data_points": [{"x": "0", "y": "0", "z": "0"}] },
+                    { "channel": "position", "time": 1, "interpolation": "linear",
+                      "bezier_left_value": [0.6, 0, 0],
+                      "bezier_left_time": [0.75, 0.75, 0.75],
+                      "data_points": [{"x": "1", "y": "0", "z": "0"}] }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+        """;
+        RawYsmModel.RawBoneAnimation boneAnim = BBToRawConverter.convert(BBModelParser.parse(json))
+                .mainEntity.animationFiles.values().iterator().next().animations.get("anim.bezier")
+                .boneAnimations.get(0);
+        check("bezier: baked samples added", boneAnim.position.size() > 2);
+        check("bezier: baked first sample linear", boneAnim.position.get(0).interpolationMode
+                == RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR);
+        check("bezier: final keyframe retained", Math.abs(boneAnim.position.get(boneAnim.position.size() - 1).timestamp - 1f) < 1e-4);
     }
 
     private static void runOrphanElementTest() {

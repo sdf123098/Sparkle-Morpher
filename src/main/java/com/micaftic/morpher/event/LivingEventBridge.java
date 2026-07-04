@@ -1,8 +1,6 @@
 package com.micaftic.morpher.event;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.event.MobEffectEvent;
-import com.micaftic.morpher.client.event.ShieldBlockCooldownEvent;
 import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent;
@@ -22,14 +20,14 @@ public final class LivingEventBridge {
         if (!YesSteveModel.isAvailable() || event.getEffectInstance() == null) {
             return;
         }
-        MobEffectEvent.onEffectAdded(event.getEntity(), event.getEffectInstance().getEffect().value(), event.getEffectInstance().getAmplifier());
+        ServerLivingEventHooks.onEffectAdded(event.getEntity(), event.getEffectInstance().getEffect().value(), event.getEffectInstance().getAmplifier());
     }
 
     private static void onMobEffectRemoved(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Remove event) {
         if (!YesSteveModel.isAvailable() || event.getEffect() == null) {
             return;
         }
-        MobEffectEvent.onEffectRemoved(event.getEntity(), event.getEffect().value());
+        ServerLivingEventHooks.onEffectRemoved(event.getEntity(), event.getEffect().value());
     }
 
     private static void onLivingShieldBlock(LivingShieldBlockEvent event) {
@@ -37,7 +35,7 @@ public final class LivingEventBridge {
             return;
         }
         if (event.getBlocked()) {
-            ShieldBlockCooldownEvent.onShieldBlock(event.getEntity());
+            ServerLivingEventHooks.onShieldBlock(event.getEntity());
         }
     }
 
@@ -46,7 +44,7 @@ public final class LivingEventBridge {
             return;
         }
         if (event.getEntity() instanceof LivingEntity livingEntity) {
-            ShieldBlockCooldownEvent.onLivingTick(livingEntity);
+            ServerLivingEventHooks.onLivingTick(livingEntity);
         }
     }
 }

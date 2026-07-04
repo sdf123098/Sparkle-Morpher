@@ -61,6 +61,14 @@ public final class RenderUtils {
     }
 
     public static boolean prepMatrixForLocator(PoseStack poseStack, List<? extends IBone> locatorHierarchy) {
+        return prepMatrixForLocator(poseStack, locatorHierarchy, false);
+    }
+
+    public static boolean prepMatrixForLocatorIgnoringHiddenLastScale(PoseStack poseStack, List<? extends IBone> locatorHierarchy) {
+        return prepMatrixForLocator(poseStack, locatorHierarchy, true);
+    }
+
+    private static boolean prepMatrixForLocator(PoseStack poseStack, List<? extends IBone> locatorHierarchy, boolean ignoreHiddenLastScale) {
         boolean scaleCheck = false;
         for (int i = 0; i < locatorHierarchy.size() - 1; i++) {
             boolean result = RenderUtils.prepMatrixForBone(poseStack, locatorHierarchy.get(i));
@@ -72,7 +80,12 @@ public final class RenderUtils {
         RenderUtils.translateMatrixToBone(poseStack, lastBone);
         RenderUtils.translateToPivotPoint(poseStack, lastBone);
         RenderUtils.rotateMatrixAroundBone(poseStack, lastBone);
-        RenderUtils.scaleMatrixForBone(poseStack, lastBone);
+        if (!ignoreHiddenLastScale || !isHiddenScale(lastBone)) {
+            boolean result = RenderUtils.scaleMatrixForBone(poseStack, lastBone);
+            if (result) {
+                scaleCheck = true;
+            }
+        }
         return scaleCheck;
     }
 

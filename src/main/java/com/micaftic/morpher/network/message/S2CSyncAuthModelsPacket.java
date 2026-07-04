@@ -1,16 +1,14 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.google.common.collect.Sets;
-import net.neoforged.api.distmarker.Dist;import net.neoforged.api.distmarker.OnlyIn;import net.minecraft.client.Minecraft;
-import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
+import com.micaftic.morpher.network.ClientNetworkBridge;
+import net.minecraft.network.FriendlyByteBuf;
 
 import java.util.HashSet;
 import java.util.Set;
 
 public class S2CSyncAuthModelsPacket {
-
     private final Set<String> authModels;
 
     public S2CSyncAuthModelsPacket(Set<String> authModels) {
@@ -34,19 +32,10 @@ public class S2CSyncAuthModelsPacket {
     }
 
     public static void handle(S2CSyncAuthModelsPacket message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            ctx.enqueueWork(() -> handleCapability(message));
-        }
+        ClientNetworkBridge.handle(ctx, "handleSyncAuthModels", message);
     }
 
-
-    @OnlyIn(Dist.CLIENT)
-    public static void handleCapability(S2CSyncAuthModelsPacket message) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player != null) {
-            AuthModelsCapability.get(minecraft.player).ifPresent(cap -> {
-                cap.setAuthModels(message.authModels);
-            });
-        }
+    public Set<String> getAuthModels() {
+        return this.authModels;
     }
 }

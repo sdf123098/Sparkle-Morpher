@@ -1,22 +1,17 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.capability.ProjectileCapability;
 import com.micaftic.morpher.capability.ProjectileModelCapability;
-import com.micaftic.morpher.event.EntityJoinCallbackEvent;
+import com.micaftic.morpher.core.api.network.PacketContext;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
-import net.neoforged.api.distmarker.Dist;import net.neoforged.api.distmarker.OnlyIn;import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.Entity;
-import com.micaftic.morpher.core.api.network.PacketContext;
 
 public class S2CSyncProjectileModelPacket {
-
     private final int entityId;
-
     private final ProjectileModelCapability capability;
-
     private final Int2FloatOpenHashMap floatMap;
 
     public S2CSyncProjectileModelPacket(int entityId, ProjectileModelCapability capability, Int2FloatOpenHashMap floatMap) {
@@ -48,16 +43,18 @@ public class S2CSyncProjectileModelPacket {
     }
 
     public static void handle(S2CSyncProjectileModelPacket message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            EntityJoinCallbackEvent.addCallback(message.entityId, entity -> handleCapability(entity, message.capability, message.floatMap));
-        }
+        ClientNetworkBridge.handle(ctx, "handleSyncProjectileModel", message);
     }
 
-    @OnlyIn(Dist.CLIENT)
-    public static void handleCapability(Entity entity, ProjectileModelCapability capability, Int2FloatOpenHashMap floatMap) {
-        ProjectileCapability.get(entity).ifPresent(projectileCapability -> {
-            projectileCapability.updateModelId(capability.getOwnerModelId());
-            projectileCapability.setFloatProperties(floatMap);
-        });
+    public int getEntityId() {
+        return this.entityId;
+    }
+
+    public ProjectileModelCapability getCapability() {
+        return this.capability;
+    }
+
+    public Int2FloatOpenHashMap getFloatMap() {
+        return this.floatMap;
     }
 }

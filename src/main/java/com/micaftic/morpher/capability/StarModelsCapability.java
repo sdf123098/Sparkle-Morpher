@@ -1,11 +1,20 @@
 package com.micaftic.morpher.capability;
 
 import com.google.common.collect.Sets;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonParser;
+import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.player.Player;
+import net.neoforged.fml.loading.FMLPaths;
+import org.apache.commons.io.FileUtils;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.Set;
@@ -14,8 +23,23 @@ public class StarModelsCapability {
 
     private Set<String> starModels = Sets.newHashSet();
 
-        public static Optional<StarModelsCapability> get(Player player) {
-        return com.micaftic.morpher.neoforge.capability.NeoForgeCapabilities.getStarModels(player);
+    private static StarModelsCapability cache;
+    private static LocalStarModelsCapability localInstance;
+
+    public static Optional<StarModelsCapability> get(Player player) {
+        Optional<StarModelsCapability> cap = com.micaftic.morpher.neoforge.capability.NeoForgeCapabilities.getStarModels(player);
+        if(ClientNetworkBridge.isLocalPlayer(player)) {
+            if(cap.isEmpty()) return Optional.empty();
+
+            StarModelsCapability temp = cap.get();
+            if(cache != temp) {
+                cache = temp;
+                localInstance = new LocalStarModelsCapability();
+            }
+
+            return Optional.of(localInstance);
+        }
+        return cap;
     }
 
     public void addModel(String str) {
@@ -62,4 +86,64 @@ public class StarModelsCapability {
             this.starModels.add(((Tag) it.next()).getAsString());
         }
     }
+
+    public static class LocalStarModelsCapability extends StarModelsCapability {
+        private static final Path LOCAL_FILE = FMLPaths.CONFIGDIR.get()
+                .resolve(YesSteveModel.MOD_ID)
+                .resolve("local_starred_models.json");
+
+        private boolean disableLocal = false;
+
+        public LocalStarModelsCapability() {
+            updateFromFile();
+        }
+
+        public void updateFromFile() {
+            super.starModels.clear();
+            try {
+                JsonParser.parseString(FileUtils.readFileToString(LOCAL_FILE.toFile(), "UTF-8")).getAsJsonArray().forEach(je -> super.starModels.add(je.getAsString()));
+            } catch (Throwable ignored) {}
+        }
+
+        public void save() {
+            if(disableLocal) return;
+            JsonArray ja = new JsonArray();
+            super.starModels.forEach(ja::add);
+            try {
+                FileUtils.writeStringToFile(LOCAL_FILE.toFile(), ja.toString(), StandardCharsets.UTF_8);
+            } catch (IOException ignored) {}
+        }
+
+        @Override
+        public void addModel(String str) {
+            super.addModel(str);
+            save();
+        }
+
+        @Override
+        public void removeModel(String str) {
+            super.removeModel(str);
+            save();
+        }
+
+        @Override
+        public void clear() {
+            super.clear();
+            save();
+        }
+
+        @Override
+        public void deserializeNBT(ListTag listTag) {
+            disableLocal = true; // 从服务器获取到的收藏模型，不要写到本地
+            super.deserializeNBT(listTag);
+        }
+
+        @Override
+        public void setStarModels(Set<String> set) {
+            disableLocal = true; // 从服务器获取到的收藏模型，不要写到本地
+            super.setStarModels(set);
+        }
+
+    }
+
 }

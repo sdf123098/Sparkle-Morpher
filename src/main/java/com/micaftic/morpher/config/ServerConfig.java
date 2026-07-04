@@ -60,7 +60,7 @@ public class ServerConfig {
         THREAD_COUNT = builder.defineInRange("ThreadCount", 0, 0, Math.max(2, Runtime.getRuntime().availableProcessors() - 1));
         builder.comment("Whether to enable the global model transfer bandwidth limit");
         builder.comment("When enabled, the limit is shared by server-to-client model sync and client-to-server model upload chunks.");
-        ENABLE_GLOBAL_BANDWIDTH_LIMIT = builder.define("EnableGlobalBandwidthLimit", true);
+        ENABLE_GLOBAL_BANDWIDTH_LIMIT = builder.define("EnableGlobalBandwidthLimit", false);
         builder.comment("Global model transfer bandwidth limit in Mbps");
         BANDWIDTH_LIMIT = builder.defineInRange("BandwidthLimit", 5, 1, 999);
         builder.comment("Timeout for players to respond to synchronization. Value not greater than 10 means AUTO.(In seconds)");

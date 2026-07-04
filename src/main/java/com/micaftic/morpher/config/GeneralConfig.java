@@ -43,6 +43,8 @@ public class GeneralConfig {
 
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue ANIMATION_DEBUG_LOG;
 
+    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue ANIMATION_ROULETTE_DEBUG_LOG;
+
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue INPUT_STATE_DEBUG_LOG;
 
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue WARN_REPEATED_ANIMATION_EVALUATION;
@@ -137,6 +139,8 @@ public class GeneralConfig {
         ANIMATION_FRAME_PROFILER = builder.define("AnimationFrameProfiler", false);
         builder.comment("Verbose per-evaluation [SM-ANIM] debug log. Very noisy, default off.");
         ANIMATION_DEBUG_LOG = builder.define("AnimationDebugLog", false);
+        builder.comment("Print [SM-ROULETTE] diagnostics for animation roulette clicks, server resolution, and client playback resolution. Default off.");
+        ANIMATION_ROULETTE_DEBUG_LOG = builder.define("AnimationRouletteDebugLog", false);
         builder.comment("Print [SM-INPUT] diagnostics for attack/use mouse clicks, key state, vanilla swing/use state, and local animation pulses.");
         INPUT_STATE_DEBUG_LOG = builder.define("InputStateDebugLog", false);
         builder.comment("Warn when the same entity is fully evaluated more than once in a single render frame.");

@@ -12,6 +12,7 @@ import com.micaftic.morpher.geckolib3.core.keyframe.BoneAnimation;
 import com.micaftic.morpher.geckolib3.core.keyframe.event.EventKeyFrame;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
+import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import com.micaftic.morpher.geckolib3.file.AnimationControllerFile;
 import com.micaftic.morpher.geckolib3.file.AnimationFile;
 import com.micaftic.morpher.geckolib3.file.ProjectileModelFiles;
@@ -30,6 +31,36 @@ public class ModelAssemblyFactory {
 
     private static final String FIRST_PERSON_ARM_BONE = "fp_arm";
     private static final String BBMODEL_IMPORT_EXTRA = "sparkle_morpher:bbmodel_import";
+
+    /**
+     * bbmodel 动作预设里的 vanilla 规范骨骼名（归一化后）到语义部位的映射，
+     * 用于把预设动画重映射到目标模型的实际骨骼名。
+     */
+    private static final Map<String, String> PRESET_BONE_SEMANTICS = Map.ofEntries(
+            Map.entry("head", "HEAD"),
+            Map.entry("allhead", "HEAD"),
+            Map.entry("body", "BODY"),
+            Map.entry("waist", "BODY"),
+            Map.entry("torso", "BODY"),
+            Map.entry("upperbody", "BODY"),
+            Map.entry("chest", "BODY"),
+            Map.entry("leftarm", "LEFT_UPPER_ARM"),
+            Map.entry("rightarm", "RIGHT_UPPER_ARM"),
+            Map.entry("leftforearm", "LEFT_FOREARM"),
+            Map.entry("rightforearm", "RIGHT_FOREARM"),
+            Map.entry("lefthand", "LEFT_HAND"),
+            Map.entry("righthand", "RIGHT_HAND"),
+            Map.entry("leftleg", "LEFT_UPPER_LEG"),
+            Map.entry("rightleg", "RIGHT_UPPER_LEG"),
+            Map.entry("leftlowerleg", "LEFT_LOWER_LEG"),
+            Map.entry("rightlowerleg", "RIGHT_LOWER_LEG"),
+            Map.entry("leftfoot", "LEFT_FOOT"),
+            Map.entry("rightfoot", "RIGHT_FOOT"),
+            Map.entry("leftitem", "LEFT_HAND_LOCATOR"),
+            Map.entry("rightitem", "RIGHT_HAND_LOCATOR"),
+            Map.entry("lefthandlocator", "LEFT_HAND_LOCATOR"),
+            Map.entry("righthandlocator", "RIGHT_HAND_LOCATOR")
+    );
 
     private static final Map<String, String> FIRST_PERSON_WEAPON_ARM_BONE_TARGETS = Map.ofEntries(
             Map.entry("LeftArm", "LeftArm"),
@@ -61,6 +92,34 @@ public class ModelAssemblyFactory {
             Map.entry("rightHandLocator", "RightHandLocator"),
             Map.entry("righthandlocator", "RightHandLocator"),
             Map.entry("rightItem", "RightHandLocator"),
+            Map.entry("rightitem", "RightHandLocator")
+    );
+    private static final Map<String, String> FIRST_PERSON_WEAPON_ARM_NORMALIZED_TARGETS = Map.ofEntries(
+            Map.entry("leftarm", "LeftArm"),
+            Map.entry("leftupperarm", "LeftArm"),
+            Map.entry("leftuparm", "LeftArm"),
+            Map.entry("leftshoulder", "LeftArm"),
+            Map.entry("leftbicep", "LeftArm"),
+            Map.entry("leftforearm", "LeftForeArm"),
+            Map.entry("leftlowerarm", "LeftForeArm"),
+            Map.entry("leftelbow", "LeftForeArm"),
+            Map.entry("lefthand", "LeftHand"),
+            Map.entry("leftwrist", "LeftHand"),
+            Map.entry("leftpalm", "LeftHand"),
+            Map.entry("lefthandlocator", "LeftHandLocator"),
+            Map.entry("leftitem", "LeftHandLocator"),
+            Map.entry("rightarm", "RightArm"),
+            Map.entry("rightupperarm", "RightArm"),
+            Map.entry("rightuparm", "RightArm"),
+            Map.entry("rightshoulder", "RightArm"),
+            Map.entry("rightbicep", "RightArm"),
+            Map.entry("rightforearm", "RightForeArm"),
+            Map.entry("rightlowerarm", "RightForeArm"),
+            Map.entry("rightelbow", "RightForeArm"),
+            Map.entry("righthand", "RightHand"),
+            Map.entry("rightwrist", "RightHand"),
+            Map.entry("rightpalm", "RightHand"),
+            Map.entry("righthandlocator", "RightHandLocator"),
             Map.entry("rightitem", "RightHandLocator")
     );
 
@@ -143,24 +202,18 @@ public class ModelAssemblyFactory {
             }
         }
         boolean bbModelImport = isBbModelImport(clientModelInfo);
-        boolean inheritPrimaryAnimations = !isPrimary && !bbModelImport;
-        if (inheritPrimaryAnimations) {
-            ObjectIterator<Map.Entry<String, Animation>> it = primaryAssembly.getAnimationBundle().getMainAnimations().entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<String, Animation> entry = it.next();
-                object2ReferenceOpenHashMap.computeIfAbsent(entry.getKey(), obj -> {
-                    return entry.getValue();
-                });
-            }
-            ObjectIterator<Map.Entry<String, Animation>> it2 = primaryAssembly.getAnimationBundle().getArmAnimations().entrySet().iterator();
-            while (it2.hasNext()) {
-                Map.Entry<String, Animation> entry2 = it2.next();
-                armAnimations.computeIfAbsent(entry2.getKey(), obj2 -> {
-                    return entry2.getValue();
-                });
-            }
+        boolean externalPlayerModel = !isPrimary;
+        ModelSourceFormat sourceFormat = resolveSourceFormat(bbModelImport, isPrimary);
+        SemanticSkeleton semanticSkeleton = buildSemanticSkeleton(mainModel);
+        boolean useBuiltinDefaultActionPreset = shouldUseBuiltinDefaultActionPreset(sourceFormat, externalPlayerModel);
+        boolean useBbmodelActionPreset = shouldUseBbmodelActionPreset(sourceFormat);
+        if (useBuiltinDefaultActionPreset) {
+            applyBuiltinDefaultActionPreset(object2ReferenceOpenHashMap, armAnimations);
         }
-        if (!bbModelImport) {
+        if (useBbmodelActionPreset) {
+            applyBbmodelActionPreset(object2ReferenceOpenHashMap, armAnimations, semanticSkeleton);
+        }
+        if (!externalPlayerModel || useBuiltinDefaultActionPreset || useBbmodelActionPreset) {
             addWeaponAnimationAliases(object2ReferenceOpenHashMap);
             addWeaponAnimationAliases(armAnimations);
             addFirstPersonWeaponArmAnimations(object2ReferenceOpenHashMap, armAnimations);
@@ -182,6 +235,7 @@ public class ModelAssemblyFactory {
             textureList.addAll(texture.getSuffixTextures().values());
         }
         String defaultTextureName = (StringUtils.isEmpty(clientModelInfo.getInfo().getModelProperties().getDefaultTexture()) || !hierarchyData.getTextureMap().containsKey(clientModelInfo.getInfo().getModelProperties().getDefaultTexture())) ? hierarchyData.getTextureMap().getKeyAt(0) : clientModelInfo.getInfo().getModelProperties().getDefaultTexture();
+        ModelActionProfile actionProfile = resolveActionProfile(sourceFormat);
         return new PlayerModelBundle(
                 mainModel,
                 armModel,
@@ -194,7 +248,152 @@ public class ModelAssemblyFactory {
                 defaultTextureName,
                 hierarchyData.getTextureMap().get(defaultTextureName),
                 resourceBundle,
-                bbModelImport);
+                sourceFormat,
+                actionProfile,
+                semanticSkeleton,
+                actionProfile == ModelActionProfile.VANILLA_HUMANOID
+                        ? HandLocatorProfile.VANILLA_EQUIPMENT
+                        : HandLocatorProfile.ysmAuthored(hierarchyData.getSpecialHandLocatorProfile()));
+    }
+
+    private static ModelSourceFormat resolveSourceFormat(boolean bbModelImport, boolean primary) {
+        if (bbModelImport) {
+            return ModelSourceFormat.BBMODEL;
+        }
+        return primary ? ModelSourceFormat.BUILTIN_SAMPLE : ModelSourceFormat.YSM_NATIVE;
+    }
+
+    private static boolean shouldUseBuiltinDefaultActionPreset(ModelSourceFormat sourceFormat, boolean externalPlayerModel) {
+        return externalPlayerModel && sourceFormat == ModelSourceFormat.YSM_NATIVE;
+    }
+
+    private static void applyBuiltinDefaultActionPreset(Object2ReferenceLinkedOpenHashMap<String, Animation> mainAnimations,
+                                                        Object2ReferenceLinkedOpenHashMap<String, Animation> armAnimations) {
+        Object2ReferenceMap<String, Animation> builtinMainAnimations = BuiltinDefaultActionPreset.mainAnimations();
+        for (Object2ReferenceMap.Entry<String, Animation> entry : builtinMainAnimations.object2ReferenceEntrySet()) {
+            mainAnimations.computeIfAbsent(entry.getKey(), key -> entry.getValue());
+        }
+        for (Object2ReferenceMap.Entry<String, Animation> entry : BuiltinDefaultActionPreset.armAnimations().object2ReferenceEntrySet()) {
+            armAnimations.computeIfAbsent(entry.getKey(), key -> entry.getValue());
+        }
+    }
+
+    private static boolean shouldUseBbmodelActionPreset(ModelSourceFormat sourceFormat) {
+        return sourceFormat == ModelSourceFormat.BBMODEL || sourceFormat == ModelSourceFormat.FIGURA_BBMODEL;
+    }
+
+    /**
+     * 把 bbmodel 专属动作预设注入模型动画表。预设动画以 vanilla 规范骨骼名作者化，
+     * 注入前按 {@link SemanticSkeleton} 重映射到当前模型的实际骨骼名；
+     * 使用 {@code computeIfAbsent} 保证不覆盖模型自带的同名动画。
+     */
+    private static void applyBbmodelActionPreset(Object2ReferenceLinkedOpenHashMap<String, Animation> mainAnimations,
+                                                 Object2ReferenceLinkedOpenHashMap<String, Animation> armAnimations,
+                                                 SemanticSkeleton semanticSkeleton) {
+        for (Object2ReferenceMap.Entry<String, Animation> entry : BuiltinBbmodelActionPreset.mainAnimations().object2ReferenceEntrySet()) {
+            mainAnimations.computeIfAbsent(entry.getKey(), key -> remapPresetAnimationBones(entry.getValue(), semanticSkeleton));
+        }
+        for (Object2ReferenceMap.Entry<String, Animation> entry : BuiltinBbmodelActionPreset.armAnimations().object2ReferenceEntrySet()) {
+            armAnimations.computeIfAbsent(entry.getKey(), key -> remapPresetAnimationBones(entry.getValue(), semanticSkeleton));
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Animation remapPresetAnimationBones(Animation source, SemanticSkeleton semanticSkeleton) {
+        if (source == null || source.boneAnimations.isEmpty() || semanticSkeleton.getBoneTargets().isEmpty()) {
+            return source;
+        }
+        boolean changed = false;
+        ArrayList<BoneAnimation> out = new ArrayList<>(source.boneAnimations.size());
+        for (BoneAnimation boneAnimation : source.boneAnimations) {
+            String target = presetBoneTarget(boneAnimation.boneName, semanticSkeleton);
+            if (target.equals(boneAnimation.boneName)) {
+                out.add(boneAnimation);
+            } else {
+                changed = true;
+                out.add(new BoneAnimation(target, boneAnimation.rotationKeyFrames, boneAnimation.positionKeyFrames, boneAnimation.scaleKeyFrames));
+            }
+        }
+        if (!changed) {
+            return source;
+        }
+        Animation derived = new Animation(
+                source.animationName,
+                source.animationLength,
+                source.loop,
+                source.unKnowData1,
+                source.unKnowData2,
+                source.blendWeight,
+                source.override,
+                out.toArray(new BoneAnimation[0]),
+                source.soundKeyFrames.toArray(new EventKeyFrame[0]),
+                source.particleKeyFrames.toArray(new ParticleEventKeyFrame[0]),
+                source.customInstructionKeyframes.toArray(new EventKeyFrame[0]));
+        derived.sourceKey = source.sourceKey;
+        derived.isFromPrimaryAssembly = source.isFromPrimaryAssembly;
+        return derived;
+    }
+
+    private static String presetBoneTarget(String presetBoneName, SemanticSkeleton semanticSkeleton) {
+        String semantic = PRESET_BONE_SEMANTICS.get(normalizeBoneName(presetBoneName));
+        if (semantic != null) {
+            String actual = semanticSkeleton.getTarget(semantic);
+            if (actual != null) {
+                return actual;
+            }
+        }
+        return presetBoneName;
+    }
+
+    private static ModelActionProfile resolveActionProfile(ModelSourceFormat sourceFormat) {
+        if (sourceFormat == ModelSourceFormat.BBMODEL || sourceFormat == ModelSourceFormat.FIGURA_BBMODEL) {
+            return ModelActionProfile.VANILLA_HUMANOID;
+        }
+        return ModelActionProfile.YSM_AUTHORED;
+    }
+
+    private static SemanticSkeleton buildSemanticSkeleton(GeoModel mainModel) {
+        LinkedHashMap<String, String> normalizedToActual = new LinkedHashMap<>();
+        if (mainModel != null && mainModel.bones != null) {
+            for (GeoBone bone : mainModel.bones) {
+                String actual = bone.getName();
+                if (actual == null || actual.isEmpty()) {
+                    continue;
+                }
+                String normalized = normalizeBoneName(actual);
+                if (!normalized.isEmpty()) {
+                    normalizedToActual.putIfAbsent(normalized, actual);
+                }
+            }
+        }
+        LinkedHashMap<String, String> bones = new LinkedHashMap<>();
+        registerSemanticBone(normalizedToActual, bones, "HEAD", "head", "allhead", "vanillahead");
+        registerSemanticBone(normalizedToActual, bones, "BODY", "body", "torso", "chest", "upperbody", "vanillabody", "waist");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_UPPER_ARM", "leftarm", "leftupperarm", "leftshoulder", "vanillaleftarm");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_UPPER_ARM", "rightarm", "rightupperarm", "rightshoulder", "vanillarightarm");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_FOREARM", "leftforearm", "leftlowerarm", "leftelbow");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_FOREARM", "rightforearm", "rightlowerarm", "rightelbow");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_HAND", "lefthand", "leftwrist", "leftpalm");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_HAND", "righthand", "rightwrist", "rightpalm");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_UPPER_LEG", "leftleg", "leftupperleg", "leftthigh", "vanillaleftleg");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_UPPER_LEG", "rightleg", "rightupperleg", "rightthigh", "vanillarightleg");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_LOWER_LEG", "leftlowerleg", "leftshin", "leftcalf");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_LOWER_LEG", "rightlowerleg", "rightshin", "rightcalf");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_FOOT", "leftfoot", "leftboot");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_FOOT", "rightfoot", "rightboot");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_HAND_LOCATOR", "lefthandlocator", "leftitem");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_HAND_LOCATOR", "righthandlocator", "rightitem");
+        return bones.isEmpty() ? SemanticSkeleton.EMPTY : new SemanticSkeleton(bones);
+    }
+
+    private static void registerSemanticBone(Map<String, String> normalizedToActual, Map<String, String> out, String semanticName, String... candidates) {
+        for (String candidate : candidates) {
+            String actual = normalizedToActual.get(candidate);
+            if (actual != null) {
+                out.putIfAbsent(semanticName, actual);
+                return;
+            }
+        }
     }
 
     private static boolean isBbModelImport(ClientModelInfo clientModelInfo) {
@@ -350,7 +549,7 @@ public class ModelAssemblyFactory {
         }
         LinkedHashMap<String, BoneAnimation> armBones = new LinkedHashMap<>();
         for (BoneAnimation boneAnimation : source.boneAnimations) {
-            String targetBoneName = FIRST_PERSON_WEAPON_ARM_BONE_TARGETS.get(boneAnimation.boneName);
+            String targetBoneName = firstPersonArmTarget(boneAnimation.boneName);
             if (targetBoneName != null) {
                 BoneAnimation targetAnimation = targetBoneName.equals(boneAnimation.boneName)
                         ? boneAnimation
@@ -381,5 +580,27 @@ public class ModelAssemblyFactory {
         derived.sourceKey = source.sourceKey;
         derived.isFromPrimaryAssembly = source.isFromPrimaryAssembly;
         return derived;
+    }
+
+    private static String firstPersonArmTarget(String boneName) {
+        String direct = FIRST_PERSON_WEAPON_ARM_BONE_TARGETS.get(boneName);
+        if (direct != null) {
+            return direct;
+        }
+        return FIRST_PERSON_WEAPON_ARM_NORMALIZED_TARGETS.get(normalizeBoneName(boneName));
+    }
+
+    private static String normalizeBoneName(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char c = Character.toLowerCase(name.charAt(i));
+            if (Character.isLetterOrDigit(c)) {
+                out.append(c);
+            }
+        }
+        return out.toString();
     }
 }

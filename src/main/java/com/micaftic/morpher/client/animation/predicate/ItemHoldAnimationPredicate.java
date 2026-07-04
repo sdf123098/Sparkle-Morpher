@@ -9,6 +9,7 @@ import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.compat.ironsspellbooks.SpellbooksCompat;
 import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.model.ModelActionProfile;
 import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.enums.PlayState;
@@ -29,6 +30,9 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
     public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
         LivingEntity livingEntity = event.getAnimatable().getEntity();
         if (livingEntity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
+            return PlayState.STOP;
+        }
+        if (event.getAnimatable().getModelAssembly().getAnimationBundle().getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
             return PlayState.STOP;
         }
         PlayState playState = SpellbooksCompat.resolvePlayState(event, livingEntity);

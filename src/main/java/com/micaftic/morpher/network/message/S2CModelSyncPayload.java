@@ -1,13 +1,12 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.client.ClientModelManager;
-import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
+import com.micaftic.morpher.network.ClientNetworkBridge;
+import net.minecraft.network.FriendlyByteBuf;
 
 import java.nio.ByteBuffer;
 
 public class S2CModelSyncPayload {
-
     private final ByteBuffer data;
 
     public S2CModelSyncPayload(ByteBuffer data) {
@@ -26,8 +25,10 @@ public class S2CModelSyncPayload {
     }
 
     public static void handle(S2CModelSyncPayload message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            ClientModelManager.startSync(ctx.getConnection(), message.data);
-        }
+        ClientNetworkBridge.handle(ctx, "handleModelSync", message, ctx.getConnection());
+    }
+
+    public ByteBuffer getData() {
+        return this.data;
     }
 }

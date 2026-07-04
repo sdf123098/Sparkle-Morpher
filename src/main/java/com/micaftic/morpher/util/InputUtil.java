@@ -9,6 +9,14 @@ public class InputUtil {
         return KeyMappingFactory.isActiveAndMatches(keyMapping, keyCode, scanCode);
     }
 
+    public static boolean isKeyPressed(int keyCode, int scanCode, int modifiers, KeyMapping keyMapping) {
+        return KeyMappingFactory.isActiveAndMatches(keyMapping, keyCode, scanCode, modifiers);
+    }
+
+    public static boolean isMousePressed(int button, KeyMapping keyMapping) {
+        return KeyMappingFactory.isMouseActiveAndMatches(keyMapping, button);
+    }
+
     public static boolean isPlayerReady() {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.getOverlay() != null || minecraft.screen != null || !minecraft.mouseHandler.isMouseGrabbed()) {

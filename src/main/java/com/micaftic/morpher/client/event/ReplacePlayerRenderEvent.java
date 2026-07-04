@@ -31,20 +31,19 @@ public class ReplacePlayerRenderEvent {
         if ((!entity.equals(localPlayer) && GeneralConfig.DISABLE_OTHER_MODEL.get().booleanValue()) || entity.isSpectator()) {
             return false;
         }
-        boolean[] cancelled = {false};
-        PlayerCapability.get(entity).ifPresent(cap -> {
-            if (cap.isModelActive()) {
-                if (!CameraUtil.isFirstPerson(cap)
-                        || FirstPersonCompat.isFirstPersonActive()
-                        || RealCameraCompat.isActive()
-                        || GeneralConfig.DISABLE_EXTERNAL_FP_ANIM.get().booleanValue()
-                        || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
-                    cancelled[0] = true;
-                    float previewYaw = ModelPreviewRenderer.isInventoryPreviewFrontFacing() ? ModelPreviewRenderer.FRONT_FACING_YAW : entityYaw;
-                    RendererManager.getPlayerRenderer().render(entity, previewYaw, partialTick, poseStack, bufferSource, packedLight);
-                }
+        PlayerCapability cap = PlayerCapability.get(entity).orElse(null);
+        if (cap != null && cap.isModelActive()) {
+            if (!CameraUtil.isFirstPerson(cap)
+                    || FirstPersonCompat.isFirstPersonActive()
+                    || RealCameraCompat.isActive()
+                    || GeneralConfig.DISABLE_EXTERNAL_FP_ANIM.get().booleanValue()
+                    || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
+                float previewYaw = ModelPreviewRenderer.isInventoryPreviewFrontFacing() ? ModelPreviewRenderer.FRONT_FACING_YAW : entityYaw;
+                // Reuse the capability resolved for the render-pre check.
+                RendererManager.getPlayerRenderer().render(cap, previewYaw, partialTick, poseStack, bufferSource, packedLight);
+                return true;
             }
-        });
-        return cancelled[0];
+        }
+        return false;
     }
 }

@@ -1,8 +1,8 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.client.upload.ModelUploadSession;
-import net.neoforged.api.distmarker.Dist;import net.neoforged.api.distmarker.OnlyIn;import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
+import com.micaftic.morpher.network.ClientNetworkBridge;
+import net.minecraft.network.FriendlyByteBuf;
 
 public record S2CModelUploadStartPacket(long uploadId, byte status, int chunkSize, int maxTotalBytes, int chunksPerTick, String message) {
     public static void encode(S2CModelUploadStartPacket packet, FriendlyByteBuf buf) {
@@ -25,13 +25,6 @@ public record S2CModelUploadStartPacket(long uploadId, byte status, int chunkSiz
     }
 
     public static void handle(S2CModelUploadStartPacket packet, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            ctx.enqueueWork(() -> handleOnClient(packet));
-        }
-    }
-
-    @OnlyIn(Dist.CLIENT)
-    private static void handleOnClient(S2CModelUploadStartPacket packet) {
-        ModelUploadSession.onStartAck(packet.uploadId, packet.status, packet.chunkSize, packet.maxTotalBytes, packet.chunksPerTick, packet.message);
+        ClientNetworkBridge.handle(ctx, "handleModelUploadStart", packet);
     }
 }

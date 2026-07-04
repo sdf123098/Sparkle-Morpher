@@ -44,6 +44,12 @@ public class AnimatedGeoModel {
     private final List<IBone> rightHandBones;
 
     @NotNull
+    private final List<IBone> leftSwordBones;
+
+    @NotNull
+    private final List<IBone> rightSwordBones;
+
+    @NotNull
     private final List<IBone> elytraBones;
 
     @NotNull
@@ -106,6 +112,8 @@ public class AnimatedGeoModel {
         this.headBones = lookupBones(data.headIds);
         this.leftHandBones = lookupBones(data.leftHandIds);
         this.rightHandBones = lookupBones(data.rightHandIds);
+        this.leftSwordBones = lookupBones(data.leftSwordIds);
+        this.rightSwordBones = lookupBones(data.rightSwordIds);
         this.elytraBones = lookupBones(data.elytraIds);
         this.tacPistolBones = lookupBones(data.tacPistolIds);
         this.tacRifleBones = lookupBones(data.tacRifleIds);
@@ -164,6 +172,16 @@ public class AnimatedGeoModel {
     @NotNull
     public List<List<IBone>> leftHandChains() {
         return this.rightHandGroupChains;
+    }
+
+    @NotNull
+    public List<IBone> leftSwordBones() {
+        return this.leftSwordBones;
+    }
+
+    @NotNull
+    public List<IBone> rightSwordBones() {
+        return this.rightSwordBones;
     }
 
     @NotNull

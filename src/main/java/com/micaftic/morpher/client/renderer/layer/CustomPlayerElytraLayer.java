@@ -36,7 +36,8 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         LivingEntity entity = entityLivingBaseIn.getEntity();
         ItemStack stack = CosmeticArmorHelper.getElytraItem(entity);
         AnimatedGeoModel animatedGeoModel = entityLivingBaseIn.getCurrentModel();
-        if (!stack.isEmpty() && animatedGeoModel != null && !animatedGeoModel.elytraBones().isEmpty()) {
+        boolean hasLocator = animatedGeoModel != null && !animatedGeoModel.elytraBones().isEmpty();
+        if (!stack.isEmpty() && animatedGeoModel != null && (hasLocator || isImportedPlayerModel(entityLivingBaseIn))) {
             ResourceLocation cloakTextureLocation = WINGS_LOCATION;
             if (entity instanceof AbstractClientPlayer abstractClientPlayer) {
                 PlayerSkin skin = abstractClientPlayer.getSkin();
@@ -47,7 +48,11 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
                 }
             }
             poseStack.pushPose();
-            renderElytra(poseStack, animatedGeoModel);
+            if (hasLocator) {
+                renderElytra(poseStack, animatedGeoModel);
+            } else {
+                poseStack.translate(0.0d, 0.0d, 0.125d);
+            }
             poseStack.translate(0.0d, 1.5d, 0.0d);
             poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
             poseStack.scale(2.0f, 2.0f, 2.0f);
@@ -59,5 +64,11 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
 
     public void renderElytra(PoseStack poseStack, AnimatedGeoModel model) {
         RenderUtils.prepMatrixForLocator(poseStack, model.elytraBones());
+    }
+
+    private static boolean isImportedPlayerModel(CustomPlayerEntity customPlayer) {
+        return customPlayer != null
+                && customPlayer.getModelAssembly() != null
+                && customPlayer.getModelAssembly().getAnimationBundle().isImportedPlayerModel();
     }
 }

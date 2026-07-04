@@ -6,8 +6,6 @@ import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
 import com.micaftic.morpher.network.message.*;
 import io.netty.channel.Channel;
 import io.netty.util.AttributeKey;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.resources.ResourceLocation;
@@ -48,11 +46,7 @@ public final class NetworkHandler {
         if (clientHandshakeComplete) {
             return true;
         }
-        ClientPacketListener connection = Minecraft.getInstance().getConnection();
-        if (connection == null) {
-            return false;
-        }
-        return isConnectionValid(connection.getConnection());
+        return ClientNetworkBridge.isClientConnected();
     }
 
     public static boolean isConnectionValid(@Nullable Connection connection) {

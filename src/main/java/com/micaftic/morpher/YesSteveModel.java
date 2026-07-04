@@ -5,10 +5,7 @@ import com.micaftic.morpher.event.CommonEvent;
 import com.micaftic.morpher.event.YsmEventBootstrap;
 import com.micaftic.morpher.util.obfuscate.Keep;
 import com.google.gson.*;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
-import net.neoforged.api.distmarker.*;
 import net.neoforged.fml.config.ModConfig;
 import org.apache.logging.log4j.*;
 import com.micaftic.morpher.core.api.PlatformAPI;
@@ -54,7 +51,18 @@ public class YesSteveModel {
     }
     @Keep public static boolean isAvailable() { return RuntimeAccelerationLoader.isAvailable(); }
     public static boolean isOnAndroid() { return RuntimeAccelerationLoader.isOnAndroid(); }
-    @OnlyIn(Dist.CLIENT) public static void sendUnavailableMessage() { LocalPlayer p = Minecraft.getInstance().player; if (p != null) p.sendSystemMessage(getUnavailableComponent()); }
+    public static void sendUnavailableMessage() {
+        if (PlatformAPI.isServer()) {
+            return;
+        }
+        try {
+            Class.forName("com.micaftic.morpher.neoforge.YesSteveModelNeoForgeClient")
+                    .getMethod("sendUnavailableMessage")
+                    .invoke(null);
+        } catch (ReflectiveOperationException e) {
+            LOGGER.warn("Failed to send unavailable message on client", e);
+        }
+    }
     public static Component getUnavailableComponent() { return RuntimeAccelerationLoader.getErrorComponent(); }
     public static String getErrorMessage() { return RuntimeAccelerationLoader.getErrorMessage(); }
 }

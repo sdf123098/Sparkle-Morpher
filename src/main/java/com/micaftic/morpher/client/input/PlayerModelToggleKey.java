@@ -20,10 +20,21 @@ public final class PlayerModelToggleKey {
     private PlayerModelToggleKey() {}
     @SubscribeEvent public static void onKey(InputEvent.Key event) {
         if (PlatformAPI.isServer()) return;
-        if (InputUtil.isPlayerReady() && event.getAction() == 1 && InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), KEY_MAPPING)) {
-            if (!YesSteveModel.isAvailable()) { YesSteveModel.sendUnavailableMessage(); return; }
-            if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) Minecraft.getInstance().setScreen(ModernPlayerModelScreen.settings());
-            else Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
+        if (event.getAction() == 1 && InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), event.getModifiers(), KEY_MAPPING)) {
+            openModelScreen();
         }
+    }
+    @SubscribeEvent public static void onMouse(InputEvent.MouseButton.Pre event) {
+        if (PlatformAPI.isServer()) return;
+        if (event.getAction() == 1 && InputUtil.isMousePressed(event.getButton(), KEY_MAPPING) && openModelScreen()) {
+            event.setCanceled(true);
+        }
+    }
+    private static boolean openModelScreen() {
+        if (!InputUtil.isPlayerReady()) return false;
+        if (!YesSteveModel.isAvailable()) { YesSteveModel.sendUnavailableMessage(); return true; }
+        if (NetworkHandler.isClientConnected() && !ServerConfig.CAN_SWITCH_MODEL.get()) Minecraft.getInstance().setScreen(ModernPlayerModelScreen.settings());
+        else Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
+        return true;
     }
 }

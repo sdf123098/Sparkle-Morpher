@@ -13,11 +13,9 @@ import java.util.function.Consumer;
 
 public class ImportedPlayerAnimationController {
 
-    private static final String IMPORTED_PREFIX = "imported";
+    public static final String MAIN_CONTROLLER_KEY = UnifiedPlayerActionController.VANILLA_POSE_CONTROLLER_KEY;
 
-    public static final String MAIN_CONTROLLER_KEY = String.format("%s.%s", IMPORTED_PREFIX, "main");
-
-    public static final String CAP_CONTROLLER_KEY = String.format("%s.%s", IMPORTED_PREFIX, "cap");
+    public static final String CAP_CONTROLLER_KEY = UnifiedPlayerActionController.CAP_CONTROLLER_KEY;
 
     private ImportedPlayerAnimationController() {
     }
@@ -27,8 +25,8 @@ public class ImportedPlayerAnimationController {
             entity.addAnimationController(new ImportedVanillaPoseController(MAIN_CONTROLLER_KEY));
             entity.addAnimationController(new PredicateBasedController<>(entity, CAP_CONTROLLER_KEY, 0.0f, new PlayerBaseAnimationPredicate()));
             if (entity instanceof IPreviewAnimatable) {
-                entity.addAnimationController(new PredicateBasedController<>(entity, "imported.gui_hover", 0.0f, new PlayerCustomAnimationPredicate()));
-                entity.addAnimationController(new PredicateBasedController<>(entity, "imported.gui_focus", 0.0f, new PlayerIdleAnimationPredicate()));
+                entity.addAnimationController(new PredicateBasedController<>(entity, UnifiedPlayerActionController.GUI_HOVER_CONTROLLER_KEY, 0.0f, new PlayerCustomAnimationPredicate()));
+                entity.addAnimationController(new PredicateBasedController<>(entity, UnifiedPlayerActionController.GUI_FOCUS_CONTROLLER_KEY, 0.0f, new PlayerIdleAnimationPredicate()));
             }
         };
     }

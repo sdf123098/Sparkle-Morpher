@@ -117,11 +117,11 @@ public final class ControllerActionResolver {
             }
             return LADDER_STILLNESS;
         }
-        if (state.flying()) {
-            return FLY;
-        }
         if (state.elytraFlying()) {
             return ELYTRA_FLY;
+        }
+        if (state.flying()) {
+            return FLY;
         }
         if (state.inWater() && !state.onGround()) {
             return SWIM_STAND;
@@ -164,6 +164,9 @@ public final class ControllerActionResolver {
     }
 
     public static boolean isFlying(AnimatableEntity<?> animatable, LivingEntity entity) {
+        if (entity.getPose() == Pose.FALL_FLYING && entity.isFallFlying()) {
+            return false;
+        }
         if (animatable instanceof PlayerCapability cap && !cap.isLocalPlayerModel()) {
             return cap.getPositionTracker().isFlying();
         }

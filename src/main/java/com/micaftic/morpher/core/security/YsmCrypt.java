@@ -1,19 +1,27 @@
 package com.micaftic.morpher.core.security;
 
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.core.algorithms.CityHash;
 import com.micaftic.morpher.core.algorithms.MT19937;
 import com.micaftic.morpher.core.algorithms.XChaCha20;
 import com.micaftic.morpher.core.algorithms.YsmZstd;
 import io.netty.buffer.Unpooled;
 
+import java.io.InputStream;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HexFormat;
 
 public class YsmCrypt {
+    private static volatile String modelCacheIdentity;
     public static final long SEED_PACKET_VERIFICATION = 0xEE6FA63D570BD77BL;
     public static final long SEED_KEY_DERIVATION = 0xD017CBBA7B5D3581L;
     public static final long SEED_FILE_VERIFICATION = 0x9E5599DB80C67C29L;
@@ -33,12 +41,113 @@ public class YsmCrypt {
     }
 
     public static long[] calculateModelHashes(String modelHashStr, byte[] serverKey) {
-        byte[] data = (modelHashStr/* + "111"*/).getBytes(StandardCharsets.UTF_8);
+        byte[] data = (getModelCacheIdentity() + "\nmodel=" + modelHashStr).getBytes(StandardCharsets.UTF_8);
         byte[] xored = mt19937Xor(data, serverKey, SEED_KEY_DERIVATION);
         CityHash ch = new CityHash();
         long hash1 = ch.hash64WithSeed(xored, SEED_CACHE_VERIFICATION);
         long hash2 = ch.hash64WithSeed(xored, SEED_CACHE_DECRYPTION);
         return new long[]{hash1, hash2};
+    }
+
+    public static String getModelCacheIdentity() {
+        String identity = modelCacheIdentity;
+        if (identity == null || identity.contains("modVersion=unknown") || identity.contains("modHash=unknown")) {
+            identity = buildModelCacheIdentity();
+            modelCacheIdentity = identity;
+        }
+        return identity;
+    }
+
+    private static String buildModelCacheIdentity() {
+        return "sparkle_morpher:model_cache\nmodVersion=" + resolveModVersion() + "\nmodHash=" + resolveModHash();
+    }
+
+    private static String resolveModVersion() {
+        String version = reflectPlatformModVersion("com.micaftic.morpher.core.architectury.platform.Platform");
+        if (version != null) return version;
+        version = reflectPlatformModVersion("dev.architectury.platform.Platform");
+        if (version != null) return version;
+        version = reflectNeoForgeModVersion();
+        if (version != null) return version;
+        version = reflectFabricModVersion();
+        return version != null ? version : "unknown";
+    }
+
+    private static String reflectPlatformModVersion(String className) {
+        try {
+            Class<?> platformClass = Class.forName(className);
+            Object mod = platformClass.getMethod("getMod", String.class).invoke(null, YesSteveModel.MOD_ID);
+            Object version = mod.getClass().getMethod("getVersion").invoke(mod);
+            return version != null ? version.toString() : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String reflectNeoForgeModVersion() {
+        try {
+            Class<?> modListClass = Class.forName("net.neoforged.fml.ModList");
+            Object modList = modListClass.getMethod("get").invoke(null);
+            Object optContainer = modListClass.getMethod("getModContainerById", String.class).invoke(modList, YesSteveModel.MOD_ID);
+            if (optContainer instanceof java.util.Optional<?> opt && opt.isPresent()) {
+                Object container = opt.get();
+                Object modInfo = container.getClass().getMethod("getModInfo").invoke(container);
+                Object version = modInfo.getClass().getMethod("getVersion").invoke(modInfo);
+                return version != null ? version.toString() : null;
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static String reflectFabricModVersion() {
+        try {
+            Class<?> loaderClass = Class.forName("net.fabricmc.loader.api.FabricLoader");
+            Object loader = loaderClass.getMethod("getInstance").invoke(null);
+            Object optContainer = loaderClass.getMethod("getModContainer", String.class).invoke(loader, YesSteveModel.MOD_ID);
+            if (optContainer instanceof java.util.Optional<?> opt && opt.isPresent()) {
+                Object metadata = opt.get().getClass().getMethod("getMetadata").invoke(opt.get());
+                Object version = metadata.getClass().getMethod("getVersion").invoke(metadata);
+                Object friendly = version.getClass().getMethod("getFriendlyString").invoke(version);
+                return friendly != null ? friendly.toString() : version.toString();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static String resolveModHash() {
+        try {
+            URI location = YsmCrypt.class.getProtectionDomain().getCodeSource().getLocation().toURI();
+            Path path = Path.of(location).toAbsolutePath().normalize();
+            if (Files.isRegularFile(path)) {
+                return sha256File(path);
+            }
+            if (Files.isDirectory(path)) {
+                return sha256Text(path + ":" + Files.getLastModifiedTime(path).toMillis());
+            }
+        } catch (Throwable ignored) {
+        }
+        return "unknown";
+    }
+
+    private static String sha256File(Path path) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[8192];
+        try (InputStream input = Files.newInputStream(path)) {
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static String sha256Text(String value) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 
     public static byte[] encryptServerCache(byte[] clearText, byte[] serverKey, long hash1, long hash2) throws Exception {

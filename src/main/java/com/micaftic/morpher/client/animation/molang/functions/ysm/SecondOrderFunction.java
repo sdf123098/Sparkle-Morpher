@@ -16,6 +16,7 @@ public class SecondOrderFunction extends EntityFunction {
         if (name == StringPool.EMPTY_ID) {
             return 0;
         }
+        int physicsKey = PhysicsManager.scopedKey(name);
         float input = arguments.getAsFloat(context, 1);
         int size = arguments.size();
         float frequency = 1.0f;
@@ -31,9 +32,9 @@ public class SecondOrderFunction extends EntityFunction {
             response = arguments.getAsFloat(context, 4);
         }
         PhysicsManager physicsManager = context.entity().geoInstance().getPhysicsManager();
-        IPhysics physics = physicsManager.get(name);
+        IPhysics physics = physicsManager.get(physicsKey);
         if (physics == null) {
-            physicsManager.put(name, new SecondOrder(input, frequency, coefficient, response));
+            physicsManager.put(physicsKey, new SecondOrder(input, frequency, coefficient, response));
             return input;
         }
         physics.setArgs(input, frequency, coefficient, response);

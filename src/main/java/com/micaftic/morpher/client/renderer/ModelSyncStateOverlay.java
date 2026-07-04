@@ -26,6 +26,8 @@ public class ModelSyncStateOverlay implements HudOverlay {
 
     @Override
     public void render(GuiGraphics g, Font font, float partialTick, int screenWidth, int screenHeight) {
+        // 每帧驱动同步超时看门狗：即便禁用了加载 UI，也要能强制结束卡住的同步。
+        ClientModelManager.tickSyncWatchdog();
         if (LoadingStateConfig.DISABLE_LOADING_STATE_SCREEN.get().booleanValue()) {
             return;
         }
@@ -64,18 +66,21 @@ public class ModelSyncStateOverlay implements HudOverlay {
             return new PopupState(Kind.SUCCESS, Component.translatable("gui.sparkle_morpher.sync_hint.success"), Component.translatable("gui.sparkle_morpher.sync_hint.completed_models", total), GREEN, 1.0f);
         }
         if (pending > 0) {
-            int loaded = ClientModelManager.getModelAssemblyMap().size();
-            int total = Math.max(1, loaded + pending);
-            return new PopupState(Kind.ACTIVE, Component.translatable("gui.sparkle_morpher.sync_hint.loading"), Component.translatable("gui.sparkle_morpher.sync_hint.loading_models_precise", loaded, total, pending), GOLD, (float) loaded / total);
+            int total = syncStatus.getTotalModels();
+            int synced = Math.max(0, syncStatus.getSyncedModels());
+            if (total > 0) {
+                return new PopupState(Kind.ACTIVE, Component.translatable("gui.sparkle_morpher.sync_hint.syncing"), Component.translatable("gui.sparkle_morpher.sync_hint.syncing_models", synced, total), GOLD, Math.max(0.0f, Math.min(1.0f, (float) synced / total)));
+            }
+            return new PopupState(Kind.ACTIVE, Component.translatable("gui.sparkle_morpher.sync_hint.loading"), Component.translatable("gui.sparkle_morpher.sync_hint.loading_detail"), GOLD, 0.18f);
         }
         return switch (syncStatus.getCurrentState()) {
             case WAITING -> new PopupState(Kind.ACTIVE, Component.translatable("gui.sparkle_morpher.sync_hint.waiting"), Component.translatable("gui.sparkle_morpher.sync_hint.waiting_detail"), BLUE, 0.0f);
             case LOADING -> new PopupState(Kind.ACTIVE, Component.translatable("gui.sparkle_morpher.sync_hint.loading"), Component.translatable("gui.sparkle_morpher.sync_hint.loading_detail"), GOLD, 0.18f);
             case PREPARING -> new PopupState(Kind.ACTIVE, Component.translatable("gui.sparkle_morpher.sync_hint.preparing"), Component.translatable("gui.sparkle_morpher.sync_hint.preparing_detail"), BLUE, 0.34f);
             case SYNCING -> {
-                int total = Math.max(1, syncStatus.getTotalModels());
+                int total = Math.max(1, Math.max(syncStatus.getTotalModels(), syncStatus.getSyncedModels()));
                 int synced = Math.max(0, syncStatus.getSyncedModels());
-                yield new PopupState(Kind.ACTIVE, Component.translatable("gui.sparkle_morpher.sync_hint.syncing"), Component.translatable("gui.sparkle_morpher.sync_hint.syncing_models", synced, total), GREEN, (float) synced / total);
+                yield new PopupState(Kind.ACTIVE, Component.translatable("gui.sparkle_morpher.sync_hint.syncing"), Component.translatable("gui.sparkle_morpher.sync_hint.syncing_models", synced, total), GREEN, Math.max(0.0f, Math.min(1.0f, (float) synced / total)));
             }
             case IDLE -> null;
         };

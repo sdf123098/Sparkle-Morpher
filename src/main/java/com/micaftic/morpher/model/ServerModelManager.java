@@ -96,6 +96,7 @@ public final class ServerModelManager {
     public static final Path CACHE_SERVER_INDEX_FILE = CACHE.resolve("server_index");
     public static final Path CACHE_SERVER = CACHE.resolve("server");
     public static final Path CACHE_CLIENT = CACHE.resolve("client");
+    public static final Path CACHE_BBMODEL_IMPORT_IDENTITY_FILE = CACHE.resolve(".bbmodel_import_cache_identity");
 
     /**
      * 模型名称 -> 模型额外信息缓存
@@ -485,6 +486,7 @@ public final class ServerModelManager {
             Set<String> authIds = new HashSet<>();
             Set<String> validCacheFiles = new HashSet<>();
 
+            prepareBbmodelImportCache();
             packs.clear();
             scanDirectoryPacks(BUILT);
             scanDirectoryPacks(CUSTOM);
@@ -1253,6 +1255,7 @@ public final class ServerModelManager {
         Set<String> validCacheFiles = new HashSet<>();
 
         try {
+            prepareBbmodelImportCache();
             packs.clear();
             scanDirectoryPacks(BUILT);
             scanDirectoryPacks(CUSTOM);
@@ -1285,6 +1288,42 @@ public final class ServerModelManager {
                 }
             });
         } catch (Exception ignored) {
+        }
+    }
+
+    private static void prepareBbmodelImportCache() {
+        createFolder(CACHE);
+        createFolder(CACHE_SERVER);
+        String currentIdentity = YsmCrypt.getModelCacheIdentity()
+                + "\nbbmodelImport=" + com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheIdentity();
+        try {
+            String existingIdentity = Files.exists(CACHE_BBMODEL_IMPORT_IDENTITY_FILE)
+                    ? Files.readString(CACHE_BBMODEL_IMPORT_IDENTITY_FILE, StandardCharsets.UTF_8)
+                    : "";
+            if (!currentIdentity.equals(existingIdentity)) {
+                clearServerModelCache("bbmodel import cache identity changed");
+                Files.writeString(CACHE_BBMODEL_IMPORT_IDENTITY_FILE, currentIdentity, StandardCharsets.UTF_8);
+            }
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.warn("[SM] Failed to prepare bbmodel import cache", e);
+        }
+    }
+
+    private static void clearServerModelCache(String reason) {
+        if (!Files.isDirectory(CACHE_SERVER)) {
+            return;
+        }
+        int removed = 0;
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(CACHE_SERVER)) {
+            for (Path entry : entries) {
+                deleteRecursively(entry);
+                removed++;
+            }
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.warn("[SM] Failed to clear server model cache ({})", reason, e);
+        }
+        if (removed > 0) {
+            YesSteveModel.LOGGER.info("[SM] Cleared {} server model cache entries ({})", removed, reason);
         }
     }
 

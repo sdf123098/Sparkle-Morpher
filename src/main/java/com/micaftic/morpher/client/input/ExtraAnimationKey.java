@@ -50,35 +50,59 @@ public final class ExtraAnimationKey {
     @SubscribeEvent
     public static void onKey(InputEvent.Key event) {
         if (PlatformAPI.isServer()) return;
-        onKeyInput(event.getAction(), event.getKey(), event.getScanCode());
+        onKeyInput(event.getAction(), event.getKey(), event.getScanCode(), event.getModifiers());
     }
 
-    private static void onKeyInput(int action, int keyCode, int scanCode) {
+    @SubscribeEvent
+    public static void onMouse(InputEvent.MouseButton.Pre event) {
+        if (PlatformAPI.isServer()) return;
+        if (onMouseInput(event.getAction(), event.getButton())) {
+            event.setCanceled(true);
+        }
+    }
+
+    private static void onKeyInput(int action, int keyCode, int scanCode, int modifiers) {
         if (!YesSteveModel.isAvailable() || !InputUtil.isPlayerReady()) return;
         LocalPlayer localPlayer = Minecraft.getInstance().player;
         for (KeyMapping eventMapping : KEY_MAPPINGS) {
-            if (action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, eventMapping) && localPlayer != null && !AnimationLockEvent.isMoving(localPlayer)) {
-                PlayerCapability.get(localPlayer).ifPresent(cap -> {
-                    ModelAssembly modelAssembly = cap.getModelAssembly();
-                    int index = KEY_MAPPINGS.indexOf(eventMapping);
-                    ModelProperties modelProperties = modelAssembly.getModelData().getModelProperties();
-                    OrderedStringMap<String, String> map = modelProperties.getExtraAnimation();
-                    if (map.size() > index) {
-                        String rouletteKey = map.getKeyAt(index);
-                        if ("#return".equals(rouletteKey)) {
-                            NetworkHandler.sendToServer(C2SPlayAnimationPacket.createDefault());
-                            return;
-                        }
-                        if (rouletteKey.startsWith("#") && modelProperties.getExtraAnimationClassify().containsKey(rouletteKey.substring(1))) {
-                            UnifiedRouletteScreen.setInitialSubmenu(rouletteKey.substring(1));
-                            Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(cap.getModelId(), modelAssembly, cap));
-                            return;
-                        }
-                        NetworkHandler.sendToServer(new C2SPlayAnimationPacket(index, StringPool.EMPTY));
-                    }
-                });
+            if (action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, modifiers, eventMapping) && localPlayer != null && !AnimationLockEvent.isMoving(localPlayer)) {
+                playExtraAnimation(localPlayer, eventMapping);
                 return;
             }
         }
+    }
+
+    private static boolean onMouseInput(int action, int button) {
+        if (!YesSteveModel.isAvailable() || !InputUtil.isPlayerReady()) return false;
+        LocalPlayer localPlayer = Minecraft.getInstance().player;
+        for (KeyMapping eventMapping : KEY_MAPPINGS) {
+            if (action == 1 && InputUtil.isMousePressed(button, eventMapping) && localPlayer != null && !AnimationLockEvent.isMoving(localPlayer)) {
+                playExtraAnimation(localPlayer, eventMapping);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void playExtraAnimation(LocalPlayer localPlayer, KeyMapping eventMapping) {
+        PlayerCapability.get(localPlayer).ifPresent(cap -> {
+            ModelAssembly modelAssembly = cap.getModelAssembly();
+            int index = KEY_MAPPINGS.indexOf(eventMapping);
+            ModelProperties modelProperties = modelAssembly.getModelData().getModelProperties();
+            OrderedStringMap<String, String> map = modelProperties.getExtraAnimation();
+            if (map.size() > index) {
+                String rouletteKey = map.getKeyAt(index);
+                if ("#return".equals(rouletteKey)) {
+                    NetworkHandler.sendToServer(C2SPlayAnimationPacket.createDefault());
+                    return;
+                }
+                if (rouletteKey.startsWith("#") && modelProperties.getExtraAnimationClassify().containsKey(rouletteKey.substring(1))) {
+                    UnifiedRouletteScreen.setInitialSubmenu(rouletteKey.substring(1));
+                    Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(cap.getModelId(), modelAssembly, cap));
+                    return;
+                }
+                NetworkHandler.sendToServer(new C2SPlayAnimationPacket(index, StringPool.EMPTY, rouletteKey));
+            }
+        });
     }
 }

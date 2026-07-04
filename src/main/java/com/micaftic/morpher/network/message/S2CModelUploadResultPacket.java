@@ -1,8 +1,8 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.client.upload.ModelUploadSession;
-import net.neoforged.api.distmarker.Dist;import net.neoforged.api.distmarker.OnlyIn;import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
+import com.micaftic.morpher.network.ClientNetworkBridge;
+import net.minecraft.network.FriendlyByteBuf;
 
 public record S2CModelUploadResultPacket(long uploadId, byte status, String modelId, long h1, long h2, String message) {
     public static void encode(S2CModelUploadResultPacket packet, FriendlyByteBuf buf) {
@@ -19,13 +19,6 @@ public record S2CModelUploadResultPacket(long uploadId, byte status, String mode
     }
 
     public static void handle(S2CModelUploadResultPacket packet, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            ctx.enqueueWork(() -> handleOnClient(packet));
-        }
-    }
-
-    @OnlyIn(Dist.CLIENT)
-    private static void handleOnClient(S2CModelUploadResultPacket packet) {
-        ModelUploadSession.onResult(packet.uploadId, packet.status, packet.modelId, packet.h1, packet.h2, packet.message);
+        ClientNetworkBridge.handle(ctx, "handleModelUploadResult", packet);
     }
 }

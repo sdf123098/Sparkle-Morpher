@@ -16,5 +16,6 @@ import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 public final class ExtraPlayerRenderKey {
     public static final KeyMapping KEY_MAPPING = KeyMappingFactory.createInGameNone("key.sparkle_morpher.open_extra_player_render.desc", InputConstants.Type.KEYSYM, 80, "key.category.sparkle_morpher");
     private ExtraPlayerRenderKey() {} public static void register() {}
-    @SubscribeEvent public static void onKey(InputEvent.Key event) { if (!PlatformAPI.isServer() && InputUtil.isPlayerReady() && event.getAction() == 1 && InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), KEY_MAPPING) && YesSteveModel.isAvailable()) Minecraft.getInstance().setScreen(new ExtraPlayerRenderScreen()); }
+    @SubscribeEvent public static void onKey(InputEvent.Key event) { if (!PlatformAPI.isServer() && InputUtil.isPlayerReady() && event.getAction() == 1 && InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), event.getModifiers(), KEY_MAPPING) && YesSteveModel.isAvailable()) Minecraft.getInstance().setScreen(new ExtraPlayerRenderScreen()); }
+    @SubscribeEvent public static void onMouse(InputEvent.MouseButton.Pre event) { if (!PlatformAPI.isServer() && InputUtil.isPlayerReady() && event.getAction() == 1 && InputUtil.isMousePressed(event.getButton(), KEY_MAPPING) && YesSteveModel.isAvailable()) { Minecraft.getInstance().setScreen(new ExtraPlayerRenderScreen()); event.setCanceled(true); } }
 }

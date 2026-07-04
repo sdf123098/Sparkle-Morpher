@@ -51,7 +51,7 @@ public final class YSMChannelImpl {
         if (registered) return;
         registered = true;
 
-        PayloadRegistrar registrar = event.registrar(channelId.toString());
+        PayloadRegistrar registrar = event.registrar(channelId.toString()).optional();
         YSMPayload.initType(channelId);
 
         registrar.playBidirectional(YSMPayload.TYPE, YSMPayload.CODEC, (payload, context) -> {
