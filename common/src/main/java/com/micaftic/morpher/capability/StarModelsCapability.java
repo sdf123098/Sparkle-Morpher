@@ -29,16 +29,18 @@ public class StarModelsCapability {
 
     public static Optional<StarModelsCapability> get(Player player) {
         Optional<StarModelsCapability> cap = StarModelsCapabilityImpl.get(player);
-        if(player instanceof LocalPlayer) {
-            if(cap.isEmpty()) return Optional.empty();
+        if(StarModelsCapabilityImpl.isClientSide()) {
+            if(player instanceof LocalPlayer) {
+                if(cap.isEmpty()) return Optional.empty();
 
-            StarModelsCapability temp = cap.get();
-            if(cache != temp) {
-                cache = temp;
-                localInstance = new LocalStarModelsCapability();
+                StarModelsCapability temp = cap.get();
+                if(cache != temp) {
+                    cache = temp;
+                    localInstance = new LocalStarModelsCapability();
+                }
+
+                return Optional.of(localInstance);
             }
-
-            return Optional.of(localInstance);
         }
         return cap;
     }
@@ -137,6 +139,12 @@ public class StarModelsCapability {
         public void deserializeNBT(ListTag listTag) {
             disableLocal = true; // 从服务器获取到的收藏模型, 不要写到本地
             super.deserializeNBT(listTag);
+        }
+
+        @Override
+        public void setStarModels(Set<String> set) {
+            disableLocal = true; // 从服务器获取到的收藏模型, 不要写到本地
+            super.setStarModels(set);
         }
 
     }
