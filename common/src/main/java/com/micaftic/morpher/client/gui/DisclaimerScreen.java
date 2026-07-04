@@ -26,10 +26,12 @@ public class DisclaimerScreen extends Screen {
 
     public void init() {
         clearWidgets();
-        int size = this.font.split(Component.translatable("gui.sparkle_morpher.disclaimer.text"), 400).size();
+        int colW = Math.min(this.width - 20, 400);
+        int btnW = Math.min(this.width - 20, 300);
+        int size = this.font.split(Component.translatable("gui.sparkle_morpher.disclaimer.text"), colW).size();
         Objects.requireNonNull(this.font);
         int i = (size * 9) + 20 + 20 + 10 + 20;
-        this.textY = (this.width - 400) / 2;
+        this.textY = (this.width - colW) / 2;
         this.textHeight = (this.height - i) / 2;
         MutableComponent mutableComponentTranslatable = Component.translatable("gui.sparkle_morpher.disclaimer.read");
         int iWidth = this.font.width(mutableComponentTranslatable);
@@ -43,14 +45,15 @@ public class DisclaimerScreen extends Screen {
             } else {
                 InputUtil.setScreen(null);
             }
-        }).size(300, 20).pos((this.width - 300) / 2, (this.textHeight + i) - 20).build());
+        }).size(btnW, 20).pos((this.width - btnW) / 2, (this.textHeight + i) - 20).build());
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
         GuiGraphicsExtractor guiGraphics = extractor;
         extractTransparentBackground(extractor);
-/*         GuiGraphicsExtractor.drawWordWrap(this.font, Component.translatable("gui.sparkle_morpher.disclaimer.text"), this.textY, this.textHeight, 400, -1); */
+/*         GuiGraphicsExtractor.drawWordWrap(this.font, Component.translatable("gui.sparkle_morpher.disclaimer.text"), this.textY, this.textHeight, 400, -1);
+ */
         super.extractRenderState(extractor, mouseX, mouseY, partialTick);
     }
 }

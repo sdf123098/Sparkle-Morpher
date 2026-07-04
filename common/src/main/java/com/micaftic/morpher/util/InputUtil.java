@@ -18,6 +18,18 @@ public class InputUtil {
         return KeyMappingFactory.isActiveAndMatches(keyMapping, keyCode, scanCode);
     }
 
+    public static boolean isKeyPressed(int keyCode, int scanCode, int modifiers, KeyMapping keyMapping) {
+        return KeyMappingFactory.isActiveAndMatches(keyMapping, keyCode, scanCode, modifiers);
+    }
+
+    public static boolean isMousePressed(int button, KeyMapping keyMapping) {
+        return KeyMappingFactory.isMouseActiveAndMatches(keyMapping, button);
+    }
+
+    public static boolean isMousePressed(int button, int modifiers, KeyMapping keyMapping) {
+        return KeyMappingFactory.isMouseActiveAndMatches(keyMapping, button, modifiers);
+    }
+
     public static Screen getCurrentScreen() {
         Object value = getFieldValue(Minecraft.getInstance(), MINECRAFT_SCREEN_FIELD);
         return value instanceof Screen screen ? screen : null;

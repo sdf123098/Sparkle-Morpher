@@ -103,8 +103,11 @@ public final class BlurStack {
             return;
         }
 
-        new Matrix4f().mul(new Matrix4f(), mvpScratch);
-        // TODO: mvpScratch.mul(graphics.poseStack.last().pose()); // poseStack removed in MC 26.x GuiGraphicsExtractor
+        // Map GUI-scaled pixel coordinates to NDC. This inherently accounts for
+        // the vanilla GUI Scale option (guiScaled range fills the framebuffer),
+        // replacing the previous identity matrix that ignored scale/projection.
+        mvpScratch.identity().setOrtho(0.0f, (float) Minecraft.getInstance().getWindow().getGuiScaledWidth(),
+                (float) Minecraft.getInstance().getWindow().getGuiScaledHeight(), 0.0f, -1000.0f, 1000.0f);
         mvpScratch.get(mvpFloats);
 
         GlStateManager._enableBlend(0);

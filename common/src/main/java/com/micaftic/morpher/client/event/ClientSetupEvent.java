@@ -7,8 +7,11 @@ import com.micaftic.morpher.client.input.DebugAnimationKey;
 import com.micaftic.morpher.client.input.ExtraAnimationKey;
 import com.micaftic.morpher.client.input.ExtraPlayerRenderKey;
 import com.micaftic.morpher.client.input.PlayerModelToggleKey;
+import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
 import com.micaftic.morpher.core.architectury.registry.client.keymappings.KeyMappingRegistry;
+import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
+import com.micaftic.morpher.core.vulkanexp.VulkanExperimentalCapability;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
@@ -30,6 +33,7 @@ public final class ClientSetupEvent {
             if (!YesSteveModel.isAvailable()) {
                 return;
             }
+            maybeProbeVulkanCapability();
             checkNativeInitialization();
         });
     }
@@ -81,6 +85,17 @@ public final class ClientSetupEvent {
         if (component != null) {
             throw new RuntimeException("sparkle Client Initialization Failed: " + component.getString(256));
         }
+    }
+
+    private static void maybeProbeVulkanCapability() {
+        if (!Boolean.getBoolean("sparkle_morpher.vulkanProbe")
+                && !GeneralConfig.safeGet(GeneralConfig.VULKAN_EXPERIMENTAL_CAPABILITY_PROBE, false)) {
+            return;
+        }
+        Blaze3D26_2Capability.Report blaze3DReport = Blaze3D26_2Capability.report();
+        YesSteveModel.LOGGER.info("[SM-VulkanExp] Blaze3D 26.2 capability: {}", blaze3DReport.summary());
+        VulkanExperimentalCapability.Report report = VulkanExperimentalCapability.probe();
+        YesSteveModel.LOGGER.info("[SM-VulkanExp] 26.2 capability probe: {}", report.summary());
     }
 
     // 這裡本來有一個native方法，可能是運行時會初始化載入模型

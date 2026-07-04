@@ -20,11 +20,18 @@ public class MainModelData {
 
     private final OrderedStringMap<String, OuterFileTexture> textureMap;
 
+    private final SpecialHandLocatorProfile specialHandLocatorProfile;
+
     public MainModelData(GeoModel[] models, Map<String, AnimationFile> animations, AnimationControllerFile[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap) {
+        this(models, animations, animationControllerFiles, textureMap, SpecialHandLocatorProfile.NONE);
+    }
+
+    public MainModelData(GeoModel[] models, Map<String, AnimationFile> animations, AnimationControllerFile[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap, SpecialHandLocatorProfile specialHandLocatorProfile) {
         this.models = ObjectArrayList.wrap(models);
         this.animations = animations;
         this.animationControllers = ObjectArrayList.wrap(animationControllerFiles);
         this.textureMap = textureMap;
+        this.specialHandLocatorProfile = specialHandLocatorProfile == null ? SpecialHandLocatorProfile.NONE : specialHandLocatorProfile;
     }
 
     public Map<String, AnimationFile> getAnimations() {
@@ -41,5 +48,9 @@ public class MainModelData {
 
     public OrderedStringMap<String, OuterFileTexture> getTextureMap() {
         return this.textureMap;
+    }
+
+    public SpecialHandLocatorProfile getSpecialHandLocatorProfile() {
+        return this.specialHandLocatorProfile;
     }
 }

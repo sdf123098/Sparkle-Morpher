@@ -58,12 +58,15 @@ public class ModelRendererBridge {
         boolean translucentTexture = model.isTranslucentTexture(textureIndex);
         GeneralConfig.NativeSimdPolicy nativePolicy = GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE);
         RenderBackendDecision backend = RenderBackendDecision.choose(model, allowDirectGpuRenderer, translucentTexture, disableGlow, textureLocation, nativePolicy);
-        GpuDebugLog.verbose("entry texture={} allowGpu={} backend={} reason={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdPolicy={} validationMode={} nativeLoaded={} nativeReason={}",
+        GpuDebugLog.verbose("entry texture={} allowGpu={} backend={} reason={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdPolicy={} validationMode={} nativeLoaded={} nativeReason={} negFaces={} optStats={} consvOnly={}",
                 textureLocation, allowDirectGpuRenderer, backend.backend, backend.reason, translucentTexture, disableGlow, shaderPackInUse,
                 isPreview, ModelPreviewRenderer.isFirstPerson(), SubmitRenderContext.get() != null, ModelPreviewRenderer.isWorldRender(),
                 GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), GeneralConfig.USE_GPU_RENDERER.get(), nativePolicy,
                 GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF),
-                AccelerationCapability.isLoaded(), AccelerationCapability.getReason());
+                AccelerationCapability.isLoaded(), AccelerationCapability.getReason(),
+                model.optimizationStats == null ? -1 : model.optimizationStats.negativeSizedFaces,
+                model.optimizationStats != null,
+                model.conservativeRenderOnly);
         if (backend.backend == RenderBackendDecision.Backend.GPU) {
             if (shaderPackInUse) {
                 if (IrisRenderPath.tryRender(model, pose, boneParams, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation)) {

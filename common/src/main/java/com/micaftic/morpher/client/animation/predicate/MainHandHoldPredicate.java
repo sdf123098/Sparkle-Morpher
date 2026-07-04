@@ -11,6 +11,7 @@ import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.enums.PlayState;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.LivingEntityFrameState;
+import com.micaftic.morpher.client.model.ModelActionProfile;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -25,6 +26,9 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
     public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
         LivingEntity entity = event.getAnimatable().getEntity();
         if (entity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
+            return PlayState.STOP;
+        }
+        if (event.getAnimatable().getModelAssembly().getAnimationBundle().getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
             return PlayState.STOP;
         }
         if (!checkSwingAndUse(entity, InteractionHand.MAIN_HAND)) {

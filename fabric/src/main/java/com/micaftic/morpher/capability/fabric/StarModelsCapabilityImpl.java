@@ -21,5 +21,4 @@ public final class StarModelsCapabilityImpl {
     public static boolean isClientSide() {
         return FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT;
     }
-
 }

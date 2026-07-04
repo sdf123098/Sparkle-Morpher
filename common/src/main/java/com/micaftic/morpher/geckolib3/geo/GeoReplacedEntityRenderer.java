@@ -13,6 +13,7 @@ import com.micaftic.morpher.mixin.client.LivingEntityAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.util.Mth;
 import net.minecraft.client.renderer.entity.LivingEntityRenderState;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Minecraft;
@@ -30,6 +31,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -98,42 +100,45 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             this.dispatchedMat.set(poseStack.last().pose());
             setCurrentModelRenderCycle(EModelRenderCycle.INITIAL);
             poseStack.pushPose();
-            if (entity.getPose() == Pose.SLEEPING && (bedOrientation = entity.getBedOrientation()) != null) {
-                float eyeHeight = entity.getEyeHeight(Pose.STANDING) - 0.1f;
-                poseStack.translate((-bedOrientation.getStepX()) * eyeHeight, 0.0f, (-bedOrientation.getStepZ()) * eyeHeight);
-            }
-            setupRotations(entity, poseStack, modelData.lerpedAge, modelData.lerpBodyRot, partialTick);
-            if (t.getEntity().getVehicle() != null) {
-                Entity vehicle = t.getEntity().getVehicle();
-                VehicleCapability.get(vehicle).ifPresent(cap -> {
-                    if (cap.isModelReady()) {
-                        Vector3f vector3f = cap.getExpressionOffset();
-                        if (vector3f != null) {
-                            poseStack.mulPose(new Quaternionf().rotateZYX(vector3f.z, 0.0f, vector3f.x).invert());
+            try {
+                if (entity.getPose() == Pose.SLEEPING && (bedOrientation = entity.getBedOrientation()) != null) {
+                    float eyeHeight = entity.getEyeHeight(Pose.STANDING) - 0.1f;
+                    poseStack.translate((-bedOrientation.getStepX()) * eyeHeight, 0.0f, (-bedOrientation.getStepZ()) * eyeHeight);
+                }
+                setupRotations(entity, poseStack, modelData.lerpedAge, modelData.lerpBodyRot, partialTick);
+                if (t.getEntity().getVehicle() != null) {
+                    Entity vehicle = t.getEntity().getVehicle();
+                    VehicleCapability.get(vehicle).ifPresent(cap -> {
+                        if (cap.isModelReady()) {
+                            Vector3f vector3f = cap.getExpressionOffset();
+                            if (vector3f != null) {
+                                poseStack.mulPose(new Quaternionf().rotateZYX(vector3f.z, 0.0f, vector3f.x).invert());
+                            }
                         }
-                    }
-                });
+                    });
+                }
+                preRenderCallback(entity, poseStack, partialTick);
+                poseStack.translate(0.0f, 0.01f, 0.0f);
+                AnimatedGeoModel animatedGeoModel = t.getCurrentModel();
+                Identifier renderTexture = textureLocation == null ? t.getTextureLocation() : textureLocation;
+                int textureIndex = textureLocation == null ? t.getTextureIndex() : 0;
+                // MC 26.x: isBodyVisible/shouldEntityAppearGlowing API changed
+                RenderType renderType = getRenderType(renderTexture, true /* isBodyVisible(entity) */ && !entity.isInvisibleTo(minecraft.player), false /* minecraft.shouldEntityAppearGlowing(entity) */, t.getCurrentModel().getGeoModel().isTranslucentTexture(textureIndex));
+                boolean useExtraPlayer = t.isRenderLayersFirst();
+                Color color = getRenderColor(t, partialTick, poseStack, multiBufferSource, null, packedLight);
+                renderWithBone(animatedGeoModel, t, partialTick, poseStack, multiBufferSource, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f);
+                if (useExtraPlayer && !entity.isSpectator()) {
+                    render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
+                }
+                if (renderType != null) {
+                    renderWithBoneAndRenderType(animatedGeoModel, t, partialTick, renderType, poseStack, multiBufferSource, textureIndex, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f, renderTexture);
+                }
+                if (!useExtraPlayer && !entity.isSpectator()) {
+                    render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
+                }
+            } finally {
+                poseStack.popPose();
             }
-            preRenderCallback(entity, poseStack, partialTick);
-            poseStack.translate(0.0f, 0.01f, 0.0f);
-            AnimatedGeoModel animatedGeoModel = t.getCurrentModel();
-            Identifier renderTexture = textureLocation == null ? t.getTextureLocation() : textureLocation;
-            int textureIndex = textureLocation == null ? t.getTextureIndex() : 0;
-            // MC 26.x: isBodyVisible/shouldEntityAppearGlowing API changed
-            RenderType renderType = getRenderType(renderTexture, true /* isBodyVisible(entity) */ && !entity.isInvisibleTo(minecraft.player), false /* minecraft.shouldEntityAppearGlowing(entity) */, t.getCurrentModel().getGeoModel().isTranslucentTexture(textureIndex));
-            boolean useExtraPlayer = t.isRenderLayersFirst();
-            Color color = getRenderColor(t, partialTick, poseStack, multiBufferSource, null, packedLight);
-            renderWithBone(animatedGeoModel, t, partialTick, poseStack, multiBufferSource, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f);
-            if (useExtraPlayer && !entity.isSpectator()) {
-                render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
-            }
-            if (renderType != null) {
-                renderWithBoneAndRenderType(animatedGeoModel, t, partialTick, renderType, poseStack, multiBufferSource, textureIndex, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f, renderTexture);
-            }
-            if (!useExtraPlayer && !entity.isSpectator()) {
-                render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
-            }
-            poseStack.popPose();
         }
         ((LivingEntityRendererAccessor) this).tlm$renderNameTag(entity, entityYaw, partialTick, poseStack, multiBufferSource, packedLight);
         RenderLivingBridge.firePost(entity, this, partialTick, poseStack, multiBufferSource, packedLight);
@@ -178,12 +183,32 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             poseStack.mulPose(Axis.YP.rotationDegrees(270.0f));
         } else {
             poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
+            if (tentity.isFallFlying()) {
+                applyFallFlyingRotation(tentity, poseStack, partialTicks, zIsAutoSpinAttack);
+            }
         }
         if (t > 0) {
             tentity.deathTime = t;
         }
         if (zIsAutoSpinAttack) {
             ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, true);
+        }
+    }
+
+    private static void applyFallFlyingRotation(LivingEntity entity, PoseStack poseStack, float partialTicks, boolean autoSpinAttack) {
+        float ticks = (float) entity.getFallFlyingTicks() + partialTicks;
+        float progress = Mth.clamp(ticks * ticks / 100.0f, 0.0f, 1.0f);
+        if (!autoSpinAttack) {
+            poseStack.mulPose(Axis.XP.rotationDegrees(progress * (-90.0f - entity.getXRot())));
+        }
+        Vec3 view = entity.getViewVector(partialTicks);
+        Vec3 movement = entity.getDeltaMovement();
+        double movementHorizontal = movement.horizontalDistanceSqr();
+        double viewHorizontal = view.horizontalDistanceSqr();
+        if (movementHorizontal > 0.0d && viewHorizontal > 0.0d) {
+            double dot = (movement.x * view.x + movement.z * view.z) / Math.sqrt(movementHorizontal * viewHorizontal);
+            double cross = movement.x * view.z - movement.z * view.x;
+            poseStack.mulPose(Axis.YP.rotation((float) (Math.signum(cross) * Math.acos(Mth.clamp(dot, -1.0d, 1.0d)))));
         }
     }
 

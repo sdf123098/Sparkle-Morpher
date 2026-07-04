@@ -105,7 +105,7 @@ public class StarModelsCapability {
             super.starModels.clear();
             try {
                 JsonParser.parseString(FileUtils.readFileToString(LOCAL_FILE.toFile(), "UTF-8")).getAsJsonArray().forEach(je -> super.starModels.add(je.getAsString()));
-            } catch (Throwable _) {}
+            } catch (Throwable ignored) {}
         }
 
         public void save() {
@@ -114,7 +114,7 @@ public class StarModelsCapability {
             super.starModels.forEach(ja::add);
             try {
                 FileUtils.writeStringToFile(LOCAL_FILE.toFile(), ja.toString(), StandardCharsets.UTF_8);
-            } catch (IOException _) {}
+            } catch (IOException ignored) {}
         }
 
         @Override
@@ -137,13 +137,13 @@ public class StarModelsCapability {
 
         @Override
         public void deserializeNBT(ListTag listTag) {
-            disableLocal = true; // 从服务器获取到的收藏模型, 不要写到本地
+            disableLocal = true; // 从服务器获取到的收藏模型，不要写到本地
             super.deserializeNBT(listTag);
         }
 
         @Override
         public void setStarModels(Set<String> set) {
-            disableLocal = true; // 从服务器获取到的收藏模型, 不要写到本地
+            disableLocal = true; // 从服务器获取到的收藏模型，不要写到本地
             super.setStarModels(set);
         }
 

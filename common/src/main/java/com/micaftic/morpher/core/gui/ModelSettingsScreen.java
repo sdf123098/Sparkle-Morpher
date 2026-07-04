@@ -53,6 +53,12 @@ public class ModelSettingsScreen extends OptionScreen {
     private int groupLeft, groupTop, groupRight, groupBottom;
     private int rowsLeft, rowsTop, rowsRight, rowsBottom;
     private int openDropdown = -1;
+    private int dropdownScroll = 0;
+    private boolean draggingDropdown = false;
+    private boolean dropdownDragged = false;
+    private double dropdownPressY = 0.0;
+    private int dropdownScrollAtPress = 0;
+    private static final int DD_ITEM_H = 16;
     private final Map<OptionGroup, List<SettingItem>> settingItems = new HashMap<>();
 
     private float yaw = 200.0f;
@@ -119,6 +125,8 @@ public class ModelSettingsScreen extends OptionScreen {
         super.init();
         activeRows.clear();
         openDropdown = -1;
+        dropdownScroll = 0;
+        draggingDropdown = false;
         closeX = panelRight - RoulettePanelStyle.ICON - 6;
         closeY = panelTop + 2;
         contentLeft = panelLeft + 8;
@@ -312,24 +320,32 @@ public class ModelSettingsScreen extends OptionScreen {
         if (openDropdown < 0 || openDropdown >= items.size()) return;
         SettingItem item = items.get(openDropdown);
         if (item.kind != SettingKind.RADIO || item.labels.isEmpty()) return;
-        int rowH = 22;
-        int slot = openDropdown - rowScrollOffset;
-        int rowY = rowsTop + slot * rowH;
-        if (rowY < rowsTop || rowY + 19 > rowsBottom) return;
-        int rowW = rowsRight - rowsLeft;
-        int controlW = Math.min(190, Math.max(90, rowW / 3));
-        int x = rowsLeft + rowW - controlW - 8;
-        int y = rowY + 19;
-        int visible = Math.min(8, item.labels.size());
-        int h = visible * 16 + 2;
-        if (y + h > rowsBottom) y = rowY - h;
-        RoulettePanelStyle.secondaryGlassPanel(g, x, y, controlW, h);
+        DropdownBounds b = dropdownBounds(item);
+        if (b == null) return;
+        int maxScroll = Math.max(0, b.total - b.visible);
+        dropdownScroll = Mth.clamp(dropdownScroll, 0, maxScroll);
+        boolean scrollable = maxScroll > 0;
+        int listW = scrollable ? b.w - 3 : b.w;
+
+        RoulettePanelStyle.secondaryGlassPanel(g, b.x, b.y, b.w, b.h);
         int current = currentIndex(item);
-        for (int i = 0; i < visible; i++) {
-            boolean hover = RoulettePanelStyle.inside(mouseX, mouseY, x + 1, y + 1 + i * 16, controlW - 2, 16);
+        for (int row = 0; row < b.visible; row++) {
+            int i = row + dropdownScroll;
+            if (i >= b.total) break;
+            int iy = b.y + 1 + row * DD_ITEM_H;
+            boolean hover = RoulettePanelStyle.inside(mouseX, mouseY, b.x + 1, iy, listW - 2, DD_ITEM_H);
             boolean selected = i == current;
-            RoulettePanelStyle.fill(g, x + 1, y + 1 + i * 16, controlW - 2, 16, selected ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x00000000);
-            g.text(this.font, Component.literal(RoulettePanelStyle.trim(this.font, item.labelAt(i), controlW - 10)), x + 5, y + 5 + i * 16, selected ? 0xFFFFFFFF : RoulettePanelStyle.TEXT, false);
+            RoulettePanelStyle.fill(g, b.x + 1, iy, listW - 2, DD_ITEM_H, selected ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x00000000);
+            g.text(this.font, Component.literal(RoulettePanelStyle.trim(this.font, item.labelAt(i), listW - 10)), b.x + 5, iy + 4, selected ? 0xFFFFFFFF : RoulettePanelStyle.TEXT, false);
+        }
+        if (scrollable) {
+            int trackX = b.x + b.w - 2;
+            int trackTop = b.y + 1;
+            int trackH = b.h - 2;
+            int thumbH = Math.max(12, trackH * b.visible / Math.max(1, b.total));
+            int thumbY = trackTop + (int) ((long) (trackH - thumbH) * dropdownScroll / maxScroll);
+            g.fill(trackX, trackTop, trackX + 1, trackTop + trackH, 0x60444444);
+            g.fill(trackX, thumbY, trackX + 1, thumbY + thumbH, 0xFFEDE1CC);
         }
     }
 
@@ -444,7 +460,7 @@ public class ModelSettingsScreen extends OptionScreen {
             onClose();
             return true;
         }
-        if (handleDropdownClick(event.x(), event.y())) {
+        if (beginDropdownPress(event.x(), event.y(), event.button())) {
             return true;
         }
         openDropdown = -1;
@@ -464,16 +480,38 @@ public class ModelSettingsScreen extends OptionScreen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
+        if (draggingDropdown && event.button() == draggingButton) {
+            boolean wasDrag = dropdownDragged;
+            draggingDropdown = false;
+            draggingButton = -1;
+            if (!wasDrag) {
+                handleDropdownClick(event.x(), event.y());
+            }
+            return true;
+        }
         if (draggingPreview && event.button() == draggingButton) {
             draggingPreview = false;
             draggingButton = -1;
             return true;
         }
-        return false;
+        return super.mouseReleased(event);
     }
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (draggingDropdown && event.button() == draggingButton) {
+            if (Math.abs(event.y() - dropdownPressY) > 4.0) dropdownDragged = true;
+            List<SettingItem> items = activeItems();
+            if (openDropdown >= 0 && openDropdown < items.size()) {
+                DropdownBounds b = dropdownBounds(items.get(openDropdown));
+                if (b != null) {
+                    int maxScroll = Math.max(0, b.total - b.visible);
+                    int deltaItems = (int) ((dropdownPressY - event.y()) / DD_ITEM_H);
+                    dropdownScroll = Mth.clamp(dropdownScrollAtPress + deltaItems, 0, maxScroll);
+                }
+            }
+            return true;
+        }
         if (draggingPreview && event.button() == draggingButton) {
             if (event.button() == 0) {
                 yaw = (float) (yaw + dragX * 1.2);
@@ -489,6 +527,17 @@ public class ModelSettingsScreen extends OptionScreen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (openDropdown >= 0) {
+            List<SettingItem> items = activeItems();
+            if (openDropdown < items.size() && items.get(openDropdown).kind == SettingKind.RADIO) {
+                DropdownBounds b = dropdownBounds(items.get(openDropdown));
+                if (b != null && RoulettePanelStyle.inside(mouseX, mouseY, b.x, b.y, b.w, b.h)) {
+                    int maxScroll = Math.max(0, b.total - b.visible);
+                    dropdownScroll = Mth.clamp((int) (dropdownScroll - scrollY), 0, maxScroll);
+                    return true;
+                }
+            }
+        }
         if (renderPreview && isInPreview(mouseX, mouseY)) {
             zoom = Mth.clamp((float) (zoom * (1.0 + scrollY * 0.1)), 30.0f, 400.0f);
             return true;
@@ -563,8 +612,27 @@ public class ModelSettingsScreen extends OptionScreen {
         int cx = rowsLeft + rowW - controlW - 8;
         if (RoulettePanelStyle.inside(mouseX, mouseY, cx, localY + 2, controlW, 15)) {
             openDropdown = openDropdown == index ? -1 : index;
+            dropdownScroll = 0;
             return true;
         }
+        return true;
+    }
+
+    private boolean beginDropdownPress(double mouseX, double mouseY, int button) {
+        if (openDropdown < 0) return false;
+        List<SettingItem> items = activeItems();
+        if (openDropdown >= items.size()) return false;
+        SettingItem item = items.get(openDropdown);
+        if (item.kind != SettingKind.RADIO) return false;
+        DropdownBounds b = dropdownBounds(item);
+        if (b == null || !RoulettePanelStyle.inside(mouseX, mouseY, b.x, b.y, b.w, b.h)) return false;
+        // Capture the press so a drag scrolls the list (touch) while a tap
+        // still selects on release.
+        draggingDropdown = true;
+        dropdownDragged = false;
+        dropdownPressY = mouseY;
+        dropdownScrollAtPress = dropdownScroll;
+        draggingButton = button;
         return true;
     }
 
@@ -579,9 +647,10 @@ public class ModelSettingsScreen extends OptionScreen {
         if (!RoulettePanelStyle.inside(mouseX, mouseY, bounds.x, bounds.y, bounds.w, bounds.h)) {
             return false;
         }
-        int slot = (int) ((mouseY - bounds.y - 1) / 16);
-        if (slot >= 0 && slot < Math.min(8, item.labels.size())) {
-            ((Option<Integer>) item.option).setPending(slot);
+        int row = (int) ((mouseY - bounds.y - 1) / DD_ITEM_H);
+        int index = row + dropdownScroll;
+        if (row >= 0 && row < bounds.visible && index >= 0 && index < bounds.total) {
+            ((Option<Integer>) item.option).setPending(index);
             openDropdown = -1;
         }
         return true;
@@ -595,11 +664,40 @@ public class ModelSettingsScreen extends OptionScreen {
         int rowW = rowsRight - rowsLeft;
         int controlW = Math.min(190, Math.max(90, rowW / 3));
         int x = rowsLeft + rowW - controlW - 8;
-        int y = rowY + 19;
-        int visible = Math.min(8, item.labels.size());
-        int h = visible * 16 + 2;
-        if (y + h > rowsBottom) y = rowY - h;
-        return new DropdownBounds(x, y, controlW, h);
+
+        int total = item.labels.size();
+        // Vertical span the popup may occupy: inside the panel, below the title
+        // bar and above the bottom edge.
+        int maxTop = panelTop + 24;
+        int maxBottom = panelBottom - 6;
+        int controlTop = rowY + 2;
+        int controlBottom = rowY + 19;
+        int spaceBelow = maxBottom - controlBottom;
+        int spaceAbove = controlTop - maxTop;
+        int desiredH = total * DD_ITEM_H + 2;
+
+        // Prefer opening downward; flip up when it does not fit; otherwise pick
+        // the side with more room and let the list scroll.
+        boolean openDown;
+        int avail;
+        if (desiredH <= spaceBelow) {
+            openDown = true;
+            avail = desiredH;
+        } else if (desiredH <= spaceAbove) {
+            openDown = false;
+            avail = desiredH;
+        } else if (spaceBelow >= spaceAbove) {
+            openDown = true;
+            avail = spaceBelow;
+        } else {
+            openDown = false;
+            avail = spaceAbove;
+        }
+
+        int visible = Mth.clamp((avail - 2) / DD_ITEM_H, 1, total);
+        int h = visible * DD_ITEM_H + 2;
+        int y = openDown ? controlBottom : controlTop - h;
+        return new DropdownBounds(x, y, controlW, h, visible, total);
     }
 
     private List<SettingItem> activeItems() {
@@ -657,7 +755,7 @@ public class ModelSettingsScreen extends OptionScreen {
         }
     }
 
-    private record DropdownBounds(int x, int y, int w, int h) {
+    private record DropdownBounds(int x, int y, int w, int h, int visible, int total) {
     }
 
 }

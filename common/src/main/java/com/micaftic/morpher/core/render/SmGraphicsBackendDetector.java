@@ -1,6 +1,8 @@
 package com.micaftic.morpher.core.render;
 
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.mixin.client.GpuDeviceAccessor;
+import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 
 import java.util.Locale;
@@ -77,22 +79,23 @@ public final class SmGraphicsBackendDetector {
         }
 
         try {
-            Object device = RenderSystem.getDevice();
+            GpuDevice device = RenderSystem.getDevice();
             if (device != null) {
-                String className = device.getClass().getName();
+                Object backend = ((GpuDeviceAccessor) device).sparkleMorpher$getBackend();
+                String className = backend == null ? device.getClass().getName() : backend.getClass().getName();
                 String normalized = className.toLowerCase(Locale.ROOT);
                 if (normalized.contains("vulkan")) {
                     cachedBackend = SmGraphicsBackend.VULKAN;
-                    cachedReason = "RenderSystem device class: " + className;
+                    cachedReason = "RenderSystem backend class: " + className;
                     return;
                 }
                 if (normalized.contains("opengl") || normalized.contains(".gl") || normalized.contains("gl")) {
                     cachedBackend = SmGraphicsBackend.OPENGL;
-                    cachedReason = "RenderSystem device class: " + className;
+                    cachedReason = "RenderSystem backend class: " + className;
                     return;
                 }
                 cachedBackend = SmGraphicsBackend.UNKNOWN;
-                cachedReason = "unknown RenderSystem device class: " + className;
+                cachedReason = "unknown RenderSystem backend class: " + className;
                 return;
             }
         } catch (Throwable t) {

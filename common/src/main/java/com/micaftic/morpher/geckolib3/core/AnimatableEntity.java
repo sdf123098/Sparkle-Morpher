@@ -75,6 +75,14 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
 
     private int lastAnimationEvaluationControllerCount;
 
+    private boolean lastAnimationEvaluationPreviewMode;
+
+    private boolean lastAnimationEvaluationExtraPlayerMode;
+
+    private float lastAnimationEvaluationHeadPitch = Float.NaN;
+
+    private float lastAnimationEvaluationNetHeadYaw = Float.NaN;
+
     private final AnimationData manager = new AnimationData();
 
     public float lastTick = -1.0f;
@@ -140,6 +148,10 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
         this.lastAnimationEvaluationModel = null;
         this.lastAnimationEvaluationBoneCount = 0;
         this.lastAnimationEvaluationControllerCount = 0;
+        this.lastAnimationEvaluationPreviewMode = false;
+        this.lastAnimationEvaluationExtraPlayerMode = false;
+        this.lastAnimationEvaluationHeadPitch = Float.NaN;
+        this.lastAnimationEvaluationNetHeadYaw = Float.NaN;
         this.animationStates.clear();
         this.smoothedRemoteSpeed = 0.0f;
     }
@@ -378,15 +390,19 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                 int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
                 int boneCount = getEvaluationContext().getBoneCount();
                 int controllerCount = this.manager.getAnimationControllers().size();
-                // Extra-player HUD rendering is a second view of the same model in the same frame.
-                // Reuse the already evaluated pose instead of running Molang/physics twice.
-                boolean canReuseEvaluation = (!ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer())
+                boolean previewMode = ModelPreviewRenderer.isPreview();
+                boolean extraPlayerMode = ModelPreviewRenderer.isExtraPlayer();
+                boolean canReuseEvaluation = (!previewMode || extraPlayerMode)
                         && this.lastAnimationEvaluationFrameId == renderFrameId
                         && Float.compare(this.lastAnimationEvaluationSeekTime, this.seekTime) == 0
                         && this.lastAnimationEvaluationActive == z
                         && this.lastAnimationEvaluationModel == this.currentModel
                         && this.lastAnimationEvaluationBoneCount == boneCount
-                        && this.lastAnimationEvaluationControllerCount == controllerCount;
+                        && this.lastAnimationEvaluationControllerCount == controllerCount
+                        && this.lastAnimationEvaluationPreviewMode == previewMode
+                        && this.lastAnimationEvaluationExtraPlayerMode == extraPlayerMode
+                        && Float.compare(this.lastAnimationEvaluationHeadPitch, event.getModelData().headPitch) == 0
+                        && Float.compare(this.lastAnimationEvaluationNetHeadYaw, event.getModelData().netHeadYaw) == 0;
                 if (canReuseEvaluation) {
                     AnimationFrameProfiler.logReusedEvaluation(this, event, this.seekTime);
                 } else {
@@ -406,6 +422,10 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                         this.lastAnimationEvaluationModel = this.currentModel;
                         this.lastAnimationEvaluationBoneCount = boneCount;
                         this.lastAnimationEvaluationControllerCount = controllerCount;
+                        this.lastAnimationEvaluationPreviewMode = previewMode;
+                        this.lastAnimationEvaluationExtraPlayerMode = extraPlayerMode;
+                        this.lastAnimationEvaluationHeadPitch = event.getModelData().headPitch;
+                        this.lastAnimationEvaluationNetHeadYaw = event.getModelData().netHeadYaw;
                     } finally {
                         AnimationFrameProfiler.endEvaluation(profilerScope);
                     }

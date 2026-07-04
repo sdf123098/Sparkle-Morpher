@@ -35,24 +35,23 @@ public class ReplacePlayerRenderEvent {
         if ((!entity.equals(localPlayer) && GeneralConfig.safeGet(GeneralConfig.DISABLE_OTHER_MODEL)) || entity.isSpectator()) {
             return false;
         }
-        boolean[] cancelled = {false};
         try {
-            PlayerCapability.get(entity).ifPresent(cap -> {
-                if (cap.isModelActive()) {
-                    if (!CameraUtil.isFirstPerson(cap)
-                            || FirstPersonCompat.isFirstPersonActive()
-                            || RealCameraCompat.isActive()
-                            || GeneralConfig.safeGet(GeneralConfig.DISABLE_EXTERNAL_FP_ANIM)
-                            || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
-                        cancelled[0] = true;
-                        RendererManager.getPlayerRenderer().render(entity, entityYaw, partialTick, poseStack, bufferSource, collector, packedLight);
-                    }
+            PlayerCapability cap = PlayerCapability.get(entity).orElse(null);
+            if (cap != null && cap.isModelActive()) {
+                if (!CameraUtil.isFirstPerson(cap)
+                        || FirstPersonCompat.isFirstPersonActive()
+                        || RealCameraCompat.isActive()
+                        || GeneralConfig.safeGet(GeneralConfig.DISABLE_EXTERNAL_FP_ANIM)
+                        || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
+                    // Reuse the capability resolved for the render-pre check.
+                    RendererManager.getPlayerRenderer().render(cap, entityYaw, partialTick, poseStack, bufferSource, collector, packedLight);
+                    return true;
                 }
-            });
+            }
+            return false;
         } catch (Exception e) {
             YesSteveModel.LOGGER.warn("Failed to render custom player model, falling back to vanilla", e);
             return false;
         }
-        return cancelled[0];
     }
 }

@@ -31,8 +31,12 @@ public final class Pie {
         float rectW = (outerRadius + pad) * 2.0f;
         float rectH = (outerRadius + pad) * 2.0f;
 
-        new Matrix4f().mul(new Matrix4f(), mvpScratch);
-        // TODO: mvpScratch.mul(graphics.poseStack.last().pose()); // poseStack removed in MC 26.x GuiGraphicsExtractor
+        // Map GUI-scaled pixel coordinates to NDC. This inherently accounts for
+        // the vanilla GUI Scale option (guiScaled range fills the framebuffer),
+        // replacing the previous identity matrix that ignored scale/projection.
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mvpScratch.identity().setOrtho(0.0f, (float) mc.getWindow().getGuiScaledWidth(),
+                (float) mc.getWindow().getGuiScaledHeight(), 0.0f, -1000.0f, 1000.0f);
         mvpScratch.get(mvpFloats);
 
         float cr = ((rgba >> 16) & 0xFF) / 255.0f;

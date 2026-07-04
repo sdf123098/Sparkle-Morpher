@@ -22,8 +22,15 @@ public final class ExtraPlayerRenderKey {
             return;
         }
         ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
-            if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, KEY_MAPPING)) {
+            if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, modifiers, KEY_MAPPING)) {
                 InputUtil.setScreen(new ExtraPlayerRenderScreen());
+            }
+            return EventResult.pass();
+        });
+        ClientRawInputEvent.MOUSE_CLICKED_PRE.register((client, button, action, modifiers) -> {
+            if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && action == 1 && InputUtil.isMousePressed(button, modifiers, KEY_MAPPING)) {
+                InputUtil.setScreen(new ExtraPlayerRenderScreen());
+                return EventResult.interruptFalse();
             }
             return EventResult.pass();
         });

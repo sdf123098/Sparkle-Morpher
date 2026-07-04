@@ -37,6 +37,15 @@ public final class ClientPlayerJoinNotification {
         if (((MinecraftAccessor) Minecraft.getInstance()).ysm$isLocalServer()) {
             return;
         }
+        Thread handshakeWatchdog = new Thread(() -> {
+            try {
+                Thread.sleep(3000L);
+                ((Executor) Minecraft.getInstance()).execute(ClientModelManager::markVanillaServerIfNoHandshake);
+            } catch (InterruptedException ignored) {
+            }
+        });
+        handshakeWatchdog.setDaemon(true);
+        handshakeWatchdog.start();
         Thread thread = new Thread(() -> {
             try {
                 Thread.sleep(60000L);
