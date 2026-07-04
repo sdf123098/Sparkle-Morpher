@@ -2,7 +2,7 @@ package com.micaftic.morpher.core.compat.slashblade;
 
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 

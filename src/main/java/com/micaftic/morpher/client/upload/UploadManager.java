@@ -4,6 +4,7 @@ import com.micaftic.morpher.ResourceCleanupHelper;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.texture.ITextureMap;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.config.GeneralConfig;
 import com.google.common.collect.Queues;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.Pair;
@@ -80,6 +81,10 @@ public class UploadManager {
 
     public static void processPendingUploads() {
         RenderSystem.assertOnRenderThread();
+        // Fast idle path: most ticks have no queued GPU texture work.
+        if (pendingUploads.isEmpty() && pendingReleases.isEmpty() && expiredTextures.isEmpty()) {
+            return;
+        }
         if (!expiredTextures.isEmpty()) {
             Iterator<Map.Entry<AbstractTexture, ReferenceIntMutablePair<Identifier>>> it = expiredTextures.entrySet().iterator();
             while (it.hasNext()) {
@@ -119,6 +124,12 @@ public class UploadManager {
                 outerFileTexture.doLoad();
             }
             Minecraft.getInstance().getTextureManager().register(locatable.textureIdentifier, texture);
+            if (GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+                YesSteveModel.LOGGER.info("[SM-MODEL] texture-register id={} textureClass={} resolution={}",
+                        locatable.textureIdentifier,
+                        texture.getClass().getName(),
+                        locatable.resolution);
+            }
             ResourceCleanupHelper.registerBiCleanup(locatable, locatable.textureIdentifier, locatable.resolution, (textureId, num) -> {
                 expiredTextures.put(texture, ReferenceIntMutablePair.of(textureId, num));
             });
@@ -150,6 +161,11 @@ public class UploadManager {
         @Override
         public Optional<Identifier> getResourceLocation() {
             return this.registered ? Optional.of(this.textureIdentifier) : Optional.empty();
+        }
+
+        @Override
+        public Identifier getResourceLocationOrNull() {
+            return this.registered ? this.textureIdentifier : null;
         }
 
         public void markRegistered() {

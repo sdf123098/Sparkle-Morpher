@@ -16,7 +16,7 @@ public class PlayerModelScreen extends Screen {
 
     @Override
     protected void init() {
-        Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
+        com.micaftic.morpher.util.InputUtil.setScreen(new ModernPlayerModelScreen());
     }
 
     public boolean shouldCloseWithToggleKey() {

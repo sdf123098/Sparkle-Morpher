@@ -1,7 +1,6 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.event.EntityJoinCallbackEvent;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import it.unimi.dsi.fastutil.ints.Int2FloatArrayMap;
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
@@ -12,8 +11,6 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.effect.MobEffect;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
 import org.apache.commons.lang3.StringUtils;
 import org.joml.Math;
 import com.micaftic.morpher.core.api.network.PacketContext;
@@ -299,29 +296,10 @@ public class S2CSyncPlayerStatePacket {
     }
 
     public static void handle(S2CSyncPlayerStatePacket message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            EntityJoinCallbackEvent.addCallback(message.entityId, entity -> handleCapability(entity, message));
-        }
+        ClientNetworkBridge.handle(ctx, "handleSyncPlayerState", message);
     }
-    public static void handleCapability(Entity entity, S2CSyncPlayerStatePacket message) {
-        if (entity instanceof Player) {
-            PlayerCapability.get(entity).ifPresent(cap -> {
-                if ((message.flags & 2048) != 0) {
-                    if (!StringUtils.isEmpty(message.modelSwitchId)) {
-                        cap.requestModelSwitch(message.modelSwitchId);
-                    } else {
-                        cap.clearModelSwitch();
-                    }
-                }
-                if ((message.flags & 4096) != 0) {
-                    if (message.isFullSync()) {
-                        cap.updateMolangVars(message.molangHashId, (Int2FloatOpenHashMap) message.molangVarData);
-                    } else {
-                        cap.enqueueMolangDelta(message.molangHashId, message.molangVarData);
-                    }
-                }
-                cap.getPositionTracker().applySyncMessage(message);
-            });
-        }
+
+    public int getMolangHashId() {
+        return this.molangHashId;
     }
 }

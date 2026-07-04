@@ -104,6 +104,8 @@ public class GeoModel {
     public int[] bakedBoneRenderOrderRightArm = new int[0];
 
     public ModelOptimizationStats optimizationStats;
+    public boolean conservativeRenderOnly;
+    public boolean conservativeFirstPersonHands;
 
     public static class BakedBone {
         public String name;
@@ -212,6 +214,55 @@ public class GeoModel {
         this.bakedBoneRenderOrderAll = buildPartMaskBoneRenderOrder(0);
         this.bakedBoneRenderOrderLeftArm = buildPartMaskBoneRenderOrder(1);
         this.bakedBoneRenderOrderRightArm = buildPartMaskBoneRenderOrder(2);
+    }
+
+    public void updateConservativeRenderFlags() {
+        int bones = bakedBones == null ? 0 : bakedBones.size();
+        int cubes = 0;
+        int quads = 0;
+        int armQuads = 0;
+        int rotatedBones = 0;
+        int negativeSizedFaces = optimizationStats == null ? 0 : optimizationStats.negativeSizedFaces;
+        if (bakedBones != null) {
+            for (BakedBone bone : bakedBones) {
+                if (bone.rotX != 0.0f || bone.rotY != 0.0f || bone.rotZ != 0.0f) {
+                    rotatedBones++;
+                }
+                for (BakedCube cube : bone.cubes) {
+                    cubes++;
+                    int cubeQuads = cube.quads.size();
+                    quads += cubeQuads;
+                    if (bone.partMask == 1 || bone.partMask == 2) {
+                        armQuads += cubeQuads;
+                    }
+                }
+            }
+        }
+        boolean hasRiskyFaces = negativeSizedFaces >= 4 || negativeSizedFaces * 3 >= Math.max(1, quads);
+        boolean complexModel = bones >= 96 || cubes >= 512 || quads >= 2048 || rotatedBones >= 12;
+        this.conservativeRenderOnly = hasRiskyFaces && complexModel;
+        this.conservativeFirstPersonHands = hasRiskyFaces && (this.hasCustomLeftHand || this.hasCustomRightHand || this.hasCustomLimbs || armQuads > 0);
+    }
+
+    public boolean ensureConservativeRenderOnly() {
+        if (!conservativeRenderOnly && optimizationStats != null && optimizationStats.negativeSizedFaces > 0) {
+            updateConservativeRenderFlags();
+            if (conservativeRenderOnly) {
+                disableCullableCubes();
+            }
+        }
+        return conservativeRenderOnly;
+    }
+
+    public void disableCullableCubes() {
+        if (bakedBones == null) {
+            return;
+        }
+        for (BakedBone bone : bakedBones) {
+            for (BakedCube cube : bone.cubes) {
+                cube.cullable = false;
+            }
+        }
     }
 
     public int[] getPartMaskBoneRenderOrder(int renderPartMask) {

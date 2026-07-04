@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.CustomPlayerRenderer;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
@@ -15,7 +16,7 @@ import com.mojang.math.Axis;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
@@ -62,6 +63,7 @@ public class RenderFirstPlayerBackground {
             if (result.isFalse()) {
                 return;
             }
+            ClientModelManager.markModelUsed(modelId);
             Identifier resourceLocationB_ = cap.getTextureLocation();
             int textureIndex = cap.getTextureIndex();
             VertexConsumer buffer = multiBufferSource.getBuffer(RenderTypes.entityCutout(resourceLocationB_));

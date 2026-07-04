@@ -1,7 +1,7 @@
 package com.micaftic.morpher.geckolib3.extended;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.world.entity.LivingEntity;
 
 public interface LivingEntityRendererAccessor {

@@ -72,7 +72,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         int toolbarX = Math.max(10, this.width - 76);
         addRenderableWidget(new IconButton(toolbarX, buttonY, 18, 18, 48, 0, button -> openFilePicker()).setTooltipText("gui.sparkle_morpher.import.choose_file"));
         addRenderableWidget(new IconButton(toolbarX + 24, buttonY, 18, 18, 64, 0, button -> openModelFolder()).setTooltipText("gui.sparkle_morpher.open_model_folder.open"));
-        addRenderableWidget(new IconButton(toolbarX + 48, buttonY, 18, 18, 80, 32, button -> Minecraft.getInstance().setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
+        addRenderableWidget(new IconButton(toolbarX + 48, buttonY, 18, 18, 80, 32, button -> com.micaftic.morpher.util.InputUtil.setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
     }
 
     @Override
@@ -537,6 +537,6 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
 
     @Override
     public void onClose() {
-        Minecraft.getInstance().setScreen(this.parentScreen);
+        com.micaftic.morpher.util.InputUtil.setScreen(this.parentScreen);
     }
 }

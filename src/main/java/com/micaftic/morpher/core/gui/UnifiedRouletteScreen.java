@@ -7,7 +7,6 @@ import com.micaftic.morpher.client.animation.custom.CustomRouletteStore;
 import com.micaftic.morpher.client.event.AnimationLockEvent;
 import com.micaftic.morpher.client.gui.CustomRouletteEditorScreen;
 import com.micaftic.morpher.client.gui.ModelMetadataPresenter;
-import com.micaftic.morpher.client.gui.button.FlatColorButton;
 import com.micaftic.morpher.client.gui.custom.ExtraAnimationButtons;
 import com.micaftic.morpher.client.input.AnimationRouletteKey;
 import com.micaftic.morpher.client.input.ExtraAnimationKey;
@@ -20,7 +19,6 @@ import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SPlayAnimationPacket;
 import com.micaftic.morpher.util.data.OrderedStringMap;
-import com.mojang.blaze3d.opengl.GlStateManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -46,9 +44,11 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 
 /**
- * Unified animation roulette — single screen for all four Sparkle
+ * Unified animation roulette - single screen for all four Sparkle
  * Morpher subprojects. Replaces the old Classic and Modern roulettes.
  *
  * <p>Visuals come from a colored slice ring drawn through
@@ -71,12 +71,15 @@ public class UnifiedRouletteScreen extends Screen {
 
     private int centerX;
     private int centerY;
+    private float layoutScale = 1.0f;
 
     private int hoveredIndex = -1;
     private int hoveredGearIndex = -1;
     private int hoveredPathSegment = -1;
     private boolean hoveredPrev;
     private boolean hoveredNext;
+    private boolean hoveredEdit;
+    private Supplier<Screen> pendingScreenFactory;
 
     private Pair<String, Integer> currentNavEntry;
 
@@ -162,14 +165,28 @@ public class UnifiedRouletteScreen extends Screen {
         clearWidgets();
         this.centerX = this.width / 2;
         this.centerY = this.height / 2;
+        this.layoutScale = computeLayoutScale();
         if (currentNavEntry.getRight() >= pageCount()) currentNavEntry.setValue(0);
-        addRenderableWidget(new FlatColorButton(
-                centerX - RouletteTheme.EDIT_BTN_WIDTH / 2,
-                centerY + RouletteTheme.EDIT_BTN_Y_OFFSET,
-                RouletteTheme.EDIT_BTN_WIDTH,
-                RouletteTheme.EDIT_BTN_HEIGHT,
-                Component.translatable("gui.sparkle_morpher.roulette.editor.edit"),
-                button -> Minecraft.getInstance().setScreen(new CustomRouletteEditorScreen(lastModelId, renderContext))));
+    }
+
+    /**
+     * Uniform scale (&lt;= 1) that shrinks the fixed-size wheel so it fits the
+     * current GUI-scaled screen. Keeps the roulette from overflowing at high
+     * vanilla GUI Scale or on small resolutions.
+     */
+    private float computeLayoutScale() {
+        return Math.min(1.0f, Math.min(
+                (float) this.width / RouletteTheme.DESIGN_WIDTH,
+                (float) this.height / RouletteTheme.DESIGN_HEIGHT));
+    }
+
+    /** Convert a raw (screen) mouse coordinate into the wheel's unscaled logical space. */
+    private int logicalMouseX(double mouseX) {
+        return (int) Math.round(centerX + (mouseX - centerX) / layoutScale);
+    }
+
+    private int logicalMouseY(double mouseY) {
+        return (int) Math.round(centerY + (mouseY - centerY) / layoutScale);
     }
 
     // ---- Layout helpers ----------------------------------------------------
@@ -193,14 +210,38 @@ public class UnifiedRouletteScreen extends Screen {
         GuiGraphicsExtractor g = extractor;
         g.fill(0, 0, this.width, this.height, RouletteTheme.BG_VEIL);
 
-        updateHover(mouseX, mouseY);
+        int lmx = logicalMouseX(mouseX);
+        int lmy = logicalMouseY(mouseY);
+        updateHover(lmx, lmy);
+
+        boolean scaled = layoutScale < 0.999f;
+        if (scaled) {
+            g.pose().pushMatrix();
+            g.pose().translate(centerX, centerY);
+            g.pose().scale(layoutScale, layoutScale);
+            g.pose().translate(-centerX, -centerY);
+        }
         renderSlices(g);
         renderLabels(g);
         renderCenter(g);
         renderPageButtons(g);
-        renderPathAndPage(g, mouseX, mouseY);
+        renderEditButton(g);
+        renderPathAndPage(g, lmx, lmy);
+        if (scaled) {
+            g.pose().popMatrix();
+        }
 
         super.extractRenderState(extractor, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (pendingScreenFactory != null) {
+            Supplier<Screen> factory = pendingScreenFactory;
+            pendingScreenFactory = null;
+            ((Executor) Minecraft.getInstance()).execute(() -> com.micaftic.morpher.util.InputUtil.setScreen(factory.get()));
+        }
     }
 
     private void updateHover(int mouseX, int mouseY) {
@@ -229,6 +270,9 @@ public class UnifiedRouletteScreen extends Screen {
         float rr = RouletteTheme.PAGE_BTN_RADIUS * RouletteTheme.PAGE_BTN_RADIUS;
         hoveredPrev = page() > 0 && (prevDx * prevDx + btnDy * btnDy) <= rr;
         hoveredNext = (page() + 1) * 8 < currentProperties.size() && (nextDx * nextDx + btnDy * btnDy) <= rr;
+
+        hoveredEdit = RoulettePanelStyle.inside(mouseX, mouseY, editButtonX(), editButtonY(),
+                RoulettePanelStyle.ICON, RoulettePanelStyle.ICON);
     }
 
     private void renderSlices(GuiGraphicsExtractor g) {
@@ -236,8 +280,8 @@ public class UnifiedRouletteScreen extends Screen {
         for (int i = 0; i < 8; i++) {
             int absoluteIdx = i + page() * 8;
             if (absoluteIdx >= currentProperties.size()) {
-                drawSlice(g, i, sliceSpan, RouletteTheme.WHEEL_INNER_R, RouletteTheme.WHEEL_OUTER_R,
-                        RouletteTheme.SLICE_EMPTY);
+                drawGlassSlice(g, i, sliceSpan, RouletteTheme.WHEEL_INNER_R, RouletteTheme.WHEEL_OUTER_R,
+                        RouletteTheme.SLICE_EMPTY, false);
                 continue;
             }
             boolean isHover = absoluteIdx == hoveredIndex;
@@ -251,19 +295,22 @@ public class UnifiedRouletteScreen extends Screen {
 
             if (hasGear) {
                 int gearColor = gearHover ? RouletteTheme.GEAR_HOVER : RouletteTheme.GEAR_IDLE;
-                drawSlice(g, i, sliceSpan, RouletteTheme.WHEEL_GEAR_R, RouletteTheme.WHEEL_OUTER_R, mainColor);
-                drawSlice(g, i, sliceSpan, RouletteTheme.WHEEL_INNER_R, RouletteTheme.WHEEL_GEAR_R, gearColor);
+                drawGlassSlice(g, i, sliceSpan, RouletteTheme.WHEEL_GEAR_R, RouletteTheme.WHEEL_OUTER_R, mainColor, isHover);
+                drawGlassSlice(g, i, sliceSpan, RouletteTheme.WHEEL_INNER_R, RouletteTheme.WHEEL_GEAR_R, gearColor, gearHover);
                 drawGearIcon(g, i, sliceSpan);
             } else {
-                drawSlice(g, i, sliceSpan, RouletteTheme.WHEEL_INNER_R, RouletteTheme.WHEEL_OUTER_R, mainColor);
+                drawGlassSlice(g, i, sliceSpan, RouletteTheme.WHEEL_INNER_R, RouletteTheme.WHEEL_OUTER_R, mainColor, isHover);
             }
         }
     }
 
-    private void drawSlice(GuiGraphicsExtractor g, int sliceIndex, float sliceSpan, float inner, float outer, int color) {
+    private void drawGlassSlice(GuiGraphicsExtractor g, int sliceIndex, float sliceSpan, float inner, float outer, int color, boolean hover) {
         float start = sliceStartOffset() + sliceIndex * sliceSpan + RouletteTheme.GAP_ANGLE_PADDING;
         float end = sliceStartOffset() + (sliceIndex + 1) * sliceSpan - RouletteTheme.GAP_ANGLE_PADDING;
+        Pie.draw(g, centerX, centerY + 2, inner + 1.0f, outer + 1.0f, start, end, RouletteTheme.SLICE_SHADOW, 1.0f);
         Pie.draw(g, centerX, centerY, inner, outer, start, end, color, 1.0f);
+        Pie.draw(g, centerX, centerY, Math.max(0.0f, outer - 2.0f), outer, start, end, hover ? 0xD8FFFFFF : RouletteTheme.SLICE_OUTLINE, 1.0f);
+        Pie.draw(g, centerX, centerY, inner, inner + 1.5f, start, end, RouletteTheme.SLICE_INNER_GLOW, 1.0f);
     }
 
     private void drawGearIcon(GuiGraphicsExtractor g, int sliceIndex, float sliceSpan) {
@@ -272,10 +319,7 @@ public class UnifiedRouletteScreen extends Screen {
         int size = RouletteTheme.ICON_SIZE_GEAR;
         int ix = centerX + (int) (r * Math.cos(mid)) - size / 2;
         int iy = centerY + (int) (r * Math.sin(mid)) - size / 2;
-        GlStateManager._enableBlend();
-        GlStateManager._blendFuncSeparate(770, 771, 1, 0);
         g.blit(RouletteIcons.SETTINGS, ix, iy, ix + size, iy + size, 0.0f, 1.0f, 0.0f, 1.0f);
-        GlStateManager._disableBlend();
     }
 
     private void renderLabels(GuiGraphicsExtractor g) {
@@ -286,38 +330,115 @@ public class UnifiedRouletteScreen extends Screen {
             float midAngle = sliceStartOffset() + (i + 0.5f) * sliceSpan;
             boolean hasGear = currentProperties.getValueAt(absoluteIdx).startsWith("#");
             boolean isSubmenuLink = currentProperties.getKeyAt(absoluteIdx).startsWith("#");
+            boolean hover = absoluteIdx == hoveredIndex || absoluteIdx == hoveredGearIndex;
             float innerEdge = hasGear ? RouletteTheme.WHEEL_GEAR_R : RouletteTheme.WHEEL_INNER_R;
-            float labelR = innerEdge * 0.5f + 50.0f;
-            int lx = centerX + (int) (labelR * Math.cos(midAngle));
-            int ly = centerY + (int) (labelR * Math.sin(midAngle));
+            float labelR = (innerEdge + RouletteTheme.WHEEL_OUTER_R) * 0.5f + 4.0f;
+            int lx = centerX + Math.round(labelR * (float) Math.cos(midAngle));
+            int ly = centerY + Math.round(labelR * (float) Math.sin(midAngle));
             String text = displayLabel(absoluteIdx);
             if (StringUtils.isBlank(text)) continue;
-            MutableComponent comp = Component.literal(text);
-            if (isSubmenuLink) comp = comp.withStyle(ChatFormatting.GOLD);
 
             List<KeyMapping> bindings = ExtraAnimationKey.getKeyMappings();
             boolean showKey = page() == 0 && navigationStack.size() == 1 && absoluteIdx < bindings.size();
-            int wrapWidth = (int) ((RouletteTheme.WHEEL_OUTER_R - innerEdge) * 0.9f);
-            List<FormattedCharSequence> lines = this.font.split(comp, wrapWidth);
-            int totalH = lines.size() * 9 + (showKey ? 10 : 0);
-            int lineY = ly - totalH / 2;
-            int textColor = isSubmenuLink ? RouletteTheme.TEXT_LABEL_LINK : RouletteTheme.TEXT_LABEL;
-            for (FormattedCharSequence line : lines) {
-                g.centeredText(this.font, line, lx, lineY, textColor);
-                lineY += 9;
+            int labelWidth = sliceTextWidth(labelR, innerEdge);
+            int iconSize = optionIconSize(absoluteIdx, isSubmenuLink, hasGear);
+            int totalH = iconSize > 0 ? iconSize + 12 + (showKey ? 10 : 0) : 10 + (showKey ? 10 : 0);
+            int y = ly - totalH / 2;
+            if (iconSize > 0) {
+                drawOptionIcon(g, absoluteIdx, isSubmenuLink, hasGear, lx, y, iconSize, hover);
+                y += iconSize + 3;
             }
-            if (showKey) renderKeyBinding(g, absoluteIdx, lx, lineY + 1, bindings);
+            int textColor = isSubmenuLink ? RouletteTheme.TEXT_LABEL_LINK : RouletteTheme.TEXT_LABEL;
+            drawSliceLabel(g, text, lx, y, labelWidth, textColor, hover);
+            if (showKey) renderKeyBinding(g, absoluteIdx, lx, y + 10, Math.min(labelWidth, 64), bindings, hover);
         }
     }
 
-    private void renderKeyBinding(GuiGraphicsExtractor g, int slot, int x, int y, List<KeyMapping> bindings) {
+    private void renderKeyBinding(GuiGraphicsExtractor g, int slot, int x, int y, int maxWidth, List<KeyMapping> bindings, boolean hover) {
         if (slot >= bindings.size()) return;
         KeyMapping km = bindings.get(slot);
         MutableComponent label = Component.literal("[ ").withStyle(ChatFormatting.YELLOW);
         if (km.isUnbound()) label.append(Component.translatable("key.sparkle_morpher.extra_animation.none"));
         else label.append(km.getTranslatedKeyMessage());
         label.append(" ]");
-        g.centeredText(this.font, label, x, y, RouletteTheme.TEXT_KEYBIND);
+        drawSliceLabel(g, label.getString(), x, y, maxWidth, RouletteTheme.TEXT_KEYBIND, hover);
+    }
+
+    private int sliceTextWidth(float labelRadius, float innerEdge) {
+        float radiusRoom = Math.min(labelRadius - innerEdge - 4.0f, RouletteTheme.WHEEL_OUTER_R - labelRadius - 6.0f);
+        float chord = (float) (2.0d * labelRadius * Math.sin(Pie.tau / 16.0d - RouletteTheme.GAP_ANGLE_PADDING * 2.0f));
+        return Mth.clamp((int) Math.min(chord - 18.0f, radiusRoom * 2.0f + 42.0f), 34, 82);
+    }
+
+    private int optionIconSize(int absoluteIdx, boolean submenu, boolean hasGear) {
+        String key = currentProperties.getKeyAt(absoluteIdx);
+        if (submenu || "#return".equals(key) || hasGear) {
+            return RouletteTheme.ICON_SIZE_OPTION;
+        }
+        return 0;
+    }
+
+    private void drawOptionIcon(GuiGraphicsExtractor g, int absoluteIdx, boolean submenu, boolean hasGear, int centerX, int y, int size, boolean hover) {
+        Identifier tex = null;
+        String key = currentProperties.getKeyAt(absoluteIdx);
+        if ("#return".equals(key)) {
+            tex = RouletteIcons.ARROW_LEFT;
+        } else if (hasGear) {
+            tex = RouletteIcons.SETTINGS;
+        } else if (submenu) {
+            tex = RouletteIcons.ARROW_RIGHT;
+        }
+        if (tex == null) {
+            return;
+        }
+        int pad = hover ? 3 : 2;
+        int cx = centerX - size / 2;
+        Pie.draw(g, centerX, y + size / 2.0f, 0.0f, size / 2.0f + pad, 0.0f, Pie.tau, hover ? 0x80FFFFFF : 0x44FFFFFF, 1.0f);
+        g.blit(tex, cx, y, cx + size, y + size, 0.0f, 1.0f, 0.0f, 1.0f);
+    }
+
+    private void drawSliceLabel(GuiGraphicsExtractor g, String text, int centerX, int y, int maxWidth, int color, boolean hover) {
+        String clean = text.replace('\n', ' ').trim();
+        if (clean.isEmpty() || maxWidth <= 4) {
+            return;
+        }
+        int textWidth = this.font.width(clean);
+        int left = centerX - maxWidth / 2;
+        if (textWidth <= maxWidth) {
+            g.text(this.font, clean, centerX - textWidth / 2, y, color, true);
+            return;
+        }
+        if (!hover || layoutScale < 0.999f) {
+            // When the wheel is scaled down we skip the scrolling marquee: the
+            // scissor rect is applied in screen space and would not line up
+            // with the scaled text. Ellipsis clipping is scale-safe.
+            String clipped = trimToWidth(clean, maxWidth);
+            g.text(this.font, clipped, centerX - this.font.width(clipped) / 2, y, color, true);
+            return;
+        }
+        int travel = textWidth - maxWidth + 14;
+        int offset = (int) ((System.currentTimeMillis() / 55L) % Math.max(1, travel * 2));
+        if (offset > travel) {
+            offset = travel * 2 - offset;
+        }
+        g.enableScissor(left, y - 1, left + maxWidth, y + 10);
+        try {
+            g.text(this.font, clean, left - offset + 7, y, color, true);
+        } finally {
+            g.disableScissor();
+        }
+    }
+
+    private String trimToWidth(String text, int maxWidth) {
+        if (this.font.width(text) <= maxWidth) {
+            return text;
+        }
+        String ellipsis = "...";
+        int keep = text.length();
+        while (keep > 0 && this.font.width(text.substring(0, keep) + ellipsis) > maxWidth) {
+            keep--;
+        }
+        return text.substring(0, Math.max(0, keep)) + ellipsis;
     }
 
     private String displayLabel(int absoluteIdx) {
@@ -345,10 +466,7 @@ public class UnifiedRouletteScreen extends Screen {
             int size = RouletteTheme.ICON_SIZE_LOCK;
             int ix = centerX - size / 2;
             int iy = centerY - size / 2;
-            GlStateManager._enableBlend();
-            GlStateManager._blendFuncSeparate(770, 771, 1, 0);
             g.blit(tex, ix, iy, ix + size, iy + size, 0.0f, 1.0f, 0.0f, 1.0f);
-            GlStateManager._disableBlend();
         } else {
             Pie.draw(g, centerX, centerY, 0.0f, RouletteTheme.WHEEL_INNER_R, 0.0f, Pie.tau,
                     RouletteTheme.CENTER_FILL, 1.0f);
@@ -365,6 +483,19 @@ public class UnifiedRouletteScreen extends Screen {
         drawPageButton(g, centerX + RouletteTheme.PAGE_BTN_OFFSET, centerY, nextEnabled, hoveredNext, false);
     }
 
+    private void renderEditButton(GuiGraphicsExtractor g) {
+        RoulettePanelStyle.iconButton(g, hoveredEdit ? editButtonX() + 1 : -1, hoveredEdit ? editButtonY() + 1 : -1,
+                editButtonX(), editButtonY(), RoulettePanelStyle.Glyph.ROULETTE, true);
+    }
+
+    private int editButtonX() {
+        return centerX - RoulettePanelStyle.ICON / 2;
+    }
+
+    private int editButtonY() {
+        return this.height - RouletteTheme.EDIT_BTN_BOTTOM_MARGIN;
+    }
+
     private void drawPageButton(GuiGraphicsExtractor g, float cx, float cy, boolean enabled, boolean hover, boolean left) {
         int fill;
         if (!enabled) fill = RouletteTheme.PAGE_BTN_FILL_DISABLED;
@@ -377,10 +508,7 @@ public class UnifiedRouletteScreen extends Screen {
         int size = RouletteTheme.ICON_SIZE_ARROW;
         int ix = (int) cx - size / 2;
         int iy = (int) cy - size / 2;
-        GlStateManager._enableBlend();
-        GlStateManager._blendFuncSeparate(770, 771, 1, 0);
         g.blit(tex, ix, iy, ix + size, iy + size, 0.0f, 1.0f, 0.0f, 1.0f);
-        GlStateManager._disableBlend();
     }
 
     private void renderPathAndPage(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -446,13 +574,18 @@ public class UnifiedRouletteScreen extends Screen {
             navigateTo(hoveredPathSegment);
             return true;
         }
+        if (hoveredEdit) {
+            playClick();
+            openScreenNextTick(() -> new CustomRouletteEditorScreen(lastModelId, renderContext));
+            return true;
+        }
         if (hoveredGearIndex >= 0) {
             playClick();
             String value = currentProperties.getValueAt(hoveredGearIndex);
             if (value.startsWith("#")) {
                 String sub = value.substring(1);
-                if (renderGroups.containsKey(sub)) {
-                    Minecraft.getInstance().setScreen(new ModelSettingsScreen(renderContext, animatableModel, this, sub));
+                if (hasConfigGroup(sub)) {
+                    openScreenNextTick(() -> new ModelSettingsScreen(renderContext, animatableModel, this, sub, false));
                     return true;
                 }
             }
@@ -465,8 +598,8 @@ public class UnifiedRouletteScreen extends Screen {
             else playAnimation(key);
             return true;
         }
-        double cdx = event.x() - centerX;
-        double cdy = event.y() - centerY;
+        double cdx = logicalMouseX(event.x()) - centerX;
+        double cdy = logicalMouseY(event.y()) - centerY;
         if (cdx * cdx + cdy * cdy <= RouletteTheme.WHEEL_INNER_R * RouletteTheme.WHEEL_INNER_R) {
             if (animatableModel.getEntity() instanceof Player) {
                 AnimationLockEvent.toggleLock();
@@ -506,7 +639,7 @@ public class UnifiedRouletteScreen extends Screen {
 
     private void navigateTo(int targetIndex) {
         while (navigationStack.size() > targetIndex + 1) navigationStack.removeLast();
-        Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
+        com.micaftic.morpher.util.InputUtil.setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
     }
 
     private void navigateToSubmenu(String value) {
@@ -518,17 +651,17 @@ public class UnifiedRouletteScreen extends Screen {
         String sub = value.substring(1);
         if (textProperties.get(sub) != null) {
             navigationStack.addLast(MutablePair.of(sub, 0));
-            Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
+            com.micaftic.morpher.util.InputUtil.setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
         }
     }
 
     private void navigateBack() {
         if (navigationStack.size() > 1) {
             navigationStack.removeLast();
-            Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
+            com.micaftic.morpher.util.InputUtil.setScreen(new UnifiedRouletteScreen(lastModelId, renderContext, animatableModel));
             return;
         }
-        Minecraft.getInstance().setScreen(null);
+        com.micaftic.morpher.util.InputUtil.setScreen(null);
     }
 
     private void playAnimation(String key) {
@@ -538,13 +671,13 @@ public class UnifiedRouletteScreen extends Screen {
             if (usingCustomLayout) {
                 int realIndex = customOriginalIndexMap.getOrDefault(key, hoveredIndex);
                 String realCategory = customOriginalCategoryMap.getOrDefault(key, StringPool.EMPTY);
-                if (entity instanceof Player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory));
-                else NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory, entity.getId()));
+                if (entity instanceof Player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory, key));
+                else NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory, entity.getId(), key));
             } else {
                 Pair<String, Integer> last = navigationStack.peekLast();
                 String submenu = (last != null && StringUtils.isNotBlank(last.getLeft())) ? last.getLeft() : StringPool.EMPTY;
-                if (entity instanceof Player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu));
-                else NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu, entity.getId()));
+                if (entity instanceof Player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu, key));
+                else NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu, entity.getId(), key));
             }
         } else if (player != null) {
             PlayerCapability.get(player).ifPresent(cap -> cap.requestModelSwitch(key));
@@ -552,11 +685,20 @@ public class UnifiedRouletteScreen extends Screen {
         if (player != null && GeneralConfig.PRINT_ANIMATION_ROULETTE_MSG.get()) {
             player.sendSystemMessage(Component.translatable("message.sparkle_morpher.model.animation_roulette.play", key));
         }
-        Minecraft.getInstance().setScreen(null);
+        com.micaftic.morpher.util.InputUtil.setScreen(null);
     }
 
     private void playClick() {
         Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0f));
+    }
+
+    private void openScreenNextTick(Supplier<Screen> screenFactory) {
+        pendingScreenFactory = screenFactory;
+    }
+
+    private boolean hasConfigGroup(String id) {
+        ExtraAnimationButtons group = renderGroups.get(id);
+        return group != null && group.getConfigForms() != null && group.getConfigForms().length > 0;
     }
 
     @Override

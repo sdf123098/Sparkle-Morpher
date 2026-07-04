@@ -1,14 +1,7 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
-import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
-import com.micaftic.morpher.molang.parser.ParseException;
-import net.minecraft.client.Minecraft;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
 public class S2CExecuteMolangPacket {
@@ -37,28 +30,14 @@ public class S2CExecuteMolangPacket {
     }
 
     public static void handle(S2CExecuteMolangPacket message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            ctx.enqueueWork(() -> handleCapability(message));
-        }
+        ClientNetworkBridge.handle(ctx, "handleExecuteMolang", message);
     }
-    public static void handleCapability(S2CExecuteMolangPacket message) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.level == null) {
-            return;
-        }
-        for (int i : message.entityIds) {
-            Entity entity = minecraft.level.getEntity(i);
-            if (entity instanceof Player) {
-                PlayerCapability.get(entity).ifPresent(cap -> {
-                    try {
-                        cap.executeExpression(GeckoLibCache.parseSimpleExpression(message.expression), true, false, null);
-                    } catch (ParseException e) {
-                        YesSteveModel.LOGGER.error("Failed to execute molang " + message.expression, e);
-                    }
-                });
-            } else if (TouhouMaidCompat.isMaidEntity(entity)) {
-                TouhouMaidCompat.playMaidAnimation(entity, message.expression);
-            }
-        }
+
+    public int[] getEntityIds() {
+        return this.entityIds;
+    }
+
+    public String getExpression() {
+        return this.expression;
     }
 }

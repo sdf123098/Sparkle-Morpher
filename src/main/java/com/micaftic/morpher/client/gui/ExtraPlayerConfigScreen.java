@@ -17,6 +17,6 @@ public class ExtraPlayerConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        Minecraft.getInstance().setScreen(ModernPlayerModelScreen.settings());
+        com.micaftic.morpher.util.InputUtil.setScreen(ModernPlayerModelScreen.settings());
     }
 }

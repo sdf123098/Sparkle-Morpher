@@ -16,6 +16,7 @@ import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import com.micaftic.morpher.molang.runtime.Struct;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SCompleteFeedbackPacket;
 import com.micaftic.morpher.network.message.FeedbackData;
@@ -26,7 +27,6 @@ import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2FloatArrayMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayFIFOQueue;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -67,13 +67,13 @@ public final class PlayerCapability extends CustomPlayerEntity {
     private float renderStateHeadPitch;
 
     public PlayerCapability(Player player) {
-        super(player, player instanceof LocalPlayer, true);
+        super(player, ClientNetworkBridge.isLocalPlayer(player), true);
         this.molangVarsMap = new Int2ReferenceOpenHashMap<>(8);
     }
 
     @Override
     public PlayerEntityFrameState createPositionTracker(Player player) {
-        return new PlayerEntityFrameState(player, player instanceof LocalPlayer);
+        return new PlayerEntityFrameState(player, ClientNetworkBridge.isLocalPlayer(player));
     }
 
     @Override

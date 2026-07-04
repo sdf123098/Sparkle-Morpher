@@ -1,8 +1,7 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import it.unimi.dsi.fastutil.floats.FloatArrayList;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
@@ -36,10 +35,14 @@ public class S2CSyncAnimationExpressionPacket {
     }
 
     public static void handleCapability(S2CSyncAnimationExpressionPacket message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            ctx.enqueueWork(() -> {
-                PlayerCapability.get(Minecraft.getInstance().level.getEntity(message.entityId)).ifPresent(cap -> cap.executeAnimationExpression(message.floatData));
-            });
-        }
+        ClientNetworkBridge.handle(ctx, "handleSyncAnimationExpression", message);
+    }
+
+    public int getEntityId() {
+        return this.entityId;
+    }
+
+    public FloatArrayList getFloatData() {
+        return this.floatData;
     }
 }

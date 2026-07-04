@@ -270,12 +270,12 @@ public abstract class OptionScreen extends Screen {
 
     protected void onSave() {
         onApply();
-        Minecraft.getInstance().setScreen(parentScreen);
+        com.micaftic.morpher.util.InputUtil.setScreen(parentScreen);
     }
 
     protected void onCancel() {
         for (OptionGroup g : groups) g.undo();
-        Minecraft.getInstance().setScreen(parentScreen);
+        com.micaftic.morpher.util.InputUtil.setScreen(parentScreen);
     }
 
     protected void onUndo() {

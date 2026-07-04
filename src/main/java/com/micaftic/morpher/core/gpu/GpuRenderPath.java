@@ -169,7 +169,7 @@ public final class GpuRenderPath {
         GlStateManager._disableCull();
         GlStateManager._enableDepthTest();
         GlStateManager._depthMask(true);
-        GlStateManager._disableBlend();
+        GlStateManager._disableBlend(0);
 
         stateCache.activeTexture(GL13.GL_TEXTURE0 + 2);
         bindTextureView(lightmapTexture);
@@ -241,7 +241,7 @@ public final class GpuRenderPath {
         GL33.glBindSampler(1, 0);
         GL33.glBindSampler(2, 0);
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);
-        GlStateManager._disableBlend();
+        GlStateManager._disableBlend(0);
         GlStateManager._enableCull();
         GlStateManager._enableDepthTest();
         GlStateManager._depthMask(true);

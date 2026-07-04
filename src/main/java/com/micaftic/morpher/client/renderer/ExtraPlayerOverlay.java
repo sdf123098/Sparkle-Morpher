@@ -13,7 +13,7 @@ public class ExtraPlayerOverlay implements HudOverlay {
     public void render(GuiGraphicsExtractor guiGraphics, Font font, float partialTick, int screenWidth, int screenHeight) {
         Minecraft minecraft;
         LocalPlayer localPlayer;
-        if (ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER.get() || (localPlayer = (minecraft = Minecraft.getInstance()).player) == null || (minecraft.screen instanceof ExtraPlayerRenderScreen)) {
+        if (ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER.get() || (localPlayer = (minecraft = Minecraft.getInstance()).player) == null || (com.micaftic.morpher.util.InputUtil.getCurrentScreen() instanceof ExtraPlayerRenderScreen)) {
             return;
         }
         ModelPreviewRenderer.renderPlayerOverlay(guiGraphics, localPlayer, ExtraPlayerRenderConfig.PLAYER_POS_X.get(), ExtraPlayerRenderConfig.PLAYER_POS_Y.get(), ExtraPlayerRenderConfig.PLAYER_SCALE.get().floatValue(), ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.get().floatValue(), -500, partialTick, false);

@@ -82,7 +82,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
         addRenderableWidget(new IconButton(
                 toolbarX + 72, buttonY, 18, 18, 80, 32,
-                button -> Minecraft.getInstance().setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
+                button -> com.micaftic.morpher.util.InputUtil.setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
 
         rebuildEntries();
         updateActionButtonsState();
@@ -101,7 +101,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
     @Override
     public void onClose() {
-        Minecraft.getInstance().setScreen(this.parentScreen);
+        com.micaftic.morpher.util.InputUtil.setScreen(this.parentScreen);
     }
 
     @Override

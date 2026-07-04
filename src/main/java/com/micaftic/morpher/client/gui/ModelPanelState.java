@@ -49,6 +49,7 @@ final class ModelPanelState {
     int settingsScroll;
     int sitesScroll;
     int categoryScroll;
+    boolean compactPreviewExpanded;
     boolean resourceLoaded;
     boolean resourceLoading;
     int resourceRequestId;

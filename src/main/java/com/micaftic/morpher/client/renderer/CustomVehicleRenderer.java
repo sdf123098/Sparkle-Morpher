@@ -3,7 +3,7 @@ package com.micaftic.morpher.client.renderer;
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;

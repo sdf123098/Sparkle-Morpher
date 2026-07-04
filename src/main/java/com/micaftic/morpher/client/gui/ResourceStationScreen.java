@@ -16,6 +16,6 @@ public class ResourceStationScreen extends Screen {
 
     @Override
     protected void init() {
-        Minecraft.getInstance().setScreen(ModernPlayerModelScreen.resourceStation());
+        com.micaftic.morpher.util.InputUtil.setScreen(ModernPlayerModelScreen.resourceStation());
     }
 }

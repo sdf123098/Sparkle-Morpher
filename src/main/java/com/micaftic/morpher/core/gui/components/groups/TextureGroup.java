@@ -11,7 +11,7 @@ public final class TextureGroup extends CategoryGroup {
     @Override
     public Component getTitle() {
         String key = "gui.sparkle_morpher.animation.category._textures";
-        if (I18n.exists(key)) return Component.translatable(key);
+        if (!I18n.get(key).equals(key)) return Component.translatable(key);
         return Component.literal("Textures");
     }
 }

@@ -207,7 +207,7 @@ public final class BlurShader {
     public static boolean captureScreen(long frameKey) {
         if (frameKey == lastCaptureFrame && frameKey >= 0) return captureTextureId != 0;
         try {
-            RenderTarget main = Minecraft.getInstance().getMainRenderTarget();
+            RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
             if (main == null || !(main.getColorTexture() instanceof GlTexture colorTexture)) {
                 return false;
             }

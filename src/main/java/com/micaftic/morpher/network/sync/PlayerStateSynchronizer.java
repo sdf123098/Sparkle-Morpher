@@ -1,6 +1,6 @@
 package com.micaftic.morpher.network.sync;
 
-import com.micaftic.morpher.client.event.ShieldBlockCooldownEvent;
+import com.micaftic.morpher.event.ServerLivingEventHooks;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.S2CSyncPlayerStatePacket;
@@ -130,7 +130,7 @@ public class PlayerStateSynchronizer {
                 message.setForwardInput(this.forwardInput);
             }
         }
-        boolean onCooldown = ShieldBlockCooldownEvent.isOnCooldown(serverPlayer);
+        boolean onCooldown = ServerLivingEventHooks.isShieldBlockOnCooldown(serverPlayer);
         if (this.isShieldBlocking != onCooldown) {
             this.isShieldBlocking = onCooldown;
             if (sendNow) {
@@ -199,7 +199,7 @@ public class PlayerStateSynchronizer {
         message.setStrafeInput(horizontalMoving ? serverPlayer.xxa : 0.0f);
         message.setVerticalInput(serverPlayer.yya);
         message.setForwardInput(horizontalMoving ? serverPlayer.zza : 0.0f);
-        if (ShieldBlockCooldownEvent.isOnCooldown(serverPlayer)) {
+        if (ServerLivingEventHooks.isShieldBlockOnCooldown(serverPlayer)) {
             message.setShieldBlockCooldown(true);
         }
         message.setModelSwitch(this.syncedModelId);

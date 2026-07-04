@@ -30,8 +30,12 @@ public final class Pie {
         float rectW = (outerRadius + pad) * 2.0f;
         float rectH = (outerRadius + pad) * 2.0f;
 
-        new Matrix4f().mul(new Matrix4f(), mvpScratch);
-        // TODO: mvpScratch.mul(graphics.poseStack.last().pose()); // poseStack removed in MC 26.x GuiGraphicsExtractor
+        // Map GUI-scaled pixel coordinates to NDC. This inherently accounts for
+        // the vanilla GUI Scale option (guiScaled range fills the framebuffer),
+        // replacing the previous identity matrix that ignored scale/projection.
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        mvpScratch.identity().setOrtho(0.0f, (float) mc.getWindow().getGuiScaledWidth(),
+                (float) mc.getWindow().getGuiScaledHeight(), 0.0f, -1000.0f, 1000.0f);
         mvpScratch.get(mvpFloats);
 
         float cr = ((rgba >> 16) & 0xFF) / 255.0f;
@@ -39,7 +43,7 @@ public final class Pie {
         float cb = (rgba & 0xFF) / 255.0f;
         float ca = ((rgba >> 24) & 0xFF) / 255.0f;
 
-        GlStateManager._enableBlend();
+        GlStateManager._enableBlend(0);
         GlStateManager._blendFuncSeparate(770, 771, 1, 0);
         GlStateManager._disableCull();
         GlStateManager._disableDepthTest();
@@ -60,9 +64,9 @@ public final class Pie {
         GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 6);
 
         GlStateManager._glUseProgram(0);
-        GlStateManager._glBindVertexArray(0);
+                GlStateManager._glBindVertexArray(0);
 
-        GlStateManager._disableBlend();
+        GlStateManager._disableBlend(0);
     }
 
     private static void drawFallback(GuiGraphicsExtractor graphics, float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float endAngle, int rgba) {

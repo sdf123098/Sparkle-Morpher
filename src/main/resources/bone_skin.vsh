@@ -11,6 +11,7 @@ layout(location = 4) in float a_cullable;
 
 
 out float v_cullable;
+flat out float v_facingSign;
 
 struct BoneData {
     mat4 transform;
@@ -76,4 +77,5 @@ void main() {
     v_vertexDistance = fogDistance(eyePos.xyz, u_fogShape);
     v_packedLight = b.packedLight;
     v_cullable = a_cullable;
+    v_facingSign = (determinant(mat3(b.transform)) < 0.0) ? -1.0 : 1.0;
 }

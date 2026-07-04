@@ -5,7 +5,7 @@ import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.geckolib3.extended.LivingEntityRendererAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -26,6 +26,9 @@ public abstract class LivingRendererMixin extends EntityRenderer<LivingEntity, E
     @Unique
     public void tlm$renderNameTag(LivingEntity pEntity, float pEntityYaw, float pPartialTick, PoseStack pPoseStack, MultiBufferSource pBuffer, int pPackedLight) {
         // Suppress name tags during GUI preview rendering (model selection tab, inventory preview, etc.)
+        // DummyPlayer entities have GameProfile names like "ysm_dab_404c_3..." which would appear
+        // as text on model heads if not suppressed. NeoForge's event patches handle this,
+        // but Fabric's vanilla shouldShowName may still return true for these entities.
         if (ModelPreviewRenderer.isPreview()) {
             return;
         }
@@ -35,8 +38,8 @@ public abstract class LivingRendererMixin extends EntityRenderer<LivingEntity, E
             if (collector != null) {
                 CameraRenderState cameraState = new CameraRenderState();
                 Minecraft mc = Minecraft.getInstance();
-                cameraState.pos = mc.gameRenderer.getMainCamera().position();
-                cameraState.orientation.set(mc.gameRenderer.getMainCamera().rotation());
+                cameraState.pos = mc.gameRenderer.mainCamera().position();
+                cameraState.orientation.set(mc.gameRenderer.mainCamera().rotation());
                 EntityRenderState renderState = this.createRenderState();
                 this.extractRenderState(pEntity, renderState, pPartialTick);
                 pPoseStack.pushPose();

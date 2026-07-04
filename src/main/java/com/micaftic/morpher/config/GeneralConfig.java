@@ -37,6 +37,8 @@ public class GeneralConfig {
 
     public static ModConfigSpec.EnumValue<NativeSimdValidationMode> NATIVE_SIMD_VALIDATION_MODE;
 
+    public static ModConfigSpec.BooleanValue NATIVE_SIMD_COMPATIBILITY_LOG;
+
     public static ModConfigSpec.BooleanValue EXPERIMENTAL_JAVA_VECTOR_RENDERER;
 
     public static ModConfigSpec.EnumValue<SmRenderBackendMode> GRAPHICS_BACKEND_MODE;
@@ -208,6 +210,8 @@ public class GeneralConfig {
         ANIMATION_DISTANCE_LOD = builder.define("AnimationDistanceLod", false);
         builder.comment("Use the incubating Java Vector API for part of the Java fallback renderer. Experimental and default off; if the module is unavailable, Sparkle Morpher automatically falls back to scalar Java math.");
         EXPERIMENTAL_JAVA_VECTOR_RENDERER = builder.define("ExperimentalJavaVectorRenderer", false);
+        builder.comment("Print [SM-NATIVE-COMPAT] diagnostics when a model uses Native SIMD compatibility culling safeguards. Intended for model troubleshooting only.");
+        NATIVE_SIMD_COMPATIBILITY_LOG = builder.define("NativeSimdCompatibilityLog", false);
         builder.comment("Enable world renderer matrix capture hook for GPU renderer. Disable if another renderer conflicts with the hook.");
         ENABLE_WORLD_RENDERER_HOOK = builder.define("EnableWorldRendererHook", true);
         builder.comment("Release original texture byte arrays after successful GPU upload. Disable if resource reloads need to re-decode outer textures.");

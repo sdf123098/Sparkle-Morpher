@@ -1,6 +1,8 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
+import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.entity.GeoEntity;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.util.Color;
 import com.micaftic.morpher.geckolib3.geo.IGeoRenderer;
@@ -10,7 +12,7 @@ import com.micaftic.morpher.geckolib3.util.IRenderCycle;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
@@ -52,6 +54,9 @@ public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T e
             if (renderType != null && (isVisible || zShouldEntityAppearGlowing)) {
                 Color color = getRenderColor(animatable, partialTick, poseStack, bufferSource, null, packedLight);
                 AnimatedGeoModel model = animatable.getCurrentModel();
+                if (animatable instanceof GeoEntity<?> geoEntity) {
+                    ClientModelManager.markModelUsed(geoEntity.getModelId());
+                }
                 this.modelViewMatrix = new Matrix4f(poseStack.last().pose());
                 setCurrentModelRenderCycle(EModelRenderCycle.INITIAL);
                 poseStack.pushPose();

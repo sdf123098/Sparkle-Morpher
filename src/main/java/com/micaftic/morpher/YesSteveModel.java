@@ -8,8 +8,6 @@ import com.micaftic.morpher.util.obfuscate.Keep;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.micaftic.morpher.core.architectury.platform.Platform;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.neoforged.fml.config.ModConfig;
 import org.apache.logging.log4j.LogManager;
@@ -94,9 +92,15 @@ public class YesSteveModel {
         return RuntimeAccelerationLoader.isOnAndroid();
     }
     public static void sendUnavailableMessage() {
-        LocalPlayer localPlayer = Minecraft.getInstance().player;
-        if (localPlayer != null) {
-            localPlayer.sendSystemMessage(getUnavailableComponent());
+        if (PlatformAPI.isServer()) {
+            return;
+        }
+        try {
+            Class.forName("com.micaftic.morpher.neoforge.YesSteveModelNeoForgeClient")
+                    .getMethod("sendUnavailableMessage")
+                    .invoke(null);
+        } catch (ReflectiveOperationException e) {
+            LOGGER.warn("Failed to send unavailable message on client", e);
         }
     }
 

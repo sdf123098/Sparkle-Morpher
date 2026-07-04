@@ -8,7 +8,6 @@
   },
   "client": [
     "client.ArrowEntityAccessor",
-    "client.BufferSourceMixin",
     "client.CameraAccessor",
     "client.MinecraftAccessor",
     "client.ClientPacketListenerMixin",

@@ -1,9 +1,11 @@
 package com.micaftic.morpher.geckolib3.geo;
 import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
+import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.util.Color;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
@@ -11,7 +13,7 @@ import com.micaftic.morpher.geckolib3.util.EModelRenderCycle;
 import com.micaftic.morpher.geckolib3.util.IRenderCycle;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -20,6 +22,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public interface IGeoRenderer<T extends AnimatableEntity<?>> {
+    ModelRenderDebug MODEL_RENDER_DEBUG = new ModelRenderDebug();
+
     MultiBufferSource getCurrentRTB();
 
     default void setCurrentRTB(MultiBufferSource bufferSource) {
@@ -45,8 +49,9 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             boolean extraPlayerMode = ModelPreviewRenderer.isExtraPlayer();
             boolean worldRenderMode = ModelPreviewRenderer.isWorldRender();
             animatable.resetAnimationState();
+            MODEL_RENDER_DEBUG.logSubmit("submit", animatable, model, renderType, textureLocation, i, i2, previewMode, extraPlayerMode, worldRenderMode, collector);
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                    renderSubmittedGeometry(buffer, pose, model, boneParams, absPivotData, i, i2, i3, f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode, worldRenderMode, allowDirectGpuRenderer));
+                    renderSubmittedGeometry(buffer, pose, model, boneParams, absPivotData, i, i2, i3, f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode, worldRenderMode));
             setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
             return;
         }
@@ -54,11 +59,12 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             vertexConsumer = bufferSource.getBuffer(renderType);
         }
         animatable.resetAnimationState();
+        MODEL_RENDER_DEBUG.logSubmit("direct", animatable, model, renderType, textureLocation, i, i2, ModelPreviewRenderer.isPreview(), ModelPreviewRenderer.isExtraPlayer(), ModelPreviewRenderer.isWorldRender(), collector);
         ModelRendererBridge.renderMesh(vertexConsumer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5, textureLocation, allowDirectGpuRenderer);
         setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
     }
 
-    private static void renderSubmittedGeometry(VertexConsumer buffer, PoseStack.Pose pose, AnimatedGeoModel model, float[] matrixData, float[] absPivotData, int textureIndex, int packedLight, int packedOverlay, float red, float green, float blue, float alpha, Identifier textureLocation, boolean previewMode, boolean extraPlayerMode, boolean worldRenderMode, boolean allowDirectGpuRenderer) {
+    private static void renderSubmittedGeometry(VertexConsumer buffer, PoseStack.Pose pose, AnimatedGeoModel model, float[] matrixData, float[] absPivotData, int textureIndex, int packedLight, int packedOverlay, float red, float green, float blue, float alpha, Identifier textureLocation, boolean previewMode, boolean extraPlayerMode, boolean worldRenderMode) {
         boolean previousPreviewMode = ModelPreviewRenderer.isPreview();
         boolean previousExtraPlayerMode = ModelPreviewRenderer.isExtraPlayer();
         boolean previousWorldRenderMode = ModelPreviewRenderer.isWorldRender();
@@ -66,7 +72,7 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
         ModelPreviewRenderer.setExtraPlayerMode(extraPlayerMode);
         ModelPreviewRenderer.setWorldRenderMode(worldRenderMode);
         try {
-            ModelRendererBridge.renderMesh(buffer, pose, model.getGeoModel(), matrixData, absPivotData, textureIndex, 0, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, allowDirectGpuRenderer);
+            ModelRendererBridge.renderMesh(buffer, pose, model.getGeoModel(), matrixData, absPivotData, textureIndex, 0, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, false);
         } finally {
             ModelPreviewRenderer.setWorldRenderMode(previousWorldRenderMode);
             ModelPreviewRenderer.setExtraPlayerMode(previousExtraPlayerMode);
@@ -113,5 +119,38 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
     }
 
     default void setCurrentModelRenderCycle(IRenderCycle cycle) {
+    }
+
+    final class ModelRenderDebug {
+        private int debugLogCount;
+        private long lastDebugLogMillis;
+
+        void logSubmit(String path, AnimatableEntity<?> animatable, AnimatedGeoModel model, RenderType renderType, Identifier textureLocation, int textureIndex, int packedLight, boolean previewMode, boolean extraPlayerMode, boolean worldRenderMode, SubmitNodeCollector collector) {
+            if (!GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            if (now - lastDebugLogMillis >= 5000L) {
+                debugLogCount = 0;
+                lastDebugLogMillis = now;
+            }
+            if (debugLogCount >= 40) {
+                return;
+            }
+            debugLogCount++;
+            YesSteveModel.LOGGER.info(
+                    "[SM-MODEL] geometry-submit path={} texture={} textureIndex={} renderType={} light={} bones={} preview={} extraPlayer={} world={} collector={}",
+                    path,
+                    textureLocation,
+                    textureIndex,
+                    renderType,
+                    packedLight,
+                    model == null || model.getGeoModel() == null || model.getGeoModel().bakedBones == null ? -1 : model.getGeoModel().bakedBones.size(),
+                    previewMode,
+                    extraPlayerMode,
+                    worldRenderMode,
+                    collector == null ? "null" : collector.getClass().getName()
+            );
+        }
     }
 }

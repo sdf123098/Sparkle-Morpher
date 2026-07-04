@@ -9,7 +9,7 @@ import com.micaftic.morpher.geckolib3.util.RenderUtils;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.client.renderer.ItemInHandRenderer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.world.entity.EquipmentSlot;

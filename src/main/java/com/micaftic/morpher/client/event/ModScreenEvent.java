@@ -22,6 +22,6 @@ public class ModScreenEvent {
     }
 
     public static void openScreen(PlayerModelScreen modelScreen) {
-        Minecraft.getInstance().setScreen(Objects.requireNonNullElseGet(receivedScreen, ModernPlayerModelScreen::downloads));
+        com.micaftic.morpher.util.InputUtil.setScreen(Objects.requireNonNullElseGet(receivedScreen, ModernPlayerModelScreen::downloads));
     }
 }

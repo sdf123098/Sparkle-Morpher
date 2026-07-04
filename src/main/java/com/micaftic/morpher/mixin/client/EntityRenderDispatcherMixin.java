@@ -5,11 +5,10 @@ import com.micaftic.morpher.client.renderer.CustomFishingHookRenderer;
 import com.micaftic.morpher.client.renderer.CustomVehicleRenderer;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.CustomProjectileRenderer;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -53,7 +52,7 @@ public class EntityRenderDispatcherMixin {
         float partialTick = captured.partialTick();
         float entityYaw = entity.getYRot();
         int packedLight = captured.packedLight();
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+        MultiBufferSource.BufferSource bufferSource = MultiBufferSource.submit(collector, poseStack);
         if (entity instanceof Projectile projectile) {
             if (!GeneralConfig.DISABLE_PROJECTILE_MODEL.get()) {
                 if (projectile instanceof FishingHook fishingHook) {

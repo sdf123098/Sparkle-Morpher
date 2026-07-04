@@ -6,9 +6,9 @@ import com.micaftic.morpher.client.event.ReplacePlayerHandRenderEvent;
 import com.micaftic.morpher.client.renderer.AnimationDebugOverlay;
 import com.micaftic.morpher.client.renderer.ExtraPlayerOverlay;
 import com.micaftic.morpher.client.renderer.ModelSyncStateOverlay;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientCommandRegistrationEvent;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientPlayerEvent;
@@ -123,14 +123,15 @@ public final class NeoForgeClientEventBridge {
 
     @SubscribeEvent
     public static void onRenderPlayerPre(RenderPlayerEvent.Pre<?> event) {
-        if (Minecraft.getInstance().level == null) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null) {
             return;
         }
-        Entity entity = Minecraft.getInstance().level.getEntity(event.getRenderState().id);
+        Entity entity = minecraft.level.getEntity(event.getRenderState().id);
         if (!(entity instanceof Player player)) {
             return;
         }
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+        MultiBufferSource.BufferSource bufferSource = MultiBufferSource.submit(event.getSubmitNodeCollector(), event.getPoseStack());
         PlayerCapability capability = PlayerCapability.get(player).orElse(null);
         if (capability != null) {
             capability.beginRenderState(event.getRenderState());
@@ -152,7 +153,9 @@ public final class NeoForgeClientEventBridge {
             }
         }
         if (replaced) {
-            bufferSource.endBatch();
+            if (event.getSubmitNodeCollector() == null) {
+                bufferSource.endBatch();
+            }
             event.setCanceled(true);
         }
     }

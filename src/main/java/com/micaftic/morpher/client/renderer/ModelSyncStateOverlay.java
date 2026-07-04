@@ -26,6 +26,8 @@ public class ModelSyncStateOverlay implements HudOverlay {
 
     @Override
     public void render(GuiGraphicsExtractor g, Font font, float partialTick, int screenWidth, int screenHeight) {
+        // 每帧驱动同步超时看门狗：即便禁用了加载 UI，也要能强制结束卡住的同步。
+        ClientModelManager.tickSyncWatchdog();
         if (LoadingStateConfig.DISABLE_LOADING_STATE_SCREEN.get().booleanValue()) {
             return;
         }
@@ -74,13 +76,20 @@ public class ModelSyncStateOverlay implements HudOverlay {
                     1.0f);
         }
         if (pending > 0) {
-            int loaded = ClientModelManager.getModelAssemblyMap().size();
-            int total = Math.max(1, loaded + pending);
+            int total = syncStatus.getTotalModels();
+            int synced = Math.max(0, syncStatus.getSyncedModels());
+            if (total > 0) {
+                return new PopupState(Kind.ACTIVE,
+                        Component.translatable("gui.sparkle_morpher.sync_hint.syncing"),
+                        Component.translatable("gui.sparkle_morpher.sync_hint.syncing_models", synced, total),
+                        GOLD,
+                        Math.max(0.0f, Math.min(1.0f, (float) synced / total)));
+            }
             return new PopupState(Kind.ACTIVE,
                     Component.translatable("gui.sparkle_morpher.sync_hint.loading"),
-                    Component.translatable("gui.sparkle_morpher.sync_hint.loading_models_precise", loaded, total, pending),
+                    Component.translatable("gui.sparkle_morpher.sync_hint.loading_detail"),
                     GOLD,
-                    (float) loaded / total);
+                    0.18f);
         }
         return switch (syncStatus.getCurrentState()) {
             case WAITING -> new PopupState(Kind.ACTIVE,

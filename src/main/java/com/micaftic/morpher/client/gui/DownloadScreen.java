@@ -20,6 +20,6 @@ public class DownloadScreen extends Screen {
 
     @Override
     protected void init() {
-        Minecraft.getInstance().setScreen(ModernPlayerModelScreen.downloads());
+        com.micaftic.morpher.util.InputUtil.setScreen(ModernPlayerModelScreen.downloads());
     }
 }

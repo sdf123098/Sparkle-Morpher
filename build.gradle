@@ -14,13 +14,13 @@ def isCurseForgeDist = providers.gradleProperty("dist")
         .get()
 
 base {
-    archivesName = "sparkle-morpher-${project.version}-neo26.1.x"
+    archivesName = "sparkle-morpher-${project.version}-neo26.2"
 }
 
 tasks.named("jar") {
     archiveFileName = isCurseForgeDist
-            ? "sparkle-morpher-${project.version}-neo26.1.x-curseforge.jar"
-            : "sparkle-morpher-${project.version}-neo26.1.x.jar"
+            ? "sparkle-morpher-${project.version}-neo26.2-curseforge.jar"
+            : "sparkle-morpher-${project.version}-neo26.2.jar"
 }
 
 repositories {

@@ -3,7 +3,6 @@ package com.micaftic.morpher.capability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.neoforge.NeoForgeCapabilityTypes;
 import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
@@ -15,8 +14,10 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Optional;
 public class VehicleCapability extends GeckoVehicleEntity {
 
+    private static final java.util.Map<Entity, VehicleCapability> STORE = new java.util.WeakHashMap<>();
+
     public static Optional<VehicleCapability> get(Entity entity) {
-        return NeoForgeCapabilityTypes.vehicleRender(entity);
+        return Optional.of(STORE.computeIfAbsent(entity, VehicleCapability::new));
     }
 
     @Nullable

@@ -1,12 +1,7 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.event.EntityJoinCallbackEvent;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.Entity;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
 public class S2CSetModelAndTexturePacket {
@@ -42,19 +37,26 @@ public class S2CSetModelAndTexturePacket {
     }
 
     public static void handle(S2CSetModelAndTexturePacket other, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            EntityJoinCallbackEvent.addCallback(other.entityId, entity -> applyOnClient(entity, other));
-        }
+        ClientNetworkBridge.handle(ctx, "handleSetModelAndTexture", other);
     }
-    public static void applyOnClient(Entity entity, S2CSetModelAndTexturePacket other) {
-        PlayerCapability.get(entity).ifPresent(cap -> {
-            LocalPlayer localPlayer = Minecraft.getInstance().player;
-            boolean keepLocalOnlyModel = entity == localPlayer && ClientModelManager.isSelectedLocalOnlyModel(cap.getModelId());
-            if (!keepLocalOnlyModel) {
-                cap.initModelWithTexture(other.modelId, other.textureId);
-            }
-            cap.setForceDisabled(other.disabled);
-            S2CSyncPlayerStatePacket.handleCapability(entity, other.entityModelSync);
-        });
+
+    public int getEntityId() {
+        return this.entityId;
+    }
+
+    public String getModelId() {
+        return this.modelId;
+    }
+
+    public String getTextureId() {
+        return this.textureId;
+    }
+
+    public boolean isDisabled() {
+        return this.disabled;
+    }
+
+    public S2CSyncPlayerStatePacket getEntityModelSync() {
+        return this.entityModelSync;
     }
 }
