@@ -14,6 +14,7 @@ import com.micaftic.morpher.mixin.client.LivingEntityAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.util.Mth;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Minecraft;
@@ -31,6 +32,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -180,12 +182,32 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             poseStack.mulPose(Axis.YP.rotationDegrees(270.0f));
         } else {
             poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
+            if (tentity.isFallFlying()) {
+                applyFallFlyingRotation(tentity, poseStack, partialTicks, zIsAutoSpinAttack);
+            }
         }
         if (t > 0) {
             tentity.deathTime = t;
         }
         if (zIsAutoSpinAttack) {
             ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, true);
+        }
+    }
+
+    private static void applyFallFlyingRotation(LivingEntity entity, PoseStack poseStack, float partialTicks, boolean autoSpinAttack) {
+        float ticks = (float) entity.getFallFlyingTicks() + partialTicks;
+        float progress = Mth.clamp(ticks * ticks / 100.0f, 0.0f, 1.0f);
+        if (!autoSpinAttack) {
+            poseStack.mulPose(Axis.XP.rotationDegrees(progress * (-90.0f - entity.getXRot())));
+        }
+        Vec3 view = entity.getViewVector(partialTicks);
+        Vec3 movement = entity.getDeltaMovement();
+        double movementHorizontal = movement.horizontalDistanceSqr();
+        double viewHorizontal = view.horizontalDistanceSqr();
+        if (movementHorizontal > 0.0d && viewHorizontal > 0.0d) {
+            double dot = (movement.x * view.x + movement.z * view.z) / Math.sqrt(movementHorizontal * viewHorizontal);
+            double cross = movement.x * view.z - movement.z * view.x;
+            poseStack.mulPose(Axis.YP.rotation((float) (Math.signum(cross) * Math.acos(Mth.clamp(dot, -1.0d, 1.0d)))));
         }
     }
 

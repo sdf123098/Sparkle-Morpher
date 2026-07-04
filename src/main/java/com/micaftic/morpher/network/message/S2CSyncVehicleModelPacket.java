@@ -1,14 +1,12 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
-import com.micaftic.morpher.event.EntityJoinCallbackEvent;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.Entity;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
 public class S2CSyncVehicleModelPacket {
@@ -48,14 +46,18 @@ public class S2CSyncVehicleModelPacket {
     }
 
     public static void handle(S2CSyncVehicleModelPacket message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            EntityJoinCallbackEvent.addCallback(message.entityId, entity -> handleCapability(entity, message.capability, message.floatMap));
-        }
+        ClientNetworkBridge.handle(ctx, "handleSyncVehicleModel", message);
     }
-    public static void handleCapability(Entity entity, VehicleModelCapability capability, Int2FloatOpenHashMap floatMap) {
-        VehicleCapability.get(entity).ifPresent(vehicleCapability -> {
-            vehicleCapability.setOwnerModelId(capability.getOwnerModelId());
-            vehicleCapability.setFloatMap(floatMap);
-        });
+
+    public int getEntityId() {
+        return this.entityId;
+    }
+
+    public VehicleModelCapability getCapability() {
+        return this.capability;
+    }
+
+    public Int2FloatOpenHashMap getFloatMap() {
+        return this.floatMap;
     }
 }

@@ -57,7 +57,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         if (renderMode == ElytraRenderMode.LOCATOR) {
             hidden = renderLocatorElytra(poseStack, animatedGeoModel);
         } else {
-            poseStack.translate(0.0f, 0.0f, 0.125f);
+            renderFallbackElytra(poseStack);
         }
         if (!hidden) {
             this.elytraModel.setupAnim(createElytraState(entity, partialTick, ageInTicks));
@@ -82,6 +82,18 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         boolean hidden = RenderUtils.prepMatrixForEquipmentLocator(poseStack, model.elytraBones());
         poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
         return hidden;
+    }
+
+    /**
+     * 无 {@code ElytraLocator} 骨骼的导入模型（如 bbmodel）走这里：没有可用的定位骨骼链，
+     * 只能按原版人形比例手动近似背部挂点。这里复刻 LOCATOR 路径的最终朝向
+     * （{@code prepMatrixForEquipmentLocator} 结束时位于挂点 + 旋转 180°），
+     * 手动上移 1.5 格到颈部/上背并略微后移，再旋转 180°。
+     * 注意：新版 {@code ElytraModel} 已是正确尺寸，无需旧版的 2x 缩放。
+     */
+    private void renderFallbackElytra(PoseStack poseStack) {
+        poseStack.translate(0.0f, 1.5f, 0.125f);
+        poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
     }
 
     public static boolean shouldSuppressVanillaWings(CustomPlayerEntity customPlayer) {
@@ -111,10 +123,19 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         if (!animatedGeoModel.elytraBones().isEmpty()) {
             return ElytraRenderMode.LOCATOR;
         }
+        if (isImportedPlayerModel(customPlayer)) {
+            return ElytraRenderMode.FALLBACK;
+        }
         if (GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_FALLBACK_ELYTRA_WITHOUT_LOCATOR)) {
             return ElytraRenderMode.FALLBACK;
         }
         return ElytraRenderMode.NONE;
+    }
+
+    private static boolean isImportedPlayerModel(CustomPlayerEntity customPlayer) {
+        return customPlayer != null
+                && customPlayer.getModelAssembly() != null
+                && customPlayer.getModelAssembly().getAnimationBundle().isImportedPlayerModel();
     }
 
     private static boolean hasEquippedElytra(CustomPlayerEntity customPlayer) {

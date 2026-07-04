@@ -1,12 +1,14 @@
 modLoader="javafml"
 loaderVersion="[1,)"
 license="${mod_license}"
+issueTrackerURL="https://github.com/sdf123098/Sparkle-Morpher/issues"
 logoFile="sparkle_morpher.png"
 
 [[mods]]
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
+displayURL="https://github.com/sdf123098/Sparkle-Morpher"
 authors="${mod_authors}"
 logoFile="sparkle_morpher.png"
 credits=""

@@ -19,6 +19,7 @@ import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.render.NativeSimdValidator;
 import com.micaftic.morpher.config.LoadingStateConfig;
+import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.core.gpu.BlurStack;
 import com.micaftic.morpher.core.vector.VectorApiCapability;
@@ -81,6 +82,9 @@ public class ModernPlayerModelScreen extends Screen {
     private static final int TEXT = 0xFFEDE1CC;
     private static final int MUTED = 0xFF9A9A9A;
     private static final int ROW = 24;
+    private static final int DENSE_MODEL_ROW = 24;
+    private static final int MODEL_PAGE_BUTTON_WIDTH = 46;
+    private static final int MODEL_PAGE_BUTTON_HEIGHT = 18;
     private static final int ICON = 18;
     private static final ExecutorService RESOURCE_EXECUTOR = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "SM Modern Resource");
@@ -106,6 +110,7 @@ public class ModernPlayerModelScreen extends Screen {
     private boolean localImportInProgress;
     private boolean resourceStatusMessage;
     private int screenGeneration;
+    private boolean draggingResourceScroll;
     private String previewModelId = "";
     private String previewTextureId = "";
 
@@ -310,6 +315,16 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderTabs(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        if (this.layout.verticalTabs) {
+            int railX = this.layout.left + 3;
+            int railW = this.layout.railWidth - 5;
+            int th = 26;
+            int y = this.layout.top + 6;
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, railX, y, railW, th, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, railX, y + th + 4, railW, th, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, railX, y + (th + 4) * 2, railW, th, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+            return;
+        }
         int tabWidth = this.layout.width / 3;
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, this.layout.left, tabWidth, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, this.layout.left + tabWidth, tabWidth, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
@@ -322,29 +337,44 @@ public class ModernPlayerModelScreen extends Screen {
         fill(g, x, this.layout.top, w, this.layout.tabHeight, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x40303030);
         int total = 16 + 6 + this.font.width(label);
         int tx = x + (w - total) / 2;
-        int ty = this.layout.top + 6;
+        int ty = this.layout.top + (this.layout.tabHeight - 16) / 2;
         drawIcon(g, icon, tx, ty);
-        g.text(this.font, label, tx + 22, this.layout.top + 10, selected ? 0xFFFFFFFF : MUTED, false);
-        hit(x, this.layout.top, w, this.layout.tabHeight, label, () -> {
-            if (STATE.activeTab != tab) {
-                STATE.activeTab = tab;
-                STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
-                if (tab == ModelPanelState.Tab.RESOURCE) {
-                    STATE.resourceLoaded = false;
-                } else if (this.resourceStatusMessage) {
-                    setStatus(Component.empty());
-                }
-                init();
+        g.text(this.font, label, tx + 22, this.layout.top + (this.layout.tabHeight - this.font.lineHeight) / 2 + 1, selected ? 0xFFFFFFFF : MUTED, false);
+        hit(x, this.layout.top, w, this.layout.tabHeight, label, () -> switchTab(tab));
+    }
+
+    private void renderVerticalTab(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelPanelState.Tab tab, int x, int y, int w, int h, IconGlyph icon, Component label) {
+        boolean selected = STATE.activeTab == tab;
+        boolean hover = inside(mouseX, mouseY, x, y, w, h);
+        fill(g, x, y, w, h, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x40303030);
+        border(g, x, y, w, h, selected ? RED : 0x33FFFFFF);
+        drawIcon(g, icon, x + (w - 16) / 2, y + (h - 16) / 2);
+        hit(x, y, w, h, label, () -> switchTab(tab));
+    }
+
+    private void switchTab(ModelPanelState.Tab tab) {
+        if (STATE.activeTab != tab) {
+            STATE.activeTab = tab;
+            STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
+            if (tab == ModelPanelState.Tab.RESOURCE) {
+                STATE.resourceLoaded = false;
+            } else if (this.resourceStatusMessage) {
+                setStatus(Component.empty());
             }
-        });
+            init();
+        }
     }
 
     private int modelLeftX() {
         return this.layout.contentLeft + 8;
     }
 
+    private boolean listPriority() {
+        return this.layout.contentWidth < 680 || this.layout.contentHeight < 260;
+    }
+
     private boolean compactModelLayout() {
-        return this.layout.contentWidth < 560 || this.layout.contentHeight < 250;
+        return listPriority();
     }
 
     private int modelLeftW() {
@@ -387,10 +417,11 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int resourceRightW() {
-        int minRight = this.layout.contentWidth < 420 ? 90 : 170;
+        boolean priority = listPriority();
+        int minRight = this.layout.contentWidth < 420 ? 90 : (priority ? 118 : 170);
         int minList = this.layout.contentWidth < 420 ? 90 : 120;
-        int max = Math.max(minRight, Math.min(260, this.layout.contentWidth - minList - 22));
-        return clamp(this.layout.contentWidth / 3, minRight, max);
+        int max = Math.max(minRight, Math.min(priority ? 190 : 260, this.layout.contentWidth - minList - 22));
+        return clamp(this.layout.contentWidth / (priority ? 4 : 3), minRight, max);
     }
 
     private int resourceListW() {
@@ -480,9 +511,15 @@ public class ModernPlayerModelScreen extends Screen {
         int pathY = compact ? stackedControls ? y + 68 : y + 48 : y + 30;
         renderPathBar(g, listX, pathY, listW);
         int gridY = pathY + 20;
-        int gridH = Math.max(compact ? 34 : 50, contentBottom - 28 - gridY - 4);
+        int actionsBandY = contentBottom - 28;
+        int detailStripH = compactDetailStripH();
+        int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
+        int gridH = Math.max(compact ? 34 : 50, actionsBandY - 4 - reserve - gridY);
         renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
-        renderModelBottomActions(g, mouseX, mouseY, listX, contentBottom - 28, listW);
+        if (detailStripH > 0) {
+            renderCompactDetail(g, mouseX, mouseY, listX, gridY + gridH + 3, listW, detailStripH, partialTick);
+        }
+        renderModelBottomActions(g, mouseX, mouseY, listX, actionsBandY, listW, gridH);
         if (!compact) {
             renderModelDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
         }
@@ -523,38 +560,78 @@ public class ModernPlayerModelScreen extends Screen {
         glassPanel(g, x, y, w, h);
         Set<String> starredModels = starModels();
         List<ModelEntry> entries = collectModelEntries();
-        int cellW = Math.max(92, Math.min(150, w / Math.max(1, w / 116)));
-        int cols = Math.max(1, w / cellW);
-        int cellH = h < 90 ? 42 : 50;
-        int rows = Math.max(1, h / cellH);
-        int maxScroll = Math.max(0, (entries.size() + cols - 1) / cols - rows);
-        STATE.modelScroll = clamp(STATE.modelScroll, 0, maxScroll);
+        ModelListMetrics metrics = modelListMetrics(w, h, entries.size());
+        STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
         if (entries.isEmpty()) {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.model_panel.no_models"), x + w / 2, y + h / 2 - 4, MUTED);
             return;
         }
-        int start = STATE.modelScroll * cols;
-        for (int i = 0; i < rows * cols && start + i < entries.size(); i++) {
+        int start = STATE.modelScroll * metrics.cols();
+        for (int i = 0; i < metrics.rows() * metrics.cols() && start + i < entries.size(); i++) {
             ModelEntry entry = entries.get(start + i);
-            int cx = x + (i % cols) * cellW + 3;
-            int cy = y + (i / cols) * cellH + 3;
-            int cw = cellW - 6;
+            int cx = x + (i % metrics.cols()) * metrics.cellW() + 3;
+            int cy = y + (i / metrics.cols()) * metrics.cellH() + 3;
+            int cw = metrics.cellW() - 6;
+            int ch = metrics.cellH() - 6;
             boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
-            boolean hover = inside(mouseX, mouseY, cx, cy, cw, cellH - 6);
+            boolean hover = inside(mouseX, mouseY, cx, cy, cw, ch);
             boolean starred = !entry.folder() && starredModels.contains(entry.modelId());
-            fill(g, cx, cy, cw, cellH - 6, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
-            border(g, cx, cy, cw, cellH - 6, selected ? RED : 0x33FFFFFF);
-            drawIcon(g, entry.folder() ? IconGlyph.FOLDER : entry.locked() ? IconGlyph.LOCK : IconGlyph.MODEL, cx + 4, cy + 4);
-            if (starred) {
-                drawIcon(g, IconGlyph.STAR, cx + cw - 16, cy + cellH - 22);
+            fill(g, cx, cy, cw, ch, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
+            border(g, cx, cy, cw, ch, selected ? RED : 0x33FFFFFF);
+            int iconY = metrics.dense() ? cy + Math.max(0, (ch - 16) / 2) : cy + 3;
+            drawIcon(g, entry.folder() ? IconGlyph.FOLDER : entry.locked() ? IconGlyph.LOCK : IconGlyph.MODEL, cx + 4, iconY);
+            if (metrics.dense()) {
+                if (starred) {
+                    drawIcon(g, IconGlyph.STAR, cx + cw - 18, iconY);
+                }
+                int titleW = starred ? cw - 44 : cw - 26;
+                drawText(g, Component.literal(trim(entry.title(), titleW)), cx + 22, cy + (ch - this.font.lineHeight) / 2 + 1);
+            } else {
+                if (starred) {
+                    drawIcon(g, IconGlyph.STAR, cx + cw - 16, cy + metrics.cellH() - 22);
+                }
+                drawText(g, Component.literal(trim(entry.title(), cw - 28)), cx + 22, cy + 6);
+                drawMuted(g, Component.literal(trim(entry.subtitle(), cw - 12)), cx + 6, cy + 22);
             }
-            drawText(g, Component.literal(trim(entry.title(), cw - 28)), cx + 22, cy + 6);
-            drawMuted(g, Component.literal(trim(entry.subtitle(), cw - 12)), cx + 6, cy + 22);
-            hit(cx, cy, cw, cellH - 6, Component.literal(entry.title()), () -> clickModelEntry(entry));
+            hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> clickModelEntry(entry));
         }
     }
 
-    private void renderModelBottomActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
+    private ModelListMetrics modelListMetrics(int w, int h, int entryCount) {
+        boolean dense = compactModelLayout() || h < 132;
+        int targetW = dense ? 104 : 116;
+        int minW = dense ? 86 : 92;
+        int maxW = dense ? 132 : 150;
+        int cellW = Math.max(minW, Math.min(maxW, w / Math.max(1, w / targetW)));
+        int cols = Math.max(1, w / cellW);
+        int cellH = dense ? DENSE_MODEL_ROW : h < 90 ? 42 : 50;
+        int rows = Math.max(1, h / cellH);
+        int maxScroll = Math.max(0, (entryCount + cols - 1) / cols - rows);
+        return new ModelListMetrics(cellW, cellH, cols, rows, maxScroll, dense);
+    }
+
+    private List<ModelEntry> visibleModelEntries() {
+        List<ModelEntry> entries = collectModelEntries();
+        ModelListMetrics metrics = modelListMetrics(modelListW(), currentModelGridH(), entries.size());
+        STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
+        int start = STATE.modelScroll * metrics.cols();
+        int end = Math.min(entries.size(), start + metrics.rows() * metrics.cols());
+        return start >= end ? List.of() : entries.subList(start, end);
+    }
+
+    private int currentModelGridH() {
+        int y = this.layout.contentTop + 8;
+        int contentBottom = this.layout.footerTop - 6;
+        boolean compact = compactModelLayout();
+        boolean stackedControls = compact && modelListW() < 260;
+        int pathY = compact ? stackedControls ? y + 68 : y + 48 : y + 30;
+        int gridY = pathY + 20;
+        int detailStripH = compactDetailStripH();
+        int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
+        return Math.max(compact ? 34 : 50, contentBottom - 28 - 4 - reserve - gridY);
+    }
+
+    private void renderModelBottomActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int gridH) {
         fill(g, x, y, w, 24, GLASS_DARK);
         int bx = x + 6;
         if (STATE.multiSelectMode) {
@@ -578,6 +655,30 @@ public class ModernPlayerModelScreen extends Screen {
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.UP, getCustomFolderUploadTooltip(), this::openCustomFolderUpload);
         }
+        renderModelPageControls(g, mouseX, mouseY, x, y, w, gridH);
+    }
+
+    private void renderModelPageControls(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int gridH) {
+        List<ModelEntry> entries = collectModelEntries();
+        if (entries.isEmpty()) {
+            return;
+        }
+        ModelListMetrics metrics = modelListMetrics(w, gridH, entries.size());
+        STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
+        int visible = metrics.rows() * metrics.cols();
+        int start = Math.min(entries.size(), STATE.modelScroll * metrics.cols());
+        int end = Math.min(entries.size(), start + visible);
+        Component range = Component.literal((start + 1) + "-" + end + "/" + entries.size());
+        int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
+        int prevX = nextX - MODEL_PAGE_BUTTON_WIDTH - 4;
+        int labelX = Math.max(x + 82, prevX - this.font.width(range) - 8);
+        drawMuted(g, range, labelX, y + 8);
+        renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.pre_page"), () -> {
+            STATE.modelScroll = Math.max(0, STATE.modelScroll - metrics.rows());
+        });
+        renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.next_page"), () -> {
+            STATE.modelScroll = Math.min(metrics.maxScroll(), STATE.modelScroll + metrics.rows());
+        });
     }
 
     private void renderModelDetails(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
@@ -689,16 +790,21 @@ public class ModernPlayerModelScreen extends Screen {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.resource_station.no_results"), x + w / 2, y + 42, MUTED);
             return;
         }
+        boolean showBar = entries.size() > rows;
+        int ww = showBar ? w - 9 : w;
         for (int i = 0; i < rows && STATE.resourceScroll + i < entries.size(); i++) {
             ModelRepoEntry entry = entries.get(STATE.resourceScroll + i);
             int rowY = y + i * ROW;
             boolean selected = entry.url().equals(STATE.selectedResourceUrl) || this.selectedResourceUrls.contains(entry.url());
-            boolean hover = inside(mouseX, mouseY, x + 3, rowY + 2, w - 6, ROW - 4);
-            fill(g, x + 3, rowY + 2, w - 6, ROW - 4, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : (i & 1) == 0 ? 0x3E30363B : 0x3630363B);
-            g.text(this.font, trim(entry.name(), w - 78), x + 8, rowY + 5, TEXT, false);
-            g.text(this.font, trim(resourceDetail(entry), w - 100), x + 8, rowY + 15, MUTED, false);
-            hit(x + 3, rowY + 2, w - 38, ROW - 4, Component.literal(entry.name()), () -> clickResource(entry));
-            renderIconButton(g, mouseX, mouseY, x + w - 28, rowY + 4, ResourceDownloadManager.isQueued(entry) ? IconGlyph.QUEUE : IconGlyph.DOWNLOAD, Component.translatable("gui.sparkle_morpher.model_panel.download"), () -> enqueueResource(entry));
+            boolean hover = inside(mouseX, mouseY, x + 3, rowY + 2, ww - 6, ROW - 4);
+            fill(g, x + 3, rowY + 2, ww - 6, ROW - 4, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : (i & 1) == 0 ? 0x3E30363B : 0x3630363B);
+            g.text(this.font, trim(entry.name(), ww - 78), x + 8, rowY + 5, TEXT, false);
+            g.text(this.font, trim(resourceDetail(entry), ww - 100), x + 8, rowY + 15, MUTED, false);
+            hit(x + 3, rowY + 2, ww - 38, ROW - 4, Component.literal(entry.name()), () -> clickResource(entry));
+            renderIconButton(g, mouseX, mouseY, x + ww - 28, rowY + 4, ResourceDownloadManager.isQueued(entry) ? IconGlyph.QUEUE : IconGlyph.DOWNLOAD, Component.translatable("gui.sparkle_morpher.model_panel.download"), () -> enqueueResource(entry));
+        }
+        if (showBar) {
+            renderScrollbar(g, mouseX, mouseY, x + w - 7, y + 3, 4, h - 6, entries.size(), rows, STATE.resourceScroll);
         }
     }
 
@@ -814,11 +920,14 @@ public class ModernPlayerModelScreen extends Screen {
             int bx = x + w - 34;
             fill(g, bx, y + 4, 26, 11, row.booleanValue() ? RED_SOFT : 0x55303030);
             fill(g, bx + (row.booleanValue() ? 15 : 2), y + 5, 9, 9, 0xFFEDE1CC);
-            hit(bx - 4, y, 34, 19, label, row.action());
+            hit(x, y, w, 19, label, row.action());
         } else if (row.decrement() == null && row.increment() == null) {
             int valueW = Math.min(104, Math.max(48, this.font.width(row.valueText()) + 14));
             int valueX = x + w - valueW - 8;
             g.text(this.font, trim(label.getString(), valueX - x - 12), x + 6, y + 6, TEXT, false);
+            if (row.action() != null) {
+                hit(x, y, w, 19, label, row.action());
+            }
             renderTextButton(g, mouseX, mouseY, valueX, y + 2, valueW, 15, Component.literal(row.valueText()), row.action());
         } else {
             g.text(this.font, trim(label.getString(), w - 82), x + 6, y + 6, TEXT, false);
@@ -978,6 +1087,9 @@ public class ModernPlayerModelScreen extends Screen {
         double mouseX = event.x();
         double mouseY = event.y();
         int button = event.button();
+        if (button == 0 && beginResourceScrollDrag(mouseX, mouseY)) {
+            return true;
+        }
         if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE) {
             if (this.siteEditBox != null && this.siteEditBox.mouseClicked(event, flag)) {
                 setFocused(this.siteEditBox);
@@ -1047,11 +1159,32 @@ public class ModernPlayerModelScreen extends Screen {
         List<ModelEntry> out = new ArrayList<>();
         String query = STATE.modelSearchText.trim().toLowerCase(Locale.ROOT);
         boolean searching = !query.isBlank();
+        Set<String> folderPaths = new HashSet<>();
         if (!searching) {
             for (String pack : ClientModelManager.getModelPackMap().keySet()) {
                 if (isDirectChild(STATE.currentPath, pack)) {
                     String name = pack.substring(STATE.currentPath.length()).replaceAll("/+$", "");
-                    out.add(ModelEntry.folder(pack, name));
+                    if (folderPaths.add(pack)) {
+                        out.add(ModelEntry.folder(pack, name));
+                    }
+                }
+            }
+            // Synthesize folder nodes for nested models placed under custom/<subfolder>/
+            // without ysm-pack.json entries. Otherwise those models are loaded but
+            // cannot be reached through the model browser path navigation.
+            for (String modelId : ClientModelManager.getModelAssemblyMap().keySet()) {
+                if (!modelId.startsWith(STATE.currentPath)) {
+                    continue;
+                }
+                String rest = modelId.substring(STATE.currentPath.length());
+                int slash = rest.indexOf('/');
+                if (slash <= 0) {
+                    continue;
+                }
+                String segment = rest.substring(0, slash);
+                String folderPath = STATE.currentPath + segment + "/";
+                if (folderPaths.add(folderPath)) {
+                    out.add(ModelEntry.folder(folderPath, segment));
                 }
             }
         }
@@ -1206,7 +1339,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void selectAllVisibleModels() {
-        for (ModelEntry entry : collectModelEntries()) {
+        for (ModelEntry entry : visibleModelEntries()) {
             if (!entry.folder() && !entry.locked()) {
                 this.selectedModelIds.add(entry.modelId());
             }
@@ -1497,6 +1630,8 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
+        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.enable_global_bandwidth_limit", ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT));
+        rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.bandwidth_limit", ServerConfig.BANDWIDTH_LIMIT, 1, 999, 10, "Mbps"));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.resource_monitor_log", GeneralConfig.RESOURCE_STATION_MONITOR_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.model_memory_profiler", GeneralConfig.MODEL_MEMORY_PROFILER));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.import_performance_log", GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG));
@@ -1543,7 +1678,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     private SettingRow nativeSimdPolicyRow(ModelPanelState.SettingGroup group) {
         GeneralConfig.NativeSimdPolicy current = GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE);
-        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.native_simd_policy", null, current.name(), () -> {
+        String valueText = Component.translatable("gui.sparkle_morpher.model_panel.setting.native_simd_policy.value." + current.name().toLowerCase(Locale.ROOT)).getString();
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.native_simd_policy", null, valueText, () -> {
             GeneralConfig.NativeSimdPolicy next = switch (current) {
                 case OFF -> GeneralConfig.NativeSimdPolicy.SAFE;
                 case SAFE -> GeneralConfig.NativeSimdPolicy.AGGRESSIVE;
@@ -1557,7 +1693,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     private SettingRow nativeSimdValidationRow(ModelPanelState.SettingGroup group) {
         GeneralConfig.NativeSimdValidationMode current = GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF);
-        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.native_simd_validation", null, current.name(), () -> {
+        String valueText = Component.translatable("gui.sparkle_morpher.model_panel.setting.native_simd_validation.value." + current.name().toLowerCase(Locale.ROOT)).getString();
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.native_simd_validation", null, valueText, () -> {
             GeneralConfig.NativeSimdValidationMode next = switch (current) {
                 case OFF -> GeneralConfig.NativeSimdValidationMode.LOG_MISMATCH;
                 case LOG_MISMATCH -> GeneralConfig.NativeSimdValidationMode.STRICT_FALLBACK;
@@ -1572,12 +1709,20 @@ public class ModernPlayerModelScreen extends Screen {
 
     private SettingRow loadingPositionRow(ModelPanelState.SettingGroup group) {
         LoadingStateConfig.Position current = GeneralConfig.safeGet(LoadingStateConfig.LOADING_STATE_POSITION, LoadingStateConfig.Position.TOP_CENTER);
-        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.loading_state_position", null, current.name(), () -> {
-            LoadingStateConfig.Position[] values = LoadingStateConfig.Position.values();
-            LoadingStateConfig.Position next = values[(current.ordinal() + 1) % values.length];
-            LoadingStateConfig.LOADING_STATE_POSITION.set(next);
-            LoadingStateConfig.LOADING_STATE_POSITION.save();
-        }, null, null, null);
+        final LoadingStateConfig.Position selected = current;
+        final LoadingStateConfig.Position[] values = LoadingStateConfig.Position.values();
+        String valueText = Component.translatable("gui.sparkle_morpher.config.loading_state_position.value." + selected.name().toLowerCase(Locale.ROOT)).getString();
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.loading_state_position", null, valueText, null,
+                () -> {
+                    LoadingStateConfig.Position prev = values[(selected.ordinal() - 1 + values.length) % values.length];
+                    LoadingStateConfig.LOADING_STATE_POSITION.set(prev);
+                    LoadingStateConfig.LOADING_STATE_POSITION.save();
+                },
+                () -> {
+                    LoadingStateConfig.Position next = values[(selected.ordinal() + 1) % values.length];
+                    LoadingStateConfig.LOADING_STATE_POSITION.set(next);
+                    LoadingStateConfig.LOADING_STATE_POSITION.save();
+                }, null);
     }
 
     private SettingRow intRow(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.IntValue value, int min, int max, int step, String suffix) {
@@ -1965,7 +2110,138 @@ public class ModernPlayerModelScreen extends Screen {
         return false;
     }
 
+    private int compactDetailStripH() {
+        if (!compactModelLayout()) {
+            return 0;
+        }
+        return STATE.compactPreviewExpanded ? 112 : 18;
+    }
+
+    private void renderCompactDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
+        int barH = 18;
+        fill(g, x, y, w, h, GLASS_DARK);
+        border(g, x, y, w, h, 0x33FFFFFF);
+        boolean expanded = STATE.compactPreviewExpanded;
+        renderIconButton(g, mouseX, mouseY, x + 1, y, expanded ? IconGlyph.MINUS : IconGlyph.PLUS,
+                Component.translatable("gui.sparkle_morpher.model_panel.details"), () -> STATE.compactPreviewExpanded = !STATE.compactPreviewExpanded);
+        ModelAssembly assembly = selectedAssembly();
+        String modelId = STATE.selectedModelId;
+        if (assembly == null) {
+            drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 22, y + 5);
+            return;
+        }
+        drawText(g, Component.literal(trim(displayName(modelId, assembly), w - 44)), x + 22, y + 5);
+        renderIconButton(g, mouseX, mouseY, x + w - 19, y, IconGlyph.INFO,
+                Component.translatable("gui.sparkle_morpher.model_panel.info"), () -> STATE.compactPreviewExpanded = true);
+        if (!expanded) {
+            return;
+        }
+        int py = y + barH + 2;
+        int ph = h - barH - 4;
+        int previewW = Math.min(w - 8, Math.max(56, ph));
+        renderSelectedModelPreview(g, assembly, modelId, x + 3, py, previewW, ph, mouseX, mouseY, partialTick);
+        int ix = x + previewW + 8;
+        int iw = x + w - 4 - ix;
+        if (iw > 40) {
+            int iy = py + 2;
+            drawMuted(g, Component.literal(trim(modelId, iw)), ix, iy);
+            iy += 12;
+            Metadata metadata = assembly.getModelData().getExtraInfo();
+            if (metadata != null && metadata.getAuthors() != null && !metadata.getAuthors().isEmpty()) {
+                drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.authors"), ix, iy);
+                iy += 11;
+                drawMuted(g, Component.literal(trim(authors(metadata), iw)), ix, iy);
+                iy += 13;
+            }
+            drawMuted(g, Component.literal(assembly.getAnimationBundle().getTextures().size() + " tex"), ix, iy);
+        }
+    }
+
+    private void renderScrollbar(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, int total, int visible, int scroll) {
+        fill(g, x, y, w, h, 0x50101418);
+        int maxScroll = Math.max(1, total - visible);
+        int thumbH = Math.max(14, (int) ((long) h * visible / total));
+        int span = Math.max(1, h - thumbH);
+        int thumbY = y + (int) ((long) span * clamp(scroll, 0, maxScroll) / maxScroll);
+        boolean hover = this.draggingResourceScroll || inside(mouseX, mouseY, x - 2, thumbY, w + 4, thumbH);
+        fill(g, x, thumbY, w, thumbH, hover ? 0xFFB8C6D0 : 0xC093A2AC);
+        border(g, x, thumbY, w, thumbH, 0x66FFFFFF);
+    }
+
+    private int resourceListContentY() {
+        return this.layout.contentTop + 8 + 26;
+    }
+
+    private int resourceListContentH() {
+        return (this.layout.footerTop - 6) - (this.layout.contentTop + 8) - 26;
+    }
+
+    private int[] resourceScrollbarTrack() {
+        List<ModelRepoEntry> entries = filteredResources();
+        int h = resourceListContentH();
+        int rows = Math.max(1, h / ROW);
+        if (entries.size() <= rows) {
+            return null;
+        }
+        int x = resourceListX() + resourceListW() - 7;
+        return new int[]{x, resourceListContentY() + 3, 4, h - 6};
+    }
+
+    private boolean beginResourceScrollDrag(double mouseX, double mouseY) {
+        if (STATE.activeTab != ModelPanelState.Tab.RESOURCE || STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE) {
+            return false;
+        }
+        int[] track = resourceScrollbarTrack();
+        if (track == null) {
+            return false;
+        }
+        if (inside(mouseX, mouseY, track[0] - 3, track[1], track[2] + 6, track[3])) {
+            this.draggingResourceScroll = true;
+            updateResourceScrollFromMouse(mouseY);
+            return true;
+        }
+        return false;
+    }
+
+    private void updateResourceScrollFromMouse(double mouseY) {
+        List<ModelRepoEntry> entries = filteredResources();
+        int h = resourceListContentH();
+        int rows = Math.max(1, h / ROW);
+        int maxScroll = Math.max(0, entries.size() - rows);
+        if (maxScroll <= 0) {
+            STATE.resourceScroll = 0;
+            return;
+        }
+        int trackY = resourceListContentY() + 3;
+        int trackH = h - 6;
+        int thumbH = Math.max(14, (int) ((long) trackH * rows / entries.size()));
+        int span = Math.max(1, trackH - thumbH);
+        double rel = (mouseY - trackY - thumbH / 2.0) / span;
+        STATE.resourceScroll = clamp((int) Math.round(rel * maxScroll), 0, maxScroll);
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (this.draggingResourceScroll) {
+            updateResourceScrollFromMouse(event.y());
+            return true;
+        }
+        return super.mouseDragged(event, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (this.draggingResourceScroll && event.button() == 0) {
+            this.draggingResourceScroll = false;
+            return true;
+        }
+        return super.mouseReleased(event);
+    }
+
     private record Hit(int x, int y, int w, int h, Component tooltip, Runnable action) {
+    }
+
+    private record ModelListMetrics(int cellW, int cellH, int cols, int rows, int maxScroll, boolean dense) {
     }
 
     private record ModelEntry(String modelId, String title, String subtitle, boolean folder, boolean locked) {

@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.input;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.util.InputUtil;
+import com.micaftic.morpher.util.ItemTagsConstants;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
 import net.minecraft.client.Minecraft;
@@ -104,7 +105,7 @@ public class InputStateKey {
             lastUseKeyDown = useDown;
             logInputSnapshot("key attack=" + attackDown + " use=" + useDown);
         }
-        if (attackDown && attackChanged) {
+        if (attackDown && attackChanged && !isUsingOffhandShield(player)) {
             recordSwingPulse(InteractionHand.MAIN_HAND);
         }
     }
@@ -137,6 +138,9 @@ public class InputStateKey {
         if (entity == null || entity.isSleeping()) {
             return 0.0f;
         }
+        if (isUsingLocalOffhandShield(entity)) {
+            return 0.0f;
+        }
         if (entity.swinging) {
             return Math.max(0.0f, entity.swingTime + partialTick);
         }
@@ -152,6 +156,9 @@ public class InputStateKey {
 
     public static float getAttackProgress(LivingEntity entity, float partialTick) {
         if (entity == null || entity.isSleeping()) {
+            return 0.0f;
+        }
+        if (isUsingLocalOffhandShield(entity)) {
             return 0.0f;
         }
         float attackAnim = entity.getAttackAnim(partialTick);
@@ -177,6 +184,9 @@ public class InputStateKey {
 
     public static boolean isSwinging(LivingEntity entity, InteractionHand hand) {
         if (entity == null || entity.isSleeping()) {
+            return false;
+        }
+        if (hand == InteractionHand.MAIN_HAND && isUsingLocalOffhandShield(entity)) {
             return false;
         }
         if (entity.swinging && entity.swingingArm == hand) {
@@ -238,6 +248,9 @@ public class InputStateKey {
         }
         InteractionHand hand = resolveClickHand(player, button);
         if (button == 0) {
+            if (isUsingOffhandShield(player)) {
+                return;
+            }
             recordSwingPulse(hand);
             return;
         }
@@ -247,6 +260,9 @@ public class InputStateKey {
     private static InteractionHand resolveClickHand(LocalPlayer player, int button) {
         if (button == 0) {
             return InteractionHand.MAIN_HAND;
+        }
+        if (button == 1 && isShield(player.getOffhandItem())) {
+            return InteractionHand.OFF_HAND;
         }
         if (button == 1 && player.getMainHandItem().isEmpty() && shouldSwingOffhandOnRightClick(player.getOffhandItem())) {
             return InteractionHand.OFF_HAND;
@@ -313,6 +329,21 @@ public class InputStateKey {
 
     private static boolean shouldSwingOffhandOnRightClick(ItemStack offhandItem) {
         return !offhandItem.isEmpty() && !offhandItem.is(Items.TOTEM_OF_UNDYING);
+    }
+
+    private static boolean isUsingOffhandShield(LocalPlayer player) {
+        return player.isUsingItem()
+                && player.getUsedItemHand() == InteractionHand.OFF_HAND
+                && isShield(player.getUseItem());
+    }
+
+    private static boolean isUsingLocalOffhandShield(LivingEntity entity) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        return player != null && isLocalPlayer(entity) && isUsingOffhandShield(player);
+    }
+
+    private static boolean isShield(ItemStack stack) {
+        return !stack.isEmpty() && (stack.is(Items.SHIELD) || stack.is(ItemTagsConstants.SHIELDS));
     }
 
 }

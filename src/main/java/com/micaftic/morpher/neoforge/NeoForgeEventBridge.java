@@ -1,7 +1,5 @@
 package com.micaftic.morpher.neoforge;
 
-import com.micaftic.morpher.client.event.MobEffectEvent;
-import com.micaftic.morpher.client.event.ShieldBlockCooldownEvent;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import com.micaftic.morpher.core.architectury.event.events.common.CommandRegistrationEvent;
 import com.micaftic.morpher.core.architectury.event.events.common.EntityEvent;
@@ -9,6 +7,7 @@ import com.micaftic.morpher.core.architectury.event.events.common.LifecycleEvent
 import com.micaftic.morpher.core.architectury.event.events.common.PlayerEvent;
 import com.micaftic.morpher.core.architectury.event.events.common.TickEvent;
 import com.micaftic.morpher.core.architectury.registry.ReloadListenerRegistry;
+import com.micaftic.morpher.event.ServerLivingEventHooks;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.world.entity.LivingEntity;
@@ -81,28 +80,28 @@ public final class NeoForgeEventBridge {
     @SubscribeEvent
     public static void onMobEffectAdded(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Added event) {
         if (event.getEffectInstance() != null) {
-            MobEffectEvent.onEffectAdded(event.getEntity(), event.getEffectInstance().getEffect().value(), event.getEffectInstance().getAmplifier());
+            ServerLivingEventHooks.onEffectAdded(event.getEntity(), event.getEffectInstance().getEffect().value(), event.getEffectInstance().getAmplifier());
         }
     }
 
     @SubscribeEvent
     public static void onMobEffectRemoved(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Remove event) {
         if (event.getEffect() != null) {
-            MobEffectEvent.onEffectRemoved(event.getEntity(), event.getEffect().value());
+            ServerLivingEventHooks.onEffectRemoved(event.getEntity(), event.getEffect().value());
         }
     }
 
     @SubscribeEvent
     public static void onLivingShieldBlock(LivingShieldBlockEvent event) {
         if (event.getBlocked()) {
-            ShieldBlockCooldownEvent.onShieldBlock(event.getEntity());
+            ServerLivingEventHooks.onShieldBlock(event.getEntity());
         }
     }
 
     @SubscribeEvent
     public static void onEntityTickPost(EntityTickEvent.Post event) {
         if (event.getEntity() instanceof LivingEntity livingEntity) {
-            ShieldBlockCooldownEvent.onLivingTick(livingEntity);
+            ServerLivingEventHooks.onLivingTick(livingEntity);
         }
     }
 

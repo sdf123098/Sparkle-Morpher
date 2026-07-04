@@ -873,9 +873,11 @@ public final class ModelPreviewRenderer {
         if (capability == null || !capability.isModelActive()) {
             return false;
         }
-        capability.tickModel();
         if (!capability.isModelReady()) {
-            return false;
+            capability.tickModel();
+            if (!capability.isModelReady()) {
+                return false;
+            }
         }
         PreviewMouseRotation mouseRotation = getPreviewMouseRotation(left, top, right, bottom, mouseX, mouseY, extraPlayer);
         EntityRenderState state = new EntityRenderState();

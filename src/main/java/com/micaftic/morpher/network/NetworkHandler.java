@@ -2,8 +2,6 @@ package com.micaftic.morpher.network;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.network.message.*;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.resources.Identifier;
@@ -52,11 +50,7 @@ public final class NetworkHandler {
         if (clientHandshakeComplete) {
             return true;
         }
-        ClientPacketListener connection = Minecraft.getInstance().getConnection();
-        if (connection == null) {
-            return false;
-        }
-        return connection.getConnection() != null;
+        return ClientNetworkBridge.isClientConnected();
     }
 
     public static boolean isConnectionValid(@Nullable Connection connection) {

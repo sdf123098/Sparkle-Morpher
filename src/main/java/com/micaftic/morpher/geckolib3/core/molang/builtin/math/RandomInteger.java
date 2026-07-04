@@ -3,6 +3,7 @@ package com.micaftic.morpher.geckolib3.core.molang.builtin.math;
 import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
 import com.micaftic.morpher.geckolib3.core.molang.funciton.ContextFunction;
 import com.micaftic.morpher.molang.runtime.ExecutionContext;
+import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 
 public class RandomInteger extends ContextFunction<Object> {
     @Override
@@ -14,7 +15,21 @@ public class RandomInteger extends ContextFunction<Object> {
     protected Object eval(ExecutionContext<IContext<Object>> context, ArgumentCollection arguments) {
         int min = arguments.getAsInt(context, 0);
         int range = arguments.getAsInt(context, 1);
-        if(min > range) {
+        if (min > range) {
+            int temp = min;
+            min = range;
+            range = temp - range;
+        } else {
+            range -= min;
+        }
+        return min + context.entity().random().nextInt(range);
+    }
+
+    @Override
+    protected float evalFloat(ExpressionEvaluator<IContext<Object>> context, ArgumentCollection arguments) {
+        int min = arguments.getAsInt(context, 0);
+        int range = arguments.getAsInt(context, 1);
+        if (min > range) {
             int temp = min;
             min = range;
             range = temp - range;

@@ -2,12 +2,8 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.client.input.AnimationRouletteKey;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SPlayAnimationPacket;
-import com.micaftic.morpher.util.InputUtil;
-import com.micaftic.morpher.core.architectury.event.EventResult;
-import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientTickEvent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.ClientInput;
@@ -21,12 +17,6 @@ public class AnimationLockEvent {
     }
 
     public static void register() {
-        ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
-            if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, AnimationRouletteKey.KEY_LOCK)) {
-                animationLocked = !animationLocked;
-            }
-            return EventResult.pass();
-        });
         ClientTickEvent.CLIENT_POST.register(AnimationLockEvent::onClientTick);
     }
 

@@ -1,7 +1,7 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import com.micaftic.morpher.network.NetworkHandler;
 import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
@@ -57,16 +57,18 @@ public class S2CVersionCheckPacket {
     }
 
     public static void handle(S2CVersionCheckPacket message, PacketContext ctx) {
-        ctx.enqueueWork(() -> {
-            ClientModelManager.setOysmServer(message.oysmServer);
-            ClientModelManager.setAllowUpload(message.allowUpload);
-        });
-        if (NetworkHandler.setChannelVersion(ctx.getConnection(), message.version)) {
-            ctx.enqueueWork(ClientModelManager::onSyncConnected);
-        }
-        if (NetworkHandler.VERSION.equals(message.version)) {
-            NetworkHandler.markClientHandshakeComplete();
-        }
-        ctx.enqueueWork(() -> NetworkHandler.sendToServer(new C2SVersionCheckPacket()));
+        ClientNetworkBridge.handle(ctx, "handleVersionCheck", message, ctx.getConnection());
+    }
+
+    public String getVersion() {
+        return this.version;
+    }
+
+    public boolean isOysmServer() {
+        return this.oysmServer;
+    }
+
+    public boolean isAllowUpload() {
+        return this.allowUpload;
     }
 }

@@ -99,7 +99,7 @@ public final class GpuMeshBuilder {
             for (GeoModel.BakedCube cube : bone.cubes) {
                 for (GeoModel.BakedQuad quad : cube.quads) {
                     int vertexOffset = vertices.position() / VERTEX_STRIDE;
-                    int normal = packNormal(quad.normalX, quad.normalY, quad.normalZ);
+                    int normal = packNormal(quad.normalX(), quad.normalY(), quad.normalZ());
                     for (int v = 0; v < 4; v++) {
                         vertices.putFloat(quad.x(v));
                         vertices.putFloat(quad.y(v));

@@ -1,8 +1,6 @@
 package com.micaftic.morpher.event;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;

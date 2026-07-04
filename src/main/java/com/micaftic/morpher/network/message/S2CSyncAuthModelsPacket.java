@@ -3,7 +3,7 @@ package com.micaftic.morpher.network.message;
 import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.google.common.collect.Sets;
 import com.micaftic.morpher.core.architectury.injectables.annotations.PlatformOnly;
-import net.minecraft.client.Minecraft;
+import com.micaftic.morpher.network.ClientNetworkBridge;
 import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
@@ -35,16 +35,10 @@ public class S2CSyncAuthModelsPacket {
     }
 
     public static void handle(S2CSyncAuthModelsPacket message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
-            ctx.enqueueWork(() -> handleCapability(message));
-        }
+        ClientNetworkBridge.handle(ctx, "handleSyncAuthModels", message);
     }
-    public static void handleCapability(S2CSyncAuthModelsPacket message) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player != null) {
-            AuthModelsCapability.get(minecraft.player).ifPresent(cap -> {
-                cap.setAuthModels(message.authModels);
-            });
-        }
+
+    public Set<String> getAuthModels() {
+        return this.authModels;
     }
 }

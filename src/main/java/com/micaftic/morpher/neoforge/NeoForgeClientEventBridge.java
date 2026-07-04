@@ -123,14 +123,15 @@ public final class NeoForgeClientEventBridge {
 
     @SubscribeEvent
     public static void onRenderPlayerPre(RenderPlayerEvent.Pre<?> event) {
-        if (Minecraft.getInstance().level == null) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null) {
             return;
         }
-        Entity entity = Minecraft.getInstance().level.getEntity(event.getRenderState().id);
+        Entity entity = minecraft.level.getEntity(event.getRenderState().id);
         if (!(entity instanceof Player player)) {
             return;
         }
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+        MultiBufferSource.BufferSource bufferSource = minecraft.renderBuffers().bufferSource();
         PlayerCapability capability = PlayerCapability.get(player).orElse(null);
         if (capability != null) {
             capability.beginRenderState(event.getRenderState());
@@ -152,7 +153,9 @@ public final class NeoForgeClientEventBridge {
             }
         }
         if (replaced) {
-            bufferSource.endBatch();
+            if (event.getSubmitNodeCollector() == null) {
+                bufferSource.endBatch();
+            }
             event.setCanceled(true);
         }
     }

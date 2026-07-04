@@ -82,9 +82,20 @@ public class ClientModelManager {
     private static String currentCacheFolderName;
     private static final AtomicInteger pendingModelsCount = new AtomicInteger(0);
 
-    private static final ThreadPoolExecutor modelPhraseExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(),
+    // ---- 同步超时看门狗 ----
+    // 记录最近一次同步活动（开始同步 / 收到分片 / 完成一个模型）的时间戳。
+    // 当同步过程中长时间没有任何进度时（例如服务端因缓存文件被清理而跳过了
+    // 某个被请求模型的分片，或客户端在重连竞态下漏掉了 decrement），
+    // pendingModelsCount 会永远归不了零、onSyncComplete 永不触发，导致加载弹窗
+    // 卡死。看门狗在超时后强制结束同步，避免 UI 永久停在某一进度。
+    private static volatile long lastSyncActivityMillis = 0L;
+    private static final long SYNC_WATCHDOG_TIMEOUT_MILLIS = 20000L;
+
+    private static final int MODEL_PARSE_THREAD_COUNT = Math.max(2, Math.min(4, Math.max(1, Runtime.getRuntime().availableProcessors() - 1)));
+    private static final AtomicInteger MODEL_PARSE_THREAD_IDS = new AtomicInteger(1);
+    private static final ThreadPoolExecutor modelPhraseExecutor = new ThreadPoolExecutor(MODEL_PARSE_THREAD_COUNT, MODEL_PARSE_THREAD_COUNT, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(),
             r -> {
-                Thread t = new Thread(r, "SM-Model-Parse-Thread");
+                Thread t = new Thread(r, "SM-Model-Parse-" + MODEL_PARSE_THREAD_IDS.getAndIncrement());
                 t.setDaemon(true);
                 return t;
             }
@@ -204,7 +215,6 @@ public class ClientModelManager {
             byte[] decrypted;
             if (syncStep == 1) {
                 decrypted = YsmCrypt.decrypt(packetBytes, YsmCrypt.publicKey);
-                System.out.println(Arrays.toString(decrypted));
                 if (decrypted != null) handlePacket01(decrypted);
             } else if (syncStep == 2) {
                 decrypted = YsmCrypt.decrypt(packetBytes, lastKey);
@@ -269,9 +279,11 @@ public class ClientModelManager {
 
         File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(currentCacheFolderName).toFile();
         if (!cacheDir.exists()) cacheDir.mkdirs();
+        YSMClientCache.prepareCacheDirectory(cacheDir);
 
         Map<UUID, File> localCacheMap = YSMClientCache.buildCacheIndex(cacheDir, clientKey);
         List<ModelHash> modelsToRequest = new ArrayList<>();
+        Set<UUID> expectedCacheModels = new HashSet<>();
 
         int unkSize = buf.readVarInt();
         onSyncProgress(unkSize);
@@ -296,9 +308,10 @@ public class ClientModelManager {
             ServerModelContext ctx = new ServerModelContext(hash1, hash2, modelId, isAuth, isCustomSkinModel, version);
             serverModels.put(ctx.uuid, ctx);
             validServerModelIds.add(modelId);
+            expectedCacheModels.add(ctx.uuid);
 
             File cachedFile = localCacheMap.get(ctx.uuid);
-            boolean isFileValid = YSMClientCache.verifyFileContent(cachedFile, hash1, hash2, clientKey);
+            boolean isFileValid = YSMClientCache.verifyFileContent(cachedFile, hash1, hash2);
 
             boolean alreadyInMemory = modelAssemblyMap != null && modelAssemblyMap.containsKey(modelId);
 
@@ -328,9 +341,12 @@ public class ClientModelManager {
                 }
             } else {
                 YesSteveModel.LOGGER.info("[SM] Cache MISS or Invalid: " + ctx.uuid + " -> Requesting...");
+                YSMClientCache.deleteCacheFile(cachedFile);
                 modelsToRequest.add(mHash);
             }
         }
+
+        YSMClientCache.cleanupCacheDirectory(cacheDir, expectedCacheModels, clientKey);
 
         int unkSize2 = buf.readVarInt();
         List<ModelPackData> parsedPacks = new ArrayList<>();
@@ -407,6 +423,7 @@ public class ClientModelManager {
 
         syncStep = 3;
         pendingModelsCount.set(modelsToRequest.size());
+        markSyncActivity();
 
         int garbageLen = 16 + SECURE_RANDOM.nextInt(48);
         byte[] garbage = new byte[garbageLen];
@@ -462,14 +479,15 @@ public class ClientModelManager {
 
         buf.getRawBuf().readBytes(ctx.fileBuffer, chunkOffset, chunkLength);
         ctx.bytesReceived += chunkLength;
+        markSyncActivity();
 
         if (ctx.bytesReceived >= totalSize) {
             byte[] fileBuffer = ctx.fileBuffer;
             ctx.fileBuffer = null;
 
             modelPhraseExecutor.submit(() -> {
-                if (clientKey == null) return;
                 try {
+                    if (clientKey == null) return;
                     String folder = currentCacheFolderName != null ? currentCacheFolderName : "default_cache";
                     File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(folder).toFile();
                     if (!cacheDir.exists()) cacheDir.mkdirs();
@@ -1054,6 +1072,19 @@ public class ClientModelManager {
         forEachGuiWidget(IGuiWidget::onSyncBegin);
     }
 
+    /**
+     * 在加入服务器一段时间后，如果 YSM 握手仍未完成（服务器没有安装本模组），
+     * 将同步状态从 WAITING 重置为 IDLE，避免加载状态 UI 一直卡在“等待中”。
+     */
+    public static void markVanillaServerIfNoHandshake() {
+        if (NetworkHandler.isClientConnected()) {
+            return;
+        }
+        if (syncState.getCurrentState() == SyncState.WAITING) {
+            syncState.setState(SyncState.IDLE);
+        }
+    }
+
     private static void onSyncProgress(int totalModels) {
         if (totalModels == -1) {
             ((Executor) Minecraft.getInstance()).execute(() -> {
@@ -1407,6 +1438,7 @@ public class ClientModelManager {
         }
         ((Executor) Minecraft.getInstance()).execute(() -> {
             if (syncState.currentState == SyncState.SYNCING) {
+                markSyncActivity();
                 syncState.syncedModels++;
                 int loaded = syncState.syncedModels;
                 if (loaded == syncState.totalModels) {
@@ -1420,12 +1452,43 @@ public class ClientModelManager {
         return parsedBundle != null;
     }
 
+    private static void markSyncActivity() {
+        lastSyncActivityMillis = System.currentTimeMillis();
+    }
+
+    /**
+     * 由客户端每帧（经 {@code ModelSyncStateOverlay#render}）调用。
+     * 若同步处于进行中（还有待下载模型或仍在 SYNCING）且超过
+     * {@link #SYNC_WATCHDOG_TIMEOUT_MILLIS} 没有任何进度，则强制结束同步，
+     * 防止加载弹窗永久卡在某一进度。
+     */
+    public static void tickSyncWatchdog() {
+        long last = lastSyncActivityMillis;
+        if (last == 0L) {
+            return;
+        }
+        boolean active = pendingModelsCount.get() > 0 || syncState.getCurrentState() == SyncState.SYNCING;
+        if (!active) {
+            lastSyncActivityMillis = 0L;
+            return;
+        }
+        if (System.currentTimeMillis() - last > SYNC_WATCHDOG_TIMEOUT_MILLIS) {
+            lastSyncActivityMillis = 0L;
+            int dropped = pendingModelsCount.getAndSet(0);
+            YesSteveModel.LOGGER.warn(
+                    "[SM] 模型同步超时（{}ms 无进度），强制结束以避免加载弹窗卡死；有 {} 个模型分片未收齐。",
+                    SYNC_WATCHDOG_TIMEOUT_MILLIS, dropped);
+            onSyncComplete();
+        }
+    }
+
     private static void onSyncComplete() {
         NetworkOnlineDebugLog.info("onSyncComplete: selectedModelId={} selectedTextureId={} assemblyMapSize={}",
                 selectedModelId, selectedTextureId, modelAssemblyMap.size());
         syncStep = 1;
         serverModels.clear();
         cachedModelHashes.clear();
+        lastSyncActivityMillis = 0L;
 
         ((Executor) Minecraft.getInstance()).execute(() -> {
             syncState.finishSuccess();
@@ -1444,6 +1507,7 @@ public class ClientModelManager {
     }
 
     private static void onSyncError(@Nullable Object obj) {
+        lastSyncActivityMillis = 0L;
         ((Executor) Minecraft.getInstance()).execute(() -> {
             syncState.finishFailure(obj instanceof Component component ? component : null);
             forEachGuiWidget(guiWidget -> {
@@ -1670,7 +1734,6 @@ public class ClientModelManager {
         }
 
         public void setState(SyncState syncState) {
-            System.out.println("Sync state: " + syncState);
             this.currentState = syncState;
             this.totalModels = -1;
             this.syncedModels = -1;
