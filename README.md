@@ -2,7 +2,7 @@
 
 > **English** | [ä¸­æ–‡](README_zh.md) | [æ—¥æœ¬èªž](README_ja.md) | [í•œêµ­ì–´](README_ko.md)
 
-A comprehensive Minecraft custom model loader that lets players mount custom models, animations, and sound effects onto players (and select entities, vehicles, and projectiles) â€?say goodbye to the default blocky character.
+A comprehensive Minecraft custom model loader that lets players mount custom models, animations, and sound effects onto players (and select entities, vehicles, and projectiles) â€” say goodbye to the default blocky character.
 
 > Sparkle's Morpher is a **universal model loader**. It currently supports the `.ysm` format (based on OpenYSM, MIT licensed) and `.bbmodel` format (Blockbench), with support for additional mainstream model formats planned for future releases.
 
@@ -14,15 +14,15 @@ Replace vanilla player models with fully custom 3D models. All custom models are
 
 ### Model Format Support
 
-- **`.ysm`** â€?The native format powered by OpenYSM/YSMParser, supporting full skeletal models with weighted animations.
-- **`.bbmodel`** â€?Direct import of Blockbench project files. Includes mesh triangulation (N-gon fan triangulation), UV normalization, face rotation, inflate expansion, embedded base64 texture extraction, and PNG IHDR header parsing.
-- **Figura Avatar Archives** â€?Import Figura `.zip` packages directly. The built-in `ZipModelSniffer` automatically detects and routes YSM folders, Figura avatars, and plain BBModel zips.
+- **`.ysm`** â€” The native format powered by OpenYSM/YSMParser, supporting full skeletal models with weighted animations.
+- **`.bbmodel`** â€” Direct import of Blockbench project files. Includes mesh triangulation (N-gon fan triangulation), UV normalization, face rotation, inflate expansion, embedded base64 texture extraction, and PNG IHDR header parsing.
+- **Figura Avatar Archives** â€” Import Figura `.zip` packages directly. The built-in `ZipModelSniffer` automatically detects and routes YSM folders, Figura avatars, and plain BBModel zips.
 
 ### Animation System
 
-- **Animation Carousel** (default key: Z) â€?A radial menu to quickly switch between animations and actions for the current model.
-- **Animation Controllers** â€?Full support for state-machine-based animation controllers with `loop`, `once`, and `hold` playback modes.
-- **Molang Expressions** â€?Data points support both raw numeric values and Molang expression strings for dynamic animation blending.
+- **Animation Carousel** (default key: Z) â€” A radial menu to quickly switch between animations and actions for the current model.
+- **Animation Controllers** â€” Full support for state-machine-based animation controllers with `loop`, `once`, and `hold` playback modes.
+- **Molang Expressions** â€” Data points support both raw numeric values and Molang expression strings for dynamic animation blending.
 
 ### Sound Effects
 
@@ -74,10 +74,10 @@ More build variants covering all major loader and version combinations:
 
 When you import a model file, Sparkle's Morpher runs it through an intelligent pipeline:
 
-1. **Zip Sniffing** â€?Archives are classified by content: YSM folder, Figura avatar (contains `avatar.json` + `.bbmodel`), plain BBModel zip, or unknown.
-2. **Parsing** â€?`.ysm` files go through YSMParser; `.bbmodel` files are parsed by the built-in `BBModelParser` which handles outliner trees, cube/mesh elements, textures, animations, and controller states.
-3. **Conversion** â€?Parsed data is converted to the engine's internal `RawGeometry` format. Mesh faces with N vertices are triangulated via fan triangulation; UV coordinates are normalized against texture resolution; external PNG textures in zip archives override embedded base64 sources.
-4. **Rendering** â€?The converted model replaces the vanilla player renderer when active, with automatic hiding of the default player model.
+1. **Zip Sniffing** â€” Archives are classified by content: YSM folder, Figura avatar (contains `avatar.json` + `.bbmodel`), plain BBModel zip, or unknown.
+2. **Parsing** â€” `.ysm` files go through YSMParser; `.bbmodel` files are parsed by the built-in `BBModelParser` which handles outliner trees, cube/mesh elements, textures, animations, and controller states.
+3. **Conversion** â€” Parsed data is converted to the engine's internal `RawGeometry` format. Mesh faces with N vertices are triangulated via fan triangulation; UV coordinates are normalized against texture resolution; external PNG textures in zip archives override embedded base64 sources.
+4. **Rendering** â€” The converted model replaces the vanilla player renderer when active, with automatic hiding of the default player model.
 
 ### BBModel Compatibility
 
@@ -94,13 +94,13 @@ Full support for Blockbench's format including:
 
 Sparkle's Morpher uses a **common + platform adapter** layered architecture:
 
-- **`common`** â€?Core logic shared across all variants: model parsing, mesh processing, zip sniffing, animation controllers, audio decoding, and Molang evaluation.
-- **`fabric`** / **`neoforge`** â€?Platform-specific adapters for initialization, networking, component registration, and rendering hooks.
-- **Native Layer** â€?Cross-platform native libraries for Opus audio decoding.
+- **`common`** â€” Core logic shared across all variants: model parsing, mesh processing, zip sniffing, animation controllers, audio decoding, and Molang evaluation.
+- **`fabric`** / **`neoforge`** â€” Platform-specific adapters for initialization, networking, component registration, and rendering hooks.
+- **Native Layer** â€” Cross-platform native libraries for Opus audio decoding.
 
 ## Dependencies
 
-Varies by build variant â€?see `mods.toml` (NeoForge) or `fabric.mod.json` (Fabric) for specifics. Fabric variants require Fabric API installed separately; other dependencies are bundled via Jar-in-Jar.
+Varies by build variant â€” see `mods.toml` (NeoForge) or `fabric.mod.json` (Fabric) for specifics. Fabric variants require Fabric API installed separately; other dependencies are bundled via Jar-in-Jar.
 
 ## Credits & License
 
