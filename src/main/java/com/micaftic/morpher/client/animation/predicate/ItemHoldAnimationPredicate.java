@@ -85,7 +85,15 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
 
     private static boolean shouldStartSwingAnimation(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
         if (hasLocalSwingPulse) {
-            return InputStateKey.getLocalSwingPulseAge() <= 1
+            // The local swing pulse is recorded during InputStateKey.tick(), which also bumps
+            // swingPulseAge to 2 in the same call (tickAttackKey sets age=1, the pulse-decrement
+            // block then increments it). Accept age<=2 (matching 1.21.1) and fall back to the
+            // vanilla swing signal so the attack animation reliably starts even when the pulse
+            // tick ordering races ahead of the render. Without this, YSM-authored models never
+            // play their swing animation in first-/third-person on 26.1.x.
+            boolean pulseJustStarted = InputStateKey.getLocalSwingPulseAge() <= 2;
+            boolean vanillaJustStarted = entity.swingTime == 0 && entity.swinging;
+            return (pulseJustStarted || vanillaJustStarted)
                     && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
         }
         return entity.swingTime == 0

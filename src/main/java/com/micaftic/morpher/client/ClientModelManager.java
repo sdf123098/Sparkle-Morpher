@@ -584,6 +584,28 @@ public class ClientModelManager {
 
         serverModels.clear();
 
+        // 断线/换服：释放过期服务端模型装配（含纹理源 byte[] 与 GPU/native 资源），
+        // 否则它们会被 modelAssemblyMap 强引用跨会话累积（主要内存泄漏源）。
+        // 保留 localModelContext（默认模型）与本地导入模型：reloadLocalModels 会重建后者。
+        if (!modelAssemblyMap.isEmpty()) {
+            Object2ReferenceOpenHashMap<String, ModelAssembly> snapshot = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+            Object2ReferenceOpenHashMap<String, ModelAssembly> survivors = new Object2ReferenceOpenHashMap<>();
+            ArrayList<ModelAssembly> toRelease = new ArrayList<>();
+            for (Map.Entry<String, ModelAssembly> entry : snapshot.entrySet()) {
+                String id = entry.getKey();
+                ModelAssembly asm = entry.getValue();
+                if (asm == localModelContext || localOnlyModelIds.contains(id) || "default".equals(id)) {
+                    survivors.put(id, asm);
+                } else {
+                    toRelease.add(asm);
+                }
+            }
+            modelAssemblyMap = survivors;
+            for (ModelAssembly asm : toRelease) {
+                releaseModelAssembly(asm);
+            }
+        }
+
         Map<String, ModelPackData> oldPreviews = modelPackMap;
         if (oldPreviews != null && !oldPreviews.isEmpty()) {
             for (ModelPackData preview : oldPreviews.values()) {

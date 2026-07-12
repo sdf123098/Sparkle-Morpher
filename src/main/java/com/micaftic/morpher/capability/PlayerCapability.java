@@ -5,6 +5,7 @@ import com.micaftic.morpher.client.animation.molang.struct.RoamingSyncBatch;
 import com.micaftic.morpher.capability.client.PlayerCapabilityClientStore;
 import com.micaftic.morpher.core.compat.bettercombat.BetterCombatCompat;
 import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
+import com.micaftic.morpher.util.CameraUtil;
 import com.micaftic.morpher.client.entity.PlayerEntityFrameState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelAssembly;
@@ -161,15 +162,24 @@ public final class PlayerCapability extends CustomPlayerEntity {
     public void applyHeadTracking(AnimationEvent<? extends AnimatableEntity<Player>> event, boolean wasAnimEvaluated) {
         super.applyHeadTracking(event, wasAnimEvaluated);
         AnimatedGeoModel model2 = getCurrentModel();
-        if (model2 != null && isLocalPlayerModel() && !event.isFirstPerson() && FirstPersonCompat.isLoaded()) {
+        if (model2 != null && isLocalPlayerModel() && !event.isFirstPerson()) {
+            // Hide the head so the first-person camera (at eye height) does not end up inside it.
+            // When an external first-person model mod (e.g. tr7zw FirstPersonModel) is loaded it
+            // manages head visibility; otherwise SparkleMorpher renders the local body itself, so
+            // hide the head whenever the camera is actually first-person for this local player.
+            boolean shouldHideHead = FirstPersonCompat.isLoaded()
+                    ? FirstPersonCompat.shouldHideHead()
+                    : CameraUtil.isFirstPerson(this);
             if (model2.allHeadBone() != null) {
-                model2.allHeadBone().setHidden(FirstPersonCompat.shouldHideHead());
+                model2.allHeadBone().setHidden(shouldHideHead);
             }
-            if (model2.viewLocatorBone() != null) {
-                FirstPersonCompat.setCameraDistance(model2.viewLocatorBone().getPivotY() * getWidthScale());
-            } else if (wasAnimEvaluated && !model2.headBones().isEmpty()) {
-                IBone bone = model2.headBones().get(model2.headBones().size() - 1);
-                FirstPersonCompat.setCameraDistance(bone == null ? 24.0f : bone.getPivotY() * getWidthScale());
+            if (FirstPersonCompat.isLoaded()) {
+                if (model2.viewLocatorBone() != null) {
+                    FirstPersonCompat.setCameraDistance(model2.viewLocatorBone().getPivotY() * getWidthScale());
+                } else if (wasAnimEvaluated && !model2.headBones().isEmpty()) {
+                    IBone bone = model2.headBones().get(model2.headBones().size() - 1);
+                    FirstPersonCompat.setCameraDistance(bone == null ? 24.0f : bone.getPivotY() * getWidthScale());
+                }
             }
         }
     }
@@ -179,7 +189,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
         super.resetHeadTracking(wasAnimEvaluated);
         AnimatedGeoModel model2 = getCurrentModel();
         if (model2 != null && isLocalPlayerModel()) {
-            if ((FirstPersonCompat.isLoaded() || BetterCombatCompat.isLoaded()) && model2.allHeadBone() != null) {
+            if (model2.allHeadBone() != null) {
                 model2.allHeadBone().setHidden(false);
             }
         }
