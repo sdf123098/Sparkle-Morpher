@@ -97,6 +97,11 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             this.uploaded = true;
             ResourceLifecycleStats.onTextureUploaded(modelId, width, height, sourceBytes);
             ModelMemoryProfiler.log("texture-uploaded", null);
+            // 源字节已上传到 GPU：立即释放堆中常驻的 byte[]（reload 走 doLoad 的 uploaded&&textureView 早返回，不再需要源数据）
+            if (this.data != null) {
+                this.data = null;
+                ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, sourceBytes);
+            }
         }
     }
 
