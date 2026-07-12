@@ -579,6 +579,28 @@ public class ClientModelManager {
 
         serverModels.clear();
 
+        // 断线/换服：释放过期服务端模型装配（含纹理源 byte[] 与 GPU/native 资源），
+        // 否则它们会被 modelAssemblyMap 强引用跨会话累积（主要内存泄漏源）。
+        // 保留 localModelContext（默认模型）与本地导入模型：reloadLocalModels 会重建后者。
+        if (!modelAssemblyMap.isEmpty()) {
+            Object2ReferenceOpenHashMap<String, ModelAssembly> snapshot = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+            Object2ReferenceOpenHashMap<String, ModelAssembly> survivors = new Object2ReferenceOpenHashMap<>();
+            ArrayList<ModelAssembly> toRelease = new ArrayList<>();
+            for (Map.Entry<String, ModelAssembly> entry : snapshot.entrySet()) {
+                String id = entry.getKey();
+                ModelAssembly asm = entry.getValue();
+                if (asm == localModelContext || localOnlyModelIds.contains(id) || "default".equals(id)) {
+                    survivors.put(id, asm);
+                } else {
+                    toRelease.add(asm);
+                }
+            }
+            modelAssemblyMap = survivors;
+            for (ModelAssembly asm : toRelease) {
+                releaseModelAssembly(asm);
+            }
+        }
+
         Map<String, ModelPackData> oldPreviews = modelPackMap;
         if (oldPreviews != null && !oldPreviews.isEmpty()) {
             for (ModelPackData preview : oldPreviews.values()) {
@@ -842,6 +864,45 @@ public class ClientModelManager {
             if (!removed.isEmpty()) {
                 forEachGuiWidget(guiWidget -> guiWidget.onModelsLoaded(map));
             }
+        });
+    }
+
+    /**
+     * 释放所有"服务器同步"而来的模型装配，仅保留仅本地导入模型（localOnlyModelIds）、
+     * 内建 default 模型以及当前本地模型上下文。会释放这些装配持有的纹理、音频、
+     * 原生模型句柄（nativeModelHandle）以及 GPU 网格，使客户端断开连接后内存回落到基线，
+     * 避免上一台服务器同步的模型在返回主菜单/进入无模组服务器后仍然常驻。
+     * <p>
+     * 重新加入模组服务器时会通过同步流程重新拉取模型；加入无模组服务器时本地模型仍可用。
+     */
+    public static void releaseServerSyncedModels(String reason) {
+        Minecraft.getInstance().execute(() -> {
+            Map<String, ModelAssembly> current = modelAssemblyMap;
+            if (current == null || current.isEmpty()) {
+                return;
+            }
+            Object2ReferenceOpenHashMap<String, ModelAssembly> retained = new Object2ReferenceOpenHashMap<>();
+            List<Pair<String, ModelAssembly>> released = new ArrayList<>();
+            for (Map.Entry<String, ModelAssembly> entry : current.entrySet()) {
+                String modelId = entry.getKey();
+                ModelAssembly assembly = entry.getValue();
+                if ("default".equals(modelId) || localOnlyModelIds.contains(modelId) || assembly == localModelContext) {
+                    retained.put(modelId, assembly);
+                } else {
+                    released.add(Pair.of(modelId, assembly));
+                }
+            }
+            if (released.isEmpty()) {
+                return;
+            }
+            modelAssemblyMap = retained;
+            for (Pair<String, ModelAssembly> pair : released) {
+                modelLastUsedAt.remove(pair.getLeft());
+                gpuCacheTrimmedModels.remove(pair.getLeft());
+                releaseModelAssembly(pair.getLeft(), pair.getRight());
+            }
+            ModelMemoryProfiler.log("server-models-released reason=" + reason + " count=" + released.size(), null);
+            forEachGuiWidget(guiWidget -> guiWidget.onModelsLoaded(retained));
         });
     }
 

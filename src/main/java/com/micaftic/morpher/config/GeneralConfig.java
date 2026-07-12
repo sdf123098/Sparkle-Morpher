@@ -162,7 +162,7 @@ public class GeneralConfig {
         builder.comment("Maximum decoded audio cache bytes retained on the client. 0 disables decoded audio caching.");
         AUDIO_CACHE_MAX_BYTES = builder.defineInRange("AudioCacheMaxBytes", 64 * 1024 * 1024, 0, 512 * 1024 * 1024);
         builder.comment("Maximum models whose GPU/native render caches stay resident. 0 disables LRU trimming.");
-        MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
+        MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 24, 0, 512);
         builder.comment("Minimum idle time before GPU/native render caches can be trimmed.");
         UNUSED_MODEL_TTL_SECONDS = builder.defineInRange("UnusedModelTtlSeconds", 300, 30, 86400);
         builder.pop();

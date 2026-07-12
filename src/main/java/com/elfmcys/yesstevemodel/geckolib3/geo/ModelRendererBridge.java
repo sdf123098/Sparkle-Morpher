@@ -262,9 +262,13 @@ public class ModelRendererBridge {
         float animSx = boneParams[pOffset + 6];
         float animSy = boneParams[pOffset + 7];
         float animSz = boneParams[pOffset + 8];
+        float unk1 = boneParams[pOffset + 9];
+        float unk2 = boneParams[pOffset + 10];
         float unk3 = boneParams[pOffset + 11];
 
         if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
+            isVisible = false;
+        } else if (unk1 == 1.0f || unk2 == 1.0f) {
             isVisible = false;
         }
 
@@ -337,7 +341,9 @@ public class ModelRendererBridge {
 
         if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
             isVisible = false;
-        }/* else if (unk1 == 1 || unk2 == 1) isVisible = false;*/
+        } else if (unk1 == 1.0f || unk2 == 1.0f) {
+            isVisible = false;
+        }
 
         localMat.translate(
                 (bone.pivotX - animTx) * 0.0625f,

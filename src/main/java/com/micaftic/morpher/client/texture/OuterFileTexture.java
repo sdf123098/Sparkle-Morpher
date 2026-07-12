@@ -61,6 +61,9 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             closed = false;
             ResourceLifecycleStats.onTextureUploaded(modelId, width, height, textureBytes.length);
             ModelMemoryProfiler.log("texture-uploaded", null);
+            // 源字节已上传到 GPU：立即释放堆中常驻的 byte[]（reload 时 doLoad 走 textureBytes==null 静默返回，不再需要源数据）
+            data = null;
+            ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, textureBytes.length);
         } catch (IOException e) {
             YesSteveModel.LOGGER.error("[SM] Failed to upload outer file texture", e);
         }
