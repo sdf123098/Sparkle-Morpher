@@ -2,6 +2,8 @@
 
 > [English](README.md) | [中文](README_zh.md) | **日本語** | [한국어](README_ko.md)
 
+**QQ:** 1104823534 | **Discord:** [Discordに参加](https://discord.gg/3KqK7USF39) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
+
 Minecraft 総合カスタムモデルローダー。プレイヤーにカスタムモデル、アニメーション、サウンドエフェクトを搭載——あのブロックキャラにさようなら。
 
 > これは**総合モデルローダー**です。現在 `.ysm` 形式（OpenYSM ベース、MIT ライセンス）と `.bbmodel` 形式（Blockbench）をサポートし、今後他の主流モデル形式への対応を予定しています。

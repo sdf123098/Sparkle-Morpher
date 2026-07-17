@@ -2,6 +2,8 @@
 
 > [English](README.md) | **中文** | [日本語](README_ja.md) | [한국어](README_ko.md)
 
+**QQ:** 1104823534 | **Discord:** [点此加入](https://discord.gg/3KqK7USF39) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **爱发电:** [Micaftic](https://afdian.com/a/Micaftic)
+
 Minecraft 综合自定义模型加载器，让玩家为角色挂载自定义模型、动画与音效——告别一成不变的方块小人。
 
 > 这是一个**综合模型加载器**：当前支持 `.ysm` 格式（基于 OpenYSM，MIT 许可）和 `.bbmodel` 格式（Blockbench），后续会陆续加入对其他主流模型格式的支持。
