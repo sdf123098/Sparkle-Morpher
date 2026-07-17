@@ -7,12 +7,9 @@ import net.minecraft.client.gui.screens.Screen;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 
 public class InputUtil {
-    private static final Field MINECRAFT_SCREEN_FIELD = findFieldByType(Minecraft.class, Screen.class);
     private static final Field MINECRAFT_MOUSE_HANDLER_FIELD = findFieldByType(Minecraft.class, MouseHandler.class);
-    private static final Method MINECRAFT_SET_SCREEN_METHOD = findSetScreenMethod();
 
     public static boolean isKeyPressed(int keyCode, int scanCode, KeyMapping keyMapping) {
         return KeyMappingFactory.isActiveAndMatches(keyMapping, keyCode, scanCode);
@@ -31,18 +28,14 @@ public class InputUtil {
     }
 
     public static Screen getCurrentScreen() {
-        Object value = getFieldValue(Minecraft.getInstance(), MINECRAFT_SCREEN_FIELD);
-        return value instanceof Screen screen ? screen : null;
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft == null ? null : minecraft.gui.screen();
     }
 
     public static void setScreen(Screen screen) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft == null || MINECRAFT_SET_SCREEN_METHOD == null) {
-            return;
-        }
-        try {
-            MINECRAFT_SET_SCREEN_METHOD.invoke(minecraft, screen);
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        if (minecraft != null) {
+            minecraft.gui.setScreen(screen);
         }
     }
 
@@ -73,29 +66,6 @@ public class InputUtil {
                 }
             }
             current = current.getSuperclass();
-        }
-        return null;
-    }
-
-    private static Method findSetScreenMethod() {
-        for (String name : new String[]{"setScreenAndShow", "setScreen"}) {
-            try {
-                Method method = Minecraft.class.getMethod(name, Screen.class);
-                method.setAccessible(true);
-                return method;
-            } catch (ReflectiveOperationException | RuntimeException ignored) {
-            }
-        }
-        for (Method method : Minecraft.class.getMethods()) {
-            Class<?>[] parameterTypes = method.getParameterTypes();
-            if (method.getReturnType() == Void.TYPE && parameterTypes.length == 1 && parameterTypes[0].isAssignableFrom(Screen.class)) {
-                try {
-                    method.setAccessible(true);
-                    return method;
-                } catch (RuntimeException ignored) {
-                    return null;
-                }
-            }
         }
         return null;
     }

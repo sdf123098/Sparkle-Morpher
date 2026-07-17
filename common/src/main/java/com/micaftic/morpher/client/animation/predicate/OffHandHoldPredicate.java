@@ -27,18 +27,16 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         if (event.getAnimatable().getModelAssembly().getAnimationBundle().getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
             return PlayState.STOP;
         }
-        if (!checkSwingAndUse(entity, InteractionHand.OFF_HAND)) {
-            return PlayState.PAUSE;
-        }
-        int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         ItemStack itemInHand = entity.getItemInHand(InteractionHand.OFF_HAND);
+        LivingEntityFrameState<?> frameState = ((LivingAnimatable) event.getAnimatable()).getPositionTracker();
+        if (!isSameItem(itemInHand, frameState, InteractionHand.OFF_HAND)) {
+            frameState.setHandItemsForAnimation(itemInHand, InteractionHand.OFF_HAND);
+            event.getController().stopTransition();
+        }
+        if (!checkSwingAndUse(entity, InteractionHand.OFF_HAND)) return PlayState.PAUSE;
+        int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         if (itemInHand.is(Items.CROSSBOW) && CrossbowItem.isCharged(itemInHand)) {
             return IAnimationPredicate.playAnimationWithValid(event, "hold_offhand:charged_crossbow", ILoopType.EDefaultLoopTypes.LOOP, i);
-        }
-        LivingEntityFrameState<?> c0675x43c72e02Mo1215x3cfc56ba = ((LivingAnimatable) event.getAnimatable()).getPositionTracker();
-        if (!isSameItem(itemInHand, c0675x43c72e02Mo1215x3cfc56ba, InteractionHand.OFF_HAND)) {
-            c0675x43c72e02Mo1215x3cfc56ba.setHandItemsForAnimation(itemInHand, InteractionHand.OFF_HAND);
-            event.getController().stopTransition();
         }
         ConditionHold conditionHold = event.getAnimatable().getModelConfig().getHoldOffhand();
         if (conditionHold != null) {

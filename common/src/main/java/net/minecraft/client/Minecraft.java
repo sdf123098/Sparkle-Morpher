@@ -14,6 +14,7 @@ public class Minecraft {
     public static void submit(Runnable r) { r.run(); }
     public int getFps() { return 60; }
     public Font font;
+    public net.minecraft.client.gui.Gui gui;
     public net.minecraft.client.MouseHandler mouseHandler;
     public net.minecraft.client.renderer.GameRenderer gameRenderer;
     public SoundManager getSoundManager() { return null; }

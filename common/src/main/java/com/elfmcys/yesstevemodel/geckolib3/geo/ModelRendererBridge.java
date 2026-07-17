@@ -89,7 +89,7 @@ public class ModelRendererBridge {
             // under STRICT_FALLBACK, or throw under CRASH_TEST). Does not change the
             // rendered path under LOG_MISMATCH.
             NativeSimdValidator.onNativeSimdRender(model, boneParams, renderPartMask, textureLocation);
-            nativeRenderModel(
+            boolean nativeRendered = nativeRenderModel(
                     buffer,
                     pose,
                     projectionModelViewMatrix,
@@ -104,6 +104,14 @@ public class ModelRendererBridge {
                     red, green, blue, alpha,
                     isPreview
             );
+            if (!nativeRendered) {
+                renderModel(
+                        buffer, pose, projectionModelViewMatrix,
+                        OptiFineDetector.isOptifinePresent(), model, boneParams, stateBuffer,
+                        textureIndex, renderPartMask, packedLight, packedOverlay,
+                        red, green, blue, alpha, isPreview, disableGlow
+                );
+            }
         } else {
             GpuDebugLog.verbose("entry rendered through Java model path texture={} nativeSimdPolicy={} vectorCfg={} vectorAvailable={} vectorReason={} translucent={} preview={} firstPerson={} compat={} disableGlow={}",
                     textureLocation, nativePolicy,
@@ -461,13 +469,13 @@ public class ModelRendererBridge {
     }
 
 
-    public static void nativeRenderModel( // TODO:
+    public static boolean nativeRenderModel(
             VertexConsumer vertexConsumer, PoseStack.Pose pose, Matrix4f projectionModelViewMatrix,
             boolean isCompatMode, GeoModel mesh, float[] boneVertex, float[] stateBuffer,
             int textureIndex, int renderPartMask, int packedLight, int packedOverlay,
             float r, float g, float b, float a, boolean isPreview) {
 
-        if (mesh.nativeModelHandle == 0) return;
+        if (!mesh.ensureNativeCache()) return false;
 
         // Phase 1.3: direct Native SIMD does not update stateBuffer. Run a targeted
         // Java prepass for locator bones (unk3 == 1.0F) so held-item / backpack /
@@ -489,6 +497,7 @@ public class ModelRendererBridge {
                 packedLight, packedOverlay,
                 r, g, b, a
         );
+        return true;
     }
 
     private static final class RenderScratch {

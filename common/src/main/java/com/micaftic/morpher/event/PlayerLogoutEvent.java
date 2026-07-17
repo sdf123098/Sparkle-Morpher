@@ -3,7 +3,6 @@ package com.micaftic.morpher.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.model.ServerModelManager;
-import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.util.PlayerDataSaveBridge;
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
 import com.micaftic.morpher.core.architectury.event.events.common.PlayerEvent;
@@ -18,9 +17,7 @@ public final class PlayerLogoutEvent {
             if (!YesSteveModel.isAvailable()) {
                 return;
             }
-            if (NetworkHandler.isPlayerConnected(player)) {
-                ServerModelManager.syncModelToPlayer(player.getUUID());
-            }
+            ServerModelManager.clearPlayerSyncState(player.getUUID());
             ModelInfoCapability.get(player).ifPresent(cap -> PlayerModelSelectionStore.saveCurrentSelection(player, cap));
             PlayerDataSaveBridge.save(player);
         });
