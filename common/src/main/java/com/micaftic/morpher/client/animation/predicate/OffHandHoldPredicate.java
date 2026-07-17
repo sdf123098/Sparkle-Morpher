@@ -9,6 +9,8 @@ import com.micaftic.morpher.geckolib3.core.enums.PlayState;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.LivingEntityFrameState;
 import com.micaftic.morpher.client.model.ModelActionProfile;
+import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -24,7 +26,9 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         if (entity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
             return PlayState.STOP;
         }
-        if (event.getAnimatable().getModelAssembly().getAnimationBundle().getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
+        ModelAssembly modelAssembly = event.getAnimatable().getModelAssembly();
+        PlayerModelBundle animationBundle = modelAssembly == null ? null : modelAssembly.getAnimationBundle();
+        if (animationBundle == null || animationBundle.getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
             return PlayState.STOP;
         }
         ItemStack itemInHand = entity.getItemInHand(InteractionHand.OFF_HAND);

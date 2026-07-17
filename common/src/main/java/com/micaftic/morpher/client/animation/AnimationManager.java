@@ -7,6 +7,8 @@ import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
 import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.model.ModelActionProfile;
+import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.enums.PlayState;
@@ -41,7 +43,9 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
         if (event.getAnimatable() instanceof IPreviewAnimatable) {
             return PlayState.STOP;
         }
-        if (event.getAnimatable().getModelAssembly().getAnimationBundle().getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
+        ModelAssembly modelAssembly = event.getAnimatable().getModelAssembly();
+        PlayerModelBundle animationBundle = modelAssembly == null ? null : modelAssembly.getAnimationBundle();
+        if (animationBundle == null || animationBundle.getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
             return PlayState.STOP;
         }
         if (ParcoolCompat.isPlayerParcooling(player)) {

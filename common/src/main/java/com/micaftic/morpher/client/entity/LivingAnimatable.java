@@ -214,7 +214,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
             return this.currentTextureName;
         }
         ModelAssembly modelAssembly = getModelAssembly();
-        if (modelAssembly != null && !modelAssembly.getAnimationBundle().getTextures().isEmpty()) {
+        if (modelAssembly != null && modelAssembly.getAnimationBundle() != null && !modelAssembly.getAnimationBundle().getTextures().isEmpty()) {
             return modelAssembly.getAnimationBundle().getTextures().getKeyAt(0);
         }
         return "";
