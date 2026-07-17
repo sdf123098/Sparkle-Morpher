@@ -10,6 +10,8 @@ import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
+import com.micaftic.morpher.geckolib3.core.keyframe.BoneAnimation;
+import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
 import net.minecraft.client.renderer.texture.AbstractTexture;
@@ -46,6 +48,8 @@ public class PlayerModelBundle {
 
     private final HandLocatorProfile handLocatorProfile;
 
+    private final boolean fallFlyingPitchHandledByAnimation;
+
     private final Consumer<CustomPlayerEntity> playerControllerInstaller;
 
     private final Consumer<PlayerGeoEntity> armControllerInstaller;
@@ -77,6 +81,7 @@ public class PlayerModelBundle {
         this.actionProfile = actionProfile;
         this.semanticSkeleton = semanticSkeleton;
         this.handLocatorProfile = handLocatorProfile;
+        this.fallFlyingPitchHandledByAnimation = detectsFallFlyingRootRotation(mainModel, mainAnimations);
         this.playerControllerInstaller = UnifiedPlayerActionController.buildControllers(this, modelResourceBundle);
         this.armControllerInstaller = FirstPersonArmAnimationController.buildControllers(this, modelResourceBundle);
         this.maidControllerInstaller = actionProfile == ModelActionProfile.VANILLA_HUMANOID ? null : TouhouLittleMaidCompat.buildControllers(this, modelResourceBundle);
@@ -146,6 +151,29 @@ public class PlayerModelBundle {
 
     public HandLocatorProfile getHandLocatorProfile() {
         return this.handLocatorProfile;
+    }
+
+    public boolean isFallFlyingPitchHandledByAnimation() {
+        return this.fallFlyingPitchHandledByAnimation;
+    }
+
+    private static boolean detectsFallFlyingRootRotation(GeoModel model, Object2ReferenceMap<String, Animation> animations) {
+        Animation animation = animations.get("elytra_fly");
+        if (animation == null || animation.isEmpty()) {
+            return false;
+        }
+        for (BoneAnimation boneAnimation : animation.boneAnimations) {
+            if (boneAnimation.rotationKeyFrames.isEmpty()) {
+                continue;
+            }
+            for (GeoBone bone : model.bones) {
+                if (bone.getName().equals(boneAnimation.boneName)
+                        && (bone.parentIdx < 0 || bone.parentName == null || bone.parentName.isEmpty())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public Consumer<CustomPlayerEntity> getPlayerControllerInstaller() {

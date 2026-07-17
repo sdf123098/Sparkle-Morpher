@@ -19,9 +19,10 @@ import org.jetbrains.annotations.NotNull;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 
 public class OuterFileTexture extends AbstractTexture implements ITextureMap {
-    private byte[] data;
+    private final byte[] data;
     private final String modelId;
 
     private Map<ShadersTextureType, OuterFileTexture> suffixTextures = Reference2ReferenceMaps.emptyMap();
@@ -34,7 +35,10 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     }
 
     public OuterFileTexture(byte[] data, String modelId) {
-        this.data = data;
+        this.data = Objects.requireNonNull(data, "Texture source data must not be null");
+        if (data.length == 0) {
+            throw new IllegalArgumentException("Texture source data must not be empty");
+        }
         this.modelId = modelId;
     }
 
@@ -50,9 +54,6 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
         NativeImage image = null;
         byte[] textureData = this.data;
         try {
-            if (textureData == null) {
-                throw new IOException("Texture source bytes were released");
-            }
             ModelMemoryProfiler.logBytes("texture-decode-start", null, textureData);
             image = NativeImage.read(new ByteArrayInputStream(textureData));
         } catch (IOException e) {
@@ -78,7 +79,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
         try (image) {
             int width = Math.max(1, image.getWidth());
             int height = Math.max(1, image.getHeight());
-            long sourceBytes = this.data == null ? 0L : this.data.length;
+            long sourceBytes = this.data.length;
             if (this.texture != null || this.textureView != null || this.sampler != null) {
                 super.close();
             }
@@ -95,13 +96,9 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             this.textureView = device.createTextureView(this.texture);
             device.createCommandEncoder().writeToTexture(this.texture, image);
             this.uploaded = true;
+            this.closed = false;
             ResourceLifecycleStats.onTextureUploaded(modelId, width, height, sourceBytes);
             ModelMemoryProfiler.log("texture-uploaded", null);
-            // 源字节已上传到 GPU：立即释放堆中常驻的 byte[]（reload 走 doLoad 的 uploaded&&textureView 早返回，不再需要源数据）
-            if (this.data != null) {
-                this.data = null;
-                ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, sourceBytes);
-            }
         }
     }
 
@@ -136,10 +133,9 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             }
         }
         this.suffixTextures = Reference2ReferenceMaps.emptyMap();
-        long retainedBytes = this.data == null ? 0L : this.data.length;
+        long retainedBytes = this.data.length;
         if (retainedBytes > 0L) {
             ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, retainedBytes);
-            this.data = null;
         }
     }
 

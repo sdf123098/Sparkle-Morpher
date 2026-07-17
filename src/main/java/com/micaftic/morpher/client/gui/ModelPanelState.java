@@ -25,6 +25,7 @@ final class ModelPanelState {
         GENERAL,
         RENDERING,
         PERFORMANCE,
+        CACHE,
         DEBUG,
         MISC
     }

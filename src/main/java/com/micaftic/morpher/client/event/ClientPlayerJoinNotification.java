@@ -62,12 +62,10 @@ public final class ClientPlayerJoinNotification {
     }
 
     private static void onPlayerQuit(LocalPlayer player) {
-        if (notified) {
-            notified = false;
-            if (!YesSteveModel.isAvailable()) {
-                return;
-            }
-            ClientModelManager.resetSync();
+        boolean reloadLocalModels = notified && YesSteveModel.isAvailable();
+        notified = false;
+        ClientModelManager.resetSync();
+        if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);
         }
     }

@@ -13,6 +13,7 @@ import com.micaftic.morpher.geckolib3.core.enums.PlayState;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.LivingEntityFrameState;
 import com.micaftic.morpher.client.model.ModelActionProfile;
+import com.micaftic.morpher.core.api.item.ToolActionBridge;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -32,11 +33,23 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         if (event.getAnimatable().getModelAssembly().getAnimationBundle().getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
             return PlayState.STOP;
         }
+        ItemStack mainHandItem = entity.getItemInHand(InteractionHand.MAIN_HAND);
+        LivingEntityFrameState<?> c0675x43c72e02Mo1215x3cfc56ba = ((LivingAnimatable) event.getAnimatable()).getPositionTracker();
+        boolean isFishing = entity instanceof Player player
+                && player.fishing != null
+                && !player.fishing.isRemoved()
+                && ToolActionBridge.canFishingRodCast(mainHandItem);
+        if (c0675x43c72e02Mo1215x3cfc56ba.updateFishingForAnimation(isFishing)) {
+            event.getController().stopTransition();
+        }
+        if (!isSameItem(mainHandItem, c0675x43c72e02Mo1215x3cfc56ba, InteractionHand.MAIN_HAND)) {
+            c0675x43c72e02Mo1215x3cfc56ba.setHandItemsForAnimation(mainHandItem, InteractionHand.MAIN_HAND);
+            event.getController().stopTransition();
+        }
         if (!checkSwingAndUse(entity, InteractionHand.MAIN_HAND)) {
             return PlayState.PAUSE;
         }
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
-        ItemStack mainHandItem = entity.getItemInHand(InteractionHand.MAIN_HAND);
         PlayState playState = TacCompat.handleGunHoldAnimState(mainHandItem, event);
         if (playState != null) {
             return playState;
@@ -48,15 +61,9 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         if (mainHandItem.is(Items.CROSSBOW) && CrossbowItem.isCharged(mainHandItem)) {
             return IAnimationPredicate.playAnimationWithValid(event, "hold_mainhand:charged_crossbow", ILoopType.EDefaultLoopTypes.LOOP, i);
         }
-        boolean isFishing = (entity instanceof Player) && ((Player) entity).fishing != null;
         boolean flag = TouhouLittleMaidCompat.isMaidSitting(entity);
         if (isFishing || flag) {
             return IAnimationPredicate.playAnimationWithValid(event, "hold_mainhand:fishing", ILoopType.EDefaultLoopTypes.LOOP, i);
-        }
-        LivingEntityFrameState<?> c0675x43c72e02Mo1215x3cfc56ba = ((LivingAnimatable) event.getAnimatable()).getPositionTracker();
-        if (!isSameItem(mainHandItem, c0675x43c72e02Mo1215x3cfc56ba, InteractionHand.MAIN_HAND)) {
-            c0675x43c72e02Mo1215x3cfc56ba.setHandItemsForAnimation(mainHandItem, InteractionHand.MAIN_HAND);
-            event.getController().stopTransition();
         }
         ConditionHold conditionHold = event.getAnimatable().getModelConfig().getHoldMainhand();
         if (conditionHold != null) {

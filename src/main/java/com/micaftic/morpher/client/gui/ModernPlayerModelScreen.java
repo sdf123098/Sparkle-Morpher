@@ -113,6 +113,7 @@ public class ModernPlayerModelScreen extends Screen {
     private boolean draggingResourceScroll;
     private String previewModelId = "";
     private String previewTextureId = "";
+    private String pendingModelApplyId;
 
     private enum IconGlyph {
         MODEL(0, 0),
@@ -262,6 +263,16 @@ public class ModernPlayerModelScreen extends Screen {
         super.tick();
         ResourceDownloadManager.tick();
         pollImports();
+        if (this.pendingModelApplyId != null) {
+            String pendingId = this.pendingModelApplyId;
+            ClientModelManager.getModelContext(pendingId).ifPresent(assembly -> {
+                this.pendingModelApplyId = null;
+                if (pendingId.equals(STATE.selectedModelId)) {
+                    STATE.selectedTextureId = selectedTextureOrDefault(assembly);
+                    applyModelAndTexture(pendingId, STATE.selectedTextureId, assembly);
+                }
+            });
+        }
         if (this.modelSearchBox != null && !Objects.equals(STATE.modelSearchText, this.modelSearchBox.getValue())) {
             STATE.modelSearchText = this.modelSearchBox.getValue();
             STATE.modelScroll = 0;
@@ -892,6 +903,7 @@ public class ModernPlayerModelScreen extends Screen {
             case GENERAL -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.general");
             case RENDERING -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.rendering");
             case PERFORMANCE -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.performance");
+            case CACHE -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.cache");
             case DEBUG -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.debug");
             case MISC -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.misc");
         };
@@ -1261,13 +1273,19 @@ public class ModernPlayerModelScreen extends Screen {
             return;
         }
         STATE.selectedModelId = entry.modelId();
-        ModelAssembly assembly = ClientModelManager.getModelAssemblyMap().get(entry.modelId());
+        if (entry.locked()) {
+            setStatus(Component.translatable("message.sparkle_morpher.model.need_auth"), ChatFormatting.YELLOW);
+            return;
+        }
+        ModelAssembly assembly = ClientModelManager.getModelContext(entry.modelId()).orElse(null);
+        if (assembly == null) {
+            this.pendingModelApplyId = entry.modelId();
+            setStatus(Component.translatable("gui.sparkle_morpher.sync_hint.loading"), ChatFormatting.YELLOW);
+            return;
+        }
+        this.pendingModelApplyId = null;
         if (assembly != null) {
             STATE.selectedTextureId = selectedTextureOrDefault(assembly);
-            if (entry.locked()) {
-                setStatus(Component.translatable("message.sparkle_morpher.model.need_auth"), ChatFormatting.YELLOW);
-                return;
-            }
             applyModelAndTexture(entry.modelId(), STATE.selectedTextureId, assembly);
         }
     }
@@ -1629,8 +1647,9 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(nativeSimdPolicyRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(nativeSimdValidationRow(ModelPanelState.SettingGroup.DEBUG));
         rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));
-        rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
-        rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
+        rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
+        rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.cpu_cache_limit", GeneralConfig.MAX_RESIDENT_CPU_MODELS, 1, 512, 1, ""));
+        rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.enable_global_bandwidth_limit", ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.bandwidth_limit", ServerConfig.BANDWIDTH_LIMIT, 1, 999, 10, "Mbps"));
         rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.resource_monitor_log", GeneralConfig.RESOURCE_STATION_MONITOR_LOG));
@@ -1781,7 +1800,7 @@ public class ModernPlayerModelScreen extends Screen {
         if (STATE.selectedModelId == null || STATE.selectedModelId.isBlank()) {
             return null;
         }
-        return ClientModelManager.getModelAssemblyMap().get(STATE.selectedModelId);
+        return ClientModelManager.getModelContext(STATE.selectedModelId).orElse(null);
     }
 
     private ModelRepoEntry selectedResource() {
@@ -1851,7 +1870,9 @@ public class ModernPlayerModelScreen extends Screen {
         if (assembly.getTextureRegistry().isAuthModel()) {
             parts.add("auth");
         }
-        parts.add(assembly.getAnimationBundle().getTextures().size() + " tex");
+        if (assembly.isRuntimeResident()) {
+            parts.add(assembly.getAnimationBundle().getTextures().size() + " tex");
+        }
         return String.join(" | ", parts);
     }
 

@@ -161,13 +161,13 @@ public final class NeoForgeClientEventBridge {
     }
 
     @SubscribeEvent
-    public static void onRenderArm(RenderArmEvent event) {
+    public static void onRenderArm(RenderArmEvent<?> event) {
         if (ReplacePlayerHandRenderEvent.onRenderArm(
-                event.getPlayer(),
+                Minecraft.getInstance().player,
                 event.getArm(),
                 event.getPoseStack(),
                 event.getSubmitNodeCollector(),
-                event.getPackedLight()
+                event.getLightCoords()
         )) {
             event.setCanceled(true);
         }

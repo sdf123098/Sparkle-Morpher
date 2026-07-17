@@ -69,14 +69,14 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 if (StringUtils.isNoneBlank(str2)) {
                     debugSwingSelection(event, livingEntity, swingingHand, str2, hasLocalSwingPulse ? "local-condition" : "condition");
                     applyLanceSwingTickOverride(event, livingEntity, swingingHand);
-                    return IAnimationPredicate.playAnimationWithValid(event, str2, ILoopType.EDefaultLoopTypes.PLAY_ONCE, i);
+                    return IAnimationPredicate.playAnimationWithLoop(event, str2, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
                 }
             }
             String fallback = getFallbackSwingAnimation(event, livingEntity, swingingHand);
             if (fallback != null) {
                 debugSwingSelection(event, livingEntity, swingingHand, fallback, hasLocalSwingPulse ? "local-fallback" : "fallback");
                 applyLanceSwingTickOverride(event, livingEntity, swingingHand);
-                return IAnimationPredicate.playAnimationWithValid(event, fallback, ILoopType.EDefaultLoopTypes.PLAY_ONCE, i);
+                return IAnimationPredicate.playAnimationWithLoop(event, fallback, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
             }
             debugSwingSelection(event, livingEntity, swingingHand, "none", hasLocalSwingPulse ? "local-missing" : "missing");
         }
@@ -85,13 +85,8 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
 
     private static boolean shouldStartSwingAnimation(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
         if (hasLocalSwingPulse) {
-            // The local swing pulse is recorded during InputStateKey.tick(), which also bumps
-            // swingPulseAge to 2 in the same call (tickAttackKey sets age=1, the pulse-decrement
-            // block then increments it). Accept age<=2 (matching 1.21.1) and fall back to the
-            // vanilla swing signal so the attack animation reliably starts even when the pulse
-            // tick ordering races ahead of the render. Without this, YSM-authored models never
-            // play their swing animation in first-/third-person on 26.1.x.
-            boolean pulseJustStarted = InputStateKey.getLocalSwingPulseAge() <= 2;
+            boolean pulseJustStarted = event.getAnimatable().getPositionTracker()
+                    .markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
             boolean vanillaJustStarted = entity.swingTime == 0 && entity.swinging;
             return (pulseJustStarted || vanillaJustStarted)
                     && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);

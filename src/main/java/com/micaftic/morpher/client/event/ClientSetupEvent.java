@@ -10,6 +10,7 @@ import com.micaftic.morpher.client.input.ExtraPlayerRenderKey;
 import com.micaftic.morpher.client.input.PlayerModelToggleKey;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
 import com.micaftic.morpher.core.architectury.registry.client.keymappings.KeyMappingRegistry;
+import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
@@ -51,6 +52,14 @@ public final class ClientSetupEvent {
     }
 
     public static Object nativeClientInit() {
+        // Minecraft 26.2 can run on a Vulkan device without creating an OpenGL
+        // context. Calling any LWJGL GL entry point in that situation aborts the
+        // JVM in native code before Java has a chance to catch an exception.
+        if (!SmGraphicsBackendDetector.isRawOpenGlAllowed()) {
+            YesSteveModel.LOGGER.info("Skipping legacy OpenGL capability probe: backend={} ({})",
+                    SmGraphicsBackendDetector.currentBackend(), SmGraphicsBackendDetector.reason());
+            return null;
+        }
         try {
             int maxTexSize = GL11.glGetInteger(GL11.GL_MAX_TEXTURE_SIZE);
             if (maxTexSize <= 0) {
