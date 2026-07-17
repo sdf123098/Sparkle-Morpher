@@ -109,7 +109,9 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
                 poseStack.translate((-bedOrientation.getStepX()) * eyeHeight, 0.0f, (-bedOrientation.getStepZ()) * eyeHeight);
             }
             boolean previousFallFlyingPitchState = this.fallFlyingPitchHandledByAnimation;
-            this.fallFlyingPitchHandledByAnimation = t.getModelAssembly().getAnimationBundle().isFallFlyingPitchHandledByAnimation();
+            this.fallFlyingPitchHandledByAnimation = t.getModelAssembly() != null
+                    && t.getModelAssembly().getAnimationBundle() != null
+                    && t.getModelAssembly().getAnimationBundle().isFallFlyingPitchHandledByAnimation();
             try {
                 setupRotations(entity, poseStack, modelData.lerpedAge, modelData.lerpBodyRot, partialTick);
             } finally {
