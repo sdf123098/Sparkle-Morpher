@@ -5,6 +5,8 @@ import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.animation.condition.ConditionUse;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelActionProfile;
+import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.enums.PlayState;
@@ -21,7 +23,9 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
         if (livingEntity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
             return PlayState.STOP;
         }
-        if (event.getAnimatable().getModelAssembly().getAnimationBundle().getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
+        ModelAssembly modelAssembly = event.getAnimatable().getModelAssembly();
+        PlayerModelBundle animationBundle = modelAssembly == null ? null : modelAssembly.getAnimationBundle();
+        if (animationBundle == null || animationBundle.getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
             return PlayState.STOP;
         }
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();

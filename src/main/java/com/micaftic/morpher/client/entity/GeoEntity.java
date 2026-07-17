@@ -205,7 +205,10 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
     }
 
     public boolean isModelReady() {
-        return this.renderShape != null && !this.renderShape.isDefault && this.renderShape.isValid();
+        return this.renderShape != null
+                && !this.renderShape.isDefault
+                && this.renderShape.context.isRuntimeResident()
+                && this.renderShape.isValid();
     }
 
     @Override
@@ -265,6 +268,12 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
     @Nullable
     public AnimationEvent<?> processAnimationImpl(float partialTick, boolean isFirstPerson) {
         RenderSystem.assertOnRenderThread();
+        if (!isModelReady()) {
+            if (this.modelFuture != null) {
+                awaitAsyncResult();
+            }
+            return null;
+        }
         boolean isGuiPreview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
         if (!isGuiPreview && this.modelFuture != null) {
             AnimationEvent<?> event = awaitAsyncResult();
