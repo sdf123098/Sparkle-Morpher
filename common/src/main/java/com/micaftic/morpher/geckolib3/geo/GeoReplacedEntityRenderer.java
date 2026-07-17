@@ -55,6 +55,8 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
 
     private IRenderCycle currentModelRenderCycle = EModelRenderCycle.INITIAL;
 
+    private boolean fallFlyingPitchHandledByAnimation;
+
     public GeoReplacedEntityRenderer(EntityRendererProvider.Context context) {
         super(context, new PlayerModel(context.bakeLayer(ModelLayers.PLAYER_SLIM), true), 0.5f);
         this.rtb = null;
@@ -104,7 +106,13 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
                 float eyeHeight = entity.getEyeHeight(Pose.STANDING) - 0.1f;
                 poseStack.translate((-bedOrientation.getStepX()) * eyeHeight, 0.0f, (-bedOrientation.getStepZ()) * eyeHeight);
             }
-            setupRotations(entity, poseStack, modelData.lerpedAge, modelData.lerpBodyRot, partialTick);
+            boolean previousFallFlyingPitchState = this.fallFlyingPitchHandledByAnimation;
+            this.fallFlyingPitchHandledByAnimation = t.getModelAssembly().getAnimationBundle().isFallFlyingPitchHandledByAnimation();
+            try {
+                setupRotations(entity, poseStack, modelData.lerpedAge, modelData.lerpBodyRot, partialTick);
+            } finally {
+                this.fallFlyingPitchHandledByAnimation = previousFallFlyingPitchState;
+            }
             if (t.getEntity().getVehicle() != null) {
                 Entity vehicle = t.getEntity().getVehicle();
                 VehicleCapability.get(vehicle).ifPresent(cap -> {
@@ -181,7 +189,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         } else {
             poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
             if (tentity.isFallFlying()) {
-                applyFallFlyingRotation(tentity, poseStack, partialTicks, zIsAutoSpinAttack);
+                applyFallFlyingRotation(tentity, poseStack, partialTicks, zIsAutoSpinAttack, this.fallFlyingPitchHandledByAnimation);
             }
         }
         if (t > 0) {
@@ -192,10 +200,10 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         }
     }
 
-    private static void applyFallFlyingRotation(LivingEntity entity, PoseStack poseStack, float partialTicks, boolean autoSpinAttack) {
+    private static void applyFallFlyingRotation(LivingEntity entity, PoseStack poseStack, float partialTicks, boolean autoSpinAttack, boolean animationHandlesPitch) {
         float ticks = (float) entity.getFallFlyingTicks() + partialTicks;
         float progress = Mth.clamp(ticks * ticks / 100.0f, 0.0f, 1.0f);
-        if (!autoSpinAttack) {
+        if (!autoSpinAttack && !animationHandlesPitch) {
             poseStack.mulPose(Axis.XP.rotationDegrees(progress * (-90.0f - entity.getXRot())));
         }
         Vec3 view = entity.getViewVector(partialTicks);

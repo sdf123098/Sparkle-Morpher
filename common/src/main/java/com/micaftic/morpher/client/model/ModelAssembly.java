@@ -12,19 +12,19 @@ import java.util.Map;
 
 public class ModelAssembly {
 
-    private final PlayerModelBundle animationBundle;
+    private volatile PlayerModelBundle animationBundle;
 
-    private final Map<Identifier, ProjectileModelBundle> projectileModels;
+    private volatile Map<Identifier, ProjectileModelBundle> projectileModels;
 
-    private final Map<Identifier, VehicleModelBundle> vehicleModels;
+    private volatile Map<Identifier, VehicleModelBundle> vehicleModels;
 
-    private final ModelResourceBundle expressionCache;
+    private volatile ModelResourceBundle expressionCache;
 
     private final ServerModelInfo modelData;
 
     private final ModelDisplayAssets textureRegistry;
 
-    private final List<AbstractTexture> textures;
+    private volatile List<AbstractTexture> textures;
 
     public ModelAssembly(PlayerModelBundle animationBundle, Map<Identifier, ProjectileModelBundle> projectileModels, Map<Identifier, VehicleModelBundle> vehicleModels, ModelResourceBundle expressionCache, ServerModelInfo modelData, ModelDisplayAssets textureRegistry, List<AbstractTexture> list) {
         this.animationBundle = animationBundle;
@@ -62,6 +62,19 @@ public class ModelAssembly {
 
     public ModelDisplayAssets getTextureRegistry() {
         return this.textureRegistry;
+    }
+
+    public boolean isRuntimeResident() {
+        return animationBundle != null && expressionCache != null;
+    }
+
+    public synchronized void unloadRuntime() {
+        animationBundle = null;
+        projectileModels = null;
+        vehicleModels = null;
+        expressionCache = null;
+        textures = List.of();
+        textureRegistry.clearTextureReferences();
     }
 
     public String getDisplayName(String str) {

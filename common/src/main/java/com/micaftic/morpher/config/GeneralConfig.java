@@ -65,8 +65,6 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue WARN_REPEATED_ANIMATION_EVALUATION;
 
-    public static ModConfigSpec.BooleanValue RELEASE_TEXTURE_BYTES_AFTER_UPLOAD;
-
     public static ModConfigSpec.BooleanValue RESOURCE_STATION_MONITOR_LOG;
 
     public static ModConfigSpec.BooleanValue NETWORK_ONLINE_DEBUG_LOG;
@@ -76,6 +74,8 @@ public class GeneralConfig {
     public static ModConfigSpec.BooleanValue GPU_DEBUG_VERBOSE_LOG;
 
     public static ModConfigSpec.IntValue MAX_CACHED_GPU_MODELS;
+
+    public static ModConfigSpec.IntValue MAX_RESIDENT_CPU_MODELS;
 
     public static ModConfigSpec.IntValue UNUSED_MODEL_TTL_SECONDS;
 
@@ -210,8 +210,6 @@ public class GeneralConfig {
         EXPERIMENTAL_JAVA_VECTOR_RENDERER = builder.define("ExperimentalJavaVectorRenderer", false);
         builder.comment("Print [SM-NATIVE-COMPAT] diagnostics when a model uses Native SIMD compatibility culling safeguards. Intended for model troubleshooting only.");
         NATIVE_SIMD_COMPATIBILITY_LOG = builder.define("NativeSimdCompatibilityLog", false);
-        builder.comment("Release original texture byte arrays after successful GPU upload. Disable if resource reloads need to re-decode outer textures.");
-        RELEASE_TEXTURE_BYTES_AFTER_UPLOAD = builder.define("ReleaseTextureBytesAfterUpload", false);
         builder.comment("Print detailed [SM-RESOURCE] logs for resource station listing, HTTP, preview, and download diagnostics.");
         RESOURCE_STATION_MONITOR_LOG = builder.define("ResourceStationMonitorLog", false);
         builder.comment("Print detailed client/server online model sync diagnostics. Default off.");
@@ -221,10 +219,12 @@ public class GeneralConfig {
         builder.comment("Print verbose per-draw [SM-GPU] diagnostics. Requires GpuDebugLog and may be noisy.");
         GPU_DEBUG_VERBOSE_LOG = builder.define("GpuDebugVerboseLog", false);
         builder.comment("Maximum client models allowed to keep GPU/native render caches. 0 disables LRU unloading.");
-        MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
+       MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
+        builder.comment("Maximum server models whose CPU geometry and animation data stay resident. Idle models reload from the local cache when used again.");
+        MAX_RESIDENT_CPU_MODELS = builder.defineInRange("MaxResidentCpuModels", 24, 1, 512);
         builder.comment("Minimum idle time before an unused client model GPU/native cache can be unloaded by LRU.");
         UNUSED_MODEL_TTL_SECONDS = builder.defineInRange("UnusedModelTtlSeconds", 300, 30, 86400);
-        builder.comment("Maximum decoded audio cache bytes per model. 0 disables decoded audio caching.");
+        builder.comment("Maximum decoded audio cache bytes across all client models. 0 disables decoded audio caching.");
         AUDIO_CACHE_MAX_BYTES = builder.defineInRange("AudioCacheMaxBytes", 64 * 1024 * 1024, 0, 512 * 1024 * 1024);
         builder.pop();
     }

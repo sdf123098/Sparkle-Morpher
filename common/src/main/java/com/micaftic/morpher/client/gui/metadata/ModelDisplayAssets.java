@@ -11,9 +11,9 @@ public class ModelDisplayAssets {
 
     private boolean isAuthModel;
 
-    private final Map<String, OuterFileTexture> authorAvatars;
+    private volatile Map<String, OuterFileTexture> authorAvatars;
 
-    private final Map<String, AbstractTexture> guiTextures;
+    private volatile Map<String, AbstractTexture> guiTextures;
 
     public ModelDisplayAssets(String selectedTexture, boolean isAuth, Map<String, OuterFileTexture> authorAvatars, Map<String, AbstractTexture> guiTextures) {
         this.selectedTexture = selectedTexture;
@@ -46,5 +46,10 @@ public class ModelDisplayAssets {
     @Nullable
     public AbstractTexture getGuiBackground() {
         return this.guiTextures.get("gui_background");
+    }
+
+    public synchronized void clearTextureReferences() {
+        this.authorAvatars = Map.of();
+        this.guiTextures = Map.of();
     }
 }

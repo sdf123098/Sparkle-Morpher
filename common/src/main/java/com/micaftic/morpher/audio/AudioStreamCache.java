@@ -1,18 +1,14 @@
 package com.micaftic.morpher.audio;
 
-import com.micaftic.morpher.ResourceCleanupHelper;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
-import net.minecraft.client.Minecraft;
-import java.util.concurrent.Executor;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.UnsupportedAudioFileException;
 import java.io.IOException;
-import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,25 +16,23 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class AudioStreamCache {
 
-    private static final IdentityHashMap<ModelAssembly, WeakReference<CachedAudioStreamProvider>> providerCache = new IdentityHashMap<>();
+    private static final IdentityHashMap<ModelAssembly, CachedAudioStreamProvider> providerCache = new IdentityHashMap<>();
 
     private static final Object LOCK = new Object();
 
+    private static final AtomicLong globalCachedBytes = new AtomicLong();
+
     public static IAudioStreamProvider getOrCreateProvider(ModelAssembly renderContext) {
-        CachedAudioStreamProvider existingProvider;
         RenderSystem.assertOnRenderThread();
-        WeakReference<CachedAudioStreamProvider> weakReference = providerCache.get(renderContext);
-        if (weakReference != null && (existingProvider = weakReference.get()) != null) {
-            return existingProvider;
+        synchronized (LOCK) {
+            CachedAudioStreamProvider existingProvider = providerCache.get(renderContext);
+            if (existingProvider != null) {
+                return existingProvider;
+            }
+            CachedAudioStreamProvider newProvider = new CachedAudioStreamProvider();
+            providerCache.put(renderContext, newProvider);
+            return newProvider;
         }
-        CachedAudioStreamProvider newProvider = new CachedAudioStreamProvider();
-        ResourceCleanupHelper.registerCleanup(newProvider, renderContext, it -> {
-            ((Executor) Minecraft.getInstance()).execute(() -> {
-                providerCache.remove(it);
-            });
-        });
-        providerCache.put(renderContext, new WeakReference<>(newProvider));
-        return newProvider;
     }
 
     public static void clearForModel(ModelAssembly renderContext) {
@@ -46,8 +40,7 @@ public class AudioStreamCache {
             return;
         }
         synchronized (LOCK) {
-            WeakReference<CachedAudioStreamProvider> weakReference = providerCache.remove(renderContext);
-            CachedAudioStreamProvider provider = weakReference == null ? null : weakReference.get();
+            CachedAudioStreamProvider provider = providerCache.remove(renderContext);
             if (provider != null) {
                 provider.clear("model evicted");
             }
@@ -56,11 +49,8 @@ public class AudioStreamCache {
 
     public static void clearAll(String reason) {
         synchronized (LOCK) {
-            for (WeakReference<CachedAudioStreamProvider> weakReference : providerCache.values()) {
-                CachedAudioStreamProvider provider = weakReference == null ? null : weakReference.get();
-                if (provider != null) {
-                    provider.clear(reason);
-                }
+            for (CachedAudioStreamProvider provider : providerCache.values()) {
+                provider.clear(reason);
             }
             providerCache.clear();
         }
@@ -78,18 +68,28 @@ public class AudioStreamCache {
         }
 
         public void cacheAudioData(AudioTrackData trackData, ByteBuffer byteBuffer, IntArrayList intArrayList) {
-            int byteSize = byteBuffer == null ? 0 : byteBuffer.remaining();
-            if (byteSize <= 0 || maxCacheBytes() <= 0 || byteSize > maxCacheBytes()) {
+            int byteSize = retainedBytes(byteBuffer, intArrayList);
+            long budget = maxCacheBytes();
+            if (budget <= 0) {
+                clearAll("audio cache disabled");
                 this.pendingTracks.remove(trackData);
                 return;
             }
-            CachedAudioEntry previous = this.cachedEntries.put(trackData, new CachedAudioEntry(byteBuffer, new AudioFormat(trackData.getSampleRate(), 16, 1, true, false), intArrayList, byteSize, System.currentTimeMillis()));
-            if (previous != null) {
-                this.cachedBytes.addAndGet(-previous.byteSize);
+            if (byteSize <= 0 || byteSize > budget) {
+                this.pendingTracks.remove(trackData);
+                return;
             }
-            this.cachedBytes.addAndGet(byteSize);
-            ResourceLifecycleStats.onAudioTrackCached(null, byteSize);
-            trimToBudget();
+            synchronized (LOCK) {
+                CachedAudioEntry previous = this.cachedEntries.put(trackData, new CachedAudioEntry(byteBuffer, new AudioFormat(trackData.getSampleRate(), 16, 1, true, false), intArrayList, byteSize, System.currentTimeMillis()));
+                if (previous != null) {
+                    this.cachedBytes.addAndGet(-previous.byteSize);
+                    releaseBytes(previous.byteSize);
+                }
+                this.cachedBytes.addAndGet(byteSize);
+                globalCachedBytes.addAndGet(byteSize);
+                ResourceLifecycleStats.onAudioTrackCached(null, byteSize);
+                trimToBudget();
+            }
             this.pendingTracks.remove(trackData);
         }
 
@@ -126,37 +126,47 @@ public class AudioStreamCache {
         }
 
         public void clear(String reason) {
-            long released = 0L;
-            for (CachedAudioEntry entry : this.cachedEntries.values()) {
-                released += entry.byteSize;
-            }
-            this.cachedEntries.clear();
-            this.pendingTracks.clear();
-            this.cachedBytes.set(0L);
-            if (released > 0L) {
-                ResourceLifecycleStats.onAudioTrackReleased(null, released);
+            synchronized (LOCK) {
+                this.cachedEntries.clear();
+                this.pendingTracks.clear();
+                releaseBytes(this.cachedBytes.getAndSet(0L));
             }
         }
 
         private void trimToBudget() {
             long budget = maxCacheBytes();
-            while (budget > 0 && this.cachedBytes.get() > budget) {
+            while (globalCachedBytes.get() > budget) {
+                CachedAudioStreamProvider oldestProvider = null;
                 AudioTrackData oldestKey = null;
                 CachedAudioEntry oldestEntry = null;
-                for (var entry : this.cachedEntries.entrySet()) {
-                    if (oldestEntry == null || entry.getValue().lastUsedAt < oldestEntry.lastUsedAt) {
-                        oldestKey = entry.getKey();
-                        oldestEntry = entry.getValue();
+                for (CachedAudioStreamProvider provider : providerCache.values()) {
+                    for (var entry : provider.cachedEntries.entrySet()) {
+                        if (oldestEntry == null || entry.getValue().lastUsedAt < oldestEntry.lastUsedAt) {
+                            oldestProvider = provider;
+                            oldestKey = entry.getKey();
+                            oldestEntry = entry.getValue();
+                        }
                     }
                 }
-                if (oldestKey == null || oldestEntry == null) {
+                if (oldestProvider == null || oldestKey == null || oldestEntry == null) {
                     return;
                 }
-                if (this.cachedEntries.remove(oldestKey, oldestEntry)) {
-                    this.cachedBytes.addAndGet(-oldestEntry.byteSize);
-                    ResourceLifecycleStats.onAudioTrackReleased(null, oldestEntry.byteSize);
+                if (oldestProvider.cachedEntries.remove(oldestKey, oldestEntry)) {
+                    oldestProvider.cachedBytes.addAndGet(-oldestEntry.byteSize);
+                    releaseBytes(oldestEntry.byteSize);
                 }
             }
+        }
+
+        private static int retainedBytes(ByteBuffer byteBuffer, IntArrayList seekPositions) {
+            if (byteBuffer == null) {
+                return 0;
+            }
+            long bytes = byteBuffer.capacity();
+            if (seekPositions != null) {
+                bytes += (long) seekPositions.size() * Integer.BYTES;
+            }
+            return (int) Math.min(Integer.MAX_VALUE, bytes);
         }
 
         private static int maxCacheBytes() {
@@ -182,5 +192,13 @@ public class AudioStreamCache {
                 this.lastUsedAt = lastUsedAt;
             }
         }
+    }
+
+    private static void releaseBytes(long released) {
+        if (released <= 0L) {
+            return;
+        }
+        globalCachedBytes.addAndGet(-released);
+        ResourceLifecycleStats.onAudioTrackReleased(null, released);
     }
 }

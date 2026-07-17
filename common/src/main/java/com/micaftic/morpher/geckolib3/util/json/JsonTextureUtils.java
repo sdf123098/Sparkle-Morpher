@@ -52,14 +52,17 @@ public class JsonTextureUtils {
                 String uvPath = jsonObj.get("uv").getAsString();
                 String name = extractTextureName(uvPath);
                 OuterFileTexture texture = createTexture(resource.get(uvPath));
+                if (texture == null) return null;
                 Map<ShadersTextureType, OuterFileTexture> fbo = new HashMap<>();
                 if (jsonObj.has("normal")) {
                     String normalPath = jsonObj.get("normal").getAsString();
-                    fbo.put(ShadersTextureType.NORMAL, createTexture(resource.get(normalPath)));
+                    OuterFileTexture normal = createTexture(resource.get(normalPath));
+                    if (normal != null) fbo.put(ShadersTextureType.NORMAL, normal);
                 }
                 if (jsonObj.has("specular")) {
                     String specularPath = jsonObj.get("specular").getAsString();
-                    fbo.put(ShadersTextureType.SPECULAR, createTexture(resource.get(specularPath)));
+                    OuterFileTexture specular = createTexture(resource.get(specularPath));
+                    if (specular != null) fbo.put(ShadersTextureType.SPECULAR, specular);
                 }
                 texture.setSuffixTextures(fbo);
 
@@ -68,14 +71,16 @@ public class JsonTextureUtils {
         } else if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
             String texPath = element.getAsString();
             String name = extractTextureName(texPath);
-            return Pair.of(name, createTexture(resource.get(texPath)));
+            OuterFileTexture texture = createTexture(resource.get(texPath));
+            return texture == null ? null : Pair.of(name, texture);
         }
 
         return null;
     }
 
+    @Nullable
     private static OuterFileTexture createTexture(byte[] data) {
-        return new OuterFileTexture(data == null ? null : YSMClientMapper.toPng(data, 0, 0, 0));
+        return data == null || data.length == 0 ? null : new OuterFileTexture(YSMClientMapper.toPng(data, 0, 0, 0));
     }
 
     private static String extractTextureName(String path) {

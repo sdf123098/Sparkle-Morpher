@@ -59,7 +59,6 @@ import com.micaftic.morpher.core.security.YSMClientCache;
 import com.micaftic.morpher.core.security.YsmCrypt;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -69,6 +68,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -81,6 +81,8 @@ public class ClientModelManager {
     private static byte[] clientKey;
     private static String currentCacheFolderName;
     private static final AtomicInteger pendingModelsCount = new AtomicInteger(0);
+    private static final AtomicBoolean syncCompletionScheduled = new AtomicBoolean(false);
+    private static volatile boolean syncManifestProcessed = false;
 
     // ---- 同步超时看门狗 ----
     // 记录最近一次同步活动（开始同步 / 收到分片 / 完成一个模型）的时间戳。
@@ -91,15 +93,60 @@ public class ClientModelManager {
     private static volatile long lastSyncActivityMillis = 0L;
     private static final long SYNC_WATCHDOG_TIMEOUT_MILLIS = 20000L;
 
-    private static final int MODEL_PARSE_THREAD_COUNT = Math.max(2, Math.min(4, Math.max(1, Runtime.getRuntime().availableProcessors() - 1)));
+    private static final int MODEL_PARSE_THREAD_COUNT = 2;
+    private static final int MODEL_PARSE_QUEUE_CAPACITY = 8;
+    private static final int MODEL_PARSE_MEMORY_BUDGET_MIB = 256;
     private static final AtomicInteger MODEL_PARSE_THREAD_IDS = new AtomicInteger(1);
-    private static final ThreadPoolExecutor modelPhraseExecutor = new ThreadPoolExecutor(MODEL_PARSE_THREAD_COUNT, MODEL_PARSE_THREAD_COUNT, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(),
+    private static final Semaphore MODEL_PARSE_SLOTS = new Semaphore(MODEL_PARSE_THREAD_COUNT + MODEL_PARSE_QUEUE_CAPACITY, true);
+    private static final Semaphore MODEL_PARSE_MEMORY = new Semaphore(MODEL_PARSE_MEMORY_BUDGET_MIB, true);
+    private static final AtomicInteger MODEL_TASK_GENERATION = new AtomicInteger(0);
+    private static final ThreadPoolExecutor modelTaskDispatcher = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(), r -> {
+        Thread t = new Thread(r, "SM-Model-Dispatch");
+        t.setDaemon(true);
+        return t;
+    });
+    private static final ThreadPoolExecutor modelPhraseExecutor = new ThreadPoolExecutor(MODEL_PARSE_THREAD_COUNT, MODEL_PARSE_THREAD_COUNT, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(MODEL_PARSE_QUEUE_CAPACITY),
             r -> {
                 Thread t = new Thread(r, "SM-Model-Parse-" + MODEL_PARSE_THREAD_IDS.getAndIncrement());
                 t.setDaemon(true);
                 return t;
             }
     );
+
+    private static void submitModelTask(Runnable task) {
+        int generation = MODEL_TASK_GENERATION.get();
+        modelTaskDispatcher.execute(() -> {
+            boolean acquired = false;
+            try {
+                MODEL_PARSE_SLOTS.acquire();
+                acquired = true;
+                if (generation != MODEL_TASK_GENERATION.get()) {
+                    MODEL_PARSE_SLOTS.release();
+                    acquired = false;
+                    return;
+                }
+                modelPhraseExecutor.execute(() -> {
+                    try {
+                        if (generation == MODEL_TASK_GENERATION.get()) {
+                            task.run();
+                        }
+                    } finally {
+                        MODEL_PARSE_SLOTS.release();
+                    }
+                });
+                acquired = false;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (RejectedExecutionException e) {
+                YesSteveModel.LOGGER.warn("[SM] Model parser rejected a queued task", e);
+            } finally {
+                if (acquired) {
+                    MODEL_PARSE_SLOTS.release();
+                }
+            }
+        });
+    }
 
     private static final Map<UUID, ServerModelContext> serverModels = new ConcurrentHashMap<>();
 
@@ -114,6 +161,8 @@ public class ClientModelManager {
     private static volatile Map<String, ModelPackData> modelPackMap = new Object2ReferenceOpenHashMap<>();
     private static final ConcurrentHashMap<String, Long> modelLastUsedAt = new ConcurrentHashMap<>();
     private static final Set<String> gpuCacheTrimmedModels = ConcurrentHashMap.newKeySet();
+    private static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
+    private static final Set<String> cpuReloadInFlight = ConcurrentHashMap.newKeySet();
 
     private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
     private static final WeakHashMap<IGuiWidget, Object> guiWidgets = new WeakHashMap<>();
@@ -136,6 +185,7 @@ public class ClientModelManager {
         public final long hash1;
         public final long hash2;
         public final String modelId;
+        public final String modelKey;
         public final boolean isAuth;
         public final int isCustomSkinModel;
         public final int version;
@@ -149,6 +199,7 @@ public class ClientModelManager {
             this.hash1 = hash1;
             this.hash2 = hash2;
             this.modelId = modelId;
+            this.modelKey = canonicalRuntimeModelKey(modelId);
             this.isAuth = isAuth;
             this.isCustomSkinModel = isCustomSkinModel;
             this.version = version;
@@ -287,6 +338,9 @@ public class ClientModelManager {
 
         int unkSize = buf.readVarInt();
         onSyncProgress(unkSize);
+        pendingModelsCount.set(0);
+        syncManifestProcessed = false;
+        syncCompletionScheduled.set(false);
 
         Set<String> validServerModelIds = new HashSet<>();
         List<String> previousModelIds = new ArrayList<>();
@@ -307,35 +361,44 @@ public class ClientModelManager {
 
             ServerModelContext ctx = new ServerModelContext(hash1, hash2, modelId, isAuth, isCustomSkinModel, version);
             serverModels.put(ctx.uuid, ctx);
-            validServerModelIds.add(modelId);
+            boolean firstCanonicalId = validServerModelIds.add(ctx.modelKey);
             expectedCacheModels.add(ctx.uuid);
+            if (!firstCanonicalId) {
+                YesSteveModel.LOGGER.warn("[SM] Ignoring duplicate server model id after case normalization: raw={} key={}", modelId, ctx.modelKey);
+                continue;
+            }
 
             File cachedFile = localCacheMap.get(ctx.uuid);
+            if (cachedFile != null) cachedModelFiles.put(ctx.modelKey, cachedFile);
             boolean isFileValid = YSMClientCache.verifyFileContent(cachedFile, hash1, hash2);
 
-            boolean alreadyInMemory = modelAssemblyMap != null && modelAssemblyMap.containsKey(modelId);
+            boolean alreadyInMemory = modelAssemblyMap != null && modelAssemblyMap.containsKey(ctx.modelKey);
 
             if (isFileValid) {
                 YesSteveModel.LOGGER.info("[SM] Cache HIT & Validated: " + ctx.uuid);
                 if (alreadyInMemory) {
-                    previousModelIds.add(modelId);
-                    updatedModelIds.add(modelId);
+                    previousModelIds.add(ctx.modelKey);
+                    updatedModelIds.add(ctx.modelKey);
                     isModelReadyList.add(isAuth);
                 } else {
                     // 閸涙垝鑵戠紓鎾崇摠
-                    modelPhraseExecutor.submit(() -> {
-                        if (clientKey == null) return;
+                    pendingModelsCount.incrementAndGet();
+                    submitModelTask(() -> {
                         try {
+                            if (clientKey == null) return;
                             byte[] fileBytes = Files.readAllBytes(cachedFile.toPath());
                             ModelMemoryProfiler.logBytes("cache-read", modelId, fileBytes);
                             byte[] decompressed = YsmCrypt.read(fileBytes, clientKey);
                             ModelMemoryProfiler.logBytes("cache-decrypted", modelId, decompressed);
                             fileBytes = null;
-                            parseAndLoadModel(decompressed, modelId, isAuth);
+                            parseAndLoadModel(decompressed, ctx.modelKey, isAuth);
                             decompressed = null;
                             ModelMemoryProfiler.log("cache-parsed", modelId);
                         } catch (Exception e) {
                             YesSteveModel.LOGGER.error("[SM] Failed to parse and load cached model: " + modelId, e);
+                            YSMClientCache.deleteCacheFile(cachedFile);
+                        } finally {
+                            finishPendingModelLoad();
                         }
                     });
                 }
@@ -343,6 +406,7 @@ public class ClientModelManager {
                 YesSteveModel.LOGGER.info("[SM] Cache MISS or Invalid: " + ctx.uuid + " -> Requesting...");
                 YSMClientCache.deleteCacheFile(cachedFile);
                 modelsToRequest.add(mHash);
+                pendingModelsCount.incrementAndGet();
             }
         }
 
@@ -400,7 +464,7 @@ public class ClientModelManager {
 
                 if (!validServerModelIds.contains(loadedId)) {
                     modelsToRemove.add(loadedId);
-                } else if (modelsToRequest.stream().anyMatch(h -> serverModels.containsKey(new UUID(h.hash1, h.hash2)) && serverModels.get(new UUID(h.hash1, h.hash2)).modelId.equals(loadedId))) {
+                } else if (modelsToRequest.stream().anyMatch(h -> serverModels.containsKey(new UUID(h.hash1, h.hash2)) && serverModels.get(new UUID(h.hash1, h.hash2)).modelKey.equals(loadedId))) {
                     modelsToRemove.add(loadedId);
                 }
             }
@@ -422,7 +486,6 @@ public class ClientModelManager {
         }
 
         syncStep = 3;
-        pendingModelsCount.set(modelsToRequest.size());
         markSyncActivity();
 
         int garbageLen = 16 + SECURE_RANDOM.nextInt(48);
@@ -443,12 +506,8 @@ public class ClientModelManager {
             sendModelFile(ByteBuffer.wrap(result.data()));
         }
 
-        if (pendingModelsCount.get() == 0) {
-            modelPhraseExecutor.submit(() -> {
-                YesSteveModel.LOGGER.info("[SM] All models loaded from local cache. Handshake complete!");
-                onSyncComplete();
-            });
-        }
+        syncManifestProcessed = true;
+        scheduleSyncCompleteIfReady();
     }
 
     private static void handlePacket05(YSMByteBuf buf) throws Exception {
@@ -470,11 +529,22 @@ public class ClientModelManager {
         int chunkOffset = buf.readVarInt();
         int chunkLength = buf.readVarInt();
 
+        if (totalSize <= 0 || totalSize > 512 * 1024 * 1024 || chunkLength <= 0
+                || chunkOffset < 0 || chunkOffset + chunkLength > totalSize
+                || buf.getRawBuf().readableBytes() < chunkLength) {
+            throw new IllegalArgumentException("Invalid model chunk bounds");
+        }
+
         // Initialize buffer on first reception
         if (ctx.fileBuffer == null) {
             ctx.fileBuffer = new byte[totalSize];
             ctx.totalSize = totalSize;
             ctx.bytesReceived = 0;
+        } else if (ctx.totalSize != totalSize) {
+            throw new IllegalArgumentException("Model chunk total size changed");
+        }
+        if (chunkOffset != ctx.bytesReceived) {
+            throw new IllegalArgumentException("Out-of-order model chunk: expected " + ctx.bytesReceived + ", got " + chunkOffset);
         }
 
         buf.getRawBuf().readBytes(ctx.fileBuffer, chunkOffset, chunkLength);
@@ -485,7 +555,7 @@ public class ClientModelManager {
             byte[] fileBuffer = ctx.fileBuffer;
             ctx.fileBuffer = null;
 
-            modelPhraseExecutor.submit(() -> {
+            submitModelTask(() -> {
                 try {
                     if (clientKey == null) return;
                     String folder = currentCacheFolderName != null ? currentCacheFolderName : "default_cache";
@@ -498,8 +568,16 @@ public class ClientModelManager {
                     String legitFileName = YSMClientCache.generateCacheFileName(hash1, hash2, clientKey);
                     File outFile = new File(cacheDir, legitFileName);
 
-                    try (FileOutputStream fos = new FileOutputStream(outFile)) {
-                        fos.write(cachedFileData);
+                    Path tempFile = Files.createTempFile(cacheDir.toPath(), legitFileName, ".tmp");
+                    try {
+                        Files.write(tempFile, cachedFileData);
+                        try {
+                            Files.move(tempFile, outFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                        } catch (AtomicMoveNotSupportedException e) {
+                            Files.move(tempFile, outFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    } finally {
+                        Files.deleteIfExists(tempFile);
                     }
 
                     YesSteveModel.LOGGER.info("[SM] Downloaded & Cached: " + outFile.getAbsolutePath());
@@ -507,16 +585,14 @@ public class ClientModelManager {
                     ModelMemoryProfiler.logBytes("download-decrypted", ctx.modelId, decompressed);
                     cachedFileData = null;
 
-                    parseAndLoadModel(decompressed, ctx.modelId, ctx.isAuth);
+                    cachedModelFiles.put(ctx.modelKey, outFile);
+                    parseAndLoadModel(decompressed, ctx.modelKey, ctx.isAuth);
                     decompressed = null;
                     ModelMemoryProfiler.log("download-parsed", ctx.modelId);
                 } catch (Exception e) {
                     YesSteveModel.LOGGER.error("[SM] Failed to save/parse downloaded model: " + ctx.modelId, e);
                 } finally {
-                    if (pendingModelsCount.decrementAndGet() <= 0) {
-                        YesSteveModel.LOGGER.info("[SM] All missing models downloaded and loaded successfully!");
-                        onSyncComplete();
-                    }
+                    finishPendingModelLoad();
                 }
             });
         }
@@ -524,6 +600,15 @@ public class ClientModelManager {
 
 
     private static void parseAndLoadModel(byte[] decompressed, String modelId, boolean isAuth) {
+        modelId = canonicalRuntimeModelKey(modelId);
+        int memoryPermits = Math.max(1, Math.min(MODEL_PARSE_MEMORY_BUDGET_MIB,
+                (decompressed.length + 1024 * 1024 - 1) / (1024 * 1024)));
+        try {
+            MODEL_PARSE_MEMORY.acquire(memoryPermits);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
         try {
 //            if (true) return;
             // IR
@@ -556,6 +641,8 @@ public class ClientModelManager {
             }
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("[SM] Failed to parse and load model: " + modelId, e);
+        } finally {
+            MODEL_PARSE_MEMORY.release(memoryPermits);
         }
     }
 
@@ -570,19 +657,28 @@ public class ClientModelManager {
     }
 
     private static void resetClientState() {
+        MODEL_TASK_GENERATION.incrementAndGet();
+        modelTaskDispatcher.getQueue().clear();
+        serverConnection = null;
         syncStep = 1;
         key1 = null;
         lastKey = null;
         serverKey = null;
         clientKey = null;
 
+        int discardedModelTasks = modelPhraseExecutor.getQueue().size();
         modelPhraseExecutor.getQueue().clear();
+        MODEL_PARSE_SLOTS.release(discardedModelTasks);
 
         currentCacheFolderName = null;
         pendingModelsCount.set(0);
+        syncManifestProcessed = false;
+        syncCompletionScheduled.set(false);
         cachedModelHashes.clear();
 
         serverModels.clear();
+        cachedModelFiles.clear();
+        cpuReloadInFlight.clear();
 
         // 断线/换服：释放过期服务端模型装配（含纹理源 byte[] 与 GPU/native 资源），
         // 否则它们会被 modelAssemblyMap 强引用跨会话累积（主要内存泄漏源）。
@@ -619,7 +715,11 @@ public class ClientModelManager {
         }
 
         modelPackMap = new Object2ReferenceOpenHashMap<>();
-        pendingModelCallback = null;
+        if (localModelContext != null) {
+            pendingModelCallback = null;
+        } else if (pendingModelCallback == null) {
+            defaultModelLoadAttempted = false;
+        }
         pendingModelQueue.clear();
         localOnlyModelIds.clear();
         localModelSourcePaths.clear();
@@ -647,23 +747,51 @@ public class ClientModelManager {
         return modelPackMap;
     }
 
-    public static Optional<ModelAssembly> getModelContext(String str) {
-        ModelAssembly assembly = modelAssemblyMap.get(str);
+   public static Optional<ModelAssembly> getModelContext(String str) {
+       String modelKey = canonicalRuntimeModelKey(str);
+       ModelAssembly assembly = modelAssemblyMap.get(modelKey);
         if (assembly != null) {
-            touchModel(str);
+            touchModel(modelKey);
         }
-        return Optional.ofNullable(assembly);
+       if (assembly != null && !assembly.isRuntimeResident()) {
+           scheduleCachedModelReload(modelKey);
+           return Optional.empty();
+       }
+       return Optional.ofNullable(assembly);
+    }
+
+    private static void scheduleCachedModelReload(String modelId) {
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        if (modelKey == null || !cpuReloadInFlight.add(modelKey)) return;
+        File cachedFile = cachedModelFiles.get(modelKey);
+        ServerModelContext context = serverModels.values().stream()
+                .filter(value -> modelKey.equals(value.modelKey)).findFirst().orElse(null);
+        if (cachedFile == null || context == null || clientKey == null) {
+            cpuReloadInFlight.remove(modelKey);
+            return;
+        }
+        submitModelTask(() -> {
+            try {
+                byte[] fileBytes = Files.readAllBytes(cachedFile.toPath());
+                byte[] decompressed = YsmCrypt.read(fileBytes, clientKey);
+                parseAndLoadModel(decompressed, modelKey, context.isAuth);
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[SM] Failed to reload resident model: {}", modelKey, e);
+            } finally {
+                cpuReloadInFlight.remove(modelKey);
+            }
+        });
     }
 
     public static boolean isLocalOnlyModel(String modelId) {
-        return modelId != null && localOnlyModelIds.contains(modelId);
+        return modelId != null && localOnlyModelIds.contains(canonicalRuntimeModelKey(modelId));
     }
 
     public static Optional<Path> getLocalModelSourcePath(String modelId) {
         if (modelId == null || modelId.isBlank()) {
             return Optional.empty();
         }
-        Path path = localModelSourcePaths.get(modelId);
+        Path path = localModelSourcePaths.get(canonicalRuntimeModelKey(modelId));
         if (path == null || !Files.exists(path)) {
             return Optional.empty();
         }
@@ -682,7 +810,7 @@ public class ClientModelManager {
     }
 
     public static boolean isSelectedLocalOnlyModel(String modelId) {
-        return modelId != null && modelId.equals(selectedModelId) && isLocalOnlyModel(modelId);
+        return modelId != null && sameRuntimeModelId(modelId, selectedModelId) && isLocalOnlyModel(modelId);
     }
 
     public static void rememberSelectedModel(String modelId, String textureId) {
@@ -691,7 +819,7 @@ public class ClientModelManager {
         if (isLocalOnlyModel(modelId)) {
             selectedLocalOnlyModelId = modelId;
             selectedLocalOnlyTextureId = textureId;
-        } else if (modelId != null && modelId.equals(selectedLocalOnlyModelId)) {
+        } else if (modelId != null && sameRuntimeModelId(modelId, selectedLocalOnlyModelId)) {
             clearSelectedLocalOnlyModel();
         }
         // 持久化模型选择到本地文件，以便在无模组服务器上自动恢复
@@ -710,7 +838,7 @@ public class ClientModelManager {
         String textureId = selectedTextureId;
 
         // 2. 如果内存中的选择不是仅本地模型（在断开YSM服务器后可能已不可用），尝试从文件恢复
-        if (modelId == null || (!isLocalOnlyModel(modelId) && !modelAssemblyMap.containsKey(modelId))) {
+        if (modelId == null || (!isLocalOnlyModel(modelId) && !containsRuntimeModel(modelId))) {
             Pair<String, String> persisted = LocalModelSelectionStore.load();
             if (persisted != null) {
                 modelId = persisted.getLeft();
@@ -724,7 +852,7 @@ public class ClientModelManager {
         }
 
         // 4. 模型必须仍在本地缓存中可用
-        if (!isLocalOnlyModel(modelId) && !modelAssemblyMap.containsKey(modelId)) {
+        if (!isLocalOnlyModel(modelId) && !containsRuntimeModel(modelId)) {
             return;
         }
 
@@ -735,7 +863,7 @@ public class ClientModelManager {
         // 6. 在渲染线程上应用
         ((Executor) Minecraft.getInstance()).execute(() -> {
             // 再次检查，防止在 execute 延迟期间选择已改变
-            if (!finalModelId.equals(selectedModelId) && !isLocalOnlyModel(finalModelId) && !modelAssemblyMap.containsKey(finalModelId)) {
+            if (!sameRuntimeModelId(finalModelId, selectedModelId) && !isLocalOnlyModel(finalModelId) && !containsRuntimeModel(finalModelId)) {
                 // 内存中的选择已经变了，且持久化的模型也不再可用，放弃恢复
                 return;
             }
@@ -779,7 +907,7 @@ public class ClientModelManager {
             String modelId = persisted.getLeft();
             String textureId = persisted.getRight();
             // 模型必须在本地缓存中可用
-            if (!isLocalOnlyModel(modelId) && !modelAssemblyMap.containsKey(modelId)) {
+            if (!isLocalOnlyModel(modelId) && !containsRuntimeModel(modelId)) {
                 return;
             }
             cap.initModelWithTexture(modelId, textureId);
@@ -800,13 +928,14 @@ public class ClientModelManager {
         if (modelId == null || modelId.isBlank()) {
             return;
         }
-        localOnlyModelIds.remove(modelId);
-        localModelSourcePaths.remove(modelId);
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        localOnlyModelIds.remove(modelKey);
+        localModelSourcePaths.remove(modelKey);
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
         if (player != null) {
             PlayerCapability.get(player).ifPresent(cap -> {
-                if (modelId.equals(cap.getModelId())) {
+                if (sameRuntimeModelId(modelId, cap.getModelId())) {
                     String textureId = cap.getCurrentTextureName();
                     rememberSelectedModel(modelId, textureId);
                     NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(modelId, textureId));
@@ -826,7 +955,7 @@ public class ClientModelManager {
         ((Executor) Minecraft.getInstance()).execute(() -> {
             String currentModelId = selectedModelId;
             String currentTextureId = selectedTextureId;
-            if (!modelId.equals(currentModelId) || currentTextureId == null || isLocalOnlyModel(modelId) || !modelAssemblyMap.containsKey(modelId)) {
+            if (!sameRuntimeModelId(modelId, currentModelId) || currentTextureId == null || isLocalOnlyModel(modelId) || !containsRuntimeModel(modelId)) {
                 return;
             }
             NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(modelId, currentTextureId));
@@ -841,17 +970,18 @@ public class ClientModelManager {
             Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
             ArrayList<ModelAssembly> removed = new ArrayList<>();
             for (String modelId : modelIds) {
-                localOnlyModelIds.remove(modelId);
-                localModelSourcePaths.remove(modelId);
-                if (modelId.equals(selectedLocalOnlyModelId)) {
+                String modelKey = canonicalRuntimeModelKey(modelId);
+                localOnlyModelIds.remove(modelKey);
+                localModelSourcePaths.remove(modelKey);
+                if (sameRuntimeModelId(modelId, selectedLocalOnlyModelId)) {
                     clearSelectedLocalOnlyModel();
                 }
-                if (modelId.equals(selectedModelId)) {
+                if (sameRuntimeModelId(modelId, selectedModelId)) {
                     clearSelectedModel();
                 }
-                modelLastUsedAt.remove(modelId);
-                gpuCacheTrimmedModels.remove(modelId);
-                ModelAssembly assembly = map.remove(modelId);
+                modelLastUsedAt.remove(modelKey);
+                gpuCacheTrimmedModels.remove(modelKey);
+                ModelAssembly assembly = map.remove(modelKey);
                 if (assembly != null) {
                     removed.add(assembly);
                 }
@@ -867,27 +997,28 @@ public class ClientModelManager {
     }
 
     public static void importLocalModel(String modelId, String fileName, byte[] data, @Nullable Consumer<Component> callback) {
+        String modelKey = canonicalRuntimeModelKey(modelId);
         byte[] importData = data;
-        modelPhraseExecutor.submit(() -> {
+        submitModelTask(() -> {
             Component error = null;
             try {
-                ModelMemoryProfiler.logBytes("local-import-read", modelId, importData);
+                ModelMemoryProfiler.logBytes("local-import-read", modelKey, importData);
                 RawYsmModel rawModel = parseImportModel(fileName, importData);
-                ModelMemoryProfiler.log("local-import-parsed", modelId);
-                ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, modelId);
-                ModelMemoryProfiler.log("local-import-mapped", modelId);
-                localOnlyModelIds.add(modelId);
-                touchModel(modelId);
+                ModelMemoryProfiler.log("local-import-parsed", modelKey);
+                ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, modelKey);
+                ModelMemoryProfiler.log("local-import-mapped", modelKey);
+                localOnlyModelIds.add(modelKey);
+                touchModel(modelKey);
                 runPendingModelCallback();
-                if (!processModelData(parsedBundle, modelId, false, false)) {
-                    localOnlyModelIds.remove(modelId);
+                if (!processModelData(parsedBundle, modelKey, false, false)) {
+                    localOnlyModelIds.remove(modelKey);
                     throw new IllegalStateException("Failed to build local model");
                 }
-                Path persisted = persistImportedModel(modelId, fileName, importData);
-                rememberLocalModelSource(ServerModelManager.CUSTOM, modelId, persisted);
-                YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelId);
+                Path persisted = persistImportedModel(modelKey, fileName, importData);
+                rememberLocalModelSource(ServerModelManager.CUSTOM, modelKey, persisted);
+                YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
             } catch (Exception e) {
-                YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelId, e);
+                YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelKey, e);
                 error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             }
             if (callback != null) {
@@ -959,7 +1090,7 @@ public class ClientModelManager {
     }
 
     public static void reloadLocalModels(@Nullable Consumer<Component> callback, boolean restoreSelection) {
-        modelPhraseExecutor.submit(() -> {
+        submitModelTask(() -> {
             Component error = null;
             try {
                 localModelSourcePaths.clear();
@@ -1041,7 +1172,7 @@ public class ClientModelManager {
         }
     }
 
-    public static void resetSync() {
+    public static synchronized void resetSync() {
         isOysmServer = false;
         allowUpload = false;
         processServerData(null);
@@ -1070,7 +1201,7 @@ public class ClientModelManager {
             }
         }
         Connection connection = serverConnection;
-        if (!connection.isConnected()) {
+        if (connection == null || !connection.isConnected()) {
             return;
         }
         try {
@@ -1080,8 +1211,18 @@ public class ClientModelManager {
         }
     }
 
-    public static void startSync(Connection connection, ByteBuffer byteBuffer) {
-        serverConnection = connection;
+    public static synchronized void startSync(Connection connection, ByteBuffer byteBuffer) {
+        if (connection == null) {
+            YesSteveModel.LOGGER.warn("[SM] Ignoring model sync packet without a connection");
+            return;
+        }
+        if (serverConnection != connection) {
+            if (serverConnection != null) {
+                YesSteveModel.LOGGER.info("[SM] Model sync connection changed; discarding the previous client sync session");
+                resetClientState();
+            }
+            serverConnection = connection;
+        }
         processServerData(byteBuffer);
     }
 
@@ -1158,18 +1299,19 @@ public class ClientModelManager {
             if (removedModelIds != null) {
                 ArrayList<Pair<String, ModelAssembly>> removed = new ArrayList<>(removedModelIds.length);
                 for (String str : removedModelIds) {
-                    if (localOnlyModelIds.contains(str)) {
+                    String modelKey = canonicalRuntimeModelKey(str);
+                    if (localOnlyModelIds.contains(modelKey)) {
                         continue;
                     }
-                    if (str.equals(selectedLocalOnlyModelId)) {
+                    if (sameRuntimeModelId(str, selectedLocalOnlyModelId)) {
                         clearSelectedLocalOnlyModel();
                     }
-                    if (str.equals(selectedModelId)) {
+                    if (sameRuntimeModelId(str, selectedModelId)) {
                         clearSelectedModel();
                     }
-                    ModelAssembly assembly = map.remove(str);
+                    ModelAssembly assembly = map.remove(modelKey);
                     if (assembly != null) {
-                        removed.add(Pair.of(str, assembly));
+                        removed.add(Pair.of(modelKey, assembly));
                     }
                 }
                 ((Executor) Minecraft.getInstance()).execute(() -> {
@@ -1181,20 +1323,21 @@ public class ClientModelManager {
             if (previousModelIds != null) {
                 ModelAssembly[] modelAssemblies = new ModelAssembly[previousModelIds.length];
                 for (int i = 0; i < previousModelIds.length; i++) {
-                    localOnlyModelIds.remove(previousModelIds[i]);
-                    if (previousModelIds[i].equals(selectedLocalOnlyModelId)) {
+                    String previousKey = canonicalRuntimeModelKey(previousModelIds[i]);
+                    localOnlyModelIds.remove(previousKey);
+                    if (sameRuntimeModelId(previousModelIds[i], selectedLocalOnlyModelId)) {
                         clearSelectedLocalOnlyModel();
                     }
-                    if (previousModelIds[i].equals(selectedModelId)) {
+                    if (sameRuntimeModelId(previousModelIds[i], selectedModelId)) {
                         selectedModelId = updatedModelIds[i];
                     }
-                    modelAssemblies[i] = map.remove(previousModelIds[i]);
+                    modelAssemblies[i] = map.remove(previousKey);
                 }
                 for (int i = 0; i < modelAssemblies.length; i++) {
                     ModelAssembly modelAssembly = modelAssemblies[i];
                     if (modelAssembly != null) {
                         modelAssembly.getTextureRegistry().setAuthModel(isModelReady[i]);
-                        map.put(updatedModelIds[i], modelAssembly);
+                        map.put(canonicalRuntimeModelKey(updatedModelIds[i]), modelAssembly);
                     }
                 }
             }
@@ -1224,7 +1367,7 @@ public class ClientModelManager {
                 processModelData(parsedBundle, modelId, true, false);
             };
         } else {
-            localOnlyModelIds.remove(modelId);
+            localOnlyModelIds.remove(canonicalRuntimeModelKey(modelId));
             runPendingModelCallback();
             processModelData(parsedBundle, modelId, false, isAuth);
         }
@@ -1377,6 +1520,7 @@ public class ClientModelManager {
     }
 
     private static void loadLocalModel(String modelId, RawYsmModel rawModel) throws Exception {
+        modelId = canonicalRuntimeModelKey(modelId);
         if (modelId == null || modelId.isBlank()) {
             return;
         }
@@ -1401,7 +1545,21 @@ public class ClientModelManager {
     }
 
     private static String normalizeLocalModelId(String modelId) {
-        return stripImportExtension(modelId.replace('\\', '/').toLowerCase(Locale.ROOT).replaceAll("/+", "/"));
+        return stripImportExtension(canonicalRuntimeModelKey(modelId));
+    }
+
+    private static String canonicalRuntimeModelKey(String modelId) {
+        if (modelId == null) return null;
+        return modelId.trim().replace('\\', '/').replaceAll("/+", "/").toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean containsRuntimeModel(String modelId) {
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        return modelKey != null && modelAssemblyMap.containsKey(modelKey);
+    }
+
+    private static boolean sameRuntimeModelId(String first, String second) {
+        return Objects.equals(canonicalRuntimeModelKey(first), canonicalRuntimeModelKey(second));
     }
 
     private static void rememberLocalModelSource(Path baseDir, String modelId, Path source) {
@@ -1411,7 +1569,7 @@ public class ClientModelManager {
         if (!samePath(baseDir, ServerModelManager.CUSTOM)) {
             return;
         }
-        localModelSourcePaths.put(modelId, source.toAbsolutePath().normalize());
+        localModelSourcePaths.put(canonicalRuntimeModelKey(modelId), source.toAbsolutePath().normalize());
     }
 
     private static boolean samePath(Path a, Path b) {
@@ -1435,6 +1593,7 @@ public class ClientModelManager {
     }
 
     public static boolean processModelData(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) {
+        modelId = canonicalRuntimeModelKey(modelId);
         if (parsedBundle != null) {
             try {
                 ModelMemoryProfiler.log("assembly-build-start", modelId);
@@ -1478,6 +1637,23 @@ public class ClientModelManager {
         lastSyncActivityMillis = System.currentTimeMillis();
     }
 
+    private static void finishPendingModelLoad() {
+        pendingModelsCount.updateAndGet(value -> Math.max(0, value - 1));
+        markSyncActivity();
+        scheduleSyncCompleteIfReady();
+    }
+
+    private static void scheduleSyncCompleteIfReady() {
+        if (!syncManifestProcessed || pendingModelsCount.get() != 0
+                || !syncCompletionScheduled.compareAndSet(false, true)) {
+            return;
+        }
+        submitModelTask(() -> {
+            YesSteveModel.LOGGER.info("[SM] All server models loaded; handshake complete!");
+            onSyncComplete();
+        });
+    }
+
     /**
      * 由客户端每帧（经 {@code ModelSyncStateOverlay#render}）调用。
      * 若同步处于进行中（还有待下载模型或仍在 SYNCING）且超过
@@ -1508,11 +1684,12 @@ public class ClientModelManager {
         NetworkOnlineDebugLog.info("onSyncComplete: selectedModelId={} selectedTextureId={} assemblyMapSize={}",
                 selectedModelId, selectedTextureId, modelAssemblyMap.size());
         syncStep = 1;
-        serverModels.clear();
         cachedModelHashes.clear();
         lastSyncActivityMillis = 0L;
+        syncManifestProcessed = false;
 
         ((Executor) Minecraft.getInstance()).execute(() -> {
+            flushPendingModels();
             syncState.finishSuccess();
             NetworkOnlineDebugLog.info("onSyncComplete: calling resendSelectedServerModel");
             resendSelectedServerModel();
@@ -1552,16 +1729,32 @@ public class ClientModelManager {
         while (true) {
             Pair<ModelAssembly, String> pairPoll = pendingModelQueue.poll();
             if (pairPoll != null) {
-                ModelAssembly previous = object2ReferenceOpenHashMap.put(pairPoll.getRight(), pairPoll.getLeft());
-                touchModel(pairPoll.getRight());
-                gpuCacheTrimmedModels.remove(pairPoll.getRight());
+                String modelKey = canonicalRuntimeModelKey(pairPoll.getRight());
+                ModelAssembly previous = object2ReferenceOpenHashMap.put(modelKey, pairPoll.getLeft());
+                touchModel(modelKey);
+                gpuCacheTrimmedModels.remove(modelKey);
                 if (previous != null && previous != pairPoll.getLeft()) {
-                    releaseModelAssembly(pairPoll.getRight(), previous);
+                    releaseModelAssembly(modelKey, previous);
                 }
             } else {
                 modelAssemblyMap = object2ReferenceOpenHashMap;
+                trimUnusedCpuModels();
                 forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(object2ReferenceOpenHashMap));
                 return;
+            }
+        }
+    }
+
+   private static void releaseAssemblyTextures(ModelAssembly assembly) {
+       for (AbstractTexture tex : assembly.getTextures()) {
+            if (tex == null) {
+                continue;
+            }
+           UploadManager.removeTexture(tex);
+            if (tex instanceof OuterFileTexture outerFileTexture) {
+                outerFileTexture.closeAndReleaseSource();
+            } else {
+                tex.close();
             }
         }
     }
@@ -1580,50 +1773,111 @@ public class ClientModelManager {
         }
         ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
         AudioStreamCache.clearForModel(assembly);
-        for (AbstractTexture tex : assembly.getTextures()) {
-            UploadManager.removeTexture(tex);
-            if (tex instanceof OuterFileTexture outerFileTexture) {
-                outerFileTexture.closeAndReleaseSource();
-            } else {
-                tex.close();
+        releaseAssemblyTextures(assembly);
+        if (assembly.getProjectileModels() != null) {
+            for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
+                if (entry.getValue().getModel() != null) entry.getValue().getModel().freeNativeCache();
             }
         }
-        for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-            entry.getValue().getModel().freeNativeCache();
-        }
-        for (Map.Entry<Identifier, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-            entry.getValue().getModel().freeNativeCache();
-        }
-        assembly.getAnimationBundle().getMainModel().freeNativeCache();
-        assembly.getAnimationBundle().getArmModel().freeNativeCache();
-        for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) {
-            if (trackData != null) {
-                trackData.close();
+        if (assembly.getVehicleModels() != null) {
+            for (Map.Entry<Identifier, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
+                if (entry.getValue().getModel() != null) entry.getValue().getModel().freeNativeCache();
             }
         }
+        if (assembly.getAnimationBundle() != null) {
+            if (assembly.getAnimationBundle().getMainModel() != null) assembly.getAnimationBundle().getMainModel().freeNativeCache();
+            if (assembly.getAnimationBundle().getArmModel() != null) assembly.getAnimationBundle().getArmModel().freeNativeCache();
+        }
+        if (assembly.getExpressionCache() != null) {
+            for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) {
+                if (trackData != null) trackData.close();
+            }
+        }
+        assembly.unloadRuntime();
         ModelMemoryProfiler.log("assembly-released", modelId);
     }
 
     public static void trimUnusedGpuCaches() {
+        trimUnusedCpuModels();
         int maxCachedGpuModels = safeInt(GeneralConfig.MAX_CACHED_GPU_MODELS, 0);
-        if (maxCachedGpuModels <= 0 || modelAssemblyMap.size() <= maxCachedGpuModels) {
+        if (maxCachedGpuModels <= 0) {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        if (Minecraft.getInstance().screen != null) {
+        long residentGpuModels = modelAssemblyMap.values().stream()
+                .filter(Objects::nonNull)
+                .filter(ModelAssembly::isRuntimeResident)
+                .count();
+        if (residentGpuModels <= maxCachedGpuModels) {
             return;
         }
         long now = System.currentTimeMillis();
         long ttlMillis = safeInt(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300) * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
         modelAssemblyMap.entrySet().stream()
+                .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
                 .filter(entry -> canTrimGpuCache(entry.getKey(), protectedModels, now, ttlMillis))
                 .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
-                .limit(Math.max(1, modelAssemblyMap.size() - maxCachedGpuModels))
+                .limit(Math.max(1L, residentGpuModels - maxCachedGpuModels))
                 .forEach(entry -> trimGpuCache(entry.getKey(), entry.getValue()));
     }
 
+    private static void trimUnusedCpuModels() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (modelAssemblyMap.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        long ttlMillis = safeInt(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300) * 1000L;
+        Set<String> protectedModels = collectProtectedModelIds(minecraft);
+        List<Map.Entry<String, ModelAssembly>> residents = modelAssemblyMap.entrySet().stream()
+                .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
+                .filter(entry -> !"default".equals(entry.getKey()) && !localOnlyModelIds.contains(entry.getKey()))
+                .toList();
+        long idleCount = residents.stream()
+                .filter(entry -> !protectedModels.contains(entry.getKey()))
+                .filter(entry -> now - modelLastUsedAt.getOrDefault(entry.getKey(), now) >= ttlMillis)
+                .count();
+        long overLimit = Math.max(0, residents.size() - safeInt(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 24));
+        long trimCount = Math.max(idleCount, overLimit);
+        if (trimCount <= 0) return;
+        residents.stream()
+               .filter(entry -> !protectedModels.contains(entry.getKey()))
+                .filter(entry -> {
+                    long idleMillis = now - modelLastUsedAt.getOrDefault(entry.getKey(), now);
+                    return idleMillis >= ttlMillis || (overLimit > 0 && idleMillis >= 1_000L);
+                })
+               .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
+                .limit(trimCount)
+                .forEach(entry -> unloadModelRuntime(entry.getKey(), entry.getValue()));
+    }
+
+    private static void unloadModelRuntime(String modelId, ModelAssembly assembly) {
+        if (assembly == null || !assembly.isRuntimeResident()) return;
+        if (!RenderSystem.isOnRenderThread()) {
+            Minecraft.getInstance().execute(() -> unloadModelRuntime(modelId, assembly));
+            return;
+        }
+        AudioStreamCache.clearForModel(assembly);
+        if (assembly.getProjectileModels() != null) {
+            for (ProjectileModelBundle bundle : assembly.getProjectileModels().values()) if (bundle.getModel() != null) bundle.getModel().freeNativeCache();
+        }
+        if (assembly.getVehicleModels() != null) {
+            for (VehicleModelBundle bundle : assembly.getVehicleModels().values()) if (bundle.getModel() != null) bundle.getModel().freeNativeCache();
+        }
+        if (assembly.getAnimationBundle() != null) {
+            if (assembly.getAnimationBundle().getMainModel() != null) assembly.getAnimationBundle().getMainModel().freeNativeCache();
+            if (assembly.getAnimationBundle().getArmModel() != null) assembly.getAnimationBundle().getArmModel().freeNativeCache();
+        }
+        if (assembly.getExpressionCache() != null) {
+            for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) if (trackData != null) trackData.close();
+        }
+        releaseAssemblyTextures(assembly);
+        assembly.unloadRuntime();
+        gpuCacheTrimmedModels.remove(modelId);
+        ModelMemoryProfiler.log("cpu-model-unloaded", modelId);
+    }
+
     private static boolean canTrimGpuCache(String modelId, Set<String> protectedModels, long now, long ttlMillis) {
+        modelId = canonicalRuntimeModelKey(modelId);
         if (modelId == null || "default".equals(modelId) || protectedModels.contains(modelId) || gpuCacheTrimmedModels.contains(modelId)) {
             return false;
         }
@@ -1642,7 +1896,7 @@ public class ClientModelManager {
                 ModelInfoCapability.get(player).ifPresent(cap -> {
                     String modelId = cap.getModelId();
                     if (modelId != null && !modelId.isBlank()) {
-                        protectedModels.add(modelId);
+                        protectedModels.add(canonicalRuntimeModelKey(modelId));
                         touchModel(modelId);
                     }
                 });
@@ -1652,7 +1906,7 @@ public class ClientModelManager {
     }
 
     private static void trimGpuCache(String modelId, ModelAssembly assembly) {
-        if (assembly == null || !gpuCacheTrimmedModels.add(modelId)) {
+        if (assembly == null || !assembly.isRuntimeResident() || !gpuCacheTrimmedModels.add(modelId)) {
             return;
         }
         if (!RenderSystem.isOnRenderThread()) {
@@ -1660,21 +1914,27 @@ public class ClientModelManager {
             return;
         }
         int releasedMeshes = 0;
-        for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-            if (entry.getValue().getModel().freeGpuCache()) {
-                releasedMeshes++;
+        if (assembly.getProjectileModels() != null) {
+            for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
+                if (entry.getValue().getModel().freeGpuCache()) {
+                    releasedMeshes++;
+                }
             }
         }
-        for (Map.Entry<Identifier, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-            if (entry.getValue().getModel().freeGpuCache()) {
-                releasedMeshes++;
+        if (assembly.getVehicleModels() != null) {
+            for (Map.Entry<Identifier, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
+                if (entry.getValue().getModel().freeGpuCache()) {
+                    releasedMeshes++;
+                }
             }
         }
-        if (assembly.getAnimationBundle().getMainModel().freeGpuCache()) {
-            releasedMeshes++;
-        }
-        if (assembly.getAnimationBundle().getArmModel().freeGpuCache()) {
-            releasedMeshes++;
+        if (assembly.getAnimationBundle() != null) {
+            if (assembly.getAnimationBundle().getMainModel().freeGpuCache()) {
+                releasedMeshes++;
+            }
+            if (assembly.getAnimationBundle().getArmModel().freeGpuCache()) {
+                releasedMeshes++;
+            }
         }
         if (releasedMeshes > 0) {
             ModelMemoryProfiler.log("gpu-cache-trimmed meshes=" + releasedMeshes
@@ -1684,9 +1944,10 @@ public class ClientModelManager {
     }
 
     private static void touchModel(String modelId) {
-        if (modelId != null && !modelId.isBlank()) {
-            modelLastUsedAt.put(modelId, System.currentTimeMillis());
-            gpuCacheTrimmedModels.remove(modelId);
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        if (modelKey != null && !modelKey.isBlank()) {
+            modelLastUsedAt.put(modelKey, System.currentTimeMillis());
+            gpuCacheTrimmedModels.remove(modelKey);
         }
     }
 
@@ -1695,7 +1956,8 @@ public class ClientModelManager {
     }
 
     public static boolean isGpuCacheTrimmed(String modelId) {
-        return modelId != null && gpuCacheTrimmedModels.contains(modelId);
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        return modelKey != null && gpuCacheTrimmedModels.contains(modelKey);
     }
 
     private static void touchAssembly(ModelAssembly assembly) {

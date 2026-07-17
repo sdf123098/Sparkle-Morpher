@@ -39,6 +39,7 @@ public final class ClientTickEvent {
         ResourceDownloadManager.tick();
         ModelUploadSession.tickCurrent();
         ClientModelManager.flushPendingModels();
+        ClientModelManager.tickSyncWatchdog();
         if ((tickCount & 63) == 0) {
             ClientModelManager.trimUnusedGpuCaches();
         }
