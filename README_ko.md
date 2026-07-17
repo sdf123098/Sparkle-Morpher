@@ -2,6 +2,8 @@
 
 > [English](README.md) | [中文](README_zh.md) | [日本語](README_ja.md) | **한국어**
 
+**QQ:** 1104823534 | **Discord:** [Discord 가입](https://discord.gg/3KqK7USF39) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
+
 Minecraft 종합 커스텀 모델 로더. 플레이어에게 커스텀 모델, 애니메이션, 사운드 이펙트를 장착——그 블록 캐릭터에게 작별을 고하세요.
 
 > 이것은**종합 모델 로더**입니다. 현재 `.ysm` 형식(OpenYSM 기반, MIT 라이선스)과 `.bbmodel` 형식(Blockbench)을 지원하며, 향후 다른 주류 모델 형식에 대한 지원을 추가할 예정입니다.

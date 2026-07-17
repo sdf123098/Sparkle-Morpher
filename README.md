@@ -2,6 +2,8 @@
 
 > **English** | [中文](README_zh.md) | [日本語](README_ja.md) | [한국어](README_ko.md)
 
+**QQ:** 1104823534 | **Discord:** [Join Discord](https://discord.gg/3KqK7USF39) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
+
 A comprehensive Minecraft custom model loader that lets players mount custom models, animations, and sound effects onto players (and select entities, vehicles, and projectiles) — say goodbye to the default blocky character.
 
 > Sparkle's Morpher is a **universal model loader**. It currently supports the `.ysm` format (based on OpenYSM, MIT licensed) and `.bbmodel` format (Blockbench), with support for additional mainstream model formats planned for future releases.
