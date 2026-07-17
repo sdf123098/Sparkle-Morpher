@@ -23,9 +23,12 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.phys.Vec3;
+import com.mojang.math.Axis;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -48,6 +51,8 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
     public MultiBufferSource rtb;
 
     private IRenderCycle currentModelRenderCycle = EModelRenderCycle.INITIAL;
+
+    private boolean fallFlyingPitchHandledByAnimation;
 
     public GeoReplacedEntityRenderer(EntityRendererProvider.Context context) {
         super(context, new PlayerModel(context.bakeLayer(ModelLayers.PLAYER_SLIM), true), 0.5f);
@@ -98,7 +103,13 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
                 float eyeHeight = entity.getEyeHeight(Pose.STANDING) - 0.1f;
                 poseStack.translate((-bedOrientation.getStepX()) * eyeHeight, 0.0f, (-bedOrientation.getStepZ()) * eyeHeight);
             }
-            setupRotations(entity, poseStack, modelData.lerpedAge, modelData.lerpBodyRot, partialTick);
+            boolean previousFallFlyingPitchState = this.fallFlyingPitchHandledByAnimation;
+            this.fallFlyingPitchHandledByAnimation = t.getModelAssembly().getAnimationBundle().isFallFlyingPitchHandledByAnimation();
+            try {
+                setupRotations(entity, poseStack, modelData.lerpedAge, modelData.lerpBodyRot, partialTick);
+            } finally {
+                this.fallFlyingPitchHandledByAnimation = previousFallFlyingPitchState;
+            }
             if (t.getEntity().getVehicle() != null) {
                 VehicleCapability.get(t.getEntity().getVehicle()).ifPresent(cap -> {
                     Vector3f vector3f = cap.getExpressionOffset();
@@ -161,12 +172,37 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
                 }
             }
         }
-        super.setupRotations(tentity, poseStack, ageInTicks, rotationYaw, partialTicks, 1.0f);
+        boolean animationHandlesFallFlyingPitch = tentity.isFallFlying() && this.fallFlyingPitchHandledByAnimation;
+        if (animationHandlesFallFlyingPitch) {
+            ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(7, false);
+        }
+        try {
+            super.setupRotations(tentity, poseStack, ageInTicks, rotationYaw, partialTicks, 1.0f);
+        } finally {
+            if (animationHandlesFallFlyingPitch) {
+                ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(7, true);
+            }
+        }
+        if (animationHandlesFallFlyingPitch) {
+            applyFallFlyingYawRotation(tentity, poseStack, partialTicks);
+        }
         if (t > 0) {
             tentity.deathTime = t;
         }
         if (zIsAutoSpinAttack) {
             ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, true);
+        }
+    }
+
+    private static void applyFallFlyingYawRotation(LivingEntity entity, PoseStack poseStack, float partialTicks) {
+        Vec3 view = entity.getViewVector(partialTicks);
+        Vec3 movement = entity.getDeltaMovement();
+        double movementHorizontal = movement.horizontalDistanceSqr();
+        double viewHorizontal = view.horizontalDistanceSqr();
+        if (movementHorizontal > 0.0d && viewHorizontal > 0.0d) {
+            double dot = (movement.x * view.x + movement.z * view.z) / Math.sqrt(movementHorizontal * viewHorizontal);
+            double cross = movement.x * view.z - movement.z * view.x;
+            poseStack.mulPose(Axis.YP.rotation((float) (Math.signum(cross) * Math.acos(Mth.clamp(dot, -1.0d, 1.0d)))));
         }
     }
 

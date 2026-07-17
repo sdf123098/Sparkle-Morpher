@@ -16,8 +16,15 @@ public class YSMByteBuf implements AutoCloseable {
 
     // 消費垃圾數據頭部，防止讀寫出問題
     public int skipGarbageHeader() {
-        int garbageLen = buf.readByte() & 0x7F;
+        if (buf.readableBytes() < 2) {
+            throw new IllegalArgumentException("Invalid packet: missing garbage header");
+        }
+        int garbageLen = buf.readUnsignedByte() & 0x7F;
         buf.skipBytes(1);
+        if (garbageLen > buf.readableBytes()) {
+            throw new IllegalArgumentException("Invalid packet: garbage header length " + garbageLen
+                    + " exceeds remaining payload " + buf.readableBytes());
+        }
         buf.skipBytes(garbageLen);
         return garbageLen;
     }

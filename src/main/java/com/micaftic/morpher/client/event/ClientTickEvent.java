@@ -38,6 +38,7 @@ public final class ClientTickEvent {
         UploadManager.processPendingUploads();
         ModelUploadSession.tickCurrent();
         ClientModelManager.flushPendingModels();
+        ClientModelManager.tickSyncWatchdog();
         ClientModelManager.trimUnusedGpuCaches();
         if (tickCount % OBJECT_POOL_CLEANUP_INTERVAL_TICKS == 0) {
             ObjectPool.cleanup();

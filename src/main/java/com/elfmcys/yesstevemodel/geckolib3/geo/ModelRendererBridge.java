@@ -85,7 +85,7 @@ public class ModelRendererBridge {
         }
 
         if (AccelerationCapability.canRenderSimd() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()) { // WIP: SIMD MODEL RENDER
-            nativeRenderModel(
+            boolean nativeRendered = nativeRenderModel(
                     buffer,
                     pose,
                     projectionModelViewMatrix,
@@ -100,6 +100,14 @@ public class ModelRendererBridge {
                     red, green, blue, alpha,
                     isPreview
             );
+            if (!nativeRendered) {
+                renderModel(
+                        buffer, pose, projectionModelViewMatrix,
+                        OptiFineDetector.isOptifinePresent(), model, boneParams, stateBuffer,
+                        textureIndex, renderPartMask, packedLight, packedOverlay,
+                        red, green, blue, alpha, isPreview
+                );
+            }
         } else {
             renderModel(
                     buffer,
@@ -402,13 +410,13 @@ public class ModelRendererBridge {
     }
 
 
-    public static void nativeRenderModel( // TODO:
+    public static boolean nativeRenderModel(
             VertexConsumer vertexConsumer, PoseStack.Pose pose, Matrix4f projectionModelViewMatrix,
             boolean isCompatMode, GeoModel mesh, float[] boneVertex, float[] stateBuffer,
             int textureIndex, int renderPartMask, int packedLight, int packedOverlay,
             float r, float g, float b, float a, boolean isPreview) {
 
-        if (mesh.nativeModelHandle == 0) return;
+        if (!mesh.ensureNativeCache()) return false;
 
         Matrix4f projMat = RenderSystem.getProjectionMatrix();
 
@@ -425,6 +433,7 @@ public class ModelRendererBridge {
                 packedLight, packedOverlay,
                 r, g, b, a
         );
+        return true;
     }
 
     private static final class RenderScratch {

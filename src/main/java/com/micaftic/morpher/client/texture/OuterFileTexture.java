@@ -16,9 +16,10 @@ import org.jetbrains.annotations.NotNull;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 
 public class OuterFileTexture extends AbstractTexture implements ITextureMap {
-    private byte[] data;
+    private final byte[] data;
     private boolean uploaded;
     private boolean closed;
     private final String modelId;
@@ -30,7 +31,8 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     }
 
     public OuterFileTexture(byte[] data, String modelId) {
-        this.data = data;
+        this.data = Objects.requireNonNull(data, "Texture source data must not be null");
+        if (data.length == 0) throw new IllegalArgumentException("Texture source data must not be empty");
         this.modelId = modelId;
     }
 
@@ -44,13 +46,10 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     }
 
     public void doLoad() {
-        byte[] textureBytes = data;
-        if (textureBytes == null) {
-            if (!uploaded) {
-                YesSteveModel.LOGGER.warn("[SM] Texture bytes are unavailable before upload.");
-            }
+        if (uploaded) {
             return;
         }
+        byte[] textureBytes = data;
         ModelMemoryProfiler.logBytes("texture-decode-start", null, textureBytes);
         try (NativeImage imageIn = NativeImage.read(new ByteArrayInputStream(textureBytes))) {
             int width = imageIn.getWidth();
@@ -61,9 +60,6 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             closed = false;
             ResourceLifecycleStats.onTextureUploaded(modelId, width, height, textureBytes.length);
             ModelMemoryProfiler.log("texture-uploaded", null);
-            // 源字节已上传到 GPU：立即释放堆中常驻的 byte[]（reload 时 doLoad 走 textureBytes==null 静默返回，不再需要源数据）
-            data = null;
-            ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, textureBytes.length);
         } catch (IOException e) {
             YesSteveModel.LOGGER.error("[SM] Failed to upload outer file texture", e);
         }
@@ -92,11 +88,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             texture.closeAndReleaseSource();
         }
         suffixTextures = Reference2ReferenceMaps.emptyMap();
-        byte[] retained = data;
-        if (retained != null) {
-            data = null;
-            ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, retained.length);
-        }
+        ResourceLifecycleStats.onTextureSourceBytesReleased(modelId, data.length);
     }
 
     private void releaseGpuBinding() {

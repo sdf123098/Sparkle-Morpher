@@ -368,14 +368,16 @@ public class BBToRawConverter {
                 data = decodeBase64Texture(bbTexture.source);
             }
 
-            if (data != null && data.length > 0) {
-                rawTexture.data = data;
-                if ((w <= 0 || h <= 0) && data.length >= 24) {
-                    int[] dim = parsePngDimensions(data);
-                    if (dim != null) {
-                        if (w <= 0) w = dim[0];
-                        if (h <= 0) h = dim[1];
-                    }
+            if (data == null || data.length == 0) {
+                String textureRef = bbTexture.relative_path == null || bbTexture.relative_path.isBlank() ? bbTexture.name : bbTexture.relative_path;
+                throw new IllegalArgumentException("Missing Blockbench texture data: " + textureRef);
+            }
+            rawTexture.data = data;
+            if ((w <= 0 || h <= 0) && data.length >= 24) {
+                int[] dim = parsePngDimensions(data);
+                if (dim != null) {
+                    if (w <= 0) w = dim[0];
+                    if (h <= 0) h = dim[1];
                 }
             }
 

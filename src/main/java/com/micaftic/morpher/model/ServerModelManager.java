@@ -418,6 +418,7 @@ public final class ServerModelManager {
         byte[] clientNextKey;
         int step = 0;
         List<ServerModelData> allowedModels = new ArrayList<>();
+        Connection connection;
 
         // TODO: 未来可基于UUID持久化，这里目前每次加入生成固定clientKey
         PlayerSyncState() {new Random(114514).nextBytes(clientKey);}
@@ -476,7 +477,9 @@ public final class ServerModelManager {
                 }
             }
         } catch (Exception e) {
-            YesSteveModel.LOGGER.error("[SM] Server sync error for " + uuid, e);
+            syncStates.remove(uuid, state);
+            YesSteveModel.LOGGER.warn("[SM] Discarded invalid model sync session for {} at step {}: {}",
+                    uuid, state.step, e.getMessage());
         }
     }
 
@@ -527,7 +530,11 @@ public final class ServerModelManager {
 
                     try {
                         if (YSMFolderDeserializer.isModelFolder(dir)) {
-                            String modelId = baseDir.relativize(dir).toString().replace('\\', '/');
+                            String modelId = normalizeScannedModelId(baseDir.relativize(dir).toString().replace('\\', '/'));
+                            if (modelId == null) {
+                                YesSteveModel.LOGGER.warn("[SM] Skipping local model folder with invalid id: {}", dir);
+                                return FileVisitResult.SKIP_SUBTREE;
+                            }
 
                             RawYsmModel rawModel = null;
                             try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(dir)) {
@@ -563,7 +570,11 @@ public final class ServerModelManager {
                     ImportKind importKind = importKindFromFileName(file.getFileName().toString());
                     if (importKind == ImportKind.UNKNOWN) return FileVisitResult.CONTINUE;
                     try {
-                        String modelId = stripImportExtension(baseDir.relativize(file).toString().replace('\\', '/'));
+                        String modelId = normalizeScannedModelId(baseDir.relativize(file).toString().replace('\\', '/'));
+                        if (modelId == null) {
+                            YesSteveModel.LOGGER.warn("[SM] Skipping local model file with invalid id: {}", file);
+                            return FileVisitResult.CONTINUE;
+                        }
                         byte[] raw = readModelFileBytes(file);
                         RawYsmModel rawModel = parseUploadedModel(raw, file.toString(), importKind);
 
@@ -751,6 +762,15 @@ public final class ServerModelManager {
         return modelId;
     }
 
+    @Nullable
+    private static String normalizeScannedModelId(@Nullable String modelId) {
+        String normalized = ModelIdUtil.normalizeImportModelId(stripImportExtension(modelId == null ? "" : modelId));
+        if (!ModelIdUtil.isValidModelId(normalized) || !ModelIdUtil.hasLetterOrNumber(normalized)) {
+            return null;
+        }
+        return normalized;
+    }
+
     private static ImportKind importKindFromFileName(String fileName) {
         if (fileName == null) {
             return ImportKind.UNKNOWN;
@@ -858,10 +878,21 @@ public final class ServerModelManager {
                 if (currentServer == null) return;
 
                 for (UUID uuid : uuids) {
-                    PlayerSyncState state = syncStates.computeIfAbsent(uuid, k -> new PlayerSyncState());
-                    state.allowedModels.clear();
-                    state.allowedModels.addAll(CACHE_NAME_INFO.values());
-                    state.step = 1;
+                    PlayerSyncState candidate = new PlayerSyncState();
+                    candidate.allowedModels.addAll(CACHE_NAME_INFO.values());
+                    candidate.step = 1;
+                    candidate.connection = getPlayerConnection(uuid);
+                    PlayerSyncState state = syncStates.compute(uuid, (key, existing) -> {
+                        if (existing != null && existing.step > 0 && existing.step < 3
+                                && candidate.connection != null && existing.connection == candidate.connection) {
+                            return existing;
+                        }
+                        return candidate;
+                    });
+                    if (state != candidate) {
+                        YesSteveModel.LOGGER.debug("[SM] Model sync already in progress for {}; duplicate start ignored", uuid);
+                        continue;
+                    }
 
                     // HandshakePing
 //                    byte[] garbage = new byte[16 + SECURE_RANDOM_S.nextInt(48)];
@@ -996,6 +1027,10 @@ public final class ServerModelManager {
                     int offset = 0;
 
                     while (offset < totalSize) {
+                        if (!isCurrentSyncSession(uuid, state)) {
+                            YesSteveModel.LOGGER.debug("[SM] Stopped stale model sync transfer for {}", uuid);
+                            return;
+                        }
                         int length = Math.min(chunkSize, totalSize - offset);
 
                         int garbageLen = 16 + theRandom.nextInt(48);
@@ -1021,6 +1056,7 @@ public final class ServerModelManager {
                             if (success) {
                                 offset += length;
                             } else {
+                                if (!isCurrentSyncSession(uuid, state)) return;
                                 try { Thread.sleep(5); } catch (InterruptedException e) {}
                             }
                         }
@@ -1101,7 +1137,11 @@ public final class ServerModelManager {
     }
 
     public static Optional<ServerModelData> getModelDefinition(String str) {
-        return Optional.ofNullable(CACHE_NAME_INFO.get(str));
+        ServerModelData data = CACHE_NAME_INFO.get(str);
+        if (data == null) {
+            data = CACHE_NAME_INFO.get(ModelIdUtil.normalizeImportModelId(str));
+        }
+        return Optional.ofNullable(data);
     }
 
     public static Map<String, ServerModelData> getServerModelInfo() {
@@ -1444,6 +1484,20 @@ public final class ServerModelManager {
         nativeSendModelData(uuid, null);
     }
 
+    public static void clearPlayerSyncState(UUID uuid) {
+        if (uuid != null) {
+            syncStates.remove(uuid);
+        }
+    }
+
+    private static boolean isCurrentSyncSession(UUID uuid, PlayerSyncState state) {
+        if (uuid == null || state == null || syncStates.get(uuid) != state || state.connection == null) {
+            return false;
+        }
+        Connection connection = getPlayerConnection(uuid);
+        return connection == state.connection && connection.isConnected();
+    }
+
     private static Connection getPlayerConnection(UUID uuid) {
         ServerPlayer player;
         MinecraftServer currentServer = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
@@ -1549,6 +1603,9 @@ public final class ServerModelManager {
     public static String resolveTextureOrDefault(String modelId, @Nullable String requestedTexture) {
         ServerModelData modelData = CACHE_NAME_INFO.get(modelId);
         if (modelData == null) {
+            modelData = CACHE_NAME_INFO.get(ModelIdUtil.normalizeImportModelId(modelId));
+        }
+        if (modelData == null) {
             return null;
         }
         List<String> textures = modelData.getModelInfo().getTextures();
@@ -1590,13 +1647,14 @@ public final class ServerModelManager {
         if (!CACHE_NAME_INFO.isEmpty()) {
             ModelInfoCapability.get(serverPlayer).ifPresent(modelInfoCap -> {
                 AuthModelsCapability.get(serverPlayer).ifPresent(authModelsCap -> {
-                    if (authModelsCap.getAuthModels().removeIf(str -> !CACHE_NAME_INFO.containsKey(str))) {
+                    if (authModelsCap.getAuthModels().removeIf(str -> getModelDefinition(str).isEmpty())) {
                         NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(authModelsCap.getAuthModels()), serverPlayer);
                     }
-                    String modelId = modelInfoCap.getModelId();
+                    String selectedModelId = modelInfoCap.getModelId();
+                    String modelId = CACHE_NAME_INFO.containsKey(selectedModelId) ? selectedModelId : ModelIdUtil.normalizeImportModelId(selectedModelId);
                     boolean inCache = getServerModelInfo().containsKey(modelId);
                     boolean isAuth = AUTH_MODELS.contains(modelId);
-                    boolean hasAuth = authModelsCap.containsModel(modelId);
+                    boolean hasAuth = authModelsCap.containsModel(selectedModelId) || authModelsCap.containsModel(modelId);
                     NetworkOnlineDebugLog.info("validate: modelId={} inCache={} isAuth={} hasAuth={}",
                             modelId, inCache, isAuth, hasAuth);
                     boolean changed = false;
@@ -1612,6 +1670,10 @@ public final class ServerModelManager {
                             changed = true;
                         } else if (!resolvedTexture.equals(modelInfoCap.getSelectTexture())) {
                             NetworkOnlineDebugLog.info("validate: TEXTURE_CHANGE {} -> {}", modelInfoCap.getSelectTexture(), resolvedTexture);
+                            modelInfoCap.setModelAndTexture(modelId, resolvedTexture);
+                            changed = true;
+                        } else if (!modelId.equals(selectedModelId)) {
+                            NetworkOnlineDebugLog.info("validate: MODEL_ID_NORMALIZE {} -> {}", selectedModelId, modelId);
                             modelInfoCap.setModelAndTexture(modelId, resolvedTexture);
                             changed = true;
                         } else {

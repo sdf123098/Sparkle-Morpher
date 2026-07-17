@@ -405,6 +405,9 @@ public class YSMClientMapper {
         List<BufferedImage> imagesList = new ArrayList<>();
 
         for (RawYsmModel.RawTexture rt : raw.mainEntity.textures.values()) {
+            if (rt.data == null || rt.data.length == 0) {
+                throw new IllegalArgumentException("Missing texture source data: " + rt.name + " (" + rt.hash + ")");
+            }
             BufferedImage img = decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
             imagesList.add(img);
 
@@ -422,7 +425,11 @@ public class YSMClientMapper {
                 }
             }
             tex.setSuffixTextures(suffixTextures);
-            mainTextures.put(rt.name, tex);
+            String textureName = uniqueTextureName(mainTextures, rt.name, rt.hash);
+            if (!textureName.equals(rt.name)) {
+                YesSteveModel.LOGGER.warn("[SM] Duplicate texture name '{}' in model '{}'; using '{}'", rt.name, modelId, textureName);
+            }
+            mainTextures.put(textureName, tex);
         }
         Map<String, OuterFileTexture> avatarTextures = new LinkedHashMap<>();
         for (RawYsmModel.RawMetadata.Author author : raw.metadata.authors) {
@@ -1602,6 +1609,16 @@ public class YSMClientMapper {
                                 .mapToDouble(i -> model.visibleBoundsOffset[i])
                                 .toArray()
         );
+    }
+
+    private static String uniqueTextureName(Map<String, OuterFileTexture> textures, String requestedName, String stableId) {
+        String base = requestedName == null || requestedName.isBlank() ? "texture" : requestedName;
+        if (!textures.containsKey(base)) return base;
+        String suffix = stableId == null || stableId.isBlank() ? "duplicate" : stableId.replaceAll("[^a-zA-Z0-9._-]", "_");
+        String candidate = base + "@" + suffix;
+        int index = 2;
+        while (textures.containsKey(candidate)) candidate = base + "@" + suffix + "-" + index++;
+        return candidate;
     }
 
     private static boolean isNegativeSizedFace(RawYsmModel.RawFace f) {

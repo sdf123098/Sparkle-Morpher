@@ -61,6 +61,10 @@ public final class ModelPreviewRenderer {
 
     private static final ThreadLocal<Boolean> FIRST_PERSON_MODE = ThreadLocal.withInitial(() -> false);
 
+    // Animation evaluation runs on worker threads during a world render. Unlike the preview
+    // modes, this frame-scoped flag must therefore be visible across threads.
+    private static volatile boolean worldRenderMode;
+
     private static boolean inventoryPreviewFrontFacing = false;
 
     private static final class PreviewMouseRotation {
@@ -118,6 +122,14 @@ public final class ModelPreviewRenderer {
 
     public static void setFirstPersonMode(boolean firstPersonMode) {
         FIRST_PERSON_MODE.set(firstPersonMode);
+    }
+
+    public static void setWorldRenderMode(boolean worldRenderMode) {
+        ModelPreviewRenderer.worldRenderMode = worldRenderMode;
+    }
+
+    public static boolean isWorldRender() {
+        return worldRenderMode;
     }
 
     public static boolean isFirstPerson() {

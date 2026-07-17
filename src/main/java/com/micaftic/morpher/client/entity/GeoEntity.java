@@ -139,6 +139,12 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
             }
         }, () -> {
             ModelAssembly modelAssembly = ClientModelManager.getLocalModelContext();
+            if (modelAssembly == null) {
+                if (this.renderShape != null || this.modelAssembly != null) {
+                    clearModel();
+                }
+                return;
+            }
             if (this.renderShape == null || !this.renderShape.isDefault || modelAssembly != this.renderShape.context) {
                 this.renderShape = buildRenderShape(modelAssembly, true);
             }

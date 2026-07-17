@@ -129,8 +129,6 @@ public class ModelAssemblyFactory {
     private static final String MACE_MAINHAND_HOLD = "hold_mainhand:mace";
     private static final String MACE_OFFHAND_HOLD = "hold_offhand:mace";
     private static final String MACE_SWING = "swing:mace";
-    private static final String MACE_MAINHAND_USE = "use_mainhand:mace";
-    private static final String MACE_OFFHAND_USE = "use_offhand:mace";
     private static final String LANCE_MAINHAND_HOLD = "hold_mainhand:lance";
     private static final String LANCE_OFFHAND_HOLD = "hold_offhand:lance";
     private static final String LANCE_SWING = "swing:lance";
@@ -451,6 +449,9 @@ public class ModelAssemblyFactory {
 
     private static ModelDisplayAssets buildTextureRegistry(ClientModelInfo clientModelInfo, boolean isAuth, List<AbstractTexture> textureList) {
         Map<String, AbstractTexture> extraTextures = extractExtraTextures(clientModelInfo, textureList);
+        if (clientModelInfo.getAvatarTextures() != null) {
+            textureList.addAll(clientModelInfo.getAvatarTextures().values());
+        }
         Metadata metadata = clientModelInfo.getInfo().getExtraInfo();
         return new ModelDisplayAssets(metadata != null ? metadata.getName() : StringPool.EMPTY, isAuth, clientModelInfo.getAvatarTextures(), extraTextures);
     }
@@ -513,8 +514,6 @@ public class ModelAssemblyFactory {
         aliasAnimation(animations, MACE_MAINHAND_HOLD, MACE_MAINHAND_HOLD_ID);
         aliasAnimation(animations, MACE_OFFHAND_HOLD, MACE_OFFHAND_HOLD_ID);
         aliasAnimation(animations, MACE_SWING, MACE_SWING_ID);
-        aliasAnimation(animations, MACE_MAINHAND_USE, MACE_MAINHAND_HOLD);
-        aliasAnimation(animations, MACE_OFFHAND_USE, MACE_OFFHAND_HOLD);
     }
 
     private static void aliasAnimation(Object2ReferenceMap<String, Animation> animations, String alias, String source) {

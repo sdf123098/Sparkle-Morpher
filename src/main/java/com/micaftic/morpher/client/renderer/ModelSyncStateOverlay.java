@@ -26,8 +26,6 @@ public class ModelSyncStateOverlay implements HudOverlay {
 
     @Override
     public void render(GuiGraphics g, Font font, float partialTick, int screenWidth, int screenHeight) {
-        // 每帧驱动同步超时看门狗：即便禁用了加载 UI，也要能强制结束卡住的同步。
-        ClientModelManager.tickSyncWatchdog();
         if (LoadingStateConfig.DISABLE_LOADING_STATE_SCREEN.get().booleanValue()) {
             return;
         }

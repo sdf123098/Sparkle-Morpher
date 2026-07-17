@@ -398,11 +398,6 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
             addForeArm(pose, arm, 0.15f, 0.0f, 0.0f);
             return;
         }
-        if ("mace".equals(itemType)) {
-            pose.name = "use_mace";
-            setArm(pose, arm, 2.25f, arm == HumanoidArm.RIGHT ? -0.25f : 0.25f, arm == HumanoidArm.RIGHT ? 0.35f : -0.35f);
-            return;
-        }
         if (isToolOrWeapon(itemType)) {
             pose.name = "use_item";
             applyGenericUsePose(player, event, pose, arm);

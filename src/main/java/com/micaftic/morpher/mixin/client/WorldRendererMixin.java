@@ -22,6 +22,7 @@ public class WorldRendererMixin {
         float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
         AnimationFrameProfiler.beginRenderFrame(partialTick);
         if (YesSteveModel.isAvailable()) {
+            ModelPreviewRenderer.setWorldRenderMode(true);
             ModelPreviewRenderer.setFirstPersonMode(true);
             EntityRenderCache.tick(partialTick);
         }
@@ -32,6 +33,7 @@ public class WorldRendererMixin {
         if (YesSteveModel.isAvailable()) {
             EntityRenderCache.clear();
             ModelPreviewRenderer.setFirstPersonMode(false);
+            ModelPreviewRenderer.setWorldRenderMode(false);
         }
     }
 }

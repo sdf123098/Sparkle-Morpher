@@ -10,6 +10,7 @@ import net.minecraft.tags.ItemTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.api.distmarker.Dist;
@@ -25,8 +26,10 @@ public class InputStateKey {
     public static volatile boolean[] mouseStates = new boolean[8];
 
     private static final int INTERACTION_PULSE_TICKS = 10;
+    private static final int USE_PENDING_TICKS = 2;
 
     private static volatile InteractionHand usePulseHand = InteractionHand.MAIN_HAND;
+    private static volatile ItemStack usePulseItem = ItemStack.EMPTY;
 
     private static volatile InteractionHand swingPulseHand = InteractionHand.MAIN_HAND;
 
@@ -37,6 +40,8 @@ public class InputStateKey {
     private static volatile int swingPulseTicks;
 
     private static volatile int swingPulseAge;
+
+    private static volatile int swingPulseSequence;
 
     private static volatile boolean lastAttackKeyDown;
 
@@ -91,8 +96,9 @@ public class InputStateKey {
     public static void tick() {
         tickAttackKey();
         if (usePulseTicks > 0) {
-            usePulseTicks--;
-            usePulseAge++;
+            LocalPlayer player = Minecraft.getInstance().player;
+            if (player == null || player.isUsingItem() || !isUsePulseValid(player, usePulseHand)) clearUsePulse();
+            else { usePulseTicks--; usePulseAge++; if (usePulseTicks <= 0) clearUsePulse(); }
         }
         if (swingPulseTicks > 0) {
             swingPulseTicks--;
@@ -131,28 +137,28 @@ public class InputStateKey {
         if (entity.isUsingItem() && entity.getUsedItemHand() == hand) {
             return true;
         }
-        return isLocalPlayer(entity) && usePulseTicks > 0 && usePulseHand == hand;
+        return hasValidUsePulse(entity, hand);
     }
 
     public static InteractionHand getUsedItemHand(LivingEntity entity) {
         if (entity.isUsingItem()) {
             return entity.getUsedItemHand();
         }
-        return usePulseHand;
+        return hasValidUsePulse(entity, usePulseHand) ? usePulseHand : InteractionHand.MAIN_HAND;
     }
 
     public static int getTicksUsingItem(LivingEntity entity) {
         if (entity.isUsingItem()) {
             return entity.getTicksUsingItem();
         }
-        return isLocalPlayer(entity) && usePulseTicks > 0 ? Math.max(1, usePulseAge) : 0;
+        return hasValidUsePulse(entity, usePulseHand) ? Math.max(1, usePulseAge) : 0;
     }
 
     public static float getTicksUsingItem(LivingEntity entity, float partialTick) {
         if (entity.isUsingItem()) {
             return entity.getTicksUsingItem();
         }
-        return isLocalPlayer(entity) && usePulseTicks > 0 ? Math.max(1.0f, usePulseAge + partialTick) : 0.0f;
+        return hasValidUsePulse(entity, usePulseHand) ? Math.max(1.0f, usePulseAge + partialTick) : 0.0f;
     }
 
     public static float getSwingTicks(LivingEntity entity, float partialTick) {
@@ -239,10 +245,16 @@ public class InputStateKey {
         return swingPulseAge;
     }
 
+    public static int getLocalSwingPulseSequence() {
+        return swingPulseSequence;
+    }
+
     private static void triggerHandAnimation(int button, int action) {
-        if (action != 1 || (button != 0 && button != 1)) {
+        if (button != 0 && button != 1) {
             return;
         }
+        if (button == 1 && action == 0) { clearUsePulse(); return; }
+        if (action != 1) return;
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {
             return;
@@ -258,7 +270,7 @@ public class InputStateKey {
             recordSwingPulse(hand);
             return;
         }
-        recordUsePulse(hand);
+        recordUsePulse(player, hand);
     }
 
     private static InteractionHand resolveClickHand(LocalPlayer player, int button) {
@@ -274,10 +286,13 @@ public class InputStateKey {
         return InteractionHand.MAIN_HAND;
     }
 
-    private static void recordUsePulse(InteractionHand hand) {
-        boolean wasActive = usePulseTicks > 0 && usePulseHand == hand;
+    private static void recordUsePulse(LocalPlayer player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        if (!canStartContinuousUse(stack)) { clearUsePulse(); return; }
+        boolean wasActive = isUsePulseValid(player, hand);
         usePulseHand = hand;
-        usePulseTicks = INTERACTION_PULSE_TICKS;
+        usePulseItem = stack.copy();
+        usePulseTicks = USE_PENDING_TICKS;
         usePulseAge = 1;
         if (!wasActive) {
             logInputSnapshot("use-pulse hand=" + hand);
@@ -289,6 +304,7 @@ public class InputStateKey {
         swingPulseHand = hand;
         swingPulseTicks = INTERACTION_PULSE_TICKS;
         swingPulseAge = 1;
+        swingPulseSequence = swingPulseSequence == Integer.MAX_VALUE ? 1 : swingPulseSequence + 1;
         if (!wasActive) {
             logInputSnapshot("swing-pulse hand=" + hand);
         }
@@ -332,6 +348,15 @@ public class InputStateKey {
     private static boolean shouldSwingOffhandOnRightClick(ItemStack offhandItem) {
         return !offhandItem.isEmpty() && !offhandItem.is(Items.TOTEM_OF_UNDYING);
     }
+
+    private static boolean canStartContinuousUse(ItemStack stack) { return !stack.isEmpty() && stack.getUseAnimation() != UseAnim.NONE; }
+    private static boolean hasValidUsePulse(LivingEntity entity, InteractionHand hand) { return isLocalPlayer(entity) && isUsePulseValid(entity, hand); }
+    private static boolean isUsePulseValid(LivingEntity entity, InteractionHand hand) {
+        if (entity == null || hand == null || usePulseTicks <= 0 || usePulseHand != hand || usePulseItem.isEmpty()) return false;
+        ItemStack current = entity.getItemInHand(hand);
+        return !current.isEmpty() && current.getItem() == usePulseItem.getItem();
+    }
+    private static void clearUsePulse() { usePulseTicks = 0; usePulseAge = 0; usePulseItem = ItemStack.EMPTY; }
 
     private static boolean isUsingOffhandShield(LocalPlayer player) {
         return player.isUsingItem()

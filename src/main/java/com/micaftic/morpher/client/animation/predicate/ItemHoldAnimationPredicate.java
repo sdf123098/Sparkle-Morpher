@@ -66,13 +66,13 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 String str2 = conditionSwing.doTest(livingEntity, swingingHand);
                 if (StringUtils.isNoneBlank(str2)) {
                     debugSwingSelection(event, livingEntity, swingingHand, str2, hasLocalSwingPulse ? "local-condition" : "condition");
-                    return IAnimationPredicate.playAnimationWithValid(event, str2, ILoopType.EDefaultLoopTypes.PLAY_ONCE, i);
+                    return IAnimationPredicate.playAnimationWithLoop(event, str2, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
                 }
             }
             String fallback = getFallbackSwingAnimation(event, livingEntity, swingingHand);
             if (fallback != null) {
                 debugSwingSelection(event, livingEntity, swingingHand, fallback, hasLocalSwingPulse ? "local-fallback" : "fallback");
-                return IAnimationPredicate.playAnimationWithValid(event, fallback, ILoopType.EDefaultLoopTypes.PLAY_ONCE, i);
+                return IAnimationPredicate.playAnimationWithLoop(event, fallback, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
             }
             debugSwingSelection(event, livingEntity, swingingHand, "none", hasLocalSwingPulse ? "local-missing" : "missing");
         }
@@ -81,7 +81,8 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
 
     private static boolean shouldStartSwingAnimation(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
         if (hasLocalSwingPulse) {
-            boolean pulseJustStarted = InputStateKey.getLocalSwingPulseAge() <= 2;
+            boolean pulseJustStarted = event.getAnimatable().getPositionTracker()
+                    .markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
             boolean vanillaJustStarted = entity.swingTime == 0 && entity.swinging;
             return (pulseJustStarted || vanillaJustStarted)
                     && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);

@@ -185,14 +185,11 @@ public final class PlayerCapability extends CustomPlayerEntity {
     public void applyHeadTracking(AnimationEvent<? extends AnimatableEntity<Player>> event, boolean wasAnimEvaluated) {
         super.applyHeadTracking(event, wasAnimEvaluated);
         AnimatedGeoModel model2 = getCurrentModel();
-        if (model2 != null && isLocalPlayerModel() && !event.isFirstPerson()) {
-            // Hide the head so the first-person camera (at eye height) does not end up inside it.
-            // When an external first-person model mod (e.g. tr7zw FirstPersonModel) is loaded it
-            // manages head visibility; otherwise SparkleMorpher renders the local body itself, so
-            // hide the head whenever the camera is actually first-person for this local player.
-            boolean shouldHideHead = FirstPersonCompat.isLoaded()
-                    ? FirstPersonCompat.shouldHideHead()
-                    : CameraUtil.isFirstPerson(this);
+        if (model2 != null && isLocalPlayerModel()) {
+            // A full-body first-person mod can render the local player from either animation pass.
+            // Always derive head visibility from the actual camera state so the camera never ends
+            // up inside the model's head.
+            boolean shouldHideHead = CameraUtil.isFirstPerson(this);
             if (model2.allHeadBone() != null) {
                 model2.allHeadBone().setHidden(shouldHideHead);
             }

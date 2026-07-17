@@ -124,7 +124,9 @@ public class YsmCrypt {
                 return sha256File(path);
             }
             if (Files.isDirectory(path)) {
-                return sha256Text(path + ":" + Files.getLastModifiedTime(path).toMillis());
+                // 仅用稳定的目录路径，不掺 mtime：否则 dev/目录加载环境每次重跑 mtime 变化
+                // 会改变缓存身份，导致客户端 prepareCacheDirectory 清空缓存 + 服务端 hash 变化 → 每次大退都重下。
+                return sha256Text(path.toString());
             }
         } catch (Throwable ignored) {
         }
