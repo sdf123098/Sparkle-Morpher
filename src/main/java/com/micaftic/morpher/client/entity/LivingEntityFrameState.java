@@ -14,17 +14,25 @@ public class LivingEntityFrameState<T extends LivingEntity> extends EntityFrameS
 
     private ItemStack offHandItem;
 
+    private boolean fishing;
+
+    private int processedSwingPulseSequence;
+
     public LivingEntityFrameState(T t) {
         super(t);
         this.imData = new ImmersiveMelodiesCompat.ImmersiveMelodiesData();
         this.mainHandItem = ItemStack.EMPTY;
         this.offHandItem = ItemStack.EMPTY;
+        this.fishing = false;
+        this.processedSwingPulseSequence = 0;
     }
 
     @Override
     public void reset() {
         this.mainHandItem = ItemStack.EMPTY;
         this.offHandItem = ItemStack.EMPTY;
+        this.fishing = false;
+        this.processedSwingPulseSequence = 0;
         super.reset();
     }
 
@@ -48,6 +56,20 @@ public class LivingEntityFrameState<T extends LivingEntity> extends EntityFrameS
         } else {
             this.offHandItem = itemStack;
         }
+    }
+
+    public boolean updateFishingForAnimation(boolean fishing) {
+        boolean changed = this.fishing != fishing;
+        this.fishing = fishing;
+        return changed;
+    }
+
+    public boolean markSwingPulseProcessed(int sequence) {
+        if (sequence <= 0 || this.processedSwingPulseSequence == sequence) {
+            return false;
+        }
+        this.processedSwingPulseSequence = sequence;
+        return true;
     }
 
     public ImmersiveMelodiesCompat.ImmersiveMelodiesData getImmersiveMelodiesData() {

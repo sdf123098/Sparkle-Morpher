@@ -12,8 +12,6 @@ import it.unimi.dsi.fastutil.ints.IntLists;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectLists;
 import org.jetbrains.annotations.NotNull;
-import org.joml.Vector2f;
-import org.joml.Vector3f;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import org.lwjgl.system.MemoryUtil;
 
@@ -125,9 +123,6 @@ public class GeoModel {
     }
 
     public static class BakedQuad {
-        public Vector3f[] positions = new Vector3f[4];
-        public Vector2f[] uvs = new Vector2f[4];
-        public Vector3f normal;
         public final float[] packedPositions = new float[12];
         public final float[] packedUvs = new float[8];
         public float normalX, normalY, normalZ;
@@ -136,7 +131,6 @@ public class GeoModel {
             this.normalX = x;
             this.normalY = y;
             this.normalZ = z;
-            this.normal = new Vector3f(x, y, z);
         }
 
         public void setVertex(int index, float x, float y, float z, float u, float v) {
@@ -147,8 +141,6 @@ public class GeoModel {
             int uvOffset = index * 2;
             packedUvs[uvOffset] = u;
             packedUvs[uvOffset + 1] = v;
-            positions[index] = new Vector3f(x, y, z);
-            uvs[index] = new Vector2f(u, v);
         }
 
         public float x(int index) {
@@ -350,8 +342,18 @@ public class GeoModel {
         ModelAccelerationBridge.nComputeBoneMatricesLocal(handle, animArray, packedLight, outBoneBuffer);
     }
 
-    public void buildNativeCache() {
-        if (bakedBones == null || bakedBones.isEmpty()) return;
+    public synchronized boolean ensureNativeCache() {
+        if (nativeModelHandle != 0) return true;
+        try {
+            buildNativeCache();
+            return nativeModelHandle != 0;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    public synchronized void buildNativeCache() {
+        if (nativeModelHandle != 0 || bakedBones == null || bakedBones.isEmpty()) return;
 
         int totalBones = bakedBones.size();
         int totalCubes = 0;
@@ -407,7 +409,7 @@ public class GeoModel {
         }
     }
 
-    public void freeNativeCache() {
+    public synchronized void freeNativeCache() {
         if (nativeModelHandle != 0) {
             nDestroyModelCache(nativeModelHandle);
             nativeModelHandle = 0;

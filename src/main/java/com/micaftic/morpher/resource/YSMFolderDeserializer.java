@@ -84,7 +84,12 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     public YSMFolderDeserializer(Map<String, byte[]> memoryFiles) {
-        this.inMemoryFiles = memoryFiles;
+        this.inMemoryFiles = new LinkedHashMap<>();
+        for (Map.Entry<String, byte[]> entry : memoryFiles.entrySet()) {
+            String key = normalizeResourceKey(entry.getKey());
+            byte[] previous = this.inMemoryFiles.putIfAbsent(key, entry.getValue());
+            if (previous != null && previous != entry.getValue()) throw new IllegalArgumentException("Duplicate resource path after case normalization: " + entry.getKey());
+        }
         this.rootPath = null;
         this.zipFileSystem = null;
         this.model = new RawYsmModel();
@@ -99,11 +104,11 @@ public class YSMFolderDeserializer implements AutoCloseable {
             if (relativePath.startsWith("/")) {
                 relativePath = relativePath.substring(1);
             }
-            String normalizedPath = relativePath.replace('\\', '/');
+            String normalizedPath = normalizeResourceKey(relativePath);
             byte[] data = null;
 
             if (inMemoryFiles == null) {
-                Path target = rootPath.resolve(relativePath);
+                Path target = resolveResourcePath(normalizedPath);
                 if (Files.exists(target) && Files.isRegularFile(target)) {
                     data = Files.readAllBytes(target);
                 }
@@ -120,6 +125,26 @@ public class YSMFolderDeserializer implements AutoCloseable {
             System.err.println("[SM] Warning: Failed to read resource: " + relativePath);
         }
         return null;
+    }
+
+    private static String normalizeResourceKey(String path) {
+        return path.replace('\\', '/').replaceAll("^/+|/+$", "").replaceAll("/+", "/").toLowerCase(Locale.ROOT);
+    }
+
+    private Path resolveResourcePath(String normalizedPath) throws IOException {
+        Path direct = rootPath.resolve(normalizedPath).normalize();
+        if (!direct.startsWith(rootPath.normalize()) || Files.exists(direct)) return direct;
+        Path current = rootPath;
+        for (String segment : normalizedPath.split("/")) {
+            if (!Files.isDirectory(current)) return direct;
+            Path matched;
+            try (Stream<Path> children = Files.list(current)) {
+                matched = children.filter(child -> child.getFileName().toString().equalsIgnoreCase(segment)).findFirst().orElse(null);
+            }
+            if (matched == null) return direct;
+            current = matched;
+        }
+        return current;
     }
 
     public RawYsmModel deserialize() {
