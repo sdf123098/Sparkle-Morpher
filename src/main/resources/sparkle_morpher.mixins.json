@@ -16,6 +16,7 @@
     "client.ThrowableItemProjectileAccessor", "client.WorldRendererMixin", "client.EntityRidingAccessor"
   ],
   "mixins": [
-    "AbstractArrowEntityMixin", "ConnectionAccessor", "ProjectileEntityMixin", "ServerCommonPacketListenerImplAccessor", "ServerPlayerMixin"
+    "AbstractArrowEntityMixin", "ConnectionAccessor", "ProjectileEntityMixin", "ServerCommonPacketListenerImplAccessor", "ServerPlayerMixin",
+    "compat.TouhouMaidEntityMixin"
   ]
 }

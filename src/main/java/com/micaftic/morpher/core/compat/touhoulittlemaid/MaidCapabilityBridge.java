@@ -10,6 +10,6 @@ public final class MaidCapabilityBridge {
     }
 
     public static Optional<Object> get(Entity entity) {
-        return Optional.empty();
+        return MaidCapability.get(entity).map(capability -> capability);
     }
 }

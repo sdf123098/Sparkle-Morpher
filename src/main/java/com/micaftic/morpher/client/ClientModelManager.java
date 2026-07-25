@@ -7,6 +7,7 @@ import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.entity.EntityRenderCache;
 import com.micaftic.morpher.client.gui.IGuiWidget;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
@@ -163,6 +164,7 @@ public class ClientModelManager {
     private static final Set<String> gpuCacheTrimmedModels = ConcurrentHashMap.newKeySet();
     private static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
     private static final Set<String> cpuReloadInFlight = ConcurrentHashMap.newKeySet();
+    private static final Set<ModelAssembly> deferredAssemblyReleases = ConcurrentHashMap.newKeySet();
 
     private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
     private static final WeakHashMap<IGuiWidget, Object> guiWidgets = new WeakHashMap<>();
@@ -377,6 +379,8 @@ public class ClientModelManager {
                     previousModelIds.add(ctx.modelKey);
                     updatedModelIds.add(ctx.modelKey);
                     isModelReadyList.add(isAuth);
+                } else if (isLazyModelLoading()) {
+                    YesSteveModel.LOGGER.info("[SM] Deferred cached model until first use: {}", ctx.modelKey);
                 } else {
                     // 命中缓存
                     pendingModelsCount.incrementAndGet();
@@ -577,14 +581,17 @@ public class ClientModelManager {
                     }
 
                     YesSteveModel.LOGGER.info("[SM] Downloaded & Cached: " + outFile.getAbsolutePath());
-                    byte[] decompressed = YsmCrypt.read(cachedFileData, clientKey);
-                    ModelMemoryProfiler.logBytes("download-decrypted", ctx.modelId, decompressed);
-                    cachedFileData = null;
-
                     cachedModelFiles.put(ctx.modelKey, outFile);
-                    parseAndLoadModel(decompressed, ctx.modelKey, ctx.isAuth);
-                    decompressed = null;
-                    ModelMemoryProfiler.log("download-parsed", ctx.modelId);
+                    if (isLazyModelLoading()) {
+                        YesSteveModel.LOGGER.info("[SM] Deferred downloaded model until first use: {}", ctx.modelKey);
+                    } else {
+                        byte[] decompressed = YsmCrypt.read(cachedFileData, clientKey);
+                        ModelMemoryProfiler.logBytes("download-decrypted", ctx.modelId, decompressed);
+                        cachedFileData = null;
+                        parseAndLoadModel(decompressed, ctx.modelKey, ctx.isAuth);
+                        decompressed = null;
+                        ModelMemoryProfiler.log("download-parsed", ctx.modelId);
+                    }
                 } catch (Exception e) {
                     YesSteveModel.LOGGER.error("[SM] Failed to save/parse downloaded model: " + ctx.modelId, e);
                 } finally {
@@ -748,7 +755,8 @@ public class ClientModelManager {
         if (assembly != null) {
             touchModel(modelKey);
         }
-       if (assembly != null && !assembly.isRuntimeResident()) {
+       if ((assembly == null && cachedModelFiles.containsKey(modelKey))
+               || (assembly != null && !assembly.isRuntimeResident())) {
            scheduleCachedModelReload(modelKey);
            return Optional.empty();
        }
@@ -776,6 +784,18 @@ public class ClientModelManager {
                 cpuReloadInFlight.remove(modelKey);
             }
         });
+    }
+
+    public static Set<String> getAvailableModelIds() {
+        LinkedHashSet<String> ids = new LinkedHashSet<>(modelAssemblyMap.keySet());
+        ids.addAll(cachedModelFiles.keySet());
+        return Collections.unmodifiableSet(ids);
+    }
+
+    public static boolean isAuthModel(String modelId) {
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        return modelKey != null && serverModels.values().stream()
+                .anyMatch(value -> modelKey.equals(value.modelKey) && value.isAuth);
     }
 
     public static boolean canUploadToServer() {
@@ -1644,7 +1664,7 @@ public class ClientModelManager {
 
     private static boolean containsRuntimeModel(String modelId) {
         String modelKey = canonicalRuntimeModelKey(modelId);
-        return modelKey != null && modelAssemblyMap.containsKey(modelKey);
+        return modelKey != null && (modelAssemblyMap.containsKey(modelKey) || cachedModelFiles.containsKey(modelKey));
     }
 
     private static boolean sameRuntimeModelId(String first, String second) {
@@ -1805,6 +1825,12 @@ public class ClientModelManager {
             Minecraft.getInstance().execute(() -> releaseModelAssembly(modelId, assembly));
             return;
        }
+        synchronized (assembly) {
+        if (EntityRenderCache.isModelAssemblyInUse(assembly)) {
+            deferredAssemblyReleases.add(assembly);
+            return;
+        }
+        deferredAssemblyReleases.remove(assembly);
        AudioStreamCache.clearForModel(assembly);
         releaseAssemblyTextures(assembly);
         if (assembly.getProjectileModels() != null) {
@@ -1829,6 +1855,7 @@ public class ClientModelManager {
         assembly.unloadRuntime();
        ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
         ModelMemoryProfiler.log("assembly-released", modelId);
+        }
     }
 
     private static void releaseModelCache(GeoModel model) {
@@ -1843,6 +1870,7 @@ public class ClientModelManager {
     }
 
     public static void trimUnusedGpuCaches() {
+        drainDeferredAssemblyReleases();
        trimUnusedCpuModels();
        int maxCachedGpuModels = GeneralConfig.safeInt(GeneralConfig.MAX_CACHED_GPU_MODELS, 0);
         if (maxCachedGpuModels <= 0) {
@@ -1903,6 +1931,8 @@ public class ClientModelManager {
             Minecraft.getInstance().execute(() -> unloadModelRuntime(modelId, assembly));
             return;
         }
+        synchronized (assembly) {
+        if (EntityRenderCache.isModelAssemblyInUse(assembly)) return;
         AudioStreamCache.clearForModel(assembly);
         if (assembly.getProjectileModels() != null) {
             for (ProjectileModelBundle bundle : assembly.getProjectileModels().values()) releaseModelCache(bundle.getModel());
@@ -1921,6 +1951,7 @@ public class ClientModelManager {
        assembly.unloadRuntime();
         gpuCacheTrimmedModels.remove(modelId);
         ModelMemoryProfiler.log("cpu-model-unloaded", modelId);
+        }
     }
 
     private static boolean canTrimGpuCache(String modelId, Set<String> protectedModels, long now, long ttlMillis) {
@@ -1936,7 +1967,17 @@ public class ClientModelManager {
         Set<String> protectedModels = new HashSet<>();
         protectedModels.add("default");
         if (localModelContext != null) {
-            touchAssembly(localModelContext);
+            for (Map.Entry<String, ModelAssembly> entry : modelAssemblyMap.entrySet()) {
+                if (entry.getValue() == localModelContext) {
+                    protectedModels.add(entry.getKey());
+                    touchModel(entry.getKey());
+                    break;
+                }
+            }
+        }
+        if (selectedModelId != null && !selectedModelId.isBlank()) {
+            protectedModels.add(canonicalRuntimeModelKey(selectedModelId));
+            touchModel(selectedModelId);
         }
         if (minecraft.level != null) {
             for (Player player : minecraft.level.players()) {
@@ -1950,6 +1991,16 @@ public class ClientModelManager {
             }
         }
         return protectedModels;
+    }
+
+    private static void drainDeferredAssemblyReleases() {
+        if (deferredAssemblyReleases.isEmpty()) return;
+        for (ModelAssembly assembly : new ArrayList<>(deferredAssemblyReleases)) {
+            if (!EntityRenderCache.isModelAssemblyInUse(assembly)
+                    && deferredAssemblyReleases.remove(assembly)) {
+                releaseModelAssembly(assembly);
+            }
+        }
     }
 
     private static void trimGpuCache(String modelId, ModelAssembly assembly) {
@@ -1994,6 +2045,10 @@ public class ClientModelManager {
             modelLastUsedAt.put(modelKey, System.currentTimeMillis());
             gpuCacheTrimmedModels.remove(modelKey);
         }
+    }
+
+    private static boolean isLazyModelLoading() {
+        return GeneralConfig.safeGet(GeneralConfig.LAZY_MODEL_LOADING, true);
     }
 
     public static void markModelUsed(String modelId) {

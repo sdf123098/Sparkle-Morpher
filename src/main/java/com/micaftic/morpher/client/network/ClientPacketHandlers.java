@@ -10,6 +10,7 @@ import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
+import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.event.EntityJoinCallbackEvent;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.molang.parser.ParseException;
@@ -168,6 +169,11 @@ public final class ClientPacketHandlers {
     public static void handleSyncVehicleModel(Object obj) {
         S2CSyncVehicleModelPacket message = (S2CSyncVehicleModelPacket) obj;
         EntityJoinCallbackEvent.addCallback(message.getEntityId(), entity -> {
+            if (TouhouMaidCompat.isMaidEntity(entity)) {
+                MaidCapability.get(entity).ifPresent(maid ->
+                        maid.applySyncedState(message.getCapability(), message.getFloatMap()));
+                return;
+            }
             VehicleCapability.get(entity).ifPresent(vehicleCapability -> {
                 vehicleCapability.setOwnerModelId(message.getCapability().getOwnerModelId());
                 vehicleCapability.setFloatMap((Int2FloatOpenHashMap) message.getFloatMap());

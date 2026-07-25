@@ -61,6 +61,8 @@ public class GeneralConfig {
 
     public static net.neoforged.neoforge.common.ModConfigSpec.IntValue MAX_CACHED_GPU_MODELS;
 
+    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue LAZY_MODEL_LOADING;
+
     public static net.neoforged.neoforge.common.ModConfigSpec.IntValue MAX_RESIDENT_CPU_MODELS;
 
     public static net.neoforged.neoforge.common.ModConfigSpec.IntValue UNUSED_MODEL_TTL_SECONDS;
@@ -160,7 +162,9 @@ public class GeneralConfig {
         builder.comment("Maximum decoded audio cache bytes across all client models. 0 disables decoded audio caching.");
         AUDIO_CACHE_MAX_BYTES = builder.defineInRange("AudioCacheMaxBytes", 64 * 1024 * 1024, 0, 512 * 1024 * 1024);
        builder.comment("Maximum models whose GPU/native render caches stay resident. 0 disables LRU trimming.");
-       MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 24, 0, 512);
+        MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 24, 0, 512);
+        builder.comment("Load cached server models only when they are first rendered or selected.");
+        LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
         builder.comment("Maximum server models whose CPU geometry and animation data stay resident. Idle models reload from the local cache when used again.");
         MAX_RESIDENT_CPU_MODELS = builder.defineInRange("MaxResidentCpuModels", 24, 1, 512);
         builder.comment("Minimum idle time before GPU/native render caches can be trimmed.");

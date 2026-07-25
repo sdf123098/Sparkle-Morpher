@@ -39,3 +39,10 @@ type = "required"
 versionRange = "${mc_version}"
 ordering = "NONE"
 side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "touhou_little_maid"
+type = "optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
