@@ -128,6 +128,11 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
         return this.modelAssembly;
     }
 
+    public final boolean referencesModelAssembly(ModelAssembly assembly) {
+        return assembly != null && (this.modelAssembly == assembly
+                || (this.renderShape != null && this.renderShape.context == assembly));
+    }
+
     public final void setModelId(String str) {
         this.modelId = str;
         refreshModel();
@@ -135,20 +140,16 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
 
     protected void refreshModel() {
         ClientModelManager.getModelContext(this.modelId).ifPresentOrElse(assembly -> {
-            if (this.renderShape == null || this.renderShape.isDefault || assembly != this.renderShape.context) {
-                this.renderShape = buildRenderShape(assembly, false);
-            }
+            updateRenderShape(assembly, false);
         }, () -> {
             ModelAssembly modelAssembly = ClientModelManager.getLocalModelContext();
-            if (modelAssembly == null) {
+            if (modelAssembly == null || !modelAssembly.isRuntimeResident()) {
                 if (this.renderShape != null || this.modelAssembly != null) {
                     clearModel();
                 }
                 return;
             }
-            if (this.renderShape == null || !this.renderShape.isDefault || modelAssembly != this.renderShape.context) {
-                this.renderShape = buildRenderShape(modelAssembly, true);
-            }
+            updateRenderShape(modelAssembly, true);
         });
         if (this.renderShape != null) {
             if ((this.renderShape.context != this.modelAssembly || this.renderShape.isDefault != this.loaded) && this.renderShape.isValid()) {
@@ -162,6 +163,19 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
         }
         if (this.modelAssembly != null) {
             clearModel();
+        }
+    }
+
+    private void updateRenderShape(ModelAssembly assembly, boolean isDefault) {
+        synchronized (assembly) {
+            if (!assembly.isRuntimeResident()) {
+                return;
+            }
+            if (this.renderShape == null
+                    || this.renderShape.isDefault != isDefault
+                    || assembly != this.renderShape.context) {
+                this.renderShape = buildRenderShape(assembly, isDefault);
+            }
         }
     }
 

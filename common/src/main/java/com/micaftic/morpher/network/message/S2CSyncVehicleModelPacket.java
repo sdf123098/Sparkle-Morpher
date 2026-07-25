@@ -2,6 +2,8 @@ package com.micaftic.morpher.network.message;
 
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
+import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
+import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.micaftic.morpher.event.EntityJoinCallbackEvent;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
@@ -57,6 +59,10 @@ public class S2CSyncVehicleModelPacket {
 
     @Environment(EnvType.CLIENT)
     public static void handleCapability(Entity entity, VehicleModelCapability capability, Int2FloatOpenHashMap floatMap) {
+        if (TouhouMaidCompat.isMaidEntity(entity)) {
+            MaidCapability.get(entity).ifPresent(maid -> maid.applySyncedState(capability, floatMap));
+            return;
+        }
         VehicleCapability.get(entity).ifPresent(vehicleCapability -> {
             vehicleCapability.setOwnerModelId(capability.getOwnerModelId());
             vehicleCapability.setFloatMap(floatMap);

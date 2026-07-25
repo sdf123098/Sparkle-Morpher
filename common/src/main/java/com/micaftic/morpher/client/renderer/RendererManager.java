@@ -22,6 +22,7 @@ public class RendererManager {
     private static HandItemRenderer handRenderer;
 
     private static VehicleRenderer vehicleRenderer;
+    private static MaidEntityRenderer maidRenderer;
 
     private RendererManager() {
     }
@@ -39,6 +40,7 @@ public class RendererManager {
         projectileRenderer = null;
         handRenderer = null;
         vehicleRenderer = null;
+        maidRenderer = null;
     }
 
     private static void initRenderers(ResourceManager resourceManager) {
@@ -63,6 +65,7 @@ public class RendererManager {
         projectileRenderer = new ProjectileRenderer(context);
         handRenderer = new HandItemRenderer();
         vehicleRenderer = new VehicleRenderer(context);
+        maidRenderer = new MaidEntityRenderer(context);
         SBackpackCompat.setupRenderLayers();
     }
 
@@ -92,5 +95,12 @@ public class RendererManager {
             initRenderers(Minecraft.getInstance().getResourceManager());
         }
         return vehicleRenderer;
+    }
+
+    public static MaidEntityRenderer getMaidRenderer() {
+        if (maidRenderer == null) {
+            initRenderers(Minecraft.getInstance().getResourceManager());
+        }
+        return maidRenderer;
     }
 }
