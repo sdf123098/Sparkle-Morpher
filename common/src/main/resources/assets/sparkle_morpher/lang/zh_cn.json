@@ -779,7 +779,7 @@
   "gui.sparkle_morpher.model_panel.model.on_demand": "首次使用时加载",
   "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit": "GPU 缓存上限",
   "gui.sparkle_morpher.model_panel.setting.cpu_cache_limit": "CPU 常驻模型数量",
-"gui.sparkle_morpher.model_panel.setting.cpu_cache_limit.desc": "限制同时保留完整模型运行时数据的服务器模型数量，空闲模型会在再次使用时从本地缓存加载。",
+"gui.sparkle_morpher.model_panel.setting.cpu_cache_limit.desc": "限制同时保留完整运行时数据的本地和服务器模型数量，空闲模型会在再次使用时从其来源按需加载。",
   "gui.sparkle_morpher.model_panel.setting.unused_model_ttl": "未使用模型 TTL",
   "gui.sparkle_morpher.model_panel.setting.enable_global_bandwidth_limit": "全局传输限速",
   "gui.sparkle_morpher.model_panel.setting.bandwidth_limit": "传输限速",

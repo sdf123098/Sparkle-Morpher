@@ -8,8 +8,11 @@ import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.EntityRenderCache;
 import com.micaftic.morpher.client.gui.IGuiWidget;
+import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
+import com.micaftic.morpher.client.model.ModelResourceBundle;
+import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
 import com.micaftic.morpher.client.model.VehicleModelBundle;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
@@ -23,6 +26,7 @@ import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
 import com.micaftic.morpher.resource.YSMBinaryDeserializer;
 import com.micaftic.morpher.resource.YSMClientMapper;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
+import com.micaftic.morpher.model.format.ServerModelInfo;
 import com.micaftic.morpher.resource.models.ModelPackData;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.DigestUtil;
@@ -164,7 +168,10 @@ public class ClientModelManager {
     private static final Set<String> gpuCacheTrimmedModels = ConcurrentHashMap.newKeySet();
     private static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
     private static final Set<String> cpuReloadInFlight = ConcurrentHashMap.newKeySet();
+    private static final ConcurrentHashMap<String, LazyModelSource> lazyModelSources = new ConcurrentHashMap<>();
     private static final Set<ModelAssembly> deferredAssemblyReleases = ConcurrentHashMap.newKeySet();
+    private static volatile Boolean lastLazyModelLoading;
+    private static volatile long lastModelTrimMillis;
 
     private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
     private static final WeakHashMap<IGuiWidget, Object> guiWidgets = new WeakHashMap<>();
@@ -371,7 +378,10 @@ public class ClientModelManager {
             }
 
             File cachedFile = localCacheMap.get(ctx.uuid);
-            if (cachedFile != null) cachedModelFiles.put(ctx.modelKey, cachedFile);
+            if (cachedFile != null) {
+                cachedModelFiles.put(ctx.modelKey, cachedFile);
+                registerRemoteLazySource(ctx.modelKey, cachedFile.toPath(), clientKey, ctx.isAuth);
+            }
             boolean isFileValid = YSMClientCache.verifyFileContent(cachedFile, hash1, hash2);
 
             boolean alreadyInMemory = modelAssemblyMap != null && modelAssemblyMap.containsKey(ctx.modelKey);
@@ -392,7 +402,7 @@ public class ClientModelManager {
                             if (clientKey == null) return;
                             byte[] fileBytes = Files.readAllBytes(cachedFile.toPath());
                             ModelMemoryProfiler.logBytes("cache-read", modelId, fileBytes);
-                            byte[] decompressed = YsmCrypt.read(fileBytes, clientKey);
+                            byte[] decompressed = YsmCrypt.readInPlace(fileBytes, clientKey);
                             ModelMemoryProfiler.logBytes("cache-decrypted", modelId, decompressed);
                             fileBytes = null;
                             parseAndLoadModel(decompressed, ctx.modelKey, isAuth);
@@ -586,10 +596,11 @@ public class ClientModelManager {
 
                     YesSteveModel.LOGGER.info("[SM] Downloaded & Cached: " + outFile.getAbsolutePath());
                     cachedModelFiles.put(ctx.modelKey, outFile);
+                    registerRemoteLazySource(ctx.modelKey, outFile.toPath(), clientKey, ctx.isAuth);
                     if (isLazyModelLoading()) {
                         YesSteveModel.LOGGER.info("[SM] Deferred downloaded model until first use: {}", ctx.modelKey);
                     } else {
-                        byte[] decompressed = YsmCrypt.read(cachedFileData, clientKey);
+                        byte[] decompressed = YsmCrypt.readInPlace(cachedFileData, clientKey);
                         ModelMemoryProfiler.logBytes("download-decrypted", ctx.modelId, decompressed);
                         cachedFileData = null;
                         parseAndLoadModel(decompressed, ctx.modelKey, ctx.isAuth);
@@ -686,6 +697,7 @@ public class ClientModelManager {
         serverModels.clear();
         cachedModelFiles.clear();
         cpuReloadInFlight.clear();
+        lazyModelSources.entrySet().removeIf(entry -> entry.getValue().remote);
 
         // 断线/换服：释放过期服务端模型装配（含纹理源 byte[] 与 GPU/native 资源），
         // 否则它们会被 modelAssemblyMap 强引用跨会话累积（主要内存泄漏源）。
@@ -732,6 +744,7 @@ public class ClientModelManager {
         localModelSourcePaths.clear();
         modelLastUsedAt.clear();
         gpuCacheTrimmedModels.clear();
+        lastModelTrimMillis = 0L;
 
         forEachGuiWidget(l -> {
             try {
@@ -754,35 +767,69 @@ public class ClientModelManager {
         return modelPackMap;
     }
 
-   public static Optional<ModelAssembly> getModelContext(String str) {
-       String modelKey = canonicalRuntimeModelKey(str);
-       ModelAssembly assembly = modelAssemblyMap.get(modelKey);
+    public static Optional<ModelAssembly> getModelContext(String str) {
+        String modelKey = canonicalRuntimeModelKey(str);
+        ModelAssembly assembly = modelAssemblyMap.get(modelKey);
+        if (assembly instanceof LazyModelAssembly) {
+            scheduleCachedModelReload(modelKey);
+            return Optional.empty();
+        }
         if (assembly != null) {
             touchModel(modelKey);
         }
-       if ((assembly == null && cachedModelFiles.containsKey(modelKey))
-               || (assembly != null && !assembly.isRuntimeResident())) {
-           scheduleCachedModelReload(modelKey);
-           return Optional.empty();
+        if ((assembly == null && lazyModelSources.containsKey(modelKey))
+                || (assembly != null && !assembly.isRuntimeResident())) {
+            scheduleCachedModelReload(modelKey);
+            return Optional.empty();
        }
        return Optional.ofNullable(assembly);
+    }
+
+    private static final class LazyModelSource {
+        private final Path path;
+        @Nullable
+        private final byte[] cacheKey;
+        private final boolean remote;
+        private final boolean auth;
+        private final long fingerprint;
+        private volatile ServerModelInfo modelInfo;
+
+        private LazyModelSource(Path path, @Nullable byte[] cacheKey, boolean remote, boolean auth,
+                                long fingerprint, @Nullable ServerModelInfo modelInfo) {
+            this.path = path.toAbsolutePath().normalize();
+            this.cacheKey = cacheKey == null ? null : cacheKey.clone();
+            this.remote = remote;
+            this.auth = auth;
+            this.fingerprint = fingerprint;
+            this.modelInfo = modelInfo;
+        }
+
+        private boolean sameLocalSource(LazyModelSource other) {
+            return other != null && !remote && !other.remote && auth == other.auth
+                    && fingerprint == other.fingerprint && path.equals(other.path);
+        }
     }
 
     private static void scheduleCachedModelReload(String modelId) {
         String modelKey = canonicalRuntimeModelKey(modelId);
         if (modelKey == null || !cpuReloadInFlight.add(modelKey)) return;
-        File cachedFile = cachedModelFiles.get(modelKey);
-        ServerModelContext context = serverModels.values().stream()
-                .filter(value -> modelKey.equals(value.modelKey)).findFirst().orElse(null);
-        if (cachedFile == null || context == null || clientKey == null) {
+        LazyModelSource source = lazyModelSources.get(modelKey);
+        if (source == null) {
             cpuReloadInFlight.remove(modelKey);
             return;
         }
         submitModelTask(() -> {
             try {
-                byte[] fileBytes = Files.readAllBytes(cachedFile.toPath());
-                byte[] decompressed = YsmCrypt.read(fileBytes, clientKey);
-                parseAndLoadModel(decompressed, modelKey, context.isAuth);
+                if (lazyModelSources.get(modelKey) != source) return;
+                if (source.remote) {
+                    if (source.cacheKey == null) return;
+                    byte[] fileBytes = Files.readAllBytes(source.path);
+                    byte[] decompressed = YsmCrypt.readInPlace(fileBytes, source.cacheKey);
+                    if (lazyModelSources.get(modelKey) != source) return;
+                    parseAndLoadModel(decompressed, modelKey, source.auth);
+                } else {
+                    loadLocalModelSource(modelKey, source);
+                }
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to reload resident model: {}", modelKey, e);
             } finally {
@@ -793,13 +840,23 @@ public class ClientModelManager {
 
     public static Set<String> getAvailableModelIds() {
         LinkedHashSet<String> ids = new LinkedHashSet<>(modelAssemblyMap.keySet());
-        ids.addAll(cachedModelFiles.keySet());
+        ids.addAll(lazyModelSources.keySet());
         return Collections.unmodifiableSet(ids);
+    }
+
+    private static void registerRemoteLazySource(String modelId, Path path, byte[] key, boolean isAuth) {
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        if (modelKey == null || path == null || key == null) return;
+        LazyModelSource previous = lazyModelSources.get(modelKey);
+        ServerModelInfo modelInfo = previous == null ? null : previous.modelInfo;
+        lazyModelSources.put(modelKey, new LazyModelSource(path, key, true, isAuth, 0L, modelInfo));
     }
 
     public static boolean isAuthModel(String modelId) {
         String modelKey = canonicalRuntimeModelKey(modelId);
-        return modelKey != null && serverModels.values().stream()
+        if (modelKey == null) return false;
+        LazyModelSource source = lazyModelSources.get(modelKey);
+        return (source != null && source.auth) || serverModels.values().stream()
                 .anyMatch(value -> modelKey.equals(value.modelKey) && value.isAuth);
     }
 
@@ -993,6 +1050,8 @@ public class ClientModelManager {
                 String modelKey = canonicalRuntimeModelKey(modelId);
                 localOnlyModelIds.remove(modelKey);
                 localModelSourcePaths.remove(modelKey);
+                lazyModelSources.computeIfPresent(modelKey, (key, source) -> source.remote ? source : null);
+                cpuReloadInFlight.remove(modelKey);
                 if (sameRuntimeModelId(modelId, selectedLocalOnlyModelId)) {
                     clearSelectedLocalOnlyModel();
                 }
@@ -1036,6 +1095,13 @@ public class ClientModelManager {
                 }
                 Path persisted = persistImportedModel(modelKey, fileName, importData);
                 rememberLocalModelSource(ServerModelManager.CUSTOM, modelKey, persisted);
+                if (persisted != null) {
+                    LazyModelSource previousSource = lazyModelSources.get(modelKey);
+                    lazyModelSources.put(modelKey, new LazyModelSource(persisted, null, false, false,
+                            localSourceFingerprint(persisted),
+                            previousSource == null ? null : previousSource.modelInfo));
+                }
+                Minecraft.getInstance().execute(ClientModelManager::flushPendingModels);
                 YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelKey, e);
@@ -1114,9 +1180,23 @@ public class ClientModelManager {
             Component error = null;
             try {
                 localModelSourcePaths.clear();
-                loadDirectoryModels(ServerModelManager.BUILT);
-                loadDirectoryModels(ServerModelManager.CUSTOM);
-                loadDirectoryModels(ServerModelManager.AUTH);
+                LinkedHashMap<String, LazyModelSource> catalog = new LinkedHashMap<>();
+                scanLocalModelSources(ServerModelManager.BUILT, false, catalog);
+                scanLocalModelSources(ServerModelManager.CUSTOM, false, catalog);
+                scanLocalModelSources(ServerModelManager.AUTH, true, catalog);
+                applyLocalModelCatalog(catalog);
+                if (!isLazyModelLoading()) {
+                    for (Map.Entry<String, LazyModelSource> entry : catalog.entrySet()) {
+                        if (!modelAssemblyMap.containsKey(entry.getKey())
+                                || !modelAssemblyMap.get(entry.getKey()).isRuntimeResident()) {
+                            loadLocalModelSource(entry.getKey(), entry.getValue());
+                        }
+                    }
+                }
+                Minecraft.getInstance().execute(() -> {
+                    flushPendingModels();
+                    forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
+                });
                 if (restoreSelection) {
                     restorePersistedModelSelection();
                 }
@@ -1508,11 +1588,12 @@ public class ClientModelManager {
         }
     }
 
-    private static boolean loadDirectoryModels(Path baseDir) throws IOException {
+    private static boolean scanLocalModelSources(Path baseDir, boolean isAuth,
+                                                 Map<String, LazyModelSource> catalog) throws IOException {
         if (baseDir == null || !Files.isDirectory(baseDir)) {
             return false;
         }
-        boolean[] loadedAny = new boolean[]{false};
+        boolean[] foundAny = new boolean[]{false};
         Files.walkFileTree(baseDir, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
@@ -1522,13 +1603,13 @@ public class ClientModelManager {
                 try {
                     if (YSMFolderDeserializer.isModelFolder(dir)) {
                         String modelId = normalizeLocalModelId(baseDir.relativize(dir).toString());
-                        loadLocalModelFolder(modelId, dir);
+                        registerLocalCatalogEntry(catalog, modelId, dir, isAuth);
                         rememberLocalModelSource(baseDir, modelId, dir);
-                        loadedAny[0] = true;
+                        foundAny[0] = true;
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                 } catch (Exception e) {
-                    YesSteveModel.LOGGER.error("[SM] Failed to load local model folder: {}", dir, e);
+                    YesSteveModel.LOGGER.error("[SM] Failed to index local model folder: {}", dir, e);
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -1542,29 +1623,94 @@ public class ClientModelManager {
                 }
                 try {
                     String modelId = stripImportExtension(normalizeLocalModelId(baseDir.relativize(file).toString()));
-                    byte[] data = Files.readAllBytes(file);
-                    ModelMemoryProfiler.logBytes("local-folder-read", modelId, data);
-                    RawYsmModel rawModel = parseImportModel(fileName, data);
-                    data = null;
-                    loadLocalModel(modelId, rawModel);
+                    registerLocalCatalogEntry(catalog, modelId, file, isAuth);
                     rememberLocalModelSource(baseDir, modelId, file);
-                    loadedAny[0] = true;
+                    foundAny[0] = true;
                 } catch (Exception e) {
-                    YesSteveModel.LOGGER.error("[SM] Failed to load local model file: {}", file, e);
+                    YesSteveModel.LOGGER.error("[SM] Failed to index local model file: {}", file, e);
                 }
                 return FileVisitResult.CONTINUE;
             }
         });
-        return loadedAny[0];
+        return foundAny[0];
     }
 
-    private static void loadLocalModelFolder(String modelId, Path dir) throws Exception {
-        try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(dir)) {
-            loadLocalModel(modelId, deserializer.deserialize());
+    private static void registerLocalCatalogEntry(Map<String, LazyModelSource> catalog, String modelId,
+                                                  Path sourcePath, boolean isAuth) throws IOException {
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        if (modelKey == null || modelKey.isBlank() || "default".equals(modelKey)) return;
+        long fingerprint = localSourceFingerprint(sourcePath);
+        LazyModelSource previous = lazyModelSources.get(modelKey);
+        ServerModelInfo modelInfo = previous == null ? null : previous.modelInfo;
+        LazyModelSource source = new LazyModelSource(sourcePath, null, false, isAuth, fingerprint, modelInfo);
+        LazyModelSource duplicate = catalog.putIfAbsent(modelKey, source);
+        if (duplicate != null) {
+            YesSteveModel.LOGGER.warn("[SM] Ignoring duplicate local model id: {}", modelKey);
         }
     }
 
-    private static void loadLocalModel(String modelId, RawYsmModel rawModel) throws Exception {
+    private static long localSourceFingerprint(Path path) throws IOException {
+        if (Files.isRegularFile(path)) {
+            return Files.getLastModifiedTime(path).toMillis() * 31L + Files.size(path);
+        }
+        final long[] fingerprint = {1L};
+        Files.walkFileTree(path, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                fingerprint[0] = 31L * fingerprint[0] + path.relativize(file).toString().hashCode();
+                fingerprint[0] = 31L * fingerprint[0] + attrs.lastModifiedTime().toMillis();
+                fingerprint[0] = 31L * fingerprint[0] + attrs.size();
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return fingerprint[0];
+    }
+
+    private static void applyLocalModelCatalog(Map<String, LazyModelSource> catalog) {
+        Set<String> validIds = new HashSet<>(catalog.keySet());
+        ArrayList<Pair<String, ModelAssembly>> staleAssemblies = new ArrayList<>();
+        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+
+        for (Map.Entry<String, LazyModelSource> entry : new ArrayList<>(lazyModelSources.entrySet())) {
+            if (entry.getValue().remote) continue;
+            LazyModelSource replacement = catalog.get(entry.getKey());
+            if (replacement == null || !entry.getValue().sameLocalSource(replacement)) {
+                ModelAssembly stale = map.remove(entry.getKey());
+                if (stale != null) staleAssemblies.add(Pair.of(entry.getKey(), stale));
+                modelLastUsedAt.remove(entry.getKey());
+                gpuCacheTrimmedModels.remove(entry.getKey());
+            } else if (entry.getValue().modelInfo != null) {
+                replacement.modelInfo = entry.getValue().modelInfo;
+            }
+        }
+
+        lazyModelSources.entrySet().removeIf(entry -> !entry.getValue().remote);
+        lazyModelSources.putAll(catalog);
+        localOnlyModelIds.clear();
+        localOnlyModelIds.addAll(validIds);
+        modelAssemblyMap = map;
+
+        if (!staleAssemblies.isEmpty()) {
+            Minecraft.getInstance().execute(() -> staleAssemblies.forEach(pair ->
+                    releaseModelAssembly(pair.getLeft(), pair.getRight())));
+        }
+    }
+
+    private static void loadLocalModelSource(String modelId, LazyModelSource source) throws Exception {
+        if (source.remote) return;
+        RawYsmModel rawModel;
+        if (Files.isDirectory(source.path)) {
+            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(source.path)) {
+                rawModel = deserializer.deserialize();
+            }
+        } else {
+            byte[] data = Files.readAllBytes(source.path);
+            rawModel = parseImportModel(source.path.getFileName().toString(), data);
+        }
+        loadLocalModel(modelId, rawModel, source.auth);
+    }
+
+    private static void loadLocalModel(String modelId, RawYsmModel rawModel, boolean isAuth) throws Exception {
         modelId = canonicalRuntimeModelKey(modelId);
         if (modelId == null || modelId.isBlank()) {
             return;
@@ -1573,7 +1719,7 @@ public class ClientModelManager {
         localOnlyModelIds.add(modelId);
         touchModel(modelId);
         runPendingModelCallback();
-        if (!processModelData(parsedBundle, modelId, false, false)) {
+        if (!processModelData(parsedBundle, modelId, false, isAuth)) {
             localOnlyModelIds.remove(modelId);
             throw new IllegalStateException("Failed to build local model");
         }
@@ -1600,7 +1746,7 @@ public class ClientModelManager {
 
     private static boolean containsRuntimeModel(String modelId) {
         String modelKey = canonicalRuntimeModelKey(modelId);
-        return modelKey != null && (modelAssemblyMap.containsKey(modelKey) || cachedModelFiles.containsKey(modelKey));
+        return modelKey != null && (modelAssemblyMap.containsKey(modelKey) || lazyModelSources.containsKey(modelKey));
     }
 
     private static boolean sameRuntimeModelId(String first, String second) {
@@ -1776,6 +1922,10 @@ public class ClientModelManager {
             if (pairPoll != null) {
                 String modelKey = canonicalRuntimeModelKey(pairPoll.getRight());
                 ModelAssembly previous = object2ReferenceOpenHashMap.put(modelKey, pairPoll.getLeft());
+                LazyModelSource source = lazyModelSources.get(modelKey);
+                if (source != null && !(pairPoll.getLeft() instanceof LazyModelAssembly)) {
+                    source.modelInfo = pairPoll.getLeft().getModelData();
+                }
                 touchModel(modelKey);
                 gpuCacheTrimmedModels.remove(modelKey);
                 if (previous != null && previous != pairPoll.getLeft()) {
@@ -1809,7 +1959,7 @@ public class ClientModelManager {
     }
 
     private static void releaseModelAssembly(String modelId, ModelAssembly assembly) {
-        if (assembly == null) {
+        if (assembly == null || assembly instanceof LazyModelAssembly) {
             return;
         }
         if (!RenderSystem.isOnRenderThread()) {
@@ -1850,9 +2000,15 @@ public class ClientModelManager {
     }
 
     public static void trimUnusedGpuCaches() {
+        updateModelLoadingMode();
         drainDeferredAssemblyReleases();
-       trimUnusedCpuModels();
-       int maxCachedGpuModels = safeInt(GeneralConfig.MAX_CACHED_GPU_MODELS, 0);
+        long checkNow = System.currentTimeMillis();
+        if (checkNow - lastModelTrimMillis < 1_000L) {
+            return;
+        }
+        lastModelTrimMillis = checkNow;
+        trimUnusedCpuModels();
+        int maxCachedGpuModels = safeInt(GeneralConfig.MAX_CACHED_GPU_MODELS, 0);
         if (maxCachedGpuModels <= 0) {
            return;
        }
@@ -1876,31 +2032,49 @@ public class ClientModelManager {
     }
 
     private static void trimUnusedCpuModels() {
-       Minecraft minecraft = Minecraft.getInstance();
+        if (!isLazyModelLoading()) return;
+        Minecraft minecraft = Minecraft.getInstance();
         if (modelAssemblyMap.isEmpty()) return;
         long now = System.currentTimeMillis();
         long ttlMillis = safeInt(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300) * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
         List<Map.Entry<String, ModelAssembly>> residents = modelAssemblyMap.entrySet().stream()
                 .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
-                .filter(entry -> !"default".equals(entry.getKey()) && !localOnlyModelIds.contains(entry.getKey()))
+                .filter(entry -> !"default".equals(entry.getKey()) && lazyModelSources.containsKey(entry.getKey()))
                 .toList();
         long idleCount = residents.stream()
                 .filter(entry -> !protectedModels.contains(entry.getKey()))
                 .filter(entry -> now - modelLastUsedAt.getOrDefault(entry.getKey(), now) >= ttlMillis)
                 .count();
-        long overLimit = Math.max(0, residents.size() - safeInt(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 24));
+        long overLimit = Math.max(0, residents.size() - safeInt(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 64));
         long trimCount = Math.max(idleCount, overLimit);
         if (trimCount <= 0) return;
-        residents.stream()
-               .filter(entry -> !protectedModels.contains(entry.getKey()))
+        List<Map.Entry<String, ModelAssembly>> victims = residents.stream()
+                .filter(entry -> !protectedModels.contains(entry.getKey()))
                 .filter(entry -> {
                     long idleMillis = now - modelLastUsedAt.getOrDefault(entry.getKey(), now);
                     return idleMillis >= ttlMillis || (overLimit > 0 && idleMillis >= 1_000L);
                 })
-               .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
+                .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
                 .limit(trimCount)
-                .forEach(entry -> unloadModelRuntime(entry.getKey(), entry.getValue()));
+                .toList();
+        if (victims.isEmpty()) return;
+
+        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+        ArrayList<Pair<String, ModelAssembly>> released = new ArrayList<>();
+        for (Map.Entry<String, ModelAssembly> entry : victims) {
+            LazyModelSource source = lazyModelSources.get(entry.getKey());
+            if (source == null) continue;
+            source.modelInfo = entry.getValue().getModelData();
+            if (source.modelInfo == null) continue;
+            map.put(entry.getKey(), new LazyModelAssembly(entry.getKey(), source));
+            gpuCacheTrimmedModels.remove(entry.getKey());
+            released.add(Pair.of(entry.getKey(), entry.getValue()));
+        }
+        if (released.isEmpty()) return;
+        modelAssemblyMap = map;
+        forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(map));
+        released.forEach(pair -> releaseModelAssembly(pair.getLeft(), pair.getRight()));
     }
 
     private static void unloadModelRuntime(String modelId, ModelAssembly assembly) {
@@ -2031,6 +2205,22 @@ public class ClientModelManager {
         return GeneralConfig.safeGet(GeneralConfig.LAZY_MODEL_LOADING, true);
     }
 
+    public static void updateModelLoadingMode() {
+        boolean enabled = isLazyModelLoading();
+        Boolean previous = lastLazyModelLoading;
+        if (previous != null && previous == enabled) return;
+        lastLazyModelLoading = enabled;
+        lastModelTrimMillis = 0L;
+        if (previous == null || enabled) return;
+
+        for (String modelId : new ArrayList<>(lazyModelSources.keySet())) {
+            ModelAssembly assembly = modelAssemblyMap.get(modelId);
+            if (assembly == null || !assembly.isRuntimeResident()) {
+                scheduleCachedModelReload(modelId);
+            }
+        }
+    }
+
     public static void markModelUsed(String modelId) {
         touchModel(modelId);
     }
@@ -2057,6 +2247,84 @@ public class ClientModelManager {
             return value == null ? fallback : value.get();
         } catch (IllegalStateException e) {
             return fallback;
+        }
+    }
+
+    private static final class LazyModelAssembly extends ModelAssembly {
+        private final String modelId;
+        private final LazyModelSource source;
+        private final ModelDisplayAssets displayAssets;
+        private final ModelResourceBundle metadataResources;
+
+        private LazyModelAssembly(String modelId, LazyModelSource source) {
+            super(null, Map.of(), Map.of(), createLazyResourceBundle(), source.modelInfo,
+                    new ModelDisplayAssets(source.modelInfo.getModelProperties().getDefaultTexture(),
+                            source.auth, Map.of(), Map.of()), List.of());
+            this.modelId = modelId;
+            this.source = source;
+            this.displayAssets = super.getTextureRegistry();
+            this.metadataResources = super.getExpressionCache();
+        }
+
+        private static ModelResourceBundle createLazyResourceBundle() {
+            return new ModelResourceBundle(Map.of(), new Object2ReferenceOpenHashMap<>(),
+                    new Object2ReferenceOpenHashMap<>(), Map.of());
+        }
+
+        @Nullable
+        private ModelAssembly loadedAssembly() {
+            ModelAssembly current = modelAssemblyMap.get(modelId);
+            return current != null && current != this && !(current instanceof LazyModelAssembly)
+                    && current.isRuntimeResident() ? current : null;
+        }
+
+        @Nullable
+        private ModelAssembly requestAndGetFallback() {
+            scheduleCachedModelReload(modelId);
+            ModelAssembly loaded = loadedAssembly();
+            return loaded == null ? localModelContext : loaded;
+        }
+
+        @Override
+        public PlayerModelBundle getAnimationBundle() {
+            ModelAssembly assembly = requestAndGetFallback();
+            return assembly == null ? null : assembly.getAnimationBundle();
+        }
+
+        @Override
+        public ModelResourceBundle getExpressionCache() {
+            ModelAssembly assembly = loadedAssembly();
+            return assembly == null ? metadataResources : assembly.getExpressionCache();
+        }
+
+        @Override
+        public Map<Identifier, ProjectileModelBundle> getProjectileModels() {
+            ModelAssembly assembly = requestAndGetFallback();
+            return assembly == null ? Map.of() : assembly.getProjectileModels();
+        }
+
+        @Override
+        public Map<Identifier, VehicleModelBundle> getVehicleModels() {
+            ModelAssembly assembly = requestAndGetFallback();
+            return assembly == null ? Map.of() : assembly.getVehicleModels();
+        }
+
+        @Override
+        public ServerModelInfo getModelData() {
+            ModelAssembly assembly = loadedAssembly();
+            return assembly == null ? source.modelInfo : assembly.getModelData();
+        }
+
+        @Override
+        public ModelDisplayAssets getTextureRegistry() {
+            ModelAssembly assembly = loadedAssembly();
+            return assembly == null ? displayAssets : assembly.getTextureRegistry();
+        }
+
+        @Override
+        public List<AbstractTexture> getTextures() {
+            ModelAssembly assembly = loadedAssembly();
+            return assembly == null ? List.of() : assembly.getTextures();
         }
     }
 
@@ -2166,7 +2434,7 @@ public class ClientModelManager {
 
                     try {
                         byte[] fileBytes = Files.readAllBytes(file.toPath());
-                        byte[] clearText = YsmCrypt.read(fileBytes, clientKey);
+                        byte[] clearText = YsmCrypt.readInPlace(fileBytes, clientKey);
 
                         int coreDataLength;
                         String exportName = file.getName(); // Fallback name
