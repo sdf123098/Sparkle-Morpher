@@ -9,6 +9,7 @@ import com.micaftic.morpher.client.model.ModelResourceBundle;
 import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 
 public final class TouhouLittleMaidCompat {
@@ -53,6 +54,21 @@ public final class TouhouLittleMaidCompat {
 
     @ExpectPlatform
     public static boolean isMaidSitting(LivingEntity livingEntity) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
+    public static boolean isMaidOwnedBy(Entity entity, Player player) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
+    public static String getMaidGameAnimation(Entity entity) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
+    public static String getMaidRenderAnimation(Entity entity) {
         throw new AssertionError();
     }
 

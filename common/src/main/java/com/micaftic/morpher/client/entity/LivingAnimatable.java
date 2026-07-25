@@ -8,6 +8,7 @@ import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
 import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
@@ -262,19 +263,29 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
 
         public TexturedModelWrapper(ModelAssembly modelAssembly, boolean isActive, boolean collectAllTextures, boolean registerImmediately, int textureResolution) {
             super(modelAssembly, isActive);
-            AbstractTexture abstractTexture = modelAssembly.getAnimationBundle().getTextures().get(LivingAnimatable.this.currentTextureName);
-            this.currentTexture = UploadManager.getOrCreateLocatableWithSize(abstractTexture != null ? abstractTexture : modelAssembly.getAnimationBundle().getDefaultTexture(), registerImmediately, textureResolution);
             this.textureResolution = textureResolution;
+            PlayerModelBundle animationBundle = modelAssembly.getAnimationBundle();
+            if (animationBundle == null) {
+                this.currentTexture = null;
+                this.allTextures = null;
+                return;
+            }
+            AbstractTexture abstractTexture = animationBundle.getTextures().get(LivingAnimatable.this.currentTextureName);
+            this.currentTexture = UploadManager.getOrCreateLocatableWithSize(abstractTexture != null ? abstractTexture : animationBundle.getDefaultTexture(), registerImmediately, textureResolution);
             if (collectAllTextures) {
                 this.allTextures = new ArrayList();
-                for (AbstractTexture texture : modelAssembly.getAnimationBundle().getTextures().values()) {
+                for (AbstractTexture texture : animationBundle.getTextures().values()) {
                     this.allTextures.add(UploadManager.getOrCreateLocatable(texture, false));
                 }
-                for (ProjectileModelBundle projectileModelBundle : modelAssembly.getProjectileModels().values()) {
-                    this.allTextures.add(UploadManager.getOrCreateLocatable(projectileModelBundle.getTexture(), false));
+                if (modelAssembly.getProjectileModels() != null) {
+                    for (ProjectileModelBundle projectileModelBundle : modelAssembly.getProjectileModels().values()) {
+                        this.allTextures.add(UploadManager.getOrCreateLocatable(projectileModelBundle.getTexture(), false));
+                    }
                 }
-                for (VehicleModelBundle vehicleModelBundle : modelAssembly.getVehicleModels().values()) {
-                    this.allTextures.add(UploadManager.getOrCreateLocatable(vehicleModelBundle.getTexture(), false));
+                if (modelAssembly.getVehicleModels() != null) {
+                    for (VehicleModelBundle vehicleModelBundle : modelAssembly.getVehicleModels().values()) {
+                        this.allTextures.add(UploadManager.getOrCreateLocatable(vehicleModelBundle.getTexture(), false));
+                    }
                 }
                 return;
             }
@@ -287,7 +298,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
 
         @Override
         public boolean isValid() {
-            return this.currentTexture.getResourceLocationOrNull() != null;
+            return this.currentTexture != null && this.currentTexture.getResourceLocationOrNull() != null;
         }
     }
 }

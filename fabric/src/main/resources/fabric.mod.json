@@ -40,7 +40,8 @@
     "forgeconfigapiport": ">=21.1.0"
   },
   "suggests": {
-    "modmenu": "*"
+    "modmenu": "*",
+    "touhou_little_maid": "*"
   },
   "custom": {
     "cardinal-components": [

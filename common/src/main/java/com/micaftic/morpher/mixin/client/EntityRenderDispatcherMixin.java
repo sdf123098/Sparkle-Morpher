@@ -5,6 +5,7 @@ import com.micaftic.morpher.client.renderer.CustomFishingHookRenderer;
 import com.micaftic.morpher.client.renderer.CustomVehicleRenderer;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.CustomProjectileRenderer;
+import com.micaftic.morpher.client.renderer.MaidEntityRenderer;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -31,6 +32,9 @@ public class EntityRenderDispatcherMixin {
                 }
                 return CustomProjectileRenderer.renderProjectile(projectile, entityYaw, partialTicks, poseStack, multiBufferSource, packedLight);
             }
+        }
+        if (!MaidEntityRenderer.tryRender(entity, entityYaw, partialTicks, poseStack, multiBufferSource, packedLight)) {
+            return false;
         }
         if (!GeneralConfig.DISABLE_VEHICLE_MODEL.get().booleanValue()) {
             ModelPreviewRenderer.renderVehicleModel(entity, poseStack, partialTicks);
