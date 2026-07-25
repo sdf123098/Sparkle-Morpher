@@ -39,7 +39,7 @@
     "forgeconfigapiport": "*"
   },
   "suggests": {
-    "another-mod": "*"
+    "touhou_little_maid": "*"
   },
   "custom": {
     "cardinal-components": [

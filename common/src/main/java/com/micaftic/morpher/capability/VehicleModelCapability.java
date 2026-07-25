@@ -14,6 +14,10 @@ public class VehicleModelCapability {
 
     private String ownerModelId = "default";
 
+    private String ownerTexture = "";
+
+    private String rouletteAnimation = "";
+
     private boolean initialized = false;
 
     private Object2FloatOpenHashMap<String> molangVars = new Object2FloatOpenHashMap<>();
@@ -21,17 +25,46 @@ public class VehicleModelCapability {
     public void setModel(String str, Object2FloatOpenHashMap<String> object2FloatOpenHashMap) {
         this.ownerModelId = str;
         this.initialized = true;
-        this.molangVars = object2FloatOpenHashMap;
+        this.molangVars = new Object2FloatOpenHashMap<>(object2FloatOpenHashMap);
+    }
+
+    public void setMaidModel(String modelId, String texture, Object2FloatOpenHashMap<String> molangVars) {
+        this.ownerModelId = modelId;
+        this.ownerTexture = texture == null ? "" : texture;
+        this.initialized = true;
+        this.molangVars = new Object2FloatOpenHashMap<>(molangVars);
+    }
+
+    public void clearMaidModel() {
+        this.ownerModelId = "default";
+        this.ownerTexture = "";
+        this.rouletteAnimation = "";
+        this.initialized = false;
+        this.molangVars.clear();
+    }
+
+    public void setRouletteAnimation(String animation) {
+        this.rouletteAnimation = animation == null ? "" : animation;
     }
 
     public void copyFrom(VehicleModelCapability other) {
         this.ownerModelId = other.ownerModelId;
+        this.ownerTexture = other.ownerTexture;
+        this.rouletteAnimation = other.rouletteAnimation;
         this.initialized = other.initialized;
-        this.molangVars = other.molangVars;
+        this.molangVars = new Object2FloatOpenHashMap<>(other.molangVars);
     }
 
     public String getOwnerModelId() {
         return this.ownerModelId;
+    }
+
+    public String getOwnerTexture() {
+        return this.ownerTexture;
+    }
+
+    public String getRouletteAnimation() {
+        return this.rouletteAnimation;
     }
 
     public boolean isInitialized() {
@@ -45,6 +78,8 @@ public class VehicleModelCapability {
     public CompoundTag serializeNBT() {
         CompoundTag compoundTag = new CompoundTag();
         compoundTag.putString("owner_model_id", this.ownerModelId);
+        compoundTag.putString("owner_texture", this.ownerTexture);
+        compoundTag.putString("roulette_animation", this.rouletteAnimation);
         compoundTag.putBoolean("initialized", this.initialized);
         CompoundTag compoundTag2 = new CompoundTag();
         this.molangVars.object2FloatEntrySet().fastForEach(entry -> {
@@ -56,6 +91,8 @@ public class VehicleModelCapability {
 
     public void deserializeNBT(CompoundTag compoundTag) {
         this.ownerModelId = compoundTag.getString("owner_model_id").orElse("");
+        this.ownerTexture = compoundTag.getString("owner_texture").orElse("");
+        this.rouletteAnimation = compoundTag.getString("roulette_animation").orElse("");
         this.initialized = compoundTag.getBoolean("initialized").orElse(false);
         this.molangVars.clear();
         CompoundTag compound = compoundTag.getCompound("molang_vars_server_bound").orElse(null);

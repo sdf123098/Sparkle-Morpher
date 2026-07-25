@@ -8,6 +8,7 @@ import com.micaftic.morpher.geckolib3.core.enums.PlayState;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 
 public final class TouhouLittleMaidCompat {
@@ -45,6 +46,18 @@ public final class TouhouLittleMaidCompat {
 
     public static boolean isMaidSitting(LivingEntity livingEntity) {
         return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isMaidSitting(livingEntity);
+    }
+
+    public static boolean isMaidOwnedBy(Entity entity, Player player) {
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isMaidOwnedBy(entity, player);
+    }
+
+    public static String getMaidGameAnimation(Entity entity) {
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.getMaidGameAnimation(entity);
+    }
+
+    public static String getMaidRenderAnimation(Entity entity) {
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.getMaidRenderAnimation(entity);
     }
 
     public static void registerMaidAnimStates(TLMBinding tlmBinding) {
