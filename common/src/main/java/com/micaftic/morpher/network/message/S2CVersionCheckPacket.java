@@ -1,6 +1,7 @@
 package com.micaftic.morpher.network.message;
 
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import net.minecraft.network.FriendlyByteBuf;
@@ -57,6 +58,9 @@ public class S2CVersionCheckPacket {
     }
 
     public static void handle(S2CVersionCheckPacket message, PacketContext ctx) {
+        if (PrivacyMode.isActive()) {
+            return;
+        }
         ctx.enqueueWork(() -> {
             ClientModelManager.setOysmServer(message.oysmServer);
             ClientModelManager.setAllowUpload(message.allowUpload);
