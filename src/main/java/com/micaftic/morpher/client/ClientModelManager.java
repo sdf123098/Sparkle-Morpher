@@ -1202,6 +1202,25 @@ public class ClientModelManager {
         });
     }
 
+    public static void enterPrivacyMode() {
+        isOysmServer = false;
+        allowUpload = false;
+        processServerData(null);
+        NetworkHandler.resetClientHandshake();
+        ((Executor) Minecraft.getInstance()).execute(() -> {
+            syncState.setState(SyncState.LOADING);
+            forEachGuiWidget(IGuiWidget::onSyncBegin);
+        });
+        reloadLocalModels(error -> {
+            syncState.setState(SyncState.IDLE);
+            restorePersistedModelSelection();
+            forEachGuiWidget(guiWidget -> {
+                guiWidget.onModelsLoaded(modelAssemblyMap);
+                guiWidget.onSyncComplete();
+            });
+        });
+    }
+
     public static boolean isAllowUpload() {
         return allowUpload;
     }
@@ -1211,6 +1230,9 @@ public class ClientModelManager {
     }
 
     private static void sendModelFile(ByteBuffer byteBuffer) {
+        if (PrivacyMode.isActive()) {
+            return;
+        }
         if (Minecraft.getInstance().player != null) {
             try {
                 NetworkHandler.sendToServer(new C2SModelSyncPayload(byteBuffer));
@@ -1232,6 +1254,9 @@ public class ClientModelManager {
     }
 
     public static synchronized void startSync(Connection connection, ByteBuffer byteBuffer) {
+        if (PrivacyMode.isActive()) {
+            return;
+        }
         if (connection == null) {
             YesSteveModel.LOGGER.warn("[SM] Ignoring model sync packet without a connection");
             return;

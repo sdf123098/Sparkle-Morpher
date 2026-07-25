@@ -47,6 +47,9 @@ public final class NetworkHandler {
     }
 
     public static boolean isClientConnected() {
+        if (ClientNetworkBridge.isPrivacyModeActive()) {
+            return false;
+        }
         if (clientHandshakeComplete) {
             return true;
         }
@@ -92,7 +95,7 @@ public final class NetworkHandler {
     }
 
     public static void sendToServer(Object obj) {
-        if (isClientConnected()) {
+        if (!ClientNetworkBridge.isPrivacyModeActive() && isClientConnected()) {
             YSMChannel.sendToServer(obj);
         }
     }

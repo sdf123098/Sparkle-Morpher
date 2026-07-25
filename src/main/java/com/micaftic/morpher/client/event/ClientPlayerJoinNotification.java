@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientPlayerEvent;
 import net.minecraft.client.Minecraft;
@@ -26,11 +27,16 @@ public final class ClientPlayerJoinNotification {
         if (notified) {
             return;
         }
+        PrivacyMode.beginSession();
         ClientModelManager.runPendingModelCallback();
         ClientModelManager.restorePersistedModelSelection();
         notified = true;
         if (!YesSteveModel.isAvailable()) {
             YesSteveModel.sendUnavailableMessage();
+            return;
+        }
+        if (PrivacyMode.isActive()) {
+            ClientModelManager.enterPrivacyMode();
             return;
         }
         if (Minecraft.getInstance().isLocalServer()) {
@@ -64,6 +70,7 @@ public final class ClientPlayerJoinNotification {
     private static void onPlayerQuit(LocalPlayer player) {
         boolean reloadLocalModels = notified && YesSteveModel.isAvailable();
         notified = false;
+        PrivacyMode.endSession();
         ClientModelManager.resetSync();
         if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);
