@@ -27,6 +27,7 @@ import com.micaftic.morpher.resource.YSMBinaryDeserializer;
 import com.micaftic.morpher.resource.YSMClientMapper;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
 import com.micaftic.morpher.model.format.ServerModelInfo;
+import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.resource.models.ModelPackData;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.DigestUtil;
@@ -38,6 +39,8 @@ import com.micaftic.morpher.util.NetworkOnlineDebugLog;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.util.YSMThreadPool;
 import com.micaftic.morpher.util.data.OrderedStringMap;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.blaze3d.systems.RenderSystem;
 import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
@@ -69,6 +72,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
@@ -76,6 +80,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 @OnlyIn(Dist.CLIENT)
 public class ClientModelManager {
@@ -793,15 +799,19 @@ public class ClientModelManager {
         private final boolean auth;
         private final long fingerprint;
         private volatile ServerModelInfo modelInfo;
+        @Nullable
+        private volatile String displayName;
 
         private LazyModelSource(Path path, @Nullable byte[] cacheKey, boolean remote, boolean auth,
-                                long fingerprint, @Nullable ServerModelInfo modelInfo) {
+                                long fingerprint, @Nullable ServerModelInfo modelInfo,
+                                @Nullable String displayName) {
             this.path = path.toAbsolutePath().normalize();
             this.cacheKey = cacheKey == null ? null : cacheKey.clone();
             this.remote = remote;
             this.auth = auth;
             this.fingerprint = fingerprint;
             this.modelInfo = modelInfo;
+            this.displayName = displayName;
         }
 
         private boolean sameLocalSource(LazyModelSource other) {
@@ -844,6 +854,28 @@ public class ClientModelManager {
         return Collections.unmodifiableSet(ids);
     }
 
+    /**
+     * Display name for a model that exists only in the lazy catalog (not yet fully loaded).
+     * Prefer sniffed/cached metadata name, then {@link ServerModelInfo} metadata, else {@code null}.
+     */
+    @Nullable
+    public static String getLazyModelDisplayName(String modelId) {
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        if (modelKey == null) return null;
+        LazyModelSource source = lazyModelSources.get(modelKey);
+        if (source == null) return null;
+        if (StringUtils.isNotBlank(source.displayName)) {
+            return source.displayName;
+        }
+        String fromInfo = displayNameFromModelInfo(source.modelInfo);
+        if (StringUtils.isNotBlank(fromInfo)) {
+            source.displayName = fromInfo;
+            return fromInfo;
+        }
+        return null;
+    }
+
+
     public static boolean isAuthModel(String modelId) {
         String modelKey = canonicalRuntimeModelKey(modelId);
         if (modelKey == null) return false;
@@ -857,7 +889,11 @@ public class ClientModelManager {
         if (modelKey == null || path == null || key == null) return;
         LazyModelSource previous = lazyModelSources.get(modelKey);
         ServerModelInfo modelInfo = previous == null ? null : previous.modelInfo;
-        lazyModelSources.put(modelKey, new LazyModelSource(path, key, true, isAuth, 0L, modelInfo));
+        String prevName = previous == null ? null : previous.displayName;
+        if (prevName == null) {
+            prevName = displayNameFromModelInfo(modelInfo);
+        }
+        lazyModelSources.put(modelKey, new LazyModelSource(path, key, true, isAuth, 0L, modelInfo, prevName));
     }
 
     public static boolean canUploadToServer() {
@@ -1101,9 +1137,16 @@ public class ClientModelManager {
                 rememberLocalModelSource(ServerModelManager.CUSTOM, modelKey, persisted);
                 if (persisted != null) {
                     LazyModelSource previousSource = lazyModelSources.get(modelKey);
+                    ServerModelInfo prevInfo = previousSource == null ? null : previousSource.modelInfo;
+                    String prevName = previousSource == null ? null : previousSource.displayName;
+                    if (prevName == null) {
+                        prevName = displayNameFromModelInfo(prevInfo);
+                    }
+                    if (prevName == null) {
+                        prevName = sniffLocalModelName(persisted);
+                    }
                     lazyModelSources.put(modelKey, new LazyModelSource(persisted, null, false, false,
-                            localSourceFingerprint(persisted),
-                            previousSource == null ? null : previousSource.modelInfo));
+                            localSourceFingerprint(persisted), prevInfo, prevName));
                 }
                 Minecraft.getInstance().execute(ClientModelManager::flushPendingModels);
                 YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
@@ -1646,12 +1689,128 @@ public class ClientModelManager {
         long fingerprint = localSourceFingerprint(sourcePath);
         LazyModelSource previous = lazyModelSources.get(modelKey);
         ServerModelInfo modelInfo = previous == null ? null : previous.modelInfo;
-        LazyModelSource source = new LazyModelSource(sourcePath, null, false, isAuth, fingerprint, modelInfo);
+        String displayName = previous != null ? previous.displayName : null;
+        if (displayName == null) {
+            displayName = displayNameFromModelInfo(modelInfo);
+        }
+        if (displayName == null) {
+            displayName = sniffLocalModelName(sourcePath);
+        }
+        LazyModelSource source = new LazyModelSource(sourcePath, null, false, isAuth, fingerprint, modelInfo, displayName);
         LazyModelSource duplicate = catalog.putIfAbsent(modelKey, source);
         if (duplicate != null) {
             YesSteveModel.LOGGER.warn("[SM] Ignoring duplicate local model id: {}", modelKey);
         }
     }
+
+    /**
+     * Lightweight name sniff for local catalog entries — reads only metadata, never full model geometry.
+     * Supports YSM folders, zip packs with ysm.json, and .bbmodel files. Encrypted .ysm is skipped.
+     */
+    @Nullable
+    private static String sniffLocalModelName(Path sourcePath) {
+        if (sourcePath == null) return null;
+        try {
+            if (Files.isDirectory(sourcePath)) {
+                Path ysmJson = sourcePath.resolve("ysm.json");
+                if (Files.isRegularFile(ysmJson)) {
+                    return parseMetadataNameFromYsmJson(Files.readString(ysmJson, StandardCharsets.UTF_8));
+                }
+                return null;
+            }
+            if (!Files.isRegularFile(sourcePath)) return null;
+            String fileName = sourcePath.getFileName() == null ? "" : sourcePath.getFileName().toString();
+            String lower = fileName.toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".bbmodel")) {
+                return parseBbmodelRootName(Files.readString(sourcePath, StandardCharsets.UTF_8));
+            }
+            if (lower.endsWith(".zip")) {
+                return sniffNameFromZip(sourcePath);
+            }
+            // Encrypted .ysm requires full decrypt — skip here.
+            return null;
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.debug("[SM] Failed to sniff model name from {}", sourcePath, e);
+            return null;
+        }
+    }
+
+    @Nullable
+    private static String sniffNameFromZip(Path zipPath) {
+        try (ZipFile zip = new ZipFile(zipPath.toFile())) {
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                if (entry.isDirectory()) continue;
+                String name = entry.getName().replace('\\', '/');
+                int slash = name.lastIndexOf('/');
+                String base = slash < 0 ? name : name.substring(slash + 1);
+                if (!"ysm.json".equalsIgnoreCase(base)) continue;
+                try (InputStream in = zip.getInputStream(entry)) {
+                    byte[] bytes = in.readAllBytes();
+                    String parsed = parseMetadataNameFromYsmJson(new String(bytes, StandardCharsets.UTF_8));
+                    if (StringUtils.isNotBlank(parsed)) return parsed;
+                }
+            }
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.debug("[SM] Failed to sniff zip model name from {}", zipPath, e);
+        }
+        return null;
+    }
+
+    @Nullable
+    private static String parseMetadataNameFromYsmJson(String json) {
+        if (StringUtils.isBlank(json)) return null;
+        try {
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            if (root.has("metadata") && root.get("metadata").isJsonObject()) {
+                JsonObject meta = root.getAsJsonObject("metadata");
+                if (meta.has("name") && meta.get("name").isJsonPrimitive()) {
+                    String name = meta.get("name").getAsString();
+                    return StringUtils.isBlank(name) ? null : name.trim();
+                }
+            }
+            // Some packs put name at root.
+            if (root.has("name") && root.get("name").isJsonPrimitive()) {
+                String name = root.get("name").getAsString();
+                return StringUtils.isBlank(name) ? null : name.trim();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    @Nullable
+    private static String parseBbmodelRootName(String json) {
+        if (StringUtils.isBlank(json)) return null;
+        try {
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            if (root.has("name") && root.get("name").isJsonPrimitive()) {
+                String name = root.get("name").getAsString();
+                return StringUtils.isBlank(name) ? null : name.trim();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    @Nullable
+    private static String displayNameFromModelInfo(@Nullable ServerModelInfo modelInfo) {
+        if (modelInfo == null) return null;
+        Metadata metadata = modelInfo.getExtraInfo();
+        if (metadata == null || StringUtils.isBlank(metadata.getName())) return null;
+        return metadata.getName().trim();
+    }
+
+    private static void rememberDisplayName(LazyModelSource source, @Nullable ServerModelInfo modelInfo) {
+        if (source == null) return;
+        String name = displayNameFromModelInfo(modelInfo);
+        if (StringUtils.isNotBlank(name)) {
+            source.displayName = name;
+        }
+    }
+
+
 
     private static long localSourceFingerprint(Path path) throws IOException {
         if (Files.isRegularFile(path)) {
@@ -1683,8 +1842,19 @@ public class ClientModelManager {
                 if (stale != null) staleAssemblies.add(Pair.of(entry.getKey(), stale));
                 modelLastUsedAt.remove(entry.getKey());
                 gpuCacheTrimmedModels.remove(entry.getKey());
-            } else if (entry.getValue().modelInfo != null) {
-                replacement.modelInfo = entry.getValue().modelInfo;
+            } else {
+                if (entry.getValue().modelInfo != null) {
+                    replacement.modelInfo = entry.getValue().modelInfo;
+                }
+                if (StringUtils.isBlank(replacement.displayName)
+                        && StringUtils.isNotBlank(entry.getValue().displayName)) {
+                    replacement.displayName = entry.getValue().displayName;
+                } else if (StringUtils.isBlank(replacement.displayName)) {
+                    String fromInfo = displayNameFromModelInfo(replacement.modelInfo);
+                    if (StringUtils.isNotBlank(fromInfo)) {
+                        replacement.displayName = fromInfo;
+                    }
+                }
             }
         }
 
@@ -1929,6 +2099,7 @@ public class ClientModelManager {
                 LazyModelSource source = lazyModelSources.get(modelKey);
                 if (source != null && !(pairPoll.getLeft() instanceof LazyModelAssembly)) {
                     source.modelInfo = pairPoll.getLeft().getModelData();
+                    rememberDisplayName(source, source.modelInfo);
                 }
                 touchModel(modelKey);
                 gpuCacheTrimmedModels.remove(modelKey);
@@ -2071,6 +2242,7 @@ public class ClientModelManager {
             if (source == null) continue;
             source.modelInfo = entry.getValue().getModelData();
             if (source.modelInfo == null) continue;
+            rememberDisplayName(source, source.modelInfo);
             map.put(entry.getKey(), new LazyModelAssembly(entry.getKey(), source));
             gpuCacheTrimmedModels.remove(entry.getKey());
             released.add(Pair.of(entry.getKey(), entry.getValue()));
