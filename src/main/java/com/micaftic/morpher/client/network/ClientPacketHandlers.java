@@ -8,6 +8,7 @@ import com.micaftic.morpher.capability.ProjectileCapability;
 import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
@@ -49,11 +50,16 @@ public final class ClientPacketHandlers {
         return connection != null && connection.getConnection() != null && NetworkHandler.isConnectionValid(connection.getConnection());
     }
 
+    public static boolean isPrivacyModeActive() {
+        return PrivacyMode.isActive();
+    }
+
     public static boolean isLocalPlayer(Object player) {
         return player instanceof LocalPlayer;
     }
 
     public static void handleModelSync(Object obj, Connection connection) {
+        if (PrivacyMode.isActive()) return;
         S2CModelSyncPayload message = (S2CModelSyncPayload) obj;
         ByteBuffer data = message.getData();
         ClientModelManager.startSync(connection, data);
@@ -94,11 +100,12 @@ public final class ClientPacketHandlers {
         EntityJoinCallbackEvent.addCallback(message.getEntityId(), entity -> {
             PlayerCapability.get(entity).ifPresent(cap -> {
                 LocalPlayer localPlayer = Minecraft.getInstance().player;
-                boolean keepLocalOnlyModel = entity == localPlayer && ClientModelManager.isSelectedLocalOnlyModel(cap.getModelId());
+                boolean keepLocalOnlyModel = entity == localPlayer
+                        && (PrivacyMode.isActive() || ClientModelManager.isSelectedLocalOnlyModel(cap.getModelId()));
                 if (!keepLocalOnlyModel) {
                     cap.initModelWithTexture(message.getModelId(), message.getTextureId());
+                    cap.setForceDisabled(message.isDisabled());
                 }
-                cap.setForceDisabled(message.isDisabled());
                 applyPlayerState(entity, message.getEntityModelSync());
             });
         });
@@ -130,6 +137,7 @@ public final class ClientPacketHandlers {
     }
 
     public static void handleVersionCheck(Object obj, Connection connection) {
+        if (PrivacyMode.isActive()) return;
         S2CVersionCheckPacket message = (S2CVersionCheckPacket) obj;
         ClientModelManager.setOysmServer(message.isOysmServer());
         ClientModelManager.setAllowUpload(message.isAllowUpload());

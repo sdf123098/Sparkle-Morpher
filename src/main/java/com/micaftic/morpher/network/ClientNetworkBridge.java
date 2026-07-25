@@ -23,6 +23,12 @@ public final class ClientNetworkBridge {
         return result instanceof Boolean value && value;
     }
 
+    public static boolean isPrivacyModeActive() {
+        if (!isPhysicalClient()) return false;
+        Object result = invoke("isPrivacyModeActive", new Class<?>[0]);
+        return result instanceof Boolean value && value;
+    }
+
     public static boolean isLocalPlayer(Object player) {
         if (!isPhysicalClient()) return false;
         Object result = invoke("isLocalPlayer", new Class<?>[]{Object.class}, player);

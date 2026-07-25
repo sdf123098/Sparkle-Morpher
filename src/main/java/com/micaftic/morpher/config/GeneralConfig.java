@@ -63,6 +63,8 @@ public class GeneralConfig {
 
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue LAZY_MODEL_LOADING;
 
+    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue PRIVACY_MODE;
+
     public static net.neoforged.neoforge.common.ModConfigSpec.IntValue MAX_RESIDENT_CPU_MODELS;
 
     public static net.neoforged.neoforge.common.ModConfigSpec.IntValue UNUSED_MODEL_TTL_SECONDS;
@@ -165,6 +167,8 @@ public class GeneralConfig {
         MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 24, 0, 512);
         builder.comment("Load cached server models only when they are first rendered or selected.");
         LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
+        builder.comment("Use local models only and block all Sparkle Morpher client-to-server traffic.");
+        PRIVACY_MODE = builder.define("PrivacyMode", false);
         builder.comment("Maximum server models whose CPU geometry and animation data stay resident. Idle models reload from the local cache when used again.");
         MAX_RESIDENT_CPU_MODELS = builder.defineInRange("MaxResidentCpuModels", 24, 1, 512);
         builder.comment("Minimum idle time before GPU/native render caches can be trimmed.");

@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.network.NetworkHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -15,8 +16,9 @@ public final class ClientPlayerJoinNotification {
     private static boolean notified = false;
     private ClientPlayerJoinNotification() {}
     @SubscribeEvent public static void onJoin(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
-        if (notified) return; ClientModelManager.runPendingModelCallback(); ClientModelManager.restorePersistedModelSelection(); notified = true;
+        if (notified) return; PrivacyMode.beginSession(); ClientModelManager.runPendingModelCallback(); ClientModelManager.restorePersistedModelSelection(); notified = true;
         if (!YesSteveModel.isAvailable()) { YesSteveModel.sendUnavailableMessage(); return; }
+        if (PrivacyMode.isActive()) { ClientModelManager.enterPrivacyMode(); return; }
         if (Minecraft.getInstance().isLocalServer()) return;
         Thread handshakeWatchdog = new Thread(() -> { try { Thread.sleep(3000L); Minecraft.getInstance().execute(ClientModelManager::markVanillaServerIfNoHandshake); } catch (InterruptedException ignored) {} });
         handshakeWatchdog.setDaemon(true); handshakeWatchdog.start();
@@ -26,6 +28,7 @@ public final class ClientPlayerJoinNotification {
     @SubscribeEvent public static void onQuit(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
         boolean reloadLocalModels = notified && YesSteveModel.isAvailable();
         notified = false;
+        PrivacyMode.endSession();
         ClientModelManager.resetSync();
         if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);
