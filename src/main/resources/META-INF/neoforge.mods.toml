@@ -30,3 +30,10 @@ type="required"
 versionRange="[26.2,26.3)"
 ordering="NONE"
 side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="touhou_little_maid"
+type="optional"
+versionRange="[0,)"
+ordering="AFTER"
+side="BOTH"

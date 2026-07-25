@@ -552,7 +552,7 @@ public class ModernPlayerModelScreen extends Screen {
         if (!texture.isBlank()) {
             drawMuted(g, Component.literal(trim(texture, w)), x, y + 24);
         }
-        int count = ClientModelManager.getModelAssemblyMap().size();
+        int count = ClientModelManager.getAvailableModelIds().size();
         drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.loaded_count", count), x, y + 46);
     }
 
@@ -1185,7 +1185,7 @@ public class ModernPlayerModelScreen extends Screen {
             // Synthesize folder nodes for nested models placed under custom/<subfolder>/
             // without ysm-pack.json entries. Otherwise those models are loaded but
             // cannot be reached through the model browser path navigation.
-            for (String modelId : ClientModelManager.getModelAssemblyMap().keySet()) {
+            for (String modelId : ClientModelManager.getAvailableModelIds()) {
                 if (!modelId.startsWith(STATE.currentPath)) {
                     continue;
                 }
@@ -1217,6 +1217,17 @@ public class ModernPlayerModelScreen extends Screen {
             }
             boolean locked = assembly.getTextureRegistry().isAuthModel() && !auth.contains(modelId);
             out.add(ModelEntry.model(modelId, displayName(modelId, assembly), modelSubtitle(modelId, assembly), locked));
+        }
+        for (String modelId : ClientModelManager.getAvailableModelIds()) {
+            if (ClientModelManager.getModelAssemblyMap().containsKey(modelId)) continue;
+            if (!searching && !isDirectModel(STATE.currentPath, modelId)) continue;
+            boolean authModel = ClientModelManager.isAuthModel(modelId);
+            if (STATE.modelFilter == ModelPanelState.ModelFilter.STAR && !stars.contains(modelId)) continue;
+            if (STATE.modelFilter == ModelPanelState.ModelFilter.AUTH && authModel && !auth.contains(modelId)) continue;
+            if (searching && !modelId.toLowerCase(Locale.ROOT).contains(query.startsWith("#") ? query.substring(1) : query)) continue;
+            boolean locked = authModel && !auth.contains(modelId);
+            out.add(ModelEntry.model(modelId, modelId,
+                    Component.translatable("gui.sparkle_morpher.model_panel.model.on_demand").getString(), locked));
         }
         out.sort(Comparator
                 .<ModelEntry, Boolean>comparing(e -> !stars.contains(e.modelId()))
@@ -1647,6 +1658,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(nativeSimdPolicyRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(nativeSimdValidationRow(ModelPanelState.SettingGroup.DEBUG));
         rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));
+        rows.add(bool(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.lazy_model_loading", GeneralConfig.LAZY_MODEL_LOADING));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.cpu_cache_limit", GeneralConfig.MAX_RESIDENT_CPU_MODELS, 1, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
