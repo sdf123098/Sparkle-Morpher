@@ -224,12 +224,12 @@ public class GeneralConfig {
         GPU_DEBUG_VERBOSE_LOG = builder.define("GpuDebugVerboseLog", false);
         builder.comment("Maximum client models allowed to keep GPU/native render caches. 0 disables LRU unloading.");
         MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
-        builder.comment("Load cached server models only when they are first rendered or selected.");
+        builder.comment("Load local and cached server models only when they are first rendered or selected.");
         LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
         builder.comment("Use local models only and block all Sparkle Morpher client-to-server traffic.");
         PRIVACY_MODE = builder.define("PrivacyMode", false);
-        builder.comment("Maximum server models whose CPU geometry and animation data stay resident. Idle models reload from the local cache when used again.");
-        MAX_RESIDENT_CPU_MODELS = builder.defineInRange("MaxResidentCpuModels", 24, 1, 512);
+        builder.comment("Maximum models whose CPU geometry and animation data stay resident. Idle models reload from their source when used again.");
+        MAX_RESIDENT_CPU_MODELS = builder.defineInRange("MaxResidentCpuModels", 64, 1, 512);
         builder.comment("Minimum idle time before an unused client model GPU/native cache can be unloaded by LRU.");
         UNUSED_MODEL_TTL_SECONDS = builder.defineInRange("UnusedModelTtlSeconds", 300, 30, 86400);
         builder.comment("Maximum decoded audio cache bytes across all client models. 0 disables decoded audio caching.");
