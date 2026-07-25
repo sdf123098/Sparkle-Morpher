@@ -5,6 +5,7 @@ import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.client.entity.PlayerPreviewEntity;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
 import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
@@ -1649,6 +1650,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_self_model", GeneralConfig.DISABLE_SELF_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_other_model", GeneralConfig.DISABLE_OTHER_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_self_hands", GeneralConfig.DISABLE_SELF_HANDS));
+        rows.add(privacyModeRow(ModelPanelState.SettingGroup.GENERAL));
         rows.add(invertedBool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_player_render", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_projectile_model", GeneralConfig.DISABLE_PROJECTILE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
@@ -1687,6 +1689,16 @@ public class ModernPlayerModelScreen extends Screen {
         return new SettingRow(group, labelKey, current, "", () -> {
             value.set(!safeBool(value));
             value.save();
+        }, null, null, null);
+    }
+
+    private SettingRow privacyModeRow(ModelPanelState.SettingGroup group) {
+        boolean current = PrivacyMode.isConfigured();
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.privacy_mode", current, "", () -> {
+            boolean enabled = !PrivacyMode.isConfigured();
+            GeneralConfig.PRIVACY_MODE.set(enabled);
+            GeneralConfig.PRIVACY_MODE.save();
+            PrivacyMode.onConfigChanged(enabled);
         }, null, null, null);
     }
 
