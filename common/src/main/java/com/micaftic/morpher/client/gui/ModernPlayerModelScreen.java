@@ -1179,9 +1179,14 @@ public class ModernPlayerModelScreen extends Screen {
             boolean authModel = ClientModelManager.isAuthModel(modelId);
             if (STATE.modelFilter == ModelPanelState.ModelFilter.STAR && !stars.contains(modelId)) continue;
             if (STATE.modelFilter == ModelPanelState.ModelFilter.AUTH && authModel && !auth.contains(modelId)) continue;
-            if (searching && !modelId.toLowerCase(Locale.ROOT).contains(query.startsWith("#") ? query.substring(1) : query)) continue;
+            String lazyTitle = lazyModelDisplayName(modelId);
+            if (searching) {
+                String needle = query.startsWith("#") ? query.substring(1) : query;
+                String haystack = (modelId + " " + lazyTitle).toLowerCase(Locale.ROOT);
+                if (!haystack.contains(needle)) continue;
+            }
             boolean locked = authModel && !auth.contains(modelId);
-            out.add(ModelEntry.model(modelId, modelId,
+            out.add(ModelEntry.model(modelId, lazyTitle,
                     Component.translatable("gui.sparkle_morpher.model_panel.model.on_demand").getString(), locked));
         }
         out.sort(Comparator
@@ -1789,6 +1794,12 @@ public class ModernPlayerModelScreen extends Screen {
         } catch (Exception ignored) {
             return modelId;
         }
+    }
+
+    /** Title for models that are catalogued but not yet fully loaded into {@code modelAssemblyMap}. */
+    private String lazyModelDisplayName(String modelId) {
+        String sniffed = ClientModelManager.getLazyModelDisplayName(modelId);
+        return StringUtils.isBlank(sniffed) ? modelId : sniffed;
     }
 
     private String modelSubtitle(String modelId, ModelAssembly assembly) {
