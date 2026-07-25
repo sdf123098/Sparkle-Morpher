@@ -2,6 +2,7 @@ package com.micaftic.morpher.network.message;
 
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.event.EntityJoinCallbackEvent;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -53,11 +54,12 @@ public class S2CSetModelAndTexturePacket {
     public static void applyOnClient(Entity entity, S2CSetModelAndTexturePacket other) {
         PlayerCapability.get(entity).ifPresent(cap -> {
             LocalPlayer localPlayer = Minecraft.getInstance().player;
-            boolean keepLocalOnlyModel = entity == localPlayer && ClientModelManager.isSelectedLocalOnlyModel(cap.getModelId());
+            boolean keepLocalOnlyModel = entity == localPlayer
+                    && (PrivacyMode.isActive() || ClientModelManager.isSelectedLocalOnlyModel(cap.getModelId()));
             if (!keepLocalOnlyModel) {
                 cap.initModelWithTexture(other.modelId, other.textureId);
+                cap.setForceDisabled(other.disabled);
             }
-            cap.setForceDisabled(other.disabled);
             S2CSyncPlayerStatePacket.handleCapability(entity, other.entityModelSync);
         });
     }

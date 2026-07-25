@@ -1,6 +1,7 @@
 package com.micaftic.morpher.network.message;
 
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.PrivacyMode;
 import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
@@ -26,7 +27,7 @@ public class S2CModelSyncPayload {
     }
 
     public static void handle(S2CModelSyncPayload message, PacketContext ctx) {
-        if (ctx.isClientSide()) {
+        if (ctx.isClientSide() && !PrivacyMode.isActive()) {
             ClientModelManager.startSync(ctx.getConnection(), message.data);
         }
     }

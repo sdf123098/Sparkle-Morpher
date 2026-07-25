@@ -35,7 +35,7 @@ public final class CommandRegistry {
             if (PlatformAPI.isServer()) {
                 return SharedSuggestionProvider.suggest(ServerModelManager.getServerModelInfo().keySet().stream().map(CommandRegistry::escapeIfRequired).toList(), suggestionsBuilder);
             }
-            return SharedSuggestionProvider.suggest(ClientModelManager.getModelAssemblyMap().keySet().stream().map(CommandRegistry::escapeIfRequired).toList(), suggestionsBuilder);
+        return SharedSuggestionProvider.suggest(ClientModelManager.getAvailableModelIds().stream().map(CommandRegistry::escapeIfRequired).toList(), suggestionsBuilder);
         }
         return Suggestions.empty();
     });
@@ -63,7 +63,7 @@ public final class CommandRegistry {
                     list.add(0, "-");
                     return SharedSuggestionProvider.suggest(list, suggestionsBuilder);
                 }
-            } else if (ClientModelManager.getModelAssemblyMap().containsKey(str)) {
+            } else if (ClientModelManager.getAvailableModelIds().contains(str)) {
                 List<String> list2 = ClientModelManager.getModelContext(str).map(context -> context.getAnimationBundle().getTextures().getKeys().stream().map(CommandRegistry::escapeIfRequired).collect(Collectors.toList())).orElseGet(Lists::newArrayList);
                 list2.add(0, "-");
                 return SharedSuggestionProvider.suggest(list2, suggestionsBuilder);
