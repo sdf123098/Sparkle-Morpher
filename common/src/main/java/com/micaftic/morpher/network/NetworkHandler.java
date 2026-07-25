@@ -1,6 +1,7 @@
 package com.micaftic.morpher.network;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.mixin.ConnectionAccessor;
 import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
 import com.micaftic.morpher.mixin.client.MinecraftAccessor;
@@ -45,6 +46,9 @@ public final class NetworkHandler {
     }
 
     public static boolean isClientConnected() {
+        if (PrivacyMode.isActive()) {
+            return false;
+        }
         if (clientHandshakeComplete) {
             return true;
         }
@@ -88,7 +92,7 @@ public final class NetworkHandler {
     }
 
     public static void sendToServer(Object obj) {
-        if (isClientConnected()) {
+        if (!PrivacyMode.isActive() && isClientConnected()) {
             YSMChannel.sendToServer(obj);
         }
     }
