@@ -779,7 +779,7 @@
   "gui.sparkle_morpher.model_panel.model.on_demand": "Loads when first used",
   "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit": "GPU cache limit",
   "gui.sparkle_morpher.model_panel.setting.cpu_cache_limit": "Resident CPU model limit",
-"gui.sparkle_morpher.model_panel.setting.cpu_cache_limit.desc": "Maximum server models that keep geometry and animation data in memory; idle models reload from the local cache when used.",
+"gui.sparkle_morpher.model_panel.setting.cpu_cache_limit.desc": "Maximum local and server models that keep full runtime data in memory; idle models reload from their source when used.",
   "gui.sparkle_morpher.model_panel.setting.unused_model_ttl": "Unused model TTL",
   "gui.sparkle_morpher.model_panel.setting.enable_global_bandwidth_limit": "Global transfer limit",
   "gui.sparkle_morpher.model_panel.setting.bandwidth_limit": "Transfer bandwidth limit",
