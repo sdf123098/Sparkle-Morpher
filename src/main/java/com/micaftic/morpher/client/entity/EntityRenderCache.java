@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.client.animation.debug.AnimationFrameProfiler;
 import com.micaftic.morpher.client.input.InputStateKey;
+import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.config.GeneralConfig;
 import it.unimi.dsi.fastutil.objects.ObjectListIterator;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
@@ -73,5 +74,24 @@ public class EntityRenderCache {
             }
         }
         strongRefs.clear();
+    }
+
+    public static boolean isModelAssemblyInUse(ModelAssembly assembly) {
+        if (assembly == null) return false;
+        for (GeoEntity<?> geoEntity : strongRefs) {
+            if (geoEntity.referencesModelAssembly(assembly)) {
+                return true;
+            }
+        }
+        ObjectListIterator<WeakReference<GeoEntity<?>>> it = weakRefs.iterator();
+        while (it.hasNext()) {
+            GeoEntity<?> geoEntity = it.next().get();
+            if (geoEntity == null) {
+                it.remove();
+            } else if (geoEntity.referencesModelAssembly(assembly)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

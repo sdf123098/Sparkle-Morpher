@@ -26,7 +26,7 @@ public final class NeoForgeCapabilityTypes {
     public static final Supplier<AttachmentType<ProjectileModelCapability>> PROJECTILE_MODEL =
             ATTACHMENTS.register("projectile_model", () -> AttachmentType.builder(ProjectileModelCapability::new).build());
     public static final Supplier<AttachmentType<VehicleModelCapability>> VEHICLE_MODEL =
-            ATTACHMENTS.register("vehicle_model", () -> AttachmentType.builder(VehicleModelCapability::new).build());
+            ATTACHMENTS.register("vehicle_model", () -> AttachmentType.serializable(VehicleModelCapability::new).build());
 
     private NeoForgeCapabilityTypes() {
     }

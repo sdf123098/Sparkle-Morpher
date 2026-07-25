@@ -77,6 +77,8 @@ public class GeneralConfig {
 
     public static ModConfigSpec.IntValue MAX_CACHED_GPU_MODELS;
 
+    public static ModConfigSpec.BooleanValue LAZY_MODEL_LOADING;
+
     public static ModConfigSpec.IntValue MAX_RESIDENT_CPU_MODELS;
 
     public static ModConfigSpec.IntValue UNUSED_MODEL_TTL_SECONDS;
@@ -223,7 +225,9 @@ public class GeneralConfig {
         builder.comment("Print verbose per-draw [SM-GPU] diagnostics. Requires GpuDebugLog and may be noisy.");
         GPU_DEBUG_VERBOSE_LOG = builder.define("GpuDebugVerboseLog", false);
         builder.comment("Maximum client models allowed to keep GPU/native render caches. 0 disables LRU unloading.");
-       MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
+        MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
+        builder.comment("Load cached server models only when they are first rendered or selected.");
+        LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
         builder.comment("Maximum server models whose CPU geometry and animation data stay resident. Idle models reload from the local cache when used again.");
         MAX_RESIDENT_CPU_MODELS = builder.defineInRange("MaxResidentCpuModels", 24, 1, 512);
         builder.comment("Minimum idle time before an unused client model GPU/native cache can be unloaded by LRU.");
