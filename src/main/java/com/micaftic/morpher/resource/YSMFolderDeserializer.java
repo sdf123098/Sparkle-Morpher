@@ -1076,7 +1076,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
             case 11 -> "fp_arm";
             case 12 -> "immersive_melodies";
             case 13 -> "irons_spell_books";
-            default -> "unknown";
+            default -> "unk_" + type;
         };
     }
 

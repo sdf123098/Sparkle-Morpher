@@ -117,7 +117,7 @@ Sparkle's Morpher 采用**公共核心 + 平台适配器**分层架构：
 ## 致谢与许可
 
 - 基于 [OpenYSM](https://github.com/OpenYSM)（MIT 许可证）二次开发。
-- 使用 [OpenYSM/YSMParser](https://github.com/OpenYSM/YSMParser)（MIT）进行 `.ysm` 模型解析。
+- 使用 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）进行 `.ysm` 模型解析。
 - 默认模型库：[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)。
 - Blockbench 格式由 [JannisX11/Blockbench](https://github.com/JannisX11/blockbench) 开发。
 
