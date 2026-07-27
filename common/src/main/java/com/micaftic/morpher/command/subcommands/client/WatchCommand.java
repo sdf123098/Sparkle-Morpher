@@ -17,6 +17,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 
+import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
 public class WatchCommand {
@@ -54,7 +55,7 @@ public class WatchCommand {
         String string = StringArgumentType.getString(context, EXP_NAME);
         try {
             IValue value = GeckoLibCache.parseSimpleExpression(string);
-            minecraft.execute(() -> {
+            ((Executor) minecraft).execute(() -> {
                 PlayerCapability.get(minecraft.player).ifPresent(cap -> {
                     AnimationDebugOverlay.getMolangWatch().addWatch(MolangWatchRegistry.EvaluationPhase.POST_ANIMATION, string, value);
                     if (!AnimationDebugOverlay.isDebugActive()) {
@@ -74,7 +75,7 @@ public class WatchCommand {
             return Command.SINGLE_SUCCESS;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        minecraft.execute(() -> {
+        ((Executor) minecraft).execute(() -> {
             PlayerCapability.get(minecraft.player).ifPresent(cap -> AnimationDebugOverlay.getMolangWatch().clearAll());
         });
         AnimationDebugOverlay.clearDebugLines();

@@ -36,6 +36,8 @@ public class  AnimationControllerInstance {
 
     private final Set<String> reportedMissingAnimationTargets;
 
+    private final Set<String> reportedMissingAnimations;
+
     private final AnimationControllerContext context;
 
     /**
@@ -80,6 +82,7 @@ public class  AnimationControllerInstance {
         this.boneAnimationQueues = new Int2ReferenceOpenHashMap<>();
         this.activeBoneAnimationQueues = new ReferenceArrayList<>();
         this.reportedMissingAnimationTargets = new HashSet<>();
+        this.reportedMissingAnimations = new HashSet<>();
         this.context = new AnimationControllerContext();
         this.animationState = AnimationState.IDLE;
         this.lastRequestedAnimation = null;
@@ -110,12 +113,15 @@ public class  AnimationControllerInstance {
         if (this.lastRequestedAnimation != null && this.lastRequestedAnimation.getSecond().equals(animationName) && this.lastRequestedAnimation.getFirst() == loopType) {
             return;
         }
-        clearAnimation();
-        this.lastRequestedAnimation = new Pair<>(loopType, animationName);
         Animation animation = this.animatable.getAnimation(animationName);
         if (animation == null) {
+            if (this.reportedMissingAnimations.add(animationName)) {
+                YesSteveModel.LOGGER.warn("[SM-ANIM] ignored missing animation={}, keeping the current animation", animationName);
+            }
             return;
         }
+        clearAnimation();
+        this.lastRequestedAnimation = new Pair<>(loopType, animationName);
         this.pendingAnimation = new Pair<>(loopType != null ? loopType : animation.loop, animation);
     }
 
