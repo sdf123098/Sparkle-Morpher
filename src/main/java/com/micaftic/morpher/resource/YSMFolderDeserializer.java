@@ -1054,6 +1054,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     public static int getAnimTypeFromKey(String key) {
+        if (key == null) return 0;
         return switch (key) {
             case "main" -> 1;
             case "arm" -> 2;
@@ -1067,9 +1068,19 @@ public class YSMFolderDeserializer implements AutoCloseable {
             case "tlm" -> 10;
             case "fp.arm", "fp_arm" -> 11;
             case "immersive_melodies" -> 12;
-            case "irons_spell_books" -> 13;
-            default -> 0;
+            case "iss", "irons_spell_books" -> 13;
+            default -> parseUnknownAnimType(key);
         };
+    }
+
+    private static int parseUnknownAnimType(String key) {
+        if (!key.startsWith("unk_")) return 0;
+        try {
+            int type = Integer.parseInt(key.substring(4));
+            return type >= 0 ? type : 0;
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     public static String getAnimKeyFromType(int type) {
