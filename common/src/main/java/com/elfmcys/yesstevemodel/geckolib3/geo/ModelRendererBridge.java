@@ -17,7 +17,6 @@ import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.core.compat.optifine.OptiFineDetector;
 import com.micaftic.morpher.core.gpu.GpuCapability;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
-import com.micaftic.morpher.core.gpu.IrisRenderPath;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.vector.JdkVectorModelMath;
 import com.micaftic.morpher.core.vector.VectorApiCapability;
@@ -62,7 +61,14 @@ public class ModelRendererBridge {
             return;
         }
 
-        boolean useGpuRenderer = textureLocation != null && AccelerationCapability.canBuildGpuMesh() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get() && GeneralConfig.USE_GPU_RENDERER.get();
+        // Shader packs own the active entity program and uniforms (including entityId).
+        // Direct VAO draws can reuse stale per-entity state, so keep them on the
+        // VertexConsumer-backed SIMD/Java path while a pack is active.
+        boolean useGpuRenderer = textureLocation != null
+                && AccelerationCapability.canBuildGpuMesh()
+                && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()
+                && GeneralConfig.USE_GPU_RENDERER.get()
+                && !OculusCompat.isShaderPackInUse();
 
         if (useGpuRenderer) {
 
@@ -73,14 +79,8 @@ public class ModelRendererBridge {
                 return;
             }
 
-            if (OculusCompat.isShaderPackInUse() && !isPreview) {
-                if (IrisRenderPath.tryRender(model, pose, boneParams, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation)) {
-                    return;
-                }
-            } else {
-                if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, model.isTranslucentTexture(textureIndex))) {
-                    return;
-                }
+            if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, model.isTranslucentTexture(textureIndex))) {
+                return;
             }
         }
 
