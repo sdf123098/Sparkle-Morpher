@@ -1434,7 +1434,17 @@ public class ModernPlayerModelScreen extends Screen {
         }
         List<ModelRepoEntry> out = new ArrayList<>();
         for (ModelRepoEntry entry : this.resourceEntries) {
-            String text = entry.name() + " " + entry.fileName() + " " + entry.description() + " " + entry.author() + " " + entry.tags();
+            String text = entry.name() + " "
+                    + ModelRepoClient.safeModelId(entry) + " "
+                    + entry.fileName() + " "
+                    + entry.description() + " "
+                    + entry.author() + " "
+                    + entry.tags() + " "
+                    + entry.url() + " "
+                    + entry.githubOwner() + " "
+                    + entry.githubRepo() + " "
+                    + entry.githubBranch() + " "
+                    + entry.githubPath();
             if (text.toLowerCase(Locale.ROOT).contains(query)) {
                 out.add(entry);
             }
