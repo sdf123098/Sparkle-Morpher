@@ -26,6 +26,11 @@ public final class TouhouMaidCompat {
     public static void init() {
     }
 
+    @OnlyIn(Dist.CLIENT)
+    public static void initClient() {
+        OfficialTouhouLittleMaidCompat.init(com.micaftic.morpher.YesSteveModel.LOGGER);
+    }
+
     public static boolean isMaidEntity(Entity entity) { return TouhouLittleMaidAccess.isMaid(entity);
     }
 
