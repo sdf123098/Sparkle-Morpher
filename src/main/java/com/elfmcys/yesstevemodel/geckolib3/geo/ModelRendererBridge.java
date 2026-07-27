@@ -19,7 +19,6 @@ import com.micaftic.morpher.core.compat.optifine.OptiFineDetector;
 import com.micaftic.morpher.core.gpu.GpuCapability;
 import com.micaftic.morpher.core.gpu.GpuDebugLog;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
-import com.micaftic.morpher.core.gpu.IrisRenderPath;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.RenderBackendDecision;
 import com.micaftic.morpher.core.render.NativeSimdValidator;
@@ -57,9 +56,13 @@ public class ModelRendererBridge {
         // entity still reaches the feature/shadow pipeline.
         boolean translucentTexture = model.isTranslucentTexture(textureIndex);
         GeneralConfig.NativeSimdPolicy nativePolicy = GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE);
-        RenderBackendDecision backend = RenderBackendDecision.choose(model, allowDirectGpuRenderer, translucentTexture, disableGlow, textureLocation, nativePolicy);
+        // Shader packs own the active entity program and uniforms (including entityId).
+        // Direct VAO draws can reuse stale per-entity state, so keep them on the
+        // VertexConsumer-backed SIMD/Java path while a pack is active.
+        boolean allowDirectGpu = allowDirectGpuRenderer && !shaderPackInUse;
+        RenderBackendDecision backend = RenderBackendDecision.choose(model, allowDirectGpu, translucentTexture, disableGlow, textureLocation, nativePolicy);
         GpuDebugLog.verbose("entry texture={} allowGpu={} backend={} reason={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdPolicy={} validationMode={} nativeLoaded={} nativeReason={} negFaces={} optStats={} consvOnly={}",
-                textureLocation, allowDirectGpuRenderer, backend.backend, backend.reason, translucentTexture, disableGlow, shaderPackInUse,
+                textureLocation, allowDirectGpu, backend.backend, backend.reason, translucentTexture, disableGlow, shaderPackInUse,
                 ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer(), ModelPreviewRenderer.isFirstPerson(), SubmitRenderContext.get() != null, ModelPreviewRenderer.isWorldRender(),
                 GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), GeneralConfig.USE_GPU_RENDERER.get(), nativePolicy,
                 GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF),
@@ -68,19 +71,11 @@ public class ModelRendererBridge {
                 model.optimizationStats != null,
                 model.conservativeRenderOnly);
         if (backend.backend == RenderBackendDecision.Backend.GPU) {
-            if (shaderPackInUse) {
-                if (IrisRenderPath.tryRender(model, pose, boneParams, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation)) {
-                    GpuDebugLog.verbose("entry rendered through IrisRenderPath texture={}", textureLocation);
-                    return;
-                }
-                GpuDebugLog.verbose("entry IrisRenderPath fallback texture={}", textureLocation);
-            } else {
-                if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
-                    GpuDebugLog.verbose("entry rendered through GpuRenderPath texture={}", textureLocation);
-                    return;
-                }
-                GpuDebugLog.verbose("entry GpuRenderPath fallback texture={}", textureLocation);
+            if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
+                GpuDebugLog.verbose("entry rendered through GpuRenderPath texture={}", textureLocation);
+                return;
             }
+            GpuDebugLog.verbose("entry GpuRenderPath fallback texture={}", textureLocation);
         }
 
         if (backend.backend == RenderBackendDecision.Backend.NATIVE_SIMD) { // WIP: SIMD MODEL RENDER
