@@ -106,7 +106,7 @@ Sparkle's Morpher は**共通コア + プラットフォームアダプター**�
 ## クレジット＆ライセンス
 
 - [OpenYSM](https://github.com/OpenYSM)（MIT ライセンス）を基に開発されました。
-- `.ysm` モデルパースに [OpenYSM/YSMParser](https://github.com/OpenYSM/YSMParser)（MIT）を使用。
+- `.ysm` モデルパースに [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）を使用。
 - デフォルトモデルライブラリ：[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)。
 - Blockbench 形式は [JannisX11/Blockbench](https://github.com/JannisX11/blockbench) による開発。
 

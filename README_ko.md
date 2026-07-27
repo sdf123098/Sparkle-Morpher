@@ -105,7 +105,7 @@ Sparkle's Morpher는**공통 코어 + 플랫폼 어댑터**계층 아키텍처�
 ## 크레딧 & 라이선스
 
 - [OpenYSM](https://github.com/OpenYSM)(MIT 라이선스)을 기반으로 개발.
-- `.ysm` 모델 파싱에 [OpenYSM/YSMParser](https://github.com/OpenYSM/YSMParser)(MIT) 사용.
+- `.ysm` 모델 파싱에 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)(MIT) 사용.
 - 기본 모델 라이브러리: [sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model).
 - Blockbench 형식은 [JannisX11/Blockbench](https://github.com/JannisX11/blockbench)에 의해 개발.
 
