@@ -33,6 +33,7 @@
     "ProjectileEntityMixin",
     "ServerCommonPacketListenerImplAccessor",
     "ServerPlayerMixin",
-    "compat.TouhouMaidEntityMixin"
+    "compat.TouhouMaidEntityMixin",
+    "compat.TouhouLittleMaidYsmCompatMixin"
   ]
 }

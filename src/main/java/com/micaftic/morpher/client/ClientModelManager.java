@@ -1148,7 +1148,7 @@ public class ClientModelManager {
                     lazyModelSources.put(modelKey, new LazyModelSource(persisted, null, false, false,
                             localSourceFingerprint(persisted), prevInfo, prevName));
                 }
-                Minecraft.getInstance().execute(ClientModelManager::flushPendingModels);
+                ((Executor) Minecraft.getInstance()).execute(ClientModelManager::flushPendingModels);
                 YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelKey, e);
@@ -1240,7 +1240,7 @@ public class ClientModelManager {
                         }
                     }
                 }
-                Minecraft.getInstance().execute(() -> {
+                ((Executor) Minecraft.getInstance()).execute(() -> {
                     flushPendingModels();
                     forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
                 });
@@ -1865,7 +1865,7 @@ public class ClientModelManager {
         modelAssemblyMap = map;
 
         if (!staleAssemblies.isEmpty()) {
-            Minecraft.getInstance().execute(() -> staleAssemblies.forEach(pair ->
+            ((Executor) Minecraft.getInstance()).execute(() -> staleAssemblies.forEach(pair ->
                     releaseModelAssembly(pair.getLeft(), pair.getRight())));
         }
     }
@@ -2256,7 +2256,7 @@ public class ClientModelManager {
     private static void unloadModelRuntime(String modelId, ModelAssembly assembly) {
         if (assembly == null || !assembly.isRuntimeResident()) return;
         if (!RenderSystem.isOnRenderThread()) {
-            Minecraft.getInstance().execute(() -> unloadModelRuntime(modelId, assembly));
+            ((Executor) Minecraft.getInstance()).execute(() -> unloadModelRuntime(modelId, assembly));
             return;
         }
         synchronized (assembly) {
