@@ -27,6 +27,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     @Nullable
     private Struct serverVars;
     private String rouletteAnimation = "";
+    private boolean officialYsmStateApplied;
 
     private MaidCapability(LivingEntity entity) {
         super(entity, true);
@@ -41,6 +42,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     }
 
     public void applySyncedState(VehicleModelCapability state, Int2FloatOpenHashMap values) {
+        this.officialYsmStateApplied = false;
         if (!state.isInitialized()) {
             this.rouletteAnimation = "";
             this.serverVars = null;
@@ -50,6 +52,35 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
         this.serverVars = new Int2FloatOpenHashMapStruct(values);
         this.rouletteAnimation = state.getRouletteAnimation();
         initModelWithTexture(state.getOwnerModelId(), state.getOwnerTexture());
+    }
+
+    /**
+     * The official Touhou Little Maid integration stores YSM state on the maid
+     * entity itself. Mirror that state into Sparkle's client-side model wrapper
+     * before rendering so the native maid screen and network packet are enough
+     * to activate the model.
+     */
+    public void syncOfficialYsmState() {
+        if (!TouhouLittleMaidAccess.isYsmModel(this.entity)) {
+            if (this.officialYsmStateApplied) {
+                this.officialYsmStateApplied = false;
+                resetModel();
+            }
+            return;
+        }
+    String modelId = TouhouLittleMaidAccess.getYsmModelId(this.entity);
+    if (modelId.isBlank()) {
+        if (this.officialYsmStateApplied) {
+            this.officialYsmStateApplied = false;
+            resetModel();
+        }
+        return;
+    }
+        this.officialYsmStateApplied = true;
+        String texture = TouhouLittleMaidAccess.getYsmModelTexture(this.entity);
+        if (!isModelInitialized() || !modelId.equals(getModelId()) || !texture.equals(getCurrentTextureName())) {
+            initModelWithTexture(modelId, texture);
+        }
     }
 
     public String getRouletteAnimation() {

@@ -37,6 +37,18 @@ final class TouhouLittleMaidAccess {
         return hasEntityId(entity, "maid");
     }
 
+    static boolean isYsmModel(Entity entity) {
+        return isMaid(entity) && booleanValue(invoke(entity, "isYsmModel"), false);
+    }
+
+    static String getYsmModelId(Entity entity) {
+        return isYsmModel(entity) ? stringValue(invoke(entity, "getYsmModelId"), "") : "";
+    }
+
+    static String getYsmModelTexture(Entity entity) {
+        return isYsmModel(entity) ? stringValue(invoke(entity, "getYsmModelTexture"), "") : "";
+    }
+
     static boolean isChair(Entity entity) {
         return hasEntityId(entity, "chair");
     }
