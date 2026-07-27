@@ -107,7 +107,7 @@ Varies by build variant — see `mods.toml` (NeoForge) or `fabric.mod.json` (Fab
 ## Credits & License
 
 - Built upon [OpenYSM](https://github.com/OpenYSM) (MIT License).
-- Uses [OpenYSM/YSMParser](https://github.com/OpenYSM/YSMParser) (MIT) for `.ysm` model parsing.
+- Uses [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser) (MIT) for `.ysm` model parsing.
 - Default model library: [sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model).
 - Blockbench format is a product of [JannisX11/Blockbench](https://github.com/JannisX11/blockbench).
 
