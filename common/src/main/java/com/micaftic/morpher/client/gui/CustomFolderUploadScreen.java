@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Dedicated batch-upload screen for files already present in
@@ -44,6 +46,8 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
     private FlatColorButton uploadAllButton;
     private FlatColorButton refreshButton;
+    private CompletableFuture<PreparedUpload> preparingUpload;
+    private Entry preparingEntry;
 
     private Component error = Component.empty();
     private Component status = Component.empty();
@@ -92,6 +96,12 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
     public void removed() {
         ModelUploadSession.removeListener(this);
         ModelUploadSession.clearIfTerminal();
+        CompletableFuture<PreparedUpload> preparation = this.preparingUpload;
+        if (preparation != null) {
+            preparation.cancel(true);
+            this.preparingUpload = null;
+            this.preparingEntry = null;
+        }
     }
 
     @Override
@@ -146,6 +156,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
     @Override
     public void tick() {
+        pollPreparedUpload();
         startNextUploadIfIdle();
     }
 
@@ -238,17 +249,20 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
     private boolean preflightUpload() {
         if (!ClientModelManager.isOysmServer()) {
-            this.error = Component.translatable("gui.sparkle_morpher.import.error.waiting_handshake");
+            showUploadBlocked(Component.translatable("gui.sparkle_morpher.import.error.waiting_handshake"));
             return false;
         }
         if (!ClientModelManager.isAllowUpload()) {
-            this.error = Component.translatable("gui.sparkle_morpher.import.error.disabled_by_server");
+            showUploadBlocked(Component.translatable("gui.sparkle_morpher.import.error.disabled_by_server"));
             return false;
         }
         return true;
     }
 
     private void startNextUploadIfIdle() {
+        if (this.preparingUpload != null) {
+            return;
+        }
         ModelUploadSession existing = ModelUploadSession.getInstance();
         if (existing != null && !existing.isTerminal()) {
             return;
@@ -269,45 +283,149 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
         }
         Path path = entry.sourcePath;
         if (path == null || !Files.exists(path)) {
-            entry.queued = false;
-            entry.failureMessage = Component.translatable("gui.sparkle_morpher.import.error.local_source_missing", entry.modelId);
-            this.error = entry.failureMessage;
+            failEntry(entry, Component.translatable("gui.sparkle_morpher.import.error.local_source_missing", entry.modelId));
             return false;
         }
-        try {
-            String fileName;
-            byte[] data;
-            if (Files.isDirectory(path)) {
-                ModelImportFilePicker.PickedFile packed = ModelImportFilePicker.packDirectory(path);
-                fileName = entry.modelId + ".zip";
-                data = packed.data();
-            } else {
-                String ext = importExtension(path);
-                if (ext.isBlank()) {
-                    entry.queued = false;
-                    entry.failureMessage = Component.translatable("gui.sparkle_morpher.import.error.invalid_extension");
-                    this.error = entry.failureMessage;
-                    return false;
-                }
-                fileName = entry.modelId + ext;
-                data = Files.readAllBytes(path);
-            }
-            Component uploadError = ModelUploadSession.start(entry.modelId, fileName, data);
-            if (uploadError != null) {
-                entry.queued = false;
-                entry.failureMessage = uploadError;
-                this.error = uploadError;
+        boolean directory = Files.isDirectory(path);
+        String fileName;
+        if (directory) {
+            fileName = entry.modelId + ".zip";
+        } else {
+            String ext = importExtension(path);
+            if (ext.isBlank()) {
+                failEntry(entry, Component.translatable("gui.sparkle_morpher.import.error.invalid_extension"));
                 return false;
             }
-            this.status = Component.translatable("gui.sparkle_morpher.upload_custom_folder.status.uploading", entry.modelId);
-            this.statusColor = ChatFormatting.YELLOW;
-            return true;
-        } catch (IOException e) {
-            entry.queued = false;
-            entry.failureMessage = Component.translatable("gui.sparkle_morpher.import.error.read_file", e.getMessage());
-            this.error = entry.failureMessage;
-            return false;
+            fileName = entry.modelId + ext;
         }
+        this.preparingEntry = entry;
+        this.preparingUpload = CompletableFuture.supplyAsync(() -> {
+            try {
+                return prepareUpload(entry.modelId, path, fileName, directory);
+            } catch (IOException e) {
+                throw new CompletionException(e);
+            }
+        });
+        this.status = Component.translatable("gui.sparkle_morpher.upload_custom_folder.status.uploading", entry.modelId);
+        this.statusColor = ChatFormatting.YELLOW;
+        return true;
+    }
+
+    private void pollPreparedUpload() {
+        CompletableFuture<PreparedUpload> preparation = this.preparingUpload;
+        if (preparation == null || !preparation.isDone()) {
+            return;
+        }
+        Entry entry = this.preparingEntry;
+        this.preparingUpload = null;
+        this.preparingEntry = null;
+        try {
+            finishPreparedUpload(entry, preparation.join());
+        } catch (CompletionException e) {
+            failPreparedUpload(entry, e.getCause() == null ? e : e.getCause());
+        } catch (RuntimeException e) {
+            failPreparedUpload(entry, e);
+        }
+    }
+
+    private PreparedUpload prepareUpload(String modelId, Path path, String fileName, boolean directory) throws IOException {
+        int maxBytes = knownUploadLimit();
+        byte[] data;
+        if (directory) {
+            try {
+                ModelImportFilePicker.PickedFile packed = maxBytes > 0
+                        ? ModelImportFilePicker.packDirectory(path, maxBytes)
+                        : ModelImportFilePicker.packDirectory(path);
+                data = packed.data();
+            } catch (ModelImportFilePicker.PackedSizeLimitExceededException e) {
+                throw new PreparationException(Component.translatable(
+                        "gui.sparkle_morpher.import.error.server_limit",
+                        ModelUploadSession.formatBytes(e.maxBytes())));
+            }
+        } else {
+            if (maxBytes > 0 && Files.size(path) > maxBytes) {
+                throw new PreparationException(Component.translatable(
+                        "gui.sparkle_morpher.import.error.server_limit",
+                        ModelUploadSession.formatBytes(maxBytes)));
+            }
+            data = Files.readAllBytes(path);
+        }
+        return new PreparedUpload(modelId, fileName, data);
+    }
+
+    private void finishPreparedUpload(Entry entry, PreparedUpload prepared) {
+        if (entry == null || prepared == null || entry.completed) {
+            return;
+        }
+        Component uploadError = ModelUploadSession.start(prepared.modelId(), prepared.fileName(), prepared.data(), false);
+        if (uploadError != null) {
+            failEntry(entry, uploadError);
+            return;
+        }
+        this.status = Component.translatable("gui.sparkle_morpher.upload_custom_folder.status.uploading", entry.modelId);
+        this.statusColor = ChatFormatting.YELLOW;
+    }
+
+    private void failPreparedUpload(Entry entry, Throwable throwable) {
+        if (entry == null) {
+            return;
+        }
+        if (throwable instanceof PreparationException preparationException) {
+            failEntry(entry, preparationException.component());
+            return;
+        }
+        failEntry(entry, Component.translatable("gui.sparkle_morpher.import.error.read_file", safeMessage(throwable)));
+    }
+
+    private void failEntry(Entry entry, Component failure) {
+        if (entry != null) {
+            entry.queued = false;
+            entry.failureMessage = failure;
+        }
+        this.error = failure;
+        this.status = failure;
+        this.statusColor = ChatFormatting.RED;
+        updateActionButtonsState();
+    }
+
+    private void showUploadBlocked(Component reason) {
+        this.error = reason;
+        this.status = reason;
+        this.statusColor = ChatFormatting.RED;
+        updateActionButtonsState();
+    }
+
+    private static int knownUploadLimit() {
+        if (!ModelUploadSession.hasServerLimits()) {
+            return -1;
+        }
+        return ModelUploadSession.getLastMaxTotalBytes();
+    }
+
+    private static String safeMessage(Throwable throwable) {
+        if (throwable == null) {
+            return "";
+        }
+        Throwable cause = throwable;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+    }
+
+    private static class PreparationException extends RuntimeException {
+        private final Component component;
+
+        PreparationException(Component component) {
+            this.component = component;
+        }
+
+        Component component() {
+            return this.component;
+        }
+    }
+
+    private record PreparedUpload(String modelId, String fileName, byte[] data) {
     }
 
     private static String importExtension(Path path) {
@@ -337,7 +455,6 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
     }
 
     private void updateActionButtonsState() {
-        boolean canUpload = ClientModelManager.isOysmServer() && ClientModelManager.isAllowUpload();
         boolean hasUploadable = false;
         for (Entry e : this.entries) {
             if (!e.queued && !e.completed) {
@@ -346,7 +463,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
             }
         }
         if (this.uploadAllButton != null) {
-            this.uploadAllButton.active = canUpload && hasUploadable;
+            this.uploadAllButton.active = hasUploadable;
         }
         if (this.refreshButton != null) {
             this.refreshButton.active = !this.refreshInProgress;

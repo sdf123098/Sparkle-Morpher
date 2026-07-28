@@ -23,6 +23,7 @@ public final class ModelUploadSession {
     private final String fileName;
     private final byte[] data;
     private final String sha256;
+    private final boolean syncSelectionOnComplete;
     private volatile State state = State.STARTING;
     private volatile long uploadId = 0L;
     private volatile int chunkSize = 32000;
@@ -30,11 +31,12 @@ public final class ModelUploadSession {
     private volatile int nextOffset = 0;
     private volatile Component message = Component.empty();
 
-    private ModelUploadSession(String modelId, String fileName, byte[] data) {
+    private ModelUploadSession(String modelId, String fileName, byte[] data, boolean syncSelectionOnComplete) {
         this.modelId = modelId;
         this.fileName = fileName;
         this.data = data;
         this.sha256 = DigestUtil.sha256Hex(data);
+        this.syncSelectionOnComplete = syncSelectionOnComplete;
     }
 
     public static ModelUploadSession getInstance() {
@@ -42,6 +44,10 @@ public final class ModelUploadSession {
     }
 
     public static synchronized Component start(String modelId, String fileName, byte[] data) {
+        return start(modelId, fileName, data, true);
+    }
+
+    public static synchronized Component start(String modelId, String fileName, byte[] data, boolean syncSelectionOnComplete) {
         if (instance != null && !instance.isTerminal()) {
             return Component.translatable("gui.sparkle_morpher.import.error.in_progress");
         }
@@ -67,7 +73,7 @@ public final class ModelUploadSession {
         if (kind == ImportKind.ZIP && !isZipFile(data)) {
             return Component.translatable("gui.sparkle_morpher.import.error.invalid_zip");
         }
-        ModelUploadSession session = new ModelUploadSession(modelId, fileName, data);
+        ModelUploadSession session = new ModelUploadSession(modelId, fileName, data, syncSelectionOnComplete);
         instance = session;
         notifyListeners();
         NetworkHandler.sendToServer(new C2SModelUploadStartPacket(modelId, fileName == null ? "" : fileName, data.length, session.sha256));
@@ -143,7 +149,11 @@ public final class ModelUploadSession {
         if (status == 0) {
             s.state = State.COMPLETED;
             s.message = Component.translatable("gui.sparkle_morpher.import.state.imported_as", modelId);
-            ClientModelManager.onUploadedModelAvailable(modelId);
+            if (s.syncSelectionOnComplete) {
+                ClientModelManager.onUploadedModelAvailable(modelId);
+            } else {
+                ClientModelManager.onUploadedModelImported(modelId);
+            }
         } else {
             s.fail(appendServerMessage(getResponseErrorText(status), message));
         }

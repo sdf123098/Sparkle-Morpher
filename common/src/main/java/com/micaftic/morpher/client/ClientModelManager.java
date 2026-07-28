@@ -1050,9 +1050,7 @@ public class ClientModelManager {
         if (modelId == null || modelId.isBlank()) {
             return;
         }
-        String modelKey = canonicalRuntimeModelKey(modelId);
-        localOnlyModelIds.remove(modelKey);
-        localModelSourcePaths.remove(modelKey);
+        onUploadedModelImported(modelId);
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
         if (player != null) {
@@ -1064,6 +1062,15 @@ public class ClientModelManager {
                 }
             });
         }
+    }
+
+    public static void onUploadedModelImported(String modelId) {
+        if (modelId == null || modelId.isBlank()) {
+            return;
+        }
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        localOnlyModelIds.remove(modelKey);
+        localModelSourcePaths.remove(modelKey);
     }
 
     public static void resendSelectedServerModel() {
