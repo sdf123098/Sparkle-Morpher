@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import dev.architectury.event.events.client.ClientPlayerEvent;
 import net.minecraft.client.player.LocalPlayer;
@@ -24,5 +25,6 @@ public final class ClientPlayerCloneEvent {
         CapabilityLifecycle.revive(oldPlayer);
         PlayerCapability.get(oldPlayer).ifPresent(cap -> PlayerCapability.get(newPlayer).ifPresent(cap2 -> cap2.copyFrom(cap)));
         CapabilityLifecycle.invalidate(oldPlayer);
+        ClientModelManager.restorePersistedModelSelection();
     }
 }
