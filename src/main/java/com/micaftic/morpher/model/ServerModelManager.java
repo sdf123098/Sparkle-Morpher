@@ -174,6 +174,7 @@ public final class ServerModelManager {
     }
 
     public static void reloadPacks() throws IOException {
+        initialized = false;
         CACHE_NAME_INFO.clear();
         AUTH_MODELS.clear();
 
@@ -1148,6 +1149,10 @@ public final class ServerModelManager {
         return CACHE_NAME_INFO;
     }
 
+    public static boolean isModelCatalogReady() {
+        return initialized;
+    }
+
     public static Set<String> getAuthModels() {
         return AUTH_MODELS;
     }
@@ -1453,7 +1458,6 @@ public final class ServerModelManager {
     private static void onModelLoadComplete(ModelLoadResult modelLoadResult, @Nullable Object obj) {
         Consumer<ModelLoadResult> consumer = (Consumer<ModelLoadResult>) obj;
         MinecraftServer currentServer = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
-        initialized = true;
         if (currentServer != null) {
             currentServer.execute(() -> {
                 if (modelLoadResult.isSuccess()) {
@@ -1464,6 +1468,7 @@ public final class ServerModelManager {
                     CACHE_NAME_INFO = modelLoadResult.getModelDefinitions();
                     modelHashSet = intOpenHashSet;
                     AUTH_MODELS = modelLoadResult.getAuthModelIds();
+                    initialized = true;
                 }
                 if (consumer != null) {
                     YSMThreadPool.submit(() -> consumer.accept(modelLoadResult));
@@ -1474,6 +1479,7 @@ public final class ServerModelManager {
         if (modelLoadResult.isSuccess()) {
             CACHE_NAME_INFO = modelLoadResult.getModelDefinitions();
             AUTH_MODELS = modelLoadResult.getAuthModelIds();
+            initialized = true;
         }
         if (consumer != null) {
             consumer.accept(modelLoadResult);
@@ -1642,6 +1648,10 @@ public final class ServerModelManager {
     }
 
     public static void validatePlayerModel(ServerPlayer serverPlayer) {
+        if (!initialized) {
+            NetworkOnlineDebugLog.info("validatePlayerModel: SKIP catalog_not_ready");
+            return;
+        }
         NetworkOnlineDebugLog.info("validatePlayerModel: {} cacheEmpty={} cacheSize={}",
                 serverPlayer.getName().getString(), CACHE_NAME_INFO.isEmpty(), CACHE_NAME_INFO.size());
         if (!CACHE_NAME_INFO.isEmpty()) {

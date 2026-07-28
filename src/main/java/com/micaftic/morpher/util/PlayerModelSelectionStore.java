@@ -44,7 +44,7 @@ public final class PlayerModelSelectionStore {
     }
 
     public static synchronized boolean restore(ServerPlayer player, ModelInfoCapability modelInfoCap, AuthModelsCapability authModelsCap) {
-        if (ServerModelManager.getServerModelInfo().isEmpty()) {
+        if (!ServerModelManager.isModelCatalogReady()) {
             return false;
         }
         JsonObject entry = getEntry(player.getUUID());

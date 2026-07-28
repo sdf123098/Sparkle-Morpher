@@ -16,9 +16,11 @@ public final class ClientPlayerJoinNotification {
     private static boolean notified = false;
     private ClientPlayerJoinNotification() {}
     @SubscribeEvent public static void onJoin(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event) {
-        if (notified) return; PrivacyMode.beginSession(); ClientModelManager.runPendingModelCallback(); ClientModelManager.restorePersistedModelSelection(); notified = true;
+        if (notified) return; PrivacyMode.beginSession(); ClientModelManager.runPendingModelCallback(); notified = true;
         if (!YesSteveModel.isAvailable()) { YesSteveModel.sendUnavailableMessage(); return; }
         if (PrivacyMode.isActive()) { ClientModelManager.enterPrivacyMode(); return; }
+        // 懒加载模式下，冷启动时模型目录尚未建立；先扫描目录，再恢复上次选择。
+        ClientModelManager.reloadLocalModels(error -> ClientModelManager.restorePersistedModelSelection());
         if (Minecraft.getInstance().isLocalServer()) return;
         Thread handshakeWatchdog = new Thread(() -> { try { Thread.sleep(3000L); Minecraft.getInstance().execute(ClientModelManager::markVanillaServerIfNoHandshake); } catch (InterruptedException ignored) {} });
         handshakeWatchdog.setDaemon(true); handshakeWatchdog.start();

@@ -3,6 +3,7 @@ package com.micaftic.morpher.network.message;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
+import com.micaftic.morpher.util.PlayerDataSaveBridge;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -33,6 +34,7 @@ public record C2SCompleteFeedbackPacket(FeedbackData feedbackData) {
         } else if (entity instanceof ServerPlayer serverPlayer) {
             ModelInfoCapability.get(serverPlayer).ifPresent(cap -> {
                 cap.applyFeedback(serverPlayer, message.feedbackData);
+                PlayerDataSaveBridge.save(serverPlayer);
                 if (serverPlayer.getVehicle() != null && serverPlayer.getVehicle().getFirstPassenger() == serverPlayer) {
                     VehicleModelCapability.get(serverPlayer.getVehicle()).ifPresent(vehicleCap -> {
                         cap.getMolangVars().ifPresent(map -> vehicleCap.setModel(cap.getModelId(), map));
