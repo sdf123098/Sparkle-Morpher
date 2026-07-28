@@ -31,6 +31,18 @@ public final class TouhouLittleMaidCompatImpl {
         return TouhouLittleMaidAccess.isMaid(entity);
     }
 
+    public static boolean isYsmModel(Entity entity) {
+        return TouhouLittleMaidAccess.isYsmModel(entity);
+    }
+
+    public static String getYsmModelId(Entity entity) {
+        return TouhouLittleMaidAccess.getYsmModelId(entity);
+    }
+
+    public static String getYsmModelTexture(Entity entity) {
+        return TouhouLittleMaidAccess.getYsmModelTexture(entity);
+    }
+
     public static boolean isMaidRideable(Entity entity) {
         return TouhouLittleMaidAccess.isMaid(entity);
     }

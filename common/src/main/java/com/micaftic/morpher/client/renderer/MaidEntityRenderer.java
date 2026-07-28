@@ -23,6 +23,7 @@ public final class MaidEntityRenderer extends GeoReplacedEntityRenderer<LivingEn
             return true;
         }
         return MaidCapability.get(entity).map(capability -> {
+            capability.syncOfficialYsmState();
             capability.tickModel();
             if (!capability.isModelActive() || !capability.isModelReady()) {
                 return true;

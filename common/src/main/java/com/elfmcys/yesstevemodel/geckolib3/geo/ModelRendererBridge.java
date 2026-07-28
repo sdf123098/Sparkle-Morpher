@@ -148,17 +148,10 @@ public class ModelRendererBridge {
         // TODO: 修復GC壓力
         Matrix4f rootPoseMat = pose.pose();
         Matrix3f rootNormalMC = pose.normal();
-        Matrix4f projMat = RenderSystem.getProjectionMatrix();
-
         Matrix4f identityMat = scratch.identityMat.identity();
         Matrix4f globalBoneMat = scratch.globalBoneMat;
-        Matrix4f projBoneMat = scratch.projBoneMat;
         Matrix3f localNormalMat = scratch.localNormalMat;
         Matrix3f globalNormalMat = scratch.globalNormalMat;
-
-        Vector4f p1 = scratch.p1;
-        Vector4f p2 = scratch.p2;
-        Vector4f p3 = scratch.p3;
         Vector4f tempPos = scratch.tempPos;
         Vector3f tempNorm = scratch.tempNorm;
         Matrix4f[] boneLocalTransforms = scratch.boneLocalTransforms;
@@ -200,12 +193,6 @@ public class ModelRendererBridge {
 
             Matrix4f localBoneMat = boneLocalTransforms[i];
             globalBoneMat.set(rootPoseMat).mul(localBoneMat);
-            projBoneMat.set(projMat).mul(globalBoneMat);
-
-            // GUI previews keep the -Z mirror in the local PoseStack. Use the
-            // screen-space culler there to avoid drawing cutout back faces while
-            // preserving the old determinant guard for world rendering.
-            boolean cullFaces = isPreview || globalBoneMat.determinant3x3() >= 0.0f;
 
             // 法線全域矩陣
             localBoneMat.normal(localNormalMat);
@@ -215,15 +202,6 @@ public class ModelRendererBridge {
 
             for (GeoModel.BakedCube cube : bone.cubes) {
                 for (GeoModel.BakedQuad quad : cube.quads) {
-                    if (cube.cullable && cullFaces) {
-                        p1.set(quad.x(0), quad.y(0), quad.z(0), 1.0f).mul(projBoneMat);
-                        p2.set(quad.x(1), quad.y(1), quad.z(1), 1.0f).mul(projBoneMat);
-                        p3.set(quad.x(2), quad.y(2), quad.z(2), 1.0f).mul(projBoneMat);
-                        float det = p1.x() * (p2.y() * p3.w() - p3.y() * p2.w()) - p2.x() * (p1.y() * p3.w() - p3.y() * p1.w()) + p3.x() * (p1.y() * p2.w() - p2.y() * p1.w());
-                        if (det <= 0.0f) {
-                            continue;
-                        }
-                    }
                     tempNorm.set(quad.normalX, quad.normalY, quad.normalZ).mul(globalNormalMat).normalize();
                     if (useJavaVector) {
                         JdkVectorModelMath.transformQuadPositions(quad, globalBoneMat, scratch.vectorX, scratch.vectorY, scratch.vectorZ);
@@ -418,11 +396,12 @@ public class ModelRendererBridge {
 
         if (!mesh.ensureNativeCache()) return false;
 
-        Matrix4f projMat = RenderSystem.getProjectionMatrix();
-
         pose.pose().get(matrixTransferArray, 0);
         pose.normal().get(matrixTransferArray, 16);
-        projMat.get(matrixTransferArray, 32);
+        // Keep native SIMD aligned with the 26.x bridge: an identity projection
+        // disables the native bone-AABB frustum cull, which misclassifies faces
+        // at specific rotations on the 1.21.1 macOS path.
+        projectionModelViewMatrix.identity().get(matrixTransferArray, 32);
 
         GeoModel.nComputeModelVertices(
                 mesh.nativeModelHandle,
@@ -439,12 +418,8 @@ public class ModelRendererBridge {
     private static final class RenderScratch {
         private final Matrix4f identityMat = new Matrix4f();
         private final Matrix4f globalBoneMat = new Matrix4f();
-        private final Matrix4f projBoneMat = new Matrix4f();
         private final Matrix3f localNormalMat = new Matrix3f();
         private final Matrix3f globalNormalMat = new Matrix3f();
-        private final Vector4f p1 = new Vector4f();
-        private final Vector4f p2 = new Vector4f();
-        private final Vector4f p3 = new Vector4f();
         private final Vector4f tempPos = new Vector4f();
         private final Vector3f tempNorm = new Vector3f();
         private final float[] vectorX = new float[4];

@@ -46,6 +46,16 @@ public final class MaidModelSync {
                         new S2CSyncVehicleModelPacket(maid.getId(), state), maid));
     }
 
+    public static void handleBaseModelChanged(Entity maid) {
+        if (maid.level().isClientSide() || maid.tickCount <= 0) {
+            return;
+        }
+        VehicleModelCapability.get(maid).filter(VehicleModelCapability::isInitialized).ifPresent(state -> {
+            state.clearMaidModel();
+            syncNow(maid, state);
+        });
+    }
+
     public static void syncNow(Entity maid, VehicleModelCapability state) {
         NetworkHandler.sendToTrackingEntity(new S2CSyncVehicleModelPacket(maid.getId(), state), maid);
     }

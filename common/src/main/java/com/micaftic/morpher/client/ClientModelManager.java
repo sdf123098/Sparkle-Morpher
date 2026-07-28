@@ -375,6 +375,7 @@ public class ClientModelManager {
             expectedCacheModels.add(ctx.uuid);
             if (!firstCanonicalId) {
                 YesSteveModel.LOGGER.warn("[SM] Ignoring duplicate server model id after case normalization: raw={} key={}", modelId, ctx.modelKey);
+                markSyncModelProcessed();
                 continue;
             }
 
@@ -393,8 +394,10 @@ public class ClientModelManager {
                     previousModelIds.add(ctx.modelKey);
                     updatedModelIds.add(ctx.modelKey);
                     isModelReadyList.add(isAuth);
+                    markSyncModelProcessed();
                 } else if (isLazyModelLoading()) {
                     YesSteveModel.LOGGER.info("[SM] Deferred cached model until first use: {}", ctx.modelKey);
+                    markSyncModelProcessed();
                 } else {
                     // 命中缓存
                     pendingModelsCount.incrementAndGet();
@@ -873,6 +876,9 @@ public class ClientModelManager {
     private static void registerRemoteLazySource(String modelId, Path path, byte[] key, boolean isAuth) {
         String modelKey = canonicalRuntimeModelKey(modelId);
         if (modelKey == null || path == null || key == null) return;
+        // 服务器已公布同名模型，本次会话中它不再是“仅本地”模型。
+        localOnlyModelIds.remove(modelKey);
+        localModelSourcePaths.remove(modelKey);
         LazyModelSource previous = lazyModelSources.get(modelKey);
         ServerModelInfo modelInfo = previous == null ? null : previous.modelInfo;
         String prevName = previous == null ? null : previous.displayName;
@@ -971,6 +977,9 @@ public class ClientModelManager {
         if (!isLocalOnlyModel(modelId) && !containsRuntimeModel(modelId)) {
             return;
         }
+
+        // 目录已经确认该模型可用，先恢复内存选择状态，避免同步完成时读取到 null。
+        rememberSelectedModel(modelId, textureId);
 
         // 5. 拷贝为 final 变量供 lambda 使用
         final String finalModelId = modelId;
@@ -1617,20 +1626,19 @@ public class ClientModelManager {
                 return false;
             }
         }
-        Minecraft.getInstance().execute(() -> {
-            if (syncState.currentState == SyncState.SYNCING) {
-                markSyncActivity();
-                syncState.syncedModels++;
-                int loaded = syncState.syncedModels;
-                if (loaded == syncState.totalModels) {
-                    syncState.finishSuccess();
-                }
-                forEachGuiWidget(guiWidget -> {
-                    guiWidget.onSyncProgress(syncState.getTotalModels(), loaded);
-                });
-            }
-        });
         return parsedBundle != null;
+    }
+
+    private static void markSyncModelProcessed() {
+        Minecraft.getInstance().execute(() -> {
+            if (syncState.currentState != SyncState.SYNCING) {
+                return;
+            }
+            markSyncActivity();
+            syncState.syncedModels = Math.min(syncState.totalModels, syncState.syncedModels + 1);
+            int processed = syncState.syncedModels;
+            forEachGuiWidget(guiWidget -> guiWidget.onSyncProgress(syncState.getTotalModels(), processed));
+        });
     }
 
     private static RawYsmModel parseImportModel(String fileName, byte[] data) throws Exception {
@@ -2037,7 +2045,7 @@ public class ClientModelManager {
 
     private static void finishPendingModelLoad() {
         pendingModelsCount.updateAndGet(value -> Math.max(0, value - 1));
-        markSyncActivity();
+        markSyncModelProcessed();
         scheduleSyncCompleteIfReady();
     }
 
@@ -2087,6 +2095,8 @@ public class ClientModelManager {
         Minecraft.getInstance().execute(() -> {
             flushPendingModels();
             syncState.finishSuccess();
+            // 远端懒加载目录到此才完整，补做一次持久化选择恢复。
+            restorePersistedModelSelection();
             resendSelectedServerModel();
             forEachGuiWidget(IGuiWidget::onSyncComplete);
         });
@@ -2595,9 +2605,7 @@ public class ClientModelManager {
             if (this.totalModels < 0) {
                 this.totalModels = Math.max(0, this.syncedModels);
             }
-            if (this.syncedModels < 0) {
-                this.syncedModels = this.totalModels;
-            }
+            this.syncedModels = this.totalModels;
             this.terminalSinceMillis = System.currentTimeMillis();
             this.message = null;
         }

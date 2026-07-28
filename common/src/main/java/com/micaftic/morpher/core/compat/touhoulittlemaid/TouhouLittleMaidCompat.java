@@ -28,6 +28,21 @@ public final class TouhouLittleMaidCompat {
     }
 
     @ExpectPlatform
+    public static boolean isYsmModel(Entity entity) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
+    public static String getYsmModelId(Entity entity) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
+    public static String getYsmModelTexture(Entity entity) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
     public static boolean isMaidRideable(Entity entity) {
         throw new AssertionError();
     }

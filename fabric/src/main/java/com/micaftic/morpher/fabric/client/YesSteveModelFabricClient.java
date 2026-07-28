@@ -12,6 +12,7 @@ import com.micaftic.morpher.core.api.client.HudOverlay;
 public final class YesSteveModelFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
+        OrihimeDirectModelCompat.init();
         FabricClientResourceLifecycle.register();
         HudOverlay debugOverlay = AnimationDebugOverlay.createOverlay();
         HudOverlay loadingOverlay = new ExtraPlayerOverlay();
