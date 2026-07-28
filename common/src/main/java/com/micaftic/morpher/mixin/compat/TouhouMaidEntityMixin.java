@@ -27,4 +27,9 @@ public abstract class TouhouMaidEntityMixin {
     private void sparkleMorpher$syncMaidModel(CallbackInfo ci) {
         MaidModelSync.periodicSync((Entity) (Object) this);
     }
+
+    @Inject(method = "setModelId", at = @At("TAIL"), require = 0, remap = false)
+    private void sparkleMorpher$clearMaidModel(String modelId, CallbackInfo ci) {
+        MaidModelSync.handleBaseModelChanged((Entity) (Object) this);
+    }
 }

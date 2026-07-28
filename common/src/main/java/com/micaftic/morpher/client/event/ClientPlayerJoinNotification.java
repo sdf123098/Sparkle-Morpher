@@ -30,7 +30,6 @@ public final class ClientPlayerJoinNotification {
         }
         PrivacyMode.beginSession();
         ClientModelManager.runPendingModelCallback();
-        ClientModelManager.restorePersistedModelSelection();
         notified = true;
         if (!YesSteveModel.isAvailable()) {
             YesSteveModel.sendUnavailableMessage();
@@ -40,6 +39,8 @@ public final class ClientPlayerJoinNotification {
             ClientModelManager.enterPrivacyMode();
             return;
         }
+        // 懒加载模式下，冷启动时模型目录尚未建立；先扫描目录，再恢复上次选择。
+        ClientModelManager.reloadLocalModels(error -> ClientModelManager.restorePersistedModelSelection());
         if (((MinecraftAccessor) Minecraft.getInstance()).ysm$isLocalServer()) {
             return;
         }
