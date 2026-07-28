@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.audio.AudioStreamCache;
+import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.core.gpu.BlurStack;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientPlayerEvent;
@@ -33,5 +34,6 @@ public final class ClientResourceLifecycleEvent {
         PlayerCapabilityClientStore.clear(reason);
         ProjectileCapabilityClientStore.clear(reason);
         VehicleCapabilityClientStore.clear(reason);
+        ClientModelManager.restorePersistedModelSelection();
     }
 }

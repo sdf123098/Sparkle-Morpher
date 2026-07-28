@@ -73,10 +73,12 @@ public final class CommandRegistry {
     });
 
     public static void register() {
-        // Client command registration disabled - Architectury ClientCommandRegistrationEvent
-        // is incompatible with MC 26.1.2's command system (ClientSuggestionProvider no longer
-        // implements ClientCommandSourceStack). Client commands are registered via the
-        // server-side CommandRegistrationEvent fallback instead.
+        ClientCommandRegistrationEvent.EVENT.register((dispatcher, context) -> {
+            if (!YesSteveModel.isAvailable()) {
+                return;
+            }
+            OpenYSMClientCommand.registerClientCommands(dispatcher);
+        });
         CommandRegistrationEvent.EVENT.register((dispatcher, registry, selection) -> {
             if (!YesSteveModel.isAvailable()) {
                 RootCommand.registerFallbackCommands(dispatcher);
