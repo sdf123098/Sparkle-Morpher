@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -16,5 +17,6 @@ public final class ClientPlayerCloneEvent {
         CapabilityLifecycle.revive(event.getOldPlayer());
         PlayerCapability.get(event.getOldPlayer()).ifPresent(c -> PlayerCapability.get(event.getNewPlayer()).ifPresent(n -> n.copyFrom(c)));
         CapabilityLifecycle.invalidate(event.getOldPlayer());
+        ClientModelManager.restorePersistedModelSelection();
     }
 }

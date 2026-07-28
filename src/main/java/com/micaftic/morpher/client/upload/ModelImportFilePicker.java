@@ -1054,6 +1054,10 @@ public final class ModelImportFilePicker {
     }
 
     public static PickedFile packDirectory(Path dir) throws IOException {
+        return packDirectory(dir, -1);
+    }
+
+    public static PickedFile packDirectory(Path dir, int maxPackedBytes) throws IOException {
         if (dir == null || !Files.isDirectory(dir)) {
             throw new IOException("Not a directory: " + dir);
         }
@@ -1081,11 +1085,19 @@ public final class ModelImportFilePicker {
                 zip.putNextEntry(entry);
                 Files.copy(normalized, zip);
                 zip.closeEntry();
+                checkPackedSize(out, maxPackedBytes);
             }
         }
+        checkPackedSize(out, maxPackedBytes);
         PerformanceProfiler.logElapsed("pack_directory", baseName, perfStart,
                 "files=" + count.get() + " bytes=" + out.size());
         return new PickedFile(baseName + ".zip", out.toByteArray());
+    }
+
+    private static void checkPackedSize(ByteArrayOutputStream out, int maxPackedBytes) throws PackedSizeLimitExceededException {
+        if (maxPackedBytes > 0 && out.size() > maxPackedBytes) {
+            throw new PackedSizeLimitExceededException(maxPackedBytes);
+        }
     }
 
     private static void completeDirectory(Path dir) throws IOException {
@@ -1429,6 +1441,19 @@ public final class ModelImportFilePicker {
     public record PickedFile(String fileName, byte[] data) {
     }
 
+    public static final class PackedSizeLimitExceededException extends IOException {
+        private final int maxBytes;
+
+        private PackedSizeLimitExceededException(int maxBytes) {
+            super("Packed folder exceeds upload limit");
+            this.maxBytes = maxBytes;
+        }
+
+        public int maxBytes() {
+            return this.maxBytes;
+        }
+    }
+
     private record FileStamp(long size, long modifiedMillis) {
     }
 
@@ -1441,3 +1466,4 @@ public final class ModelImportFilePicker {
     private record DirectoryCandidate(DirectoryStamp stamp, long firstSeenMs) {
     }
 }
+
