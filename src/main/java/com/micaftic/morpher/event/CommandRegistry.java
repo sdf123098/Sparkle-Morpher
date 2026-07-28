@@ -1,7 +1,9 @@
 package com.micaftic.morpher.event;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.command.OpenYSMClientCommand;
 import com.micaftic.morpher.command.RootCommand;
+import com.micaftic.morpher.core.architectury.event.events.client.ClientCommandRegistrationEvent;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.google.common.collect.Lists;
 import com.mojang.brigadier.StringReader;
@@ -52,10 +54,12 @@ public final class CommandRegistry {
     });
 
     public static void register() {
-        // Client command registration disabled - Architectury ClientCommandRegistrationEvent
-        // is incompatible with MC 26.1.2's command system (ClientSuggestionProvider no longer
-        // implements ClientCommandSourceStack). Client commands are registered via the
-        // server-side CommandRegistrationEvent fallback instead.
+        ClientCommandRegistrationEvent.EVENT.register((dispatcher, context) -> {
+            if (!YesSteveModel.isAvailable()) {
+                return;
+            }
+            OpenYSMClientCommand.registerClientCommands(dispatcher);
+        });
         CommandRegistrationEvent.EVENT.register((dispatcher, registry, selection) -> {
             if (!YesSteveModel.isAvailable()) {
                 RootCommand.registerFallbackCommands(dispatcher);

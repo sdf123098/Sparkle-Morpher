@@ -5,19 +5,18 @@ import com.micaftic.morpher.util.YSMMessageFormatter;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
-import com.micaftic.morpher.core.architectury.event.events.client.ClientCommandRegistrationEvent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
 public class CacheCommand {
 
-    public static LiteralArgumentBuilder<ClientCommandRegistrationEvent.ClientCommandSourceStack> register() {
-        return LiteralArgumentBuilder.<ClientCommandRegistrationEvent.ClientCommandSourceStack>literal("cache")
-                .then(LiteralArgumentBuilder.<ClientCommandRegistrationEvent.ClientCommandSourceStack>literal("dump")
+    public static <S> LiteralArgumentBuilder<S> register() {
+        return LiteralArgumentBuilder.<S>literal("cache")
+                .then(LiteralArgumentBuilder.<S>literal("dump")
                         .executes(CacheCommand::dumpCache));
     }
 
-    private static int dumpCache(CommandContext<ClientCommandRegistrationEvent.ClientCommandSourceStack> context) {
+    private static <S> int dumpCache(CommandContext<S> context) {
         var player = Minecraft.getInstance().player;
         if (player == null) {
             return 0;
