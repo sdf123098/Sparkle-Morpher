@@ -166,9 +166,9 @@ public class GeneralConfig {
         builder.comment("Disable first person animation from other mods.");
         DISABLE_EXTERNAL_FP_ANIM = builder.define("DisableExternalFirstPersonAnim", false);
         builder.comment("If rendering errors occur, try turning on this.");
-        USE_COMPATIBILITY_RENDERER = builder.define("UseCompatibilityRenderer", true);
+        USE_COMPATIBILITY_RENDERER = builder.define("UseCompatibilityRenderer", false);
         builder.comment("Legacy direct OpenGL GPU renderer master switch. This remains off by default and is additionally gated by GraphicsBackendMode and EnableOpenGlLegacyGpuRenderer.");
-        USE_GPU_RENDERER = builder.define("UseGpuRenderer", false);
+        USE_GPU_RENDERER = builder.define("UseGpuRenderer", true);
         GRAPHICS_BACKEND_MODE = builder.comment("Graphics backend policy. AUTO uses Minecraft's detected device, VANILLA_PIPELINE_ONLY disables raw OpenGL paths, OPENGL_LEGACY_COMPAT permits legacy OpenGL acceleration only on OpenGL, DISABLED_GPU_ACCELERATION disables raw OpenGL acceleration.")
                 .defineEnum("GraphicsBackendMode", SmRenderBackendMode.AUTO);
         DISABLE_RAW_OPENGL_ON_NON_OPENGL = builder.comment("Prevent raw OpenGL probes/renderers when Minecraft is not using an OpenGL backend.")
