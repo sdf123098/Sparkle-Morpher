@@ -6,6 +6,7 @@ import com.micaftic.morpher.capability.client.PlayerCapabilityClientStore;
 import com.micaftic.morpher.core.compat.bettercombat.BetterCombatCompat;
 import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
 import com.micaftic.morpher.util.CameraUtil;
+import com.micaftic.morpher.util.LocalModelSettingsStore;
 import com.micaftic.morpher.client.entity.PlayerEntityFrameState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelAssembly;
@@ -87,6 +88,12 @@ public final class PlayerCapability extends CustomPlayerEntity {
         return this.serverVarContainer;
     }
 
+    private RoamingStruct createLocalRoamingStruct(int modelHashId, Int2FloatOpenHashMap variables) {
+        RoamingStruct roamingStruct = new RoamingStruct(modelHashId, variables);
+        LocalModelSettingsStore.restore(getModelId(), roamingStruct);
+        return roamingStruct;
+    }
+
     public void beginRenderState(AvatarRenderState renderState) {
         this.hasRenderState = true;
         this.renderStateWalkAnimationSpeed = renderState.walkAnimationSpeed;
@@ -142,7 +149,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
         MolangVarHolder varHolder = this.molangVarsMap.get(this.currentModelHashId);
         if (varHolder != null && varHolder.currentVars != null) {
             if (isLocalPlayerModel()) {
-                this.serverVarContainer = new RoamingStruct(this.currentModelHashId, varHolder.currentVars);
+                this.serverVarContainer = createLocalRoamingStruct(this.currentModelHashId, varHolder.currentVars);
                 return;
             } else {
                 this.serverVarContainer = new Int2FloatOpenHashMapStruct(varHolder.currentVars);
@@ -201,7 +208,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
                 varHolder.currentVars = int2FloatOpenHashMap;
                 varHolder.applyPendingDeltas();
                 if (i == this.currentModelHashId) {
-                    this.serverVarContainer = new RoamingStruct(i, int2FloatOpenHashMap);
+                    this.serverVarContainer = createLocalRoamingStruct(i, int2FloatOpenHashMap);
                     clearAnimationControllers();
                     return;
                 }
@@ -248,6 +255,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
             if (struct instanceof RoamingStruct roamingStruct) {
                 if (roamingStruct.hasPendingChanges()) {
                     RoamingSyncBatch syncBatch = roamingStruct.consumePendingBoneData();
+                    LocalModelSettingsStore.save(getModelId(), syncBatch.changedVariables());
                     applyMolangDelta(syncBatch.modelHashId(), syncBatch.changedVariables());
                     String[] strArr = new String[syncBatch.changedVariables().size()];
                     float[] fArr = new float[syncBatch.changedVariables().size()];
