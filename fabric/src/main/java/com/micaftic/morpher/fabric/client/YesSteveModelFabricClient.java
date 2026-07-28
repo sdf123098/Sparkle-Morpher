@@ -18,6 +18,7 @@ import com.micaftic.morpher.core.api.client.HudOverlay;
 public final class YesSteveModelFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
+        OrihimeDirectModelCompat.init();
         KeyMappingRegistry.getCustomKeyMappings().forEach(KeyMappingHelper::registerKeyMapping);
 
         HudOverlay debugOverlay = AnimationDebugOverlay.createOverlay();

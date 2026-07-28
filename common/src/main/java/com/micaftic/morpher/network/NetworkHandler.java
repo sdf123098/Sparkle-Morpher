@@ -82,6 +82,7 @@ public final class NetworkHandler {
         YSMChannel.register(21, S2CSyncPlayerStatePacket.class, S2CSyncPlayerStatePacket::encode, S2CSyncPlayerStatePacket::decode, S2CSyncPlayerStatePacket::handle, PacketDirection.PLAY_TO_CLIENT);
         YSMChannel.register(22, S2CSyncVehicleModelPacket.class, S2CSyncVehicleModelPacket::encode, S2CSyncVehicleModelPacket::decode, S2CSyncVehicleModelPacket::handle, PacketDirection.PLAY_TO_CLIENT);
         YSMChannel.register(23, C2SSwingArmPacket.class, C2SSwingArmPacket::encode, C2SSwingArmPacket::decode, C2SSwingArmPacket::handle, PacketDirection.PLAY_TO_SERVER);
+        YSMChannel.register(24, C2SSetMaidModelPacket.class, C2SSetMaidModelPacket::encode, C2SSetMaidModelPacket::decode, C2SSetMaidModelPacket::handle, PacketDirection.PLAY_TO_SERVER);
         YSMChannel.register(51, S2CVersionCheckPacket.class, S2CVersionCheckPacket::encode, S2CVersionCheckPacket::decode, S2CVersionCheckPacket::handle, PacketDirection.PLAY_TO_CLIENT);
         YSMChannel.register(52, C2SVersionCheckPacket.class, C2SVersionCheckPacket::encode, C2SVersionCheckPacket::decode, C2SVersionCheckPacket::handle, PacketDirection.PLAY_TO_SERVER);
         YSMChannel.register(70, C2SModelUploadStartPacket.class, C2SModelUploadStartPacket::encode, C2SModelUploadStartPacket::decode, C2SModelUploadStartPacket::handle, PacketDirection.PLAY_TO_SERVER);

@@ -67,6 +67,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 
 public class ModernPlayerModelScreen extends Screen {
     private static final ModelPanelState STATE = new ModelPanelState();
@@ -100,6 +101,7 @@ public class ModernPlayerModelScreen extends Screen {
     private final Queue<ModelImportFilePicker.PickedFile> pendingImports = new ArrayDeque<>();
     private final PlayerPreviewEntity previewEntity = new PlayerPreviewEntity();
     private final Screen parentScreen;
+    private final BiConsumer<String, String> modelSelectionTarget;
     private ModelPanelLayout layout;
     private EditBox modelSearchBox;
     private EditBox resourceSearchBox;
@@ -164,8 +166,13 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     public ModernPlayerModelScreen(Screen parentScreen) {
+        this(parentScreen, null);
+    }
+
+    public ModernPlayerModelScreen(Screen parentScreen, BiConsumer<String, String> modelSelectionTarget) {
         super(Component.translatable("key.sparkle_morpher.player_model.desc"));
         this.parentScreen = parentScreen;
+        this.modelSelectionTarget = modelSelectionTarget;
     }
 
     public ModernPlayerModelScreen(ModelPanelState.Tab tab) {
@@ -1338,6 +1345,12 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void applyModelAndTexture(String modelId, String textureId, ModelAssembly assembly) {
+        if (this.modelSelectionTarget != null) {
+            ClientModelManager.rememberSelectedModel(modelId, textureId);
+            this.modelSelectionTarget.accept(modelId, textureId);
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.applied_model", modelId), ChatFormatting.GREEN);
+            return;
+        }
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {
             return;
