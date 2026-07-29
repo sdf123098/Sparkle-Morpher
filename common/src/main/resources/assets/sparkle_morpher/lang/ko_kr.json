@@ -757,6 +757,7 @@
   "gui.sparkle_morpher.model_panel.setting.compatibility_renderer": "호환 렌더러",
   "gui.sparkle_morpher.model_panel.setting.native_simd_renderer": "Native SIMD renderer",
   "gui.sparkle_morpher.model_panel.setting.java_vector_renderer": "Java Vector renderer",
+  "gui.sparkle_morpher.model_panel.setting.blaze3d_vulkan_gpu_renderer": "Experimental Blaze3D Vulkan GPU renderer",
   "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility": "셰이더 발광 호환성",
   "gui.sparkle_morpher.model_panel.setting.show_model_id_first": "모델 ID 먼저 표시",
   "gui.sparkle_morpher.model_panel.setting.resource_monitor_log": "리소스 모니터 로그",
