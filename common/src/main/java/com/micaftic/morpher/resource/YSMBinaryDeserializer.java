@@ -696,7 +696,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
         model.metadata.tips = reader.readString();
         int extraAnimationsCount = reader.readVarInt();
         for (int i = 0; i < extraAnimationsCount; i++) {
-            reader.readString(); // extra animation name
+            model.properties.extraAnimations.put("extra" + i, reader.readString());
         }
         int authorsCount = reader.readVarInt();
         for (int i = 0; i < authorsCount; i++) {
