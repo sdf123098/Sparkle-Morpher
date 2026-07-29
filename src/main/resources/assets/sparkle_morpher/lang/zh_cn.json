@@ -762,6 +762,7 @@
   "gui.sparkle_morpher.model_panel.setting.compatibility_renderer": "兼容渲染器",
   "gui.sparkle_morpher.model_panel.setting.native_simd_renderer": "原生 SIMD 渲染器",
   "gui.sparkle_morpher.model_panel.setting.java_vector_renderer": "Java Vector 渲染器",
+  "gui.sparkle_morpher.model_panel.setting.blaze3d_vulkan_gpu_renderer": "实验性 Blaze3D Vulkan GPU 渲染器",
   "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility": "光影发光兼容",
   "gui.sparkle_morpher.model_panel.setting.show_model_id_first": "优先显示模型 ID",
   "gui.sparkle_morpher.model_panel.setting.resource_monitor_log": "资源站监控日志",

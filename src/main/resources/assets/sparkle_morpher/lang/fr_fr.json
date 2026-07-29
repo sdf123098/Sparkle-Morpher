@@ -757,6 +757,7 @@
   "gui.sparkle_morpher.model_panel.setting.compatibility_renderer": "Rendu de compatibilite",
   "gui.sparkle_morpher.model_panel.setting.native_simd_renderer": "Native SIMD renderer",
   "gui.sparkle_morpher.model_panel.setting.java_vector_renderer": "Java Vector renderer",
+  "gui.sparkle_morpher.model_panel.setting.blaze3d_vulkan_gpu_renderer": "Experimental Blaze3D Vulkan GPU renderer",
   "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility": "Compatibilite de lueur des shaders",
   "gui.sparkle_morpher.model_panel.setting.show_model_id_first": "Afficher d'abord l'ID du modele",
   "gui.sparkle_morpher.model_panel.setting.resource_monitor_log": "Journal du moniteur de ressources",

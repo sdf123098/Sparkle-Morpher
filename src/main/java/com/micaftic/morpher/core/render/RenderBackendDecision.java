@@ -5,11 +5,13 @@ import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
+import com.micaftic.morpher.core.gpu.Blaze3DRenderPath;
 import com.micaftic.morpher.core.gpu.GpuCapability;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 
 public final class RenderBackendDecision {
     public enum Backend {
+        BLAZE3D_GPU,
         GPU,
         NATIVE_SIMD,
         JAVA
@@ -46,6 +48,45 @@ public final class RenderBackendDecision {
         }
         if (backendMode == SmRenderBackendMode.DISABLED_GPU_ACCELERATION) {
             return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "raw OpenGL GPU acceleration disabled by backend mode");
+        }
+        if (!SmGraphicsBackendDetector.isRawOpenGlAllowed() && Blaze3DRenderPath.isExperimentalEnabled()) {
+            if (!allowDirectGpuRenderer) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled by caller");
+            }
+            if (textureLocation == null) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU missing texture");
+            }
+            if (model.bakedBones == null || model.bakedBones.isEmpty()) {
+                return new RenderBackendDecision(Backend.JAVA, "java fallback: no baked bones");
+            }
+            if (translucentTexture) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU unsupported translucent texture");
+            }
+            if (disableGlow) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled by shaderpack glow compatibility");
+            }
+            if (hasSubmitContext) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled inside submit render context");
+            }
+            if (!worldRender) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled outside world render");
+            }
+            if (isPreview) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled for preview");
+            }
+            if (firstPerson) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, true, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled for first person");
+            }
+            if (compatibilityRenderer) {
+                return new RenderBackendDecision(Backend.JAVA, "java fallback: compatibility renderer enabled");
+            }
+            if (!gpuConfigured) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, false, disableGlow, "Blaze3D GPU config disabled");
+            }
+            if (!Blaze3DRenderPath.hasStableGraphicsApi()) {
+                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, false, disableGlow, "Blaze3D GPU API unavailable");
+            }
+            return new RenderBackendDecision(Backend.BLAZE3D_GPU, "experimental Blaze3D GPU path for mcBackend=" + graphicsBackend);
         }
         if (!SmGraphicsBackendDetector.isRawOpenGlAllowed()) {
             return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow,

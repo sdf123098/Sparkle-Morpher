@@ -1688,6 +1688,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(nativeSimdPolicyRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(nativeSimdValidationRow(ModelPanelState.SettingGroup.DEBUG));
         rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));
+        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.blaze3d_vulkan_gpu_renderer", GeneralConfig.ENABLE_BLAZE3D_VULKAN_GPU_RENDERER));
         rows.add(bool(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.lazy_model_loading", GeneralConfig.LAZY_MODEL_LOADING));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.cpu_cache_limit", GeneralConfig.MAX_RESIDENT_CPU_MODELS, 1, 512, 1, ""));
@@ -2210,7 +2211,26 @@ public class ModernPlayerModelScreen extends Screen {
             drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 22, y + 5);
             return;
         }
-        drawText(g, Component.literal(trim(displayName(modelId, assembly), w - 44)), x + 22, y + 5);
+        List<String> textures = new ArrayList<>(assembly.getAnimationBundle().getTextures().keySet());
+        String selectedTexture = selectedTextureOrDefault(assembly);
+        int quickButtonW = 52;
+        int quickCount = Math.min(textures.size(), Math.max(0, Math.min(3, (w - 150) / (quickButtonW + 2))));
+        int quickStartIndex = 0;
+        int selectedTextureIndex = textures.indexOf(selectedTexture);
+        if (quickCount > 0 && selectedTextureIndex >= quickCount) {
+            quickStartIndex = Math.min(selectedTextureIndex, textures.size() - quickCount);
+        }
+        int quickStartX = x + w - 22 - quickCount * (quickButtonW + 2);
+        drawText(g, Component.literal(trim(displayName(modelId, assembly), Math.max(24, quickStartX - x - 26))), x + 22, y + 5);
+        for (int i = 0; i < quickCount; i++) {
+            String texture = textures.get(quickStartIndex + i);
+            int buttonX = quickStartX + i * (quickButtonW + 2);
+            renderRowButton(g, mouseX, mouseY, buttonX, y + 2, quickButtonW, 14,
+                    Component.literal(trim(texture, quickButtonW - 10)), texture.equals(selectedTexture), () -> {
+                        STATE.selectedTextureId = texture;
+                        applySelectedTexture();
+                    });
+        }
         renderIconButton(g, mouseX, mouseY, x + w - 19, y, IconGlyph.INFO,
                 Component.translatable("gui.sparkle_morpher.model_panel.info"), () -> STATE.compactPreviewExpanded = true);
         if (!expanded) {
@@ -2226,14 +2246,22 @@ public class ModernPlayerModelScreen extends Screen {
             int iy = py + 2;
             drawMuted(g, Component.literal(trim(modelId, iw)), ix, iy);
             iy += 12;
-            Metadata metadata = assembly.getModelData().getExtraInfo();
-            if (metadata != null && metadata.getAuthors() != null && !metadata.getAuthors().isEmpty()) {
-                drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.authors"), ix, iy);
-                iy += 11;
-                drawMuted(g, Component.literal(trim(authors(metadata), iw)), ix, iy);
-                iy += 13;
+            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.textures"), ix, iy);
+            iy += 11;
+            int visibleTextures = Math.min(textures.size(), Math.max(1, Math.min(4, (py + ph - iy) / 16)));
+            int textureStart = 0;
+            if (visibleTextures > 0 && selectedTextureIndex >= visibleTextures) {
+                textureStart = Math.min(selectedTextureIndex, textures.size() - visibleTextures);
             }
-            drawMuted(g, Component.literal(assembly.getAnimationBundle().getTextures().size() + " tex"), ix, iy);
+            for (int i = 0; i < visibleTextures; i++) {
+                String texture = textures.get(textureStart + i);
+                renderRowButton(g, mouseX, mouseY, ix, iy, iw, 14, Component.literal(trim(texture, iw - 10)),
+                        texture.equals(selectedTexture), () -> {
+                            STATE.selectedTextureId = texture;
+                            applySelectedTexture();
+                        });
+                iy += 16;
+            }
         }
     }
 

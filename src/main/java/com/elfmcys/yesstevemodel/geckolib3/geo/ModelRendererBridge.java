@@ -16,6 +16,7 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.core.compat.optifine.OptiFineDetector;
+import com.micaftic.morpher.core.gpu.Blaze3DRenderPath;
 import com.micaftic.morpher.core.gpu.GpuCapability;
 import com.micaftic.morpher.core.gpu.GpuDebugLog;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
@@ -69,7 +70,15 @@ public class ModelRendererBridge {
                 AccelerationCapability.isLoaded(), AccelerationCapability.getReason(),
                 model.optimizationStats == null ? -1 : model.optimizationStats.negativeSizedFaces,
                 model.optimizationStats != null,
-                model.conservativeRenderOnly);
+	                model.conservativeRenderOnly);
+        if (backend.backend == RenderBackendDecision.Backend.BLAZE3D_GPU) {
+            if (Blaze3DRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
+                GpuDebugLog.verbose("entry rendered through Blaze3DRenderPath texture={}", textureLocation);
+                return;
+            }
+            GpuDebugLog.verbose("entry Blaze3DRenderPath fallback texture={}", textureLocation);
+            backend = RenderBackendDecision.choose(model, false, translucentTexture, disableGlow, textureLocation, nativePolicy);
+        }
         if (backend.backend == RenderBackendDecision.Backend.GPU) {
             if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
                 GpuDebugLog.verbose("entry rendered through GpuRenderPath texture={}", textureLocation);
