@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Sparkle's Morpher：为 Minecraft 带来可共享的自定义模型、动画与音效。">
+    <meta name="theme-color" content="#090a21">
+    <title>Sparkle's Morpher — 让角色成为你的作品</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #f8f6ff;
+        --muted: #b5b6cf;
+        --night: #08091e;
+        --panel: rgba(20, 22, 59, .72);
+        --line: rgba(180, 188, 255, .17);
+        --lavender: #a79bff;
+        --aqua: #58e5e1;
+        --coral: #ff8e9b;
+        --glow: 0 0 32px rgba(91, 231, 226, .28);
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        min-width: 320px;
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+        background: var(--night);
+        overflow-x: hidden;
+      }
+      a { color: inherit; text-decoration: none; }
+      .shell { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+      .aurora {
+        position: fixed;
+        z-index: -2;
+        inset: 0;
+        background:
+          radial-gradient(circle at 8% 15%, rgba(101, 84, 235, .48), transparent 25rem),
+          radial-gradient(circle at 90% 10%, rgba(47, 197, 207, .24), transparent 26rem),
+          radial-gradient(circle at 52% 95%, rgba(242, 111, 154, .15), transparent 29rem),
+          linear-gradient(135deg, #090a21 20%, #111139 58%, #090c25 100%);
+      }
+      .stars, .stars::before, .stars::after {
+        position: fixed;
+        z-index: -1;
+        width: 2px;
+        height: 2px;
+        border-radius: 50%;
+        content: "";
+        background: white;
+        box-shadow: 6vw 14vh #d8d4ff, 11vw 72vh #8bf8f2, 18vw 37vh #fff, 24vw 88vh #fff, 30vw 18vh #d8d4ff, 37vw 60vh #fff, 44vw 10vh #8bf8f2, 51vw 37vh #fff, 57vw 78vh #d8d4ff, 64vw 21vh #fff, 71vw 58vh #8bf8f2, 78vw 87vh #fff, 84vw 32vh #d8d4ff, 92vw 66vh #fff, 97vw 12vh #8bf8f2;
+        opacity: .65;
+      }
+      .stars { top: 12vh; left: 4vw; animation: drift 16s ease-in-out infinite alternate; }
+      .stars::before { top: 13vh; left: 10vw; }
+      .stars::after { top: 35vh; left: 28vw; }
+      @keyframes drift { to { transform: translateY(-18px); opacity: .92; } }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        border-bottom: 1px solid transparent;
+        transition: background .25s, border-color .25s, backdrop-filter .25s;
+      }
+      header.scrolled { background: rgba(8, 9, 30, .78); border-color: var(--line); backdrop-filter: blur(18px); }
+      .nav { display: flex; align-items: center; justify-content: space-between; height: 74px; gap: 20px; }
+      .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -.04em; }
+      .brand-mark { position: relative; display: grid; place-items: center; width: 34px; aspect-ratio: 1; border: 1px solid rgba(255,255,255,.5); border-radius: 10px 10px 16px 10px; background: linear-gradient(135deg, var(--aqua), var(--lavender)); box-shadow: 0 0 22px rgba(87,224,223,.4); }
+      .brand-mark::after { width: 11px; height: 11px; border: 2px solid #10112e; border-radius: 2px 7px 2px 7px; content: ""; transform: rotate(45deg); }
+      .nav-links { display: flex; align-items: center; gap: 25px; color: #d2d2e5; font-size: .88rem; }
+      .nav-links a { transition: color .2s; }
+      .nav-links a:hover { color: var(--aqua); }
+      .nav-cta { padding: 9px 14px; border: 1px solid rgba(88,229,225,.55); border-radius: 999px; color: var(--aqua); }
+
+      .hero { display: grid; grid-template-columns: 1.08fr .92fr; align-items: center; min-height: calc(100vh - 74px); padding: 75px 0 65px; gap: 48px; }
+      .eyebrow { display: flex; align-items: center; gap: 8px; color: var(--aqua); font-size: .78rem; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
+      .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--aqua); box-shadow: 0 0 0 5px rgba(88,229,225,.12), 0 0 16px var(--aqua); animation: pulse 1.8s infinite; }
+      @keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(88,229,225,.02), 0 0 21px var(--aqua); } }
+      h1 { max-width: 750px; margin: 19px 0 20px; font-size: clamp(3.1rem, 7vw, 6.6rem); line-height: .91; letter-spacing: -.09em; }
+      .gradient-word { display: block; background: linear-gradient(100deg, #fff 12%, #b7f9f3 43%, #c6b5ff 83%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .lead { max-width: 570px; color: var(--muted); font-size: clamp(1rem, 1.45vw, 1.18rem); line-height: 1.8; }
+      .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+      .button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 49px; padding: 0 19px; border: 1px solid var(--line); border-radius: 12px; font-size: .93rem; font-weight: 750; transition: transform .2s, box-shadow .2s, background .2s; }
+      .button:hover { transform: translateY(-3px); }
+      .button.primary { border-color: transparent; background: linear-gradient(110deg, var(--aqua), #9c9dff); color: #10112c; box-shadow: 0 12px 35px rgba(95, 209, 221, .24); }
+      .button.primary:hover { box-shadow: 0 18px 45px rgba(95, 209, 221, .4); }
+      .button.secondary { background: rgba(255,255,255,.05); }
+      .button svg { width: 18px; height: 18px; fill: currentColor; }
+      .hero-note { display: flex; gap: 21px; margin-top: 40px; color: #a7a8c3; font-size: .8rem; }
+      .hero-note strong { display: block; color: #f5f4ff; font-size: 1rem; letter-spacing: -.02em; }
+
+      .morph-stage { position: relative; min-height: 490px; perspective: 1000px; }
+      .orbit { position: absolute; inset: 6% 1% 7%; border: 1px solid rgba(174, 174, 255, .25); border-radius: 50%; transform: rotate(-23deg); }
+      .orbit::after { position: absolute; top: 17%; right: 5%; width: 9px; height: 9px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 18px var(--coral); content: ""; }
+      .orbit.two { inset: 17% 9% 14%; border-color: rgba(88,229,225,.33); transform: rotate(48deg); }
+      .orbit.two::after { top: 69%; right: auto; left: 2%; width: 7px; height: 7px; background: var(--aqua); box-shadow: 0 0 18px var(--aqua); }
+      .avatar { position: absolute; top: 50%; left: 50%; width: min(296px, 70vw); height: 374px; transform: translate(-50%, -50%) rotateY(-11deg) rotateX(4deg); filter: drop-shadow(0 28px 24px rgba(0,0,0,.38)); }
+      .avatar::before { position: absolute; inset: 0; border: 1px solid rgba(196,201,255,.48); border-radius: 35% 35% 24% 24% / 22% 22% 18% 18%; background: linear-gradient(135deg, rgba(150,144,255,.4), rgba(40,203,206,.23)); box-shadow: inset 0 0 40px rgba(255,255,255,.07), var(--glow); content: ""; }
+      .head { position: absolute; z-index: 2; top: 34px; left: 76px; width: 143px; height: 137px; border: 1px solid rgba(242,255,255,.7); border-radius: 42% 42% 37% 37%; background: linear-gradient(135deg, #88e7e0, #7975dc 58%, #db8ebd); box-shadow: inset 9px 8px 20px rgba(255,255,255,.3); }
+      .head::before, .head::after { position: absolute; top: 59px; width: 24px; height: 12px; border-radius: 999px; background: #101333; box-shadow: 0 0 0 3px rgba(255,255,255,.1); content: ""; }
+      .head::before { left: 31px; } .head::after { right: 31px; }
+      .head span { position: absolute; bottom: 27px; left: 50%; width: 38px; height: 13px; border-bottom: 3px solid #1a1b44; border-radius: 0 0 50% 50%; transform: translateX(-50%); }
+      .body-shape { position: absolute; z-index: 1; bottom: 22px; left: 50px; width: 196px; height: 232px; border: 1px solid rgba(242,255,255,.6); border-radius: 40% 40% 21% 21% / 30% 30% 12% 12%; background: linear-gradient(145deg, #7675dc, #4bbad2 52%, #9c85d8); }
+      .body-shape::before { position: absolute; top: 51px; left: 50%; width: 60px; height: 60px; border: 1px solid rgba(255,255,255,.6); border-radius: 50%; background: rgba(7,11,38,.38); box-shadow: inset 0 0 22px rgba(88,229,225,.42), 0 0 20px rgba(88,229,225,.2); content: ""; transform: translateX(-50%); }
+      .body-shape::after { position: absolute; right: 11px; bottom: 23px; left: 11px; height: 67px; border-top: 1px solid rgba(255,255,255,.33); border-radius: 40%; background: repeating-linear-gradient(100deg, transparent 0 14px, rgba(255,255,255,.12) 15px 16px); content: ""; }
+      .float-card { position: absolute; z-index: 4; padding: 11px 13px; border: 1px solid rgba(255,255,255,.18); border-radius: 11px; background: rgba(13,15,46,.78); box-shadow: 0 13px 28px rgba(0,0,0,.22); backdrop-filter: blur(12px); font-size: .76rem; animation: bob 4s ease-in-out infinite alternate; }
+      .float-card b { display: block; margin-bottom: 4px; color: var(--aqua); font-size: .67rem; letter-spacing: .1em; }
+      .card-one { top: 13%; left: 1%; } .card-two { right: 0; bottom: 19%; animation-delay: -1.7s; } .card-three { top: 61%; left: 7%; animation-delay: -2.5s; }
+      @keyframes bob { to { transform: translateY(-12px); } }
+
+      section { padding: 108px 0; }
+      .section-heading { max-width: 620px; margin-bottom: 45px; }
+      .kicker { color: var(--aqua); font-size: .74rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+      h2 { margin: 12px 0 14px; font-size: clamp(2rem, 4vw, 3.45rem); line-height: 1.02; letter-spacing: -.065em; }
+      .section-heading p { margin: 0; color: var(--muted); line-height: 1.75; }
+      .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .feature { min-height: 232px; padding: 24px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(140deg, rgba(36,39,88,.74), rgba(15,16,47,.45)); transition: transform .25s, border-color .25s; }
+      .feature:hover { border-color: rgba(88,229,225,.55); transform: translateY(-5px); }
+      .icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 39px; border-radius: 12px; color: #09112d; background: linear-gradient(135deg, var(--aqua), #b4a3ff); font-size: 1.2rem; }
+      .feature h3 { margin: 0 0 8px; font-size: 1.12rem; letter-spacing: -.03em; }
+      .feature p { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.65; }
+
+      .compatibility { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: rgba(10,11,35,.4); }
+      .versions { display: grid; grid-template-columns: .78fr 1.22fr; gap: 50px; align-items: center; }
+      .version-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .version { min-height: 100px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.035); }
+      .version span { display: block; margin-bottom: 7px; color: var(--aqua); font-size: .72rem; font-weight: 800; letter-spacing: .1em; }
+      .version strong { font-size: 1.05rem; }
+      .feature-list { display: grid; gap: 12px; margin-top: 28px; color: #d9d9ec; font-size: .94rem; }
+      .feature-list div::before { display: inline-block; width: 19px; color: var(--aqua); content: "✦"; }
+
+      .cta { position: relative; overflow: hidden; padding: 70px clamp(25px, 6vw, 78px); border: 1px solid rgba(166,155,255,.37); border-radius: 24px; background: linear-gradient(115deg, rgba(92,77,194,.62), rgba(24,135,160,.43)); text-align: center; }
+      .cta::before { position: absolute; top: -270px; left: 50%; width: 520px; height: 520px; border: 1px solid rgba(255,255,255,.19); border-radius: 50%; content: ""; transform: translateX(-50%); }
+      .cta > * { position: relative; }
+      .cta h2 { max-width: 670px; margin: 8px auto 15px; }
+      .cta p { max-width: 560px; margin: 0 auto; color: #e1e2f6; line-height: 1.7; }
+      .cta .actions { justify-content: center; }
+      footer { display: flex; justify-content: space-between; gap: 20px; padding: 30px 0 38px; color: #989ab9; font-size: .8rem; }
+      footer a { color: #d3d4e5; } footer a:hover { color: var(--aqua); }
+
+      @media (max-width: 760px) {
+        .nav { height: 64px; } .nav-links a:not(.nav-cta) { display: none; }
+        .hero { grid-template-columns: 1fr; min-height: auto; padding-top: 68px; text-align: center; }
+        .eyebrow, .actions, .hero-note { justify-content: center; } .lead { margin-inline: auto; }
+        .morph-stage { order: -1; min-height: 390px; } .avatar { transform: translate(-50%, -50%) scale(.82); }
+        .features, .versions { grid-template-columns: 1fr; } .versions { gap: 28px; }
+        section { padding: 78px 0; } footer { align-items: center; flex-direction: column; text-align: center; }
+      }
+      @media (max-width: 420px) { .shell { width: min(100% - 28px, 1120px); } h1 { font-size: 3rem; } .hero-note { gap: 14px; } .float-card { font-size: .68rem; } .card-three { left: 0; } }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+    </style>
+  </head>
+  <body>
+    <div class="aurora" aria-hidden="true"></div><div class="stars" aria-hidden="true"></div>
+    <header id="top"><nav class="nav shell" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="Sparkle's Morpher 首页"><span class="brand-mark" aria-hidden="true"></span><span>Sparkle's Morpher</span></a>
+      <div class="nav-links"><a href="#features">能力</a><a href="#versions">版本</a><a href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">项目源码</a><a class="nav-cta" href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">前往下载</a></div>
+    </nav></header>
+    <main>
+      <section class="hero shell" aria-labelledby="hero-title">
+        <div>
+          <div class="eyebrow"><span class="pulse" aria-hidden="true"></span> Minecraft custom model loader</div>
+          <h1 id="hero-title">让角色<br><span class="gradient-word">成为你的作品。</span></h1>
+          <p class="lead">Sparkle's Morpher 让自定义模型、动画和音效自然融入 Minecraft。选择你的形象，让每一次进入世界都留下自己的光芒。</p>
+          <div class="actions"><a class="button primary" href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">在 CurseForge 下载 <span aria-hidden="true">↗</span></a><a class="button secondary" href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.44-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>查看 GitHub 项目</a></div>
+          <div class="hero-note"><div><strong>多人可见</strong>你的模型，不止你看得见</div><div><strong>多种格式</strong>模型导入更自由</div></div>
+        </div>
+        <div class="morph-stage" role="img" aria-label="抽象的自定义角色展示">
+          <div class="orbit"></div><div class="orbit two"></div>
+          <div class="avatar"><div class="head"><span></span></div><div class="body-shape"></div></div>
+          <div class="float-card card-one"><b>ANIMATION</b>动作，由你定义</div><div class="float-card card-two"><b>SOUND FX</b>让角色发出声音</div><div class="float-card card-three"><b>MODEL SYNC</b>与朋友共享形象</div>
+        </div>
+      </section>
+      <section class="shell" id="features" aria-labelledby="feature-title">
+        <div class="section-heading"><div class="kicker">Make it yours</div><h2 id="feature-title">不只是换一张皮肤。</h2><p>从模型到动作、从表情到声音，为你想成为的角色建立完整形象。</p></div>
+        <div class="features">
+          <article class="feature"><div class="icon" aria-hidden="true">✦</div><h3>自定义模型</h3><p>装载你的专属角色模型。它会出现在你和同伴的视野里，让形象真正进入联机世界。</p></article>
+          <article class="feature"><div class="icon" aria-hidden="true">◌</div><h3>动画与动作</h3><p>通过动画转盘快速切换动作和表情；让待机、技能与角色个性都拥有自己的节奏。</p></article>
+          <article class="feature"><div class="icon" aria-hidden="true">♫</div><h3>声音也有表情</h3><p>将音效和语音随模型带入游戏。每个动作不再沉默，角色表达更完整。</p></article>
+        </div>
+      </section>
+      <section class="compatibility" id="versions" aria-labelledby="version-title"><div class="shell versions">
+        <div><div class="kicker">Built to travel</div><h2 id="version-title">走进不同的世界。</h2><p class="lead">无论你习惯 Fabric 还是 NeoForge，都能带上你的角色继续冒险。</p><div class="feature-list"><div>本地文件、文件夹与 URL 导入</div><div>模型分组、收藏与自动识别</div><div>服务器模型列表与客户端同步</div></div></div>
+        <div class="version-grid" role="group" aria-label="支持版本"><div class="version"><span>LOADER</span><strong>Fabric</strong></div><div class="version"><span>LOADER</span><strong>NeoForge</strong></div><div class="version"><span>MINECRAFT</span><strong>1.21.1</strong></div><div class="version"><span>MINECRAFT</span><strong>26.1.2 · 26.2</strong></div></div>
+      </div></section>
+      <section class="shell"><div class="cta"><div class="kicker">Your next form awaits</div><h2>现在，开始塑造你的冒险者。</h2><p>下载 Sparkle's Morpher，或者在 GitHub 关注项目进展。想象力已经准备好了。</p><div class="actions"><a class="button primary" href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">下载 Sparkle's Morpher <span aria-hidden="true">↗</span></a><a class="button secondary" href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">浏览项目源码</a></div></div></section>
+    </main>
+    <footer class="shell"><span>© 2026 Sparkle's Morpher · MIT License</span><span><a href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">CurseForge</a></span></footer>
+    <script>const header=document.querySelector('header');addEventListener('scroll',()=>header.classList.toggle('scrolled',scrollY>8),{passive:true});</script>
+  </body>
+</html>
