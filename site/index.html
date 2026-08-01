@@ -97,7 +97,7 @@
       .footer-inner a { color: var(--red); }
 
       @media (max-width: 800px) {
-        nav { height: 66px; } .nav-links { gap: 14px; } .nav-links a:not(.download) { display: none; }
+        nav { height: 66px; } .nav-links { gap: 14px; } .nav-links a:not(.download):not(.sponsor-link) { display: none; }
         .hero::before { display: none; } .hero-inner { grid-template-columns: 1fr; gap: 0; text-align: center; } .hero-copy { padding: 74px 0 28px; } .eyebrow, .actions, .hero-meta { justify-content: center; } .hero-copy p { margin-inline: auto; }
         .hero-art { min-height: 390px; padding-bottom: 55px; } .art-frame { width: min(315px, 79vw); } .art-caption { right: -2px; bottom: 16px; text-align: left; }
         section { padding: 78px 0; } .features { grid-template-columns: 1fr; } .feature { min-height: auto; } .feature-number { margin-bottom: 26px; }
@@ -111,7 +111,7 @@
     <header id="top">
       <nav class="wrap" aria-label="主导航">
         <a class="wordmark" href="#top"><img src="assets/sparkle_morpher.png" alt="Sparkle's Morpher 模组图标"><span>Sparkle's Morpher</span></a>
-        <div class="nav-links"><a href="#features">功能</a><a href="#versions">版本</a><a href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">GitHub</a><a class="download" href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">CurseForge 下载</a></div>
+        <div class="nav-links"><a href="#features">功能</a><a href="#versions">版本</a><a class="sponsor-link" href="sponsor.html">赞助</a><a href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">GitHub</a><a class="download" href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">CurseForge 下载</a></div>
       </nav>
     </header>
     <main>
@@ -125,7 +125,7 @@
       <section class="story" id="versions" aria-labelledby="versions-title"><div class="wrap story-grid"><div><div class="label">Across your worlds</div><h2 class="serif" id="versions-title">为不同世界，保留同一份风格。</h2></div><div><div class="story-copy"><p>无论选择 Fabric 还是 NeoForge，都可以继续带着自己的角色前行。支持本地文件、文件夹与 URL 导入，并提供模型分组、收藏与服务器同步。</p><p>需要了解开发进展、问题反馈或源码细节？请访问 <a href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">GitHub 项目页</a>。</p></div><div class="support" role="group" aria-label="支持的加载器与 Minecraft 版本"><div class="support-item"><small>LOADERS</small><strong>Fabric · NeoForge</strong></div><div class="support-item"><small>MINECRAFT</small><strong>1.21.1 · 26.1.2 · 26.2</strong></div></div></div></div></section>
       <section class="wrap download-area" aria-labelledby="download-title"><img class="site-icon" src="assets/sparkle_morpher.png" alt="Sparkle's Morpher 模组图标"><div class="section-intro"><div class="label">Begin your next form</div><h2 class="serif" id="download-title">让角色，成为冒险的一部分。</h2><p>下载 Sparkle's Morpher，开始制作并分享属于你的 Minecraft 形象。</p></div><div class="actions"><a class="button primary" href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">在 CurseForge 获取模组</a><a class="button ghost" href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">浏览源码</a></div></section>
     </main>
-    <footer><div class="wrap footer-inner"><span>© 2026 Sparkle's Morpher · MIT License</span><span><a href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">CurseForge</a></span></div></footer>
+    <footer><div class="wrap footer-inner"><span>© 2026 Sparkle's Morpher · MIT License</span><span><a href="sponsor.html">赞助</a> · <a href="https://github.com/sdf123098/Sparkle-Morpher" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://www.curseforge.com/minecraft/mc-mods/sparkles-morpher" target="_blank" rel="noreferrer">CurseForge</a></span></div></footer>
     <script>const header=document.querySelector('header');addEventListener('scroll',()=>header.classList.toggle('scrolled',scrollY>6),{passive:true});</script>
   </body>
 </html>
