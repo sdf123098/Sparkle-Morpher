@@ -35,8 +35,9 @@ public class ReplacePlayerRenderEvent {
         if ((!entity.equals(localPlayer) && GeneralConfig.safeGet(GeneralConfig.DISABLE_OTHER_MODEL)) || entity.isSpectator()) {
             return false;
         }
+        PlayerCapability cap = null;
         try {
-            PlayerCapability cap = PlayerCapability.get(entity).orElse(null);
+            cap = PlayerCapability.get(entity).orElse(null);
             if (cap != null && cap.isModelActive()) {
                 if (!CameraUtil.isFirstPerson(cap)
                         || FirstPersonCompat.isFirstPersonActive()
@@ -50,8 +51,9 @@ public class ReplacePlayerRenderEvent {
             }
             return false;
         } catch (Exception e) {
-            YesSteveModel.LOGGER.warn("Failed to render custom player model, falling back to vanilla", e);
-            return false;
+            boolean suppressVanillaFallback = cap != null && cap.isModelActive() && cap.hasRenderableModel();
+            YesSteveModel.LOGGER.warn("Failed to render custom player model; suppressing vanilla fallback={}", suppressVanillaFallback, e);
+            return suppressVanillaFallback;
         }
     }
 }

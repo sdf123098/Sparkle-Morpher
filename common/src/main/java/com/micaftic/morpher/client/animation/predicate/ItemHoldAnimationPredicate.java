@@ -91,8 +91,9 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
         if (hasLocalSwingPulse) {
             boolean pulseJustStarted = event.getAnimatable().getPositionTracker()
                     .markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
-            boolean vanillaJustStarted = entity.swingTime == 0 && entity.swinging;
-            return (pulseJustStarted || vanillaJustStarted)
+            // The local pulse owns this attack edge. Vanilla mirrors the same swing on a later
+            // tick, so accepting both would restart swing:sword and advance combo controllers twice.
+            return pulseJustStarted
                     && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
         }
         return entity.swingTime == 0

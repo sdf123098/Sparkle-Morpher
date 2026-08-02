@@ -256,6 +256,11 @@ public class InputStateKey {
         if (button != 0 && button != 1) {
             return;
         }
+        if (button == 0) {
+            // keyAttack's rising edge is the canonical local attack pulse. Recording the raw
+            // mouse event as well can advance controller-driven combo animations twice.
+            return;
+        }
         if (button == 1 && action == 0) { clearUsePulse(); return; }
         if (action != 1) return;
         LocalPlayer player = Minecraft.getInstance().player;
@@ -263,20 +268,10 @@ public class InputStateKey {
             return;
         }
         InteractionHand hand = resolveClickHand(player, button);
-        if (button == 0) {
-            if (isUsingOffhandShield(player)) {
-                return;
-            }
-            recordSwingPulse(hand);
-            return;
-        }
         recordUsePulse(player, hand);
     }
 
     private static InteractionHand resolveClickHand(LocalPlayer player, int button) {
-        if (button == 0) {
-            return InteractionHand.MAIN_HAND;
-        }
         if (button == 1 && isShield(player.getOffhandItem())) {
             return InteractionHand.OFF_HAND;
         }
