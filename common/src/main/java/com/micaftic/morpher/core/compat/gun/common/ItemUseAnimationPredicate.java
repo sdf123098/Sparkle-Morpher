@@ -21,12 +21,13 @@ public class ItemUseAnimationPredicate implements IAnimationPredicate<LivingAnim
         if (livingEntity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
             return PlayState.STOP;
         }
+        ItemStack itemInHand = livingEntity.getItemInHand(InteractionHand.MAIN_HAND);
+        PlayState taczPlayState = TacCompat.handleGunActionAnimState(itemInHand, event);
+        if (taczPlayState != null) {
+            return taczPlayState;
+        }
         if (!livingEntity.swinging && !livingEntity.isUsingItem()) {
-            ItemStack itemInHand = livingEntity.getItemInHand(InteractionHand.MAIN_HAND);
-            PlayState playState = TacCompat.handleGunActionAnimState(itemInHand, event);
-            if (playState == null) {
-                playState = SWarfareCompat.handleGunActionAnim(itemInHand, event);
-            }
+            PlayState playState = SWarfareCompat.handleGunActionAnim(itemInHand, event);
             return Objects.requireNonNullElse(playState, PlayState.STOP);
         }
         return PlayState.STOP;
