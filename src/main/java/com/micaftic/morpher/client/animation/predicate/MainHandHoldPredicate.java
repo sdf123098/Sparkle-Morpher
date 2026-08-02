@@ -49,12 +49,12 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
             frameState.setHandItemsForAnimation(mainHandItem, InteractionHand.MAIN_HAND);
             event.getController().stopTransition();
         }
-        if (!checkSwingAndUse(entity, InteractionHand.MAIN_HAND)) return PlayState.PAUSE;
-        int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         PlayState playState = TacCompat.handleGunHoldAnimState(mainHandItem, event);
         if (playState != null) {
             return playState;
         }
+        if (!checkSwingAndUse(entity, InteractionHand.MAIN_HAND)) return PlayState.PAUSE;
+        int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         PlayState gunPlayState = SWarfareCompat.handleGunHoldAnim(mainHandItem, event);
         if (gunPlayState != null) {
             return gunPlayState;

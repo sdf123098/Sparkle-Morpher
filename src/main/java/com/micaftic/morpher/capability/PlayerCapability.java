@@ -55,6 +55,8 @@ public final class PlayerCapability extends CustomPlayerEntity {
 
     private Struct serverVarContainer;
 
+    private boolean pendingLocalSettingsRestore;
+
     private volatile RenderStateSnapshot capturedRenderState;
 
     private final ThreadLocal<RenderStateSnapshot> activeRenderState = new ThreadLocal<>();
@@ -81,7 +83,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
 
     private RoamingStruct createLocalRoamingStruct(int modelHashId, Int2FloatOpenHashMap variables) {
         RoamingStruct roamingStruct = new RoamingStruct(modelHashId, variables);
-        LocalModelSettingsStore.restore(getModelId(), roamingStruct);
+        this.pendingLocalSettingsRestore = true;
         return roamingStruct;
     }
 
@@ -181,8 +183,18 @@ public final class PlayerCapability extends CustomPlayerEntity {
     }
 
     @Override
+    public void setupAnim(float seekTime, boolean isFirstPerson) {
+        super.setupAnim(seekTime, isFirstPerson);
+        if (this.pendingLocalSettingsRestore && this.serverVarContainer instanceof RoamingStruct roamingStruct) {
+            this.pendingLocalSettingsRestore = false;
+            LocalModelSettingsStore.restore(getModelId(), roamingStruct);
+        }
+    }
+
+    @Override
     public void reset() {
         this.serverVarContainer = null;
+        this.pendingLocalSettingsRestore = false;
         this.capturedRenderState = null;
         this.activeRenderState.remove();
         super.reset();

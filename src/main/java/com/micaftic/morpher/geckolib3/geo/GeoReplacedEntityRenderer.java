@@ -2,6 +2,7 @@ package com.micaftic.morpher.geckolib3.geo;
 
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.util.Color;
 import com.micaftic.morpher.geckolib3.extended.LivingEntityRendererAccessor;
@@ -112,7 +113,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             } finally {
                 this.fallFlyingPitchHandledByAnimation = previousFallFlyingPitchState;
             }
-            if (t.getEntity().getVehicle() != null) {
+            if (t.getEntity().getVehicle() != null && !ModelPreviewRenderer.isExtraPlayer()) {
                 VehicleCapability.get(t.getEntity().getVehicle()).ifPresent(cap -> {
                     Vector3f vector3f = cap.getExpressionOffset();
                     if (vector3f != null) {
@@ -159,13 +160,14 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
     public void setupRotations(TEntity tentity, PoseStack poseStack, float ageInTicks, float rotationYaw, float partialTicks) {
         int t = tentity.deathTime;
         boolean zIsAutoSpinAttack = tentity.isAutoSpinAttack();
+        boolean extraPlayer = ModelPreviewRenderer.isExtraPlayer();
         if (t > 0) {
             tentity.deathTime = 0;
         }
         if (zIsAutoSpinAttack) {
             ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, false);
         }
-        if (tentity.onClimbable()) {
+        if (tentity.onClimbable() && !extraPlayer) {
             Optional<BlockPos> lastClimbablePos = tentity.getLastClimbablePos();
             if (lastClimbablePos.isPresent()) {
                 Optional<Direction> optionalValue = tentity.level().getBlockState(lastClimbablePos.get()).getOptionalValue(HorizontalDirectionalBlock.FACING);
@@ -174,18 +176,23 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
                 }
             }
         }
+        boolean extraPlayerFallFlying = tentity.isFallFlying() && ModelPreviewRenderer.isExtraPlayer();
         boolean animationHandlesFallFlyingPitch = tentity.isFallFlying() && this.fallFlyingPitchHandledByAnimation;
-        if (animationHandlesFallFlyingPitch) {
+        if (extraPlayerFallFlying || animationHandlesFallFlyingPitch) {
             ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(7, false);
         }
         try {
-            super.setupRotations(tentity, poseStack, ageInTicks, rotationYaw, partialTicks, 1.0f);
+            if (extraPlayer && tentity.getPose() != Pose.SLEEPING) {
+                poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
+            } else {
+                super.setupRotations(tentity, poseStack, ageInTicks, rotationYaw, partialTicks, 1.0f);
+            }
         } finally {
-            if (animationHandlesFallFlyingPitch) {
+            if (extraPlayerFallFlying || animationHandlesFallFlyingPitch) {
                 ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(7, true);
             }
         }
-        if (animationHandlesFallFlyingPitch) {
+        if (animationHandlesFallFlyingPitch && !extraPlayerFallFlying) {
             applyFallFlyingYawRotation(tentity, poseStack, partialTicks);
         }
         if (t > 0) {

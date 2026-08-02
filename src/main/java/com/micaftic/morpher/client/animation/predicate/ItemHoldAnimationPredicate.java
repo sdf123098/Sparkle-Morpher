@@ -7,6 +7,7 @@ import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.compat.ironsspellbooks.SpellbooksCompat;
+import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelActionProfile;
@@ -42,6 +43,9 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
         PlayState playState = SpellbooksCompat.resolvePlayState(event, livingEntity);
         if (playState != null) {
             return playState;
+        }
+        if (isMainHandTaczGunSwing(event, livingEntity)) {
+            return PlayState.STOP;
         }
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         if (!livingEntity.isSleeping() && SlashBladeCompat.isSlashBladeItem(livingEntity.getItemInHand(InteractionHand.MAIN_HAND))) {
@@ -83,12 +87,25 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
         return PlayState.CONTINUE;
     }
 
+    private static boolean isMainHandTaczGunSwing(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity) {
+        if (TacCompat.getGunTexture(entity.getMainHandItem()) == null) {
+            return false;
+        }
+        if (entity.swinging && entity.swingingArm == InteractionHand.MAIN_HAND) {
+            return true;
+        }
+        return isLocalSwingTarget(event, entity)
+                && InputStateKey.isLocalAnyHandSwinging()
+                && InputStateKey.getLocalSwingingHand() == InteractionHand.MAIN_HAND;
+    }
+
     private static boolean shouldStartSwingAnimation(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
         if (hasLocalSwingPulse) {
             boolean pulseJustStarted = event.getAnimatable().getPositionTracker()
                     .markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
-            boolean vanillaJustStarted = entity.swingTime == 0 && entity.swinging;
-            return (pulseJustStarted || vanillaJustStarted)
+            // The local pulse owns this attack edge. Vanilla mirrors the same swing on a later
+            // tick, so accepting both would restart swing:sword and advance combo controllers twice.
+            return pulseJustStarted
                     && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
         }
         return entity.swingTime == 0

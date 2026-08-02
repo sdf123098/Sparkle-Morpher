@@ -72,13 +72,17 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
     @Override
     public void process(AnimationEvent<T> event, ExpressionEvaluator<AnimationContext<?>> evaluator, boolean isMoving) {
         event.setController(this);
-        boolean forceSwingPredicate = shouldForceSwingPredicate();
-        debugSwingProcess(event, isMoving, forceSwingPredicate);
-        PlayState playState = forceSwingPredicate ? null : handleSoundExpression(evaluator);
-        if (playState == null) {
-            playState = this.predicate.predicate(event, evaluator);
+        PlayState playState;
+        try {
+            boolean forceSwingPredicate = shouldForceSwingPredicate();
+            debugSwingProcess(event, isMoving, forceSwingPredicate);
+            playState = forceSwingPredicate ? null : handleSoundExpression(evaluator);
+            if (playState == null) {
+                playState = this.predicate.predicate(event, evaluator);
+            }
+        } finally {
+            event.setController(null);
         }
-        event.setController(null);
         if (playState == PlayState.CONTINUE) {
             this.transitionInterpolator.process(event.currentTick, evaluator, isMoving);
             this.needsReset = false;
@@ -134,10 +138,14 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
         expressionEvaluator.entity().setPlaybackFlags(this.playbackFlags);
         expressionEvaluator.entity().setAnimationControllerContext(this.transitionInterpolator.getContext());
         expressionEvaluator.entity().setIsClientSide(true);
-        int state = this.soundIValue.evalAsInt(expressionEvaluator);
-        expressionEvaluator.entity().setIsClientSide(false);
-        expressionEvaluator.entity().setAnimationControllerContext(null);
-        expressionEvaluator.entity().setPlaybackFlags(null);
+        int state;
+        try {
+            state = this.soundIValue.evalAsInt(expressionEvaluator);
+        } finally {
+            expressionEvaluator.entity().setIsClientSide(false);
+            expressionEvaluator.entity().setAnimationControllerContext(null);
+            expressionEvaluator.entity().setPlaybackFlags(null);
+        }
         switch (state) {
             case 2:
                 return PlayState.CONTINUE;

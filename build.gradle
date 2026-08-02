@@ -15,6 +15,17 @@ def isCurseForgeDist = providers.gradleProperty("dist")
 
 repositories {
     mavenLocal()
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter {
+            includeGroup 'maven.modrinth'
+        }
+    }
     maven { url = 'https://maven.creeperhost.net' }
     maven { url = 'https://maven.neoforged.net/releases' }
     maven { url = 'https://jitpack.io' }
@@ -77,6 +88,8 @@ repositories {
 }
 
 dependencies {
+    // Optional at runtime. Used only to compile the TaCZ 1.21.1 compatibility bridge.
+    compileOnly "maven.modrinth:OypNE65K:wPvGWIj9"
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 }
