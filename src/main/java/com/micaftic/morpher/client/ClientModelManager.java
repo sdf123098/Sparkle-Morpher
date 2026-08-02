@@ -795,6 +795,19 @@ public class ClientModelManager {
        return Optional.ofNullable(assembly);
     }
 
+    public static boolean isModelLoadPending(String modelId) {
+        String modelKey = canonicalRuntimeModelKey(modelId);
+        if (modelKey == null) {
+            return false;
+        }
+        if (cpuReloadInFlight.contains(modelKey)) {
+            return true;
+        }
+        ModelAssembly assembly = modelAssemblyMap.get(modelKey);
+        return lazyModelSources.containsKey(modelKey)
+                && (assembly == null || assembly instanceof LazyModelAssembly || !assembly.isRuntimeResident());
+    }
+
     private static final class LazyModelSource {
         private final Path path;
         @Nullable

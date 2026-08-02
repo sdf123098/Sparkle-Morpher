@@ -142,6 +142,11 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
         ClientModelManager.getModelContext(this.modelId).ifPresentOrElse(assembly -> {
             updateRenderShape(assembly, false);
         }, () -> {
+            // Keep the last complete custom model visible while its requested
+            // replacement is being restored from the lazy CPU cache.
+            if (ClientModelManager.isModelLoadPending(this.modelId) && hasRenderableModel()) {
+                return;
+            }
             ModelAssembly modelAssembly = ClientModelManager.getLocalModelContext();
             if (modelAssembly == null || !modelAssembly.isRuntimeResident()) {
                 if (this.renderShape != null || this.modelAssembly != null) {
@@ -227,7 +232,10 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
     }
 
     public boolean hasRenderableModel() {
-        return this.modelAssembly != null && this.renderShape != null && this.renderShape.isValid();
+        return this.modelAssembly != null
+                && this.renderShape != null
+                && this.renderShape.context.isRuntimeResident()
+                && this.renderShape.isValid();
     }
 
     @Override
