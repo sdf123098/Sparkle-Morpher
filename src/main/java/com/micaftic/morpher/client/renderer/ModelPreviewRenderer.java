@@ -337,7 +337,7 @@ public final class ModelPreviewRenderer {
         livingEntity.yHeadRotO = livingEntity.getYRot() + headYawOffsetO;
 
         Entity vehicle = livingEntity.getVehicle();
-        if (vehicle instanceof LivingEntity) {
+        if (vehicle instanceof LivingEntity && !extraPlayer) {
             float vehicleYaw = vehicle.getYRot();
             poseStack.mulPose(Axis.YP.rotationDegrees(vehicleYaw - displayYaw));
             livingEntity.yHeadRot = vehicleYaw;

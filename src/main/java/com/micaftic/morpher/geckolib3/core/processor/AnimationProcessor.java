@@ -1,5 +1,6 @@
 package com.micaftic.morpher.geckolib3.core.processor;
 
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.AudioPlayerManager;
 import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.geckolib3.core.manager.AnimationData;
@@ -34,12 +35,15 @@ import org.joml.Vector3f;
 import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
 public class AnimationProcessor<TEntity extends Entity> {
 
     private static final int ROAMING_STRUCT_NAME = StringPool.computeIfAbsent("roaming");
+    private static final Set<String> REPORTED_CONTROLLER_FAILURES = ConcurrentHashMap.newKeySet();
 
     private final AnimatableEntity<TEntity> animatable;
 
@@ -100,7 +104,12 @@ public class AnimationProcessor<TEntity extends Entity> {
                 controller.init(this.bones, this.initExpressions);
             }
             if (z) {
-                controller.process(event, evaluator, z2);
+                try {
+                    controller.process(event, evaluator, z2);
+                } catch (RuntimeException exception) {
+                    event.setController(null);
+                    reportControllerFailure(controller, exception);
+                }
             }
             this.currentDeprecatedMode = controller.isDeprecatedMode();
             controller.forEachTransform(this.transformConsumer);
@@ -168,6 +177,14 @@ public class AnimationProcessor<TEntity extends Entity> {
         context.setPlaybackFlags(null);
         context.setAnimationControllerContext(null);
         postProcess(evaluator);
+    }
+
+    private static void reportControllerFailure(IAnimationController<?> controller, RuntimeException exception) {
+        String failureKey = controller.getName() + '|' + exception.getClass().getName() + '|' + exception.getMessage();
+        if (REPORTED_CONTROLLER_FAILURES.add(failureKey)) {
+            YesSteveModel.LOGGER.warn("[SM-ANIM] Animation controller '{}' failed; keeping its last valid pose and continuing other controllers",
+                    controller.getName(), exception);
+        }
     }
 
     private void applyTransform(BoneTransformProvider provider) {
