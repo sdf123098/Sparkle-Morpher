@@ -2,6 +2,7 @@ package com.micaftic.morpher.geckolib3.geo;
 
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.util.Color;
 import com.micaftic.morpher.geckolib3.extended.LivingEntityRendererAccessor;
@@ -116,7 +117,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             } finally {
                 this.fallFlyingPitchHandledByAnimation = previousFallFlyingPitchState;
             }
-                if (t.getEntity().getVehicle() != null) {
+            if (t.getEntity().getVehicle() != null && !ModelPreviewRenderer.isExtraPlayer()) {
                     Entity vehicle = t.getEntity().getVehicle();
                     VehicleCapability.get(vehicle).ifPresent(cap -> {
                         if (cap.isModelReady()) {
@@ -176,7 +177,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         if (zIsAutoSpinAttack) {
             ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, false);
         }
-        if (tentity.onClimbable()) {
+        if (tentity.onClimbable() && !ModelPreviewRenderer.isExtraPlayer()) {
             Optional<BlockPos> lastClimbablePos = tentity.getLastClimbablePos();
             if (lastClimbablePos.isPresent()) {
                 Optional<Direction> optionalValue = tentity.level().getBlockState(lastClimbablePos.get()).getOptionalValue(HorizontalDirectionalBlock.FACING);
@@ -193,7 +194,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             poseStack.mulPose(Axis.YP.rotationDegrees(270.0f));
         } else {
             poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
-            if (tentity.isFallFlying()) {
+            if (tentity.isFallFlying() && !ModelPreviewRenderer.isExtraPlayer()) {
                 applyFallFlyingRotation(tentity, poseStack, partialTicks, zIsAutoSpinAttack, this.fallFlyingPitchHandledByAnimation);
             }
         }

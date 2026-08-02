@@ -41,7 +41,7 @@ public final class ResourceStationConfig {
         String urlList = properties.getProperty("urls", "");
         for (String url : urlList.split("\\|")) {
             if (!url.isBlank()) {
-                addUrl(urls, repairKnownUrl(url.trim()));
+                addUrl(urls, url.trim());
             }
         }
         if (urls.isEmpty()) {
@@ -51,7 +51,7 @@ public final class ResourceStationConfig {
                 addUrl(urls, defaultUrl);
             }
         }
-        String selected = repairKnownUrl(properties.getProperty("selectedUrl", urls.get(0)).trim());
+        String selected = properties.getProperty("selectedUrl", urls.get(0)).trim();
         if (!urls.contains(selected)) {
             urls.add(0, selected);
         }
@@ -114,19 +114,6 @@ public final class ResourceStationConfig {
         if (!url.isBlank() && !urls.contains(url)) {
             urls.add(url);
         }
-    }
-
-    private static String repairKnownUrl(String url) {
-        if (url == null) {
-            return "";
-        }
-        if (url.startsWith("https://github.com/Elaina69/Yes-")) {
-            return "https://github.com/Elaina69/Yes-Steve-Model-Repo/tree/main";
-        }
-        if (url.startsWith("https://github.com/sdf123098/YSM-")) {
-            return "https://github.com/sdf123098/YSM-Model";
-        }
-        return url;
     }
 
     public static boolean monitorLogEnabled() {

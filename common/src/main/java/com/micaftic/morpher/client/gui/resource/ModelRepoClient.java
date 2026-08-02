@@ -51,7 +51,7 @@ public final class ModelRepoClient {
     public static List<ModelRepoEntry> list(String sourceUrl, ResourceStationConfig.State config) throws Exception {
         URI uri = URI.create(sourceUrl.trim());
         monitor(config, "List start source={} host={} timeoutMs={}", sourceUrl, uri.getHost(), config.timeoutMs());
-        if ("github.com".equalsIgnoreCase(uri.getHost())) {
+            if (isGithubRepositoryHost(uri.getHost())) {
             return listGithub(uri, config);
         }
         String indexUrl = sourceUrl.endsWith("/") ? sourceUrl + "index.json" : sourceUrl;
@@ -749,7 +749,7 @@ public final class ModelRepoClient {
     private static boolean isGithubRelated(String url) {
         try {
             String host = URI.create(url).getHost();
-            return host != null && (host.equalsIgnoreCase("github.com")
+            return host != null && (isGithubRepositoryHost(host)
                     || host.equalsIgnoreCase("api.github.com")
                     || host.equalsIgnoreCase("raw.githubusercontent.com")
                     || host.equalsIgnoreCase("codeload.github.com")
@@ -757,6 +757,10 @@ public final class ModelRepoClient {
         } catch (IllegalArgumentException ignored) {
             return false;
         }
+    }
+
+    private static boolean isGithubRepositoryHost(String host) {
+        return "github.com".equalsIgnoreCase(host) || "www.github.com".equalsIgnoreCase(host);
     }
 
     private static void monitor(ResourceStationConfig.State config, String message, Object... args) {
@@ -957,7 +961,11 @@ public final class ModelRepoClient {
                     path = String.join("/", java.util.Arrays.copyOfRange(parts, 4, parts.length));
                 }
             }
-            return new GithubPath(parts[0], parts[1], branch, path);
+            String repo = parts[1].endsWith(".git") ? parts[1].substring(0, parts[1].length() - 4) : parts[1];
+            if (repo.isBlank()) {
+                throw new IllegalArgumentException("Invalid GitHub URL");
+            }
+            return new GithubPath(parts[0], repo, branch, path);
         }
     }
 

@@ -3,6 +3,7 @@ package com.micaftic.morpher.fabric.mixin.client;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.event.ReplacePlayerRenderEvent;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.client.renderer.SubmitMultiBufferSource;
 import com.micaftic.morpher.mixin.client.MinecraftAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -25,8 +26,8 @@ public abstract class PlayerRendererMixin {
     @Inject(method = "submit", at = @At("HEAD"), cancellable = true)
     private void ysm$onSubmit(LivingEntityRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState, CallbackInfo ci) {
         if (state instanceof AvatarRenderState avatarState && Minecraft.getInstance().level != null) {
-            net.minecraft.world.entity.Entity entity = Minecraft.getInstance().level.getEntity(avatarState.id);
-            if (entity instanceof AbstractClientPlayer player) {
+            AbstractClientPlayer player = ysm$resolvePlayer(avatarState);
+            if (player != null) {
                 float partialTick = ((MinecraftAccessor) Minecraft.getInstance()).ysm$getDeltaTracker().getGameTimeDeltaPartialTick(false);
                 int packedLight = ((MinecraftAccessor) Minecraft.getInstance()).ysm$getEntityRenderDispatcher().getPackedLightCoords(player, partialTick);
                 boolean preview = ModelPreviewRenderer.isPreview();
@@ -57,7 +58,8 @@ public abstract class PlayerRendererMixin {
                     capability.beginRenderState(avatarState);
                 }
                 try {
-                    if (ReplacePlayerRenderEvent.onRenderPlayerPre(player, yaw, partialTick, poseStack, null, collector, packedLight)) {
+                    SubmitMultiBufferSource bufferSource = new SubmitMultiBufferSource(collector, poseStack);
+                    if (ReplacePlayerRenderEvent.onRenderPlayerPre(player, yaw, partialTick, poseStack, bufferSource, collector, packedLight)) {
                         ci.cancel();
                     }
                 } finally {
@@ -77,5 +79,19 @@ public abstract class PlayerRendererMixin {
                 }
             }
         }
+    }
+
+    private static AbstractClientPlayer ysm$resolvePlayer(AvatarRenderState state) {
+        Minecraft minecraft = Minecraft.getInstance();
+        net.minecraft.world.entity.Entity entity = minecraft.level.getEntity(state.id);
+        if (entity instanceof AbstractClientPlayer player) {
+            return player;
+        }
+        // Tweakeroo free camera uses a LocalPlayer surrogate with the original
+        // player's id. It is not guaranteed to be present in ClientLevel.
+        if (minecraft.player != null && minecraft.player.getId() == state.id) {
+            return minecraft.player;
+        }
+        return null;
     }
 }
