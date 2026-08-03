@@ -120,3 +120,6 @@ dist/
 dep.txt
 level_javap.txt
 
+
+*.class
+*.log
