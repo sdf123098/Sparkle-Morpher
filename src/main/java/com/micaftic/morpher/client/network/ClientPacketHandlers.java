@@ -10,6 +10,7 @@ import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
+import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.event.EntityJoinCallbackEvent;
@@ -93,7 +94,7 @@ public final class ClientPacketHandlers {
                     }
                 });
             } else if (TouhouMaidCompat.isMaidEntity(entity)) {
-                TouhouMaidCompat.playMaidAnimation(entity, message.getExpression());
+                TouhouLittleMaidClientCompat.playMaidAnimation(entity, message.getExpression());
             }
         }
     }

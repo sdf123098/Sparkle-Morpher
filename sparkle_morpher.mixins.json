@@ -1,0 +1,37 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.micaftic.morpher.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "client.ArrowEntityAccessor",
+    "client.BufferSourceMixin",
+    "client.CameraAccessor",
+    "client.MinecraftAccessor",
+    "client.ClientPacketListenerMixin",
+    "client.EntityRenderDispatcherAccessor",
+    "client.EntityRenderDispatcherMixin",
+    "client.FishingHookAccessor",
+    "client.GuiEntityRendererMixin",
+    "client.InventoryScreenMixin",
+    "client.LivingEntityAccessor",
+    "client.LivingRendererMixin",
+    "client.PauseScreenMixin",
+    "client.ScreenAccessor",
+    "client.ThrowableItemProjectileAccessor",
+    "client.EntityRidingAccessor",
+    "client.WingsLayerMixin",
+    "client.WorldRendererMixin"
+  ],
+  "mixins": [
+    "AbstractArrowEntityMixin",
+    "ConnectionAccessor",
+    "PlayerListAccessor",
+    "ProjectileEntityMixin",
+    "ServerCommonPacketListenerImplAccessor",
+    "ServerPlayerMixin"
+  ]
+}

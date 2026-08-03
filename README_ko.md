@@ -1,8 +1,8 @@
-# Sparkle's Morpher — 스파클의 변신기
+﻿# Sparkle's Morpher — 스파클의 변신기
 
 > [English](README.md) | [中文](README_zh.md) | [日本語](README_ja.md) | **한국어**
 
-**QQ:** 1104823534 | **Discord:** [Discord 가입](https://discord.gg/3KqK7USF39) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
+**QQ:** 1104823534 | **Discord:** [Discord 가입](https://discord.gg/3KqK7USF39) | **Telegram:** [Telegram 가입](https://t.me/sparklemorpher) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
 
 Minecraft 종합 커스텀 모델 로더. 플레이어에게 커스텀 모델, 애니메이션, 사운드 이펙트를 장착——그 블록 캐릭터에게 작별을 고하세요.
 

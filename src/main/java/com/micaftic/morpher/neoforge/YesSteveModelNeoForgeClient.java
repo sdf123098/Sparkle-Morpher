@@ -2,7 +2,7 @@ package com.micaftic.morpher.neoforge;
 
 import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
+import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.neoforged.api.distmarker.Dist;
@@ -18,7 +18,7 @@ public final class YesSteveModelNeoForgeClient {
     }
 
     public static void init(IEventBus modBus, ModContainer container) {
-        TouhouMaidCompat.initClient();
+        TouhouLittleMaidClientCompat.initOfficialCompat();
         container.registerExtensionPoint(IConfigScreenFactory.class, (modContainer, parent) -> ModernPlayerModelScreen.settings(parent));
         NeoForgeClientEventBridge.register(modBus);
     }
