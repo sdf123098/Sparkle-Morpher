@@ -1,8 +1,6 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
 import com.micaftic.morpher.network.message.FeedbackData;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 
@@ -35,8 +33,4 @@ public final class TouhouMaidCompat {
         com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouMaidCompatImpl.applyFeedback(entity, message);
     }
 
-    @Environment(EnvType.CLIENT)
-    public static void playMaidAnimation(Entity entity, String str) {
-        com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouMaidCompatImpl.playMaidAnimation(entity, str);
-    }
 }

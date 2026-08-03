@@ -1,8 +1,8 @@
-# Sparkle's Morpher — 花火火的变身器
+﻿# Sparkle's Morpher — 花火火的变身器
 
 > [English](README.md) | **中文** | [日本語](README_ja.md) | [한국어](README_ko.md)
 
-**QQ:** 1104823534 | **Discord:** [点此加入](https://discord.gg/3KqK7USF39) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **爱发电:** [Micaftic](https://afdian.com/a/Micaftic)
+**QQ:** 1104823534 | **Discord:** [点此加入](https://discord.gg/3KqK7USF39) | **Telegram:** [加入 Telegram](https://t.me/sparklemorpher) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **爱发电:** [Micaftic](https://afdian.com/a/Micaftic)
 
 Minecraft 综合自定义模型加载器，让玩家为角色挂载自定义模型、动画与音效——告别一成不变的方块小人。
 
