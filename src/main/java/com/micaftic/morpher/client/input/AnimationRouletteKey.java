@@ -9,7 +9,7 @@ import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
-import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
+import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.util.InputUtil;
@@ -77,8 +77,8 @@ public final class AnimationRouletteKey {
     }
 
     private static void handleRoulettePress() {
-        if (TouhouLittleMaidCompat.isMaidChatAvailable()) {
-            TouhouLittleMaidCompat.openMaidChat();
+        if (TouhouLittleMaidClientCompat.isMaidChatAvailable()) {
+            TouhouLittleMaidClientCompat.openMaidChat();
             return;
         }
         Minecraft mc = Minecraft.getInstance();

@@ -9,3 +9,5 @@ out/
 *.log
 local-maven/
 .codegraph/
+
+*.class

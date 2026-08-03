@@ -6,7 +6,7 @@ import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.geckolib3.core.controller.controllers.FirstPersonArmAnimationController;
 import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
-import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
+import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
@@ -84,7 +84,7 @@ public class PlayerModelBundle {
         this.fallFlyingPitchHandledByAnimation = detectsFallFlyingRootRotation(mainModel, mainAnimations);
         this.playerControllerInstaller = UnifiedPlayerActionController.buildControllers(this, modelResourceBundle);
         this.armControllerInstaller = FirstPersonArmAnimationController.buildControllers(this, modelResourceBundle);
-        this.maidControllerInstaller = actionProfile == ModelActionProfile.VANILLA_HUMANOID ? null : TouhouLittleMaidCompat.buildControllers(this, modelResourceBundle);
+        this.maidControllerInstaller = actionProfile == ModelActionProfile.VANILLA_HUMANOID ? null : TouhouLittleMaidClientCompat.buildControllers(this, modelResourceBundle);
     }
 
     public GeoModel getMainModel() {
