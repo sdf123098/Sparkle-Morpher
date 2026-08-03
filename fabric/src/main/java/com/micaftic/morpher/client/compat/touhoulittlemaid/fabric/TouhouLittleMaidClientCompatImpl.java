@@ -1,4 +1,4 @@
-package com.micaftic.morpher.core.compat.touhoulittlemaid.fabric;
+package com.micaftic.morpher.client.compat.touhoulittlemaid.fabric;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.animation.molang.TLMBinding;
@@ -8,6 +8,7 @@ import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidAnimationController;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
+import com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidAccess;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.geckolib3.core.enums.PlayState;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
