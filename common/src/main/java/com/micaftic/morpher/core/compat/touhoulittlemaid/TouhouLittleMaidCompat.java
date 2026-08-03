@@ -1,11 +1,5 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
-import com.micaftic.morpher.client.animation.molang.TLMBinding;
-import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.client.model.PlayerModelBundle;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.client.model.ModelResourceBundle;
 import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -84,31 +78,6 @@ public final class TouhouLittleMaidCompat {
 
     @ExpectPlatform
     public static String getMaidRenderAnimation(Entity entity) {
-        throw new AssertionError();
-    }
-
-    @ExpectPlatform
-    public static void registerMaidAnimStates(TLMBinding tlmBinding) {
-        throw new AssertionError();
-    }
-
-    @ExpectPlatform
-    public static PlayState handleMaidInteraction(AnimationEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, Entity entity) {
-        throw new AssertionError();
-    }
-
-    @ExpectPlatform
-    public static boolean isMaidChatAvailable() {
-        throw new AssertionError();
-    }
-
-    @ExpectPlatform
-    public static void openMaidChat() {
-        throw new AssertionError();
-    }
-
-    @ExpectPlatform
-    public static Object buildControllers(PlayerModelBundle modelBundle, ModelResourceBundle resourceBundle) {
         throw new AssertionError();
     }
 }

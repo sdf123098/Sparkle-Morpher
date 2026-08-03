@@ -2,8 +2,6 @@ package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
 import com.micaftic.morpher.network.message.FeedbackData;
 import dev.architectury.injectables.annotations.ExpectPlatform;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 
@@ -42,8 +40,4 @@ public final class TouhouMaidCompat {
         throw new AssertionError();
     }
 
-    @ExpectPlatform    @Environment(EnvType.CLIENT)
-    public static void playMaidAnimation(Entity entity, String str) {
-        throw new AssertionError();
-    }
 }

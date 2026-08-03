@@ -1,8 +1,8 @@
-# Sparkle's Morpher — 花火の変身器
+﻿# Sparkle's Morpher — 花火の変身器
 
 > [English](README.md) | [中文](README_zh.md) | **日本語** | [한국어](README_ko.md)
 
-**QQ:** 1104823534 | **Discord:** [Discordに参加](https://discord.gg/3KqK7USF39) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
+**QQ:** 1104823534 | **Discord:** [Discordに参加](https://discord.gg/3KqK7USF39) | **Telegram:** [Telegramに参加](https://t.me/sparklemorpher) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
 
 マインクラフトの総合カスタムモデルローダー。
 プレイヤーにカスタムモデル、アニメーション、サウンドエフェクトを搭載——あのブロックキャラにさようなら！
