@@ -3,7 +3,7 @@ package com.micaftic.morpher.neoforge;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
 import com.micaftic.morpher.client.renderer.*;
-import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
+import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -25,7 +25,7 @@ public final class YesSteveModelNeoForgeClient {
     }
 
     @SubscribeEvent public static void onClientSetup(FMLClientSetupEvent event) {
-        TouhouMaidCompat.initClient();
+        TouhouLittleMaidClientCompat.initOfficialCompat();
         debugOverlay = AnimationDebugOverlay.createOverlay(); loadingOverlay = new ExtraPlayerOverlay(); syncOverlay = new ModelSyncStateOverlay();
         ClientModelManager.loadDefaultModel();
         ClientModelManager.reloadLocalModels(null);

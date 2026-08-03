@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Soft-link access to the official Touhou Little Maid build.
  */
-final class TouhouLittleMaidAccess {
+public final class TouhouLittleMaidAccess {
     static final String MOD_ID = "touhou_little_maid";
 
     private static final ConcurrentMap<MemberKey, Optional<Method>> ZERO_ARG_METHODS = new ConcurrentHashMap<>();
@@ -29,39 +29,39 @@ final class TouhouLittleMaidAccess {
     private TouhouLittleMaidAccess() {
     }
 
-    static boolean isLoaded() {
+    public static boolean isLoaded() {
         return ModList.get().isLoaded(MOD_ID);
     }
 
-    static boolean isMaid(Entity entity) {
+    public static boolean isMaid(Entity entity) {
         return hasEntityId(entity, "maid");
     }
 
-    static boolean isYsmModel(Entity entity) {
+    public static boolean isYsmModel(Entity entity) {
         return isMaid(entity) && booleanValue(invoke(entity, "isYsmModel"), false);
     }
 
-    static String getYsmModelId(Entity entity) {
+    public static String getYsmModelId(Entity entity) {
         return isYsmModel(entity) ? stringValue(invoke(entity, "getYsmModelId"), "") : "";
     }
 
-    static String getYsmModelTexture(Entity entity) {
+    public static String getYsmModelTexture(Entity entity) {
         return isYsmModel(entity) ? stringValue(invoke(entity, "getYsmModelTexture"), "") : "";
     }
 
-    static boolean isChair(Entity entity) {
+    public static boolean isChair(Entity entity) {
         return hasEntityId(entity, "chair");
     }
 
-    static boolean isSit(Entity entity) {
+    public static boolean isSit(Entity entity) {
         return hasEntityId(entity, "sit");
     }
 
-    static boolean isBroom(Entity entity) {
+    public static boolean isBroom(Entity entity) {
         return hasEntityId(entity, "broom");
     }
 
-    static boolean isGohei(Item item) {
+    public static boolean isGohei(Item item) {
         if (!isLoaded() || item == null) {
             return false;
         }
@@ -70,52 +70,52 @@ final class TouhouLittleMaidAccess {
                 && ("hakurei_gohei".equals(id.getPath()) || "sanae_gohei".equals(id.getPath()));
     }
 
-    static String getChairModelId(Entity entity) {
+    public static String getChairModelId(Entity entity) {
         return isChair(entity) ? stringValue(invoke(entity, "getModelId"), "") : "";
     }
 
-    static String getJoyType(Entity entity) {
+    public static String getJoyType(Entity entity) {
         return isSit(entity) ? stringValue(invoke(entity, "getJoyType"), "") : "";
     }
 
-    static boolean isBegging(Entity entity) {
+    public static boolean isBegging(Entity entity) {
         return maidBoolean(entity, false, "isBegging");
     }
 
-    static boolean isSitting(Entity entity) {
+    public static boolean isSitting(Entity entity) {
         return maidBoolean(entity, false, "isMaidInSittingPose");
     }
 
-    static boolean hasBackpack(Entity entity) {
+    public static boolean hasBackpack(Entity entity) {
         return maidBoolean(entity, false, "hasBackpack");
     }
 
-    static int getFavorability(Entity entity) {
+    public static int getFavorability(Entity entity) {
         return intValue(maidInvoke(entity, "getFavorability"), 0);
     }
 
-    static int getFavorabilityLevel(Entity entity) {
+    public static int getFavorabilityLevel(Entity entity) {
         return intValue(invoke(maidInvoke(entity, "getFavorabilityManager"), "getLevel"), 0);
     }
 
-    static String getTaskId(Entity entity) {
+    public static String getTaskId(Entity entity) {
         return stringValue(invoke(maidInvoke(entity, "getTask"), "getUid"), "");
     }
 
-    static String getSchedule(Entity entity) {
+    public static String getSchedule(Entity entity) {
         Object schedule = maidInvoke(entity, "getSchedule");
         return schedule == null ? "" : schedule.toString().toLowerCase(Locale.ENGLISH);
     }
 
-    static String getActivity(Entity entity) {
+    public static String getActivity(Entity entity) {
         return stringValue(invoke(maidInvoke(entity, "getScheduleDetail"), "getName"), "");
     }
 
-    static int getGomokuWinCount(Entity entity) {
+    public static int getGomokuWinCount(Entity entity) {
         return intValue(invoke(gameManager(entity), "getGomokuWinCount"), 0);
     }
 
-    static int getGomokuRank(Entity entity) {
+    public static int getGomokuRank(Entity entity) {
         if (!isMaid(entity)) {
             return 1;
         }
@@ -130,7 +130,7 @@ final class TouhouLittleMaidAccess {
         }
     }
 
-    static String getGameState(Entity entity) {
+    public static String getGameState(Entity entity) {
         if (!isMaid(entity) || !isSit(entity.getVehicle())) {
             return "";
         }
@@ -141,11 +141,11 @@ final class TouhouLittleMaidAccess {
         return booleanValue(invoke(manager, "isLost"), false) ? "lost" : "";
     }
 
-    static String getBackpackType(Entity entity) {
+    public static String getBackpackType(Entity entity) {
         return stringValue(invoke(maidInvoke(entity, "getMaidBackpackType"), "getId"), "");
     }
 
-    static boolean isRenderState(Entity entity, String expected) {
+    public static boolean isRenderState(Entity entity, String expected) {
         if (!isMaid(entity)) {
             return false;
         }
@@ -156,7 +156,7 @@ final class TouhouLittleMaidAccess {
         return state == null ? "ENTITY".equals(expected) : expected.equalsIgnoreCase(state.toString());
     }
 
-    static String getBackpackShowItem(Entity entity) {
+    public static String getBackpackShowItem(Entity entity) {
         Object value = maidInvoke(entity, "getBackpackShowItem");
         if (!(value instanceof ItemStack stack) || stack.isEmpty()) {
             return "";
@@ -165,17 +165,17 @@ final class TouhouLittleMaidAccess {
         return id == null ? "" : id.toString();
     }
 
-    static boolean hasFishingHook(Entity entity) {
+    public static boolean hasFishingHook(Entity entity) {
         return maidBoolean(entity, false, "hasFishingHook");
     }
 
-    static boolean isOwnedBy(Entity entity, net.minecraft.world.entity.player.Player player) {
+    public static boolean isOwnedBy(Entity entity, net.minecraft.world.entity.player.Player player) {
         if (!isMaid(entity) || player == null) return false;
         Object owner = maidInvoke(entity, "getOwnerUUID");
         return player.getAbilities().instabuild || owner instanceof UUID uuid && uuid.equals(player.getUUID());
     }
 
-    static String getGameAnimation(Entity entity) {
+    public static String getGameAnimation(Entity entity) {
         if (isBegging(entity)) return "beg";
         return switch (getGameState(entity)) {
             case "win" -> "game_win";
@@ -184,7 +184,7 @@ final class TouhouLittleMaidAccess {
         };
     }
 
-    static String getRenderAnimation(Entity entity) {
+    public static String getRenderAnimation(Entity entity) {
         if (isRenderState(entity, "STATUE")) return "statue";
         return isRenderState(entity, "GARAGE_KIT") ? "garage_kit" : "";
     }

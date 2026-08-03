@@ -1,0 +1,2 @@
+This directory is cleared every time the game starts!
+该目录会在每次游戏启动时清空！

@@ -9,7 +9,7 @@ import com.micaftic.morpher.network.message.S2CSyncProjectileModelPacket;
 import com.micaftic.morpher.resource.models.ModelProperties;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
-import net.neoforged.api.distmarker.Dist;import net.neoforged.api.distmarker.OnlyIn;import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 import org.apache.commons.lang3.StringUtils;
 
@@ -20,18 +20,15 @@ public final class TouhouMaidCompat {
     private TouhouMaidCompat() {
     }
 
-    public static boolean isLoaded() { return TouhouLittleMaidAccess.isLoaded();
+    public static boolean isLoaded() {
+        return TouhouLittleMaidAccess.isLoaded();
     }
 
     public static void init() {
     }
 
-    @OnlyIn(Dist.CLIENT)
-    public static void initClient() {
-        OfficialTouhouLittleMaidCompat.init(com.micaftic.morpher.YesSteveModel.LOGGER);
-    }
-
-    public static boolean isMaidEntity(Entity entity) { return TouhouLittleMaidAccess.isMaid(entity);
+    public static boolean isMaidEntity(Entity entity) {
+        return TouhouLittleMaidAccess.isMaid(entity);
     }
 
     public static void handleProjectileOwner(Projectile projectile, Entity entity) {
@@ -68,10 +65,5 @@ public final class TouhouMaidCompat {
             state.getMolangVars().putAll(message.stringValues());
             MaidModelSync.syncNow(entity, state);
         });
-    }
-
-    @OnlyIn(Dist.CLIENT)
-    public static void playMaidAnimation(Entity entity, String str) {
-        MaidCapability.get(entity).ifPresent(capability -> capability.executeMolang(str));
     }
 }

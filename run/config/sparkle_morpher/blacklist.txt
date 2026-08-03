@@ -1,0 +1,63 @@
+# 花火火的变身器 模组 - 内置模型黑名单配置文件
+# Sparkle's Morpher Mod - Built-in Model Blacklist Configuration File
+
+# 功能说明：
+# 随着内置模型数量的增加，为了满足个性化定制需求，本模组提供了黑名单功能
+# 允许用户选择性地禁用不需要的内置模型，以节省存储空间和加载时间
+#
+# Feature Description:
+# As the number of built-in models increases, this mod provides blacklist functionality
+# to meet customization needs, allowing users to selectively disable unwanted built-in
+# models to save storage space and loading time.
+
+# 使用方法：
+# 1. 在游戏启动前编辑此文件
+# 2. 清空 <游戏目录>/config/sparkle_morpher/builtin 文件夹中的已解压模型文件
+# 3. 重新启动游戏，模组将根据黑名单规则跳过指定模型的解压
+#
+# Usage Instructions:
+# 1. Edit this file before starting the game
+# 2. Clear extracted model files in <game_directory>/config/sparkle_morpher/builtin folder
+# 3. Restart the game, the mod will skip extracting specified models based on blacklist rules
+
+# 注意事项：
+# - default 模型采用特殊加载机制，无法通过黑名单禁用
+# - 配置文件位置：<游戏目录>/config/sparkle_morpher/blacklist.txt
+# - 以 # 开头的行被视为注释，不会被处理
+# - 每行一个规则，使用正则表达式匹配模型的完整解压路径
+#
+# Important Notes:
+# - The default model uses special loading mechanism and cannot be disabled via blacklist
+# - Config file location: <game_directory>/config/sparkle_morpher/blacklist.txt
+# - Lines starting with # are comments and will not be processed
+# - One rule per line, using regular expressions to match the complete extraction path of models
+
+# 路径匹配规则：
+# 模组解压时会使用以下格式的路径进行正则表达式匹配：
+#
+# Path Matching Rules:
+# The mod will use the following path formats for regular expression matching during extraction:
+#
+# assets/sparkle_morpher/builtin/wine_fox/01_taisho_maid/animations/arrow.animation.json
+# assets/sparkle_morpher/builtin/wine_fox/01_taisho_maid/avatar/nico.png
+# assets/sparkle_morpher/builtin/misc/2_steve/ysm.json
+
+# 配置示例：
+# 重要提示：下面的示例都以 # 开头，这表示它们目前是注释状态，不会生效
+# 如果你想要启用某个规则，请删除该行开头的 # 号和空格
+#
+# Configuration Examples:
+# Important Notice: All examples below start with #, meaning they are currently commented out and inactive
+# To enable a rule, delete the # symbol and space at the beginning of that line
+
+# 示例1：禁用所有酒狐系列模型 | Example 1: Disable all Wine Fox series models
+# assets/sparkle_morpher/builtin/wine_fox/.*
+
+# 示例2：禁用杂项模型文件夹下的所有模型 | Example 2: Disable all models in misc folder
+# assets/sparkle_morpher/builtin/misc/.*
+
+# 示例3：禁用特定的大正女仆酒狐模型 | Example 3: Disable specific Taisho Maid Wine Fox model
+# assets/sparkle_morpher/builtin/wine_fox/01_taisho_maid/.*
+
+# 示例4：禁用所有内置模型 | Example 4: Disable all built-in models
+# .*

@@ -6,6 +6,7 @@ import com.micaftic.morpher.core.compat.carryon.CarryOnCompat;
 import com.micaftic.morpher.core.compat.swem.SWEMCompat;
 import com.micaftic.morpher.client.animation.condition.ConditionChair;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
@@ -70,7 +71,7 @@ public class LivingMovementAnimationPredicate implements IAnimationPredicate<Liv
         if (z || z2) {
             return IAnimationPredicate.playAnimationWithLoop(event, "carryon:princess", ILoopType.EDefaultLoopTypes.LOOP);
         }
-        PlayState playState = TouhouLittleMaidCompat.handleMaidInteraction(event, livingEntity, vehicle);
+        PlayState playState = TouhouLittleMaidClientCompat.handleMaidInteraction(event, livingEntity, vehicle);
         if (playState != null) {
             return playState;
         }

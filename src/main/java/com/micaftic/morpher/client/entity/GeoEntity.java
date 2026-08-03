@@ -9,6 +9,7 @@ import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.client.animation.molang.MolangWatchRegistry;
+import com.micaftic.morpher.client.animation.debug.AnimationFrameProfiler;
 import com.micaftic.morpher.client.renderer.AnimationDebugOverlay;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
@@ -54,6 +55,8 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
 
     @Nullable
     private Future<AnimationEvent<?>> modelFuture;
+
+    private int asyncSubmitFrameId = -1;
 
     @Nullable
     public abstract GeoEntity.ModelWrapper buildRenderShape(ModelAssembly modelAssembly, boolean isDefault);
@@ -208,6 +211,7 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
         this.previewBones = null;
         this.extraPlayerBones = null;
         this.modelFuture = null;
+        this.asyncSubmitFrameId = -1;
         this.updateTicks = 0;
     }
 
@@ -267,14 +271,21 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
     }
 
     public void submitAsyncUpdate(float partialTick) {
+        // Capture the animation time base on the render thread. The worker must not read
+        // entity.tickCount at execution time: a delayed/culled task would compute a time
+        // that is ahead of its submission frame, making seekTime advance in bursts followed
+        // by freezes (visible as ~20Hz stutter on other players' models).
+        int capturedTickCount = this.entity.tickCount;
+        int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
         UnsafeUtil.getUnsafe().storeFence();
+        this.asyncSubmitFrameId = renderFrameId;
         this.modelFuture = YSMThreadPool.submitCallable(() -> {
             PlayerCapability playerCapability = this instanceof PlayerCapability cap ? cap : null;
             if (playerCapability != null) {
                 playerCapability.beginCapturedRenderState();
             }
             try {
-                AnimationEvent<?> event = super.processAnimationImpl(partialTick, false);
+                AnimationEvent<?> event = super.processAnimationImpl(partialTick, capturedTickCount, false);
                 UnsafeUtil.getUnsafe().storeFence();
                 return event;
             } catch (Throwable th) {
@@ -288,6 +299,10 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
         });
     }
 
+    public boolean hasPendingAsyncUpdate() {
+        return this.modelFuture != null;
+    }
+
     @Override
     @Nullable
     public AnimationEvent<?> processAnimationImpl(float partialTick, boolean isFirstPerson) {
@@ -299,10 +314,24 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
             return null;
         }
         boolean isGuiPreview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
-        if (!isGuiPreview && this.modelFuture != null) {
-            AnimationEvent<?> event = awaitAsyncResult();
-            if (event != null) {
-                return event;
+        if (!isGuiPreview) {
+            int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
+            if (this.modelFuture != null && this.asyncSubmitFrameId != renderFrameId) {
+                // The pending task belongs to a frame in which this entity was not rendered;
+                // its time base is stale. Discard it and submit a fresh task below.
+                awaitAsyncResult();
+            }
+            if (this.modelFuture == null && this.asyncSubmitFrameId != renderFrameId) {
+                // Submit only while the entity is actually being rendered this frame. Keeping the
+                // worker queue bounded by the visible set (and submit order equal to render order)
+                // keeps frame pacing regular instead of stalling on accumulated background tasks.
+                submitAsyncUpdate(partialTick);
+            }
+            if (this.modelFuture != null) {
+                AnimationEvent<?> event = awaitAsyncResult();
+                if (event != null) {
+                    return event;
+                }
             }
         }
         return super.processAnimationImpl(partialTick, isFirstPerson);
