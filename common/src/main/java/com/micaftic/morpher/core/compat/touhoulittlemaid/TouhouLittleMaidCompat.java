@@ -1,11 +1,5 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
-import com.micaftic.morpher.client.animation.molang.TLMBinding;
-import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.client.model.PlayerModelBundle;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.client.model.ModelResourceBundle;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -58,25 +52,5 @@ public final class TouhouLittleMaidCompat {
 
     public static String getMaidRenderAnimation(Entity entity) {
         return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.getMaidRenderAnimation(entity);
-    }
-
-    public static void registerMaidAnimStates(TLMBinding tlmBinding) {
-        com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.registerMaidAnimStates(tlmBinding);
-    }
-
-    public static PlayState handleMaidInteraction(AnimationEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, Entity entity) {
-        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.handleMaidInteraction(event, livingEntity, entity);
-    }
-
-    public static boolean isMaidChatAvailable() {
-        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isMaidChatAvailable();
-    }
-
-    public static void openMaidChat() {
-        com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.openMaidChat();
-    }
-
-    public static Object buildControllers(PlayerModelBundle modelBundle, ModelResourceBundle resourceBundle) {
-        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.buildControllers(modelBundle, resourceBundle);
     }
 }

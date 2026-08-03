@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.molang.parser.ParseException;
@@ -61,7 +62,7 @@ public class S2CExecuteMolangPacket {
                     }
                 });
             } else if (TouhouMaidCompat.isMaidEntity(entity)) {
-                TouhouMaidCompat.playMaidAnimation(entity, message.expression);
+                TouhouLittleMaidClientCompat.playMaidAnimation(entity, message.expression);
             }
         }
     }

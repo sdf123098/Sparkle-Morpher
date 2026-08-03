@@ -1,16 +1,10 @@
 package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.client.animation.debug.AnimationFrameProfiler;
-import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.config.GeneralConfig;
 import it.unimi.dsi.fastutil.objects.ObjectListIterator;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.projectile.Projectile;
 
 import java.lang.ref.WeakReference;
 
@@ -38,28 +32,6 @@ public class EntityRenderCache {
                 it.remove();
             } else {
                 geoEntity.tickModel();
-                if (geoEntity.supportsAsync() && geoEntity.isModelInitialized() && geoEntity.isModelReady()) {
-                    Entity entity = geoEntity.getEntity();
-                    if (entity instanceof AbstractClientPlayer) {
-                        if (entity instanceof LocalPlayer) {
-                            if (!GeneralConfig.DISABLE_SELF_MODEL.get() && !InputStateKey.hasLocalInteractionState()) {
-                                geoEntity.submitAsyncUpdate(partialTick);
-                                strongRefs.add(geoEntity);
-                            }
-                        } else if (!GeneralConfig.DISABLE_OTHER_MODEL.get()) {
-                            geoEntity.submitAsyncUpdate(partialTick);
-                            strongRefs.add(geoEntity);
-                        }
-                    } else if (entity instanceof Projectile) {
-                        if (!GeneralConfig.DISABLE_PROJECTILE_MODEL.get()) {
-                            geoEntity.submitAsyncUpdate(partialTick);
-                            strongRefs.add(geoEntity);
-                        }
-                    } else if (!GeneralConfig.DISABLE_VEHICLE_MODEL.get()) {
-                        geoEntity.submitAsyncUpdate(partialTick);
-                        strongRefs.add(geoEntity);
-                    }
-                }
             }
         }
     }

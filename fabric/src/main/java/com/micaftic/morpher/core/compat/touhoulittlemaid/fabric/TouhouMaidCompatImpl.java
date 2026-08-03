@@ -2,7 +2,6 @@ package com.micaftic.morpher.core.compat.touhoulittlemaid.fabric;
 
 import com.micaftic.morpher.capability.ProjectileModelCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
-import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidModelSync;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
@@ -11,8 +10,6 @@ import com.micaftic.morpher.network.message.S2CSyncProjectileModelPacket;
 import com.micaftic.morpher.resource.models.ModelProperties;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 import org.apache.commons.lang3.StringUtils;
@@ -76,8 +73,4 @@ public final class TouhouMaidCompatImpl {
         });
     }
 
-    @Environment(EnvType.CLIENT)
-    public static void playMaidAnimation(Entity entity, String str) {
-        MaidCapability.get(entity).ifPresent(capability -> capability.executeMolang(str));
-    }
 }

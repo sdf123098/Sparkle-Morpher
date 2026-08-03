@@ -260,6 +260,11 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
 
     @Nullable
     public AnimationEvent<?> processAnimationImpl(float partialTick, boolean z) {
+        return processAnimationImpl(partialTick, -1, z);
+    }
+
+    @Nullable
+    public AnimationEvent<?> processAnimationImpl(float partialTick, int capturedTickCount, boolean z) {
         if (this.currentModel == null) {
             return null;
         }
@@ -267,7 +272,9 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
         Entity entity = this.entity;
         LivingEntity livingEntity = entity instanceof LivingEntity ? (LivingEntity) entity : null;
         PlayerCapability playerCapability = this instanceof PlayerCapability cap ? cap : null;
-        int tickCount = this instanceof IPreviewAnimatable ? ClientTickEvent.getTickCount() : entity.tickCount;
+        int tickCount = this instanceof IPreviewAnimatable
+                ? ClientTickEvent.getTickCount()
+                : (capturedTickCount >= 0 ? capturedTickCount : entity.tickCount);
         float frameTime = partialTick;
         boolean shouldSit = entity.isPassenger() && entity.getVehicle() != null && EntityDataBridge.shouldRiderSit(entity.getVehicle());
         float limbSwingAmount = 0.0f;
@@ -282,18 +289,18 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                 limbSwing = livingEntity.walkAnimation.position(partialTick);
             }
             if (playerCapability != null && !playerCapability.isLocalPlayerModel()) {
-                // Filter vanilla walkAnimation.speed() decay residue
-                if (Math.abs(limbSwingAmount) <= WALK_SPEED_THRESHOLD) {
-                    limbSwingAmount = 0.0f;
-                }
+                // Remote players: drive the limb cycle from the walkAnimation state (the same
+                // source as the local player, partialTick-interpolated on the render thread) so
+                // the walk cadence matches the actual movement. Fall back to the position-tracker
+                // based physical speed only when the captured state is degenerate while the entity
+                // is clearly moving (e.g. the entity was culled and walkAnimation went stale).
                 float physicalSpeed = MovementQuery.getPhysicalGroundSpeed(entity, this.positionTracker);
-                if (physicalSpeed > WALK_SPEED_THRESHOLD) {
+                if (physicalSpeed > WALK_SPEED_THRESHOLD && Math.abs(limbSwingAmount) <= WALK_SPEED_THRESHOLD) {
                     this.smoothedRemoteSpeed += 0.3f * (physicalSpeed - this.smoothedRemoteSpeed);
                     limbSwingAmount = this.smoothedRemoteSpeed;
                     limbSwing = this.seekTime * 0.6662f;
                 } else {
                     this.smoothedRemoteSpeed = 0.0f;
-                    limbSwingAmount = 0.0f;
                 }
                 renderStateMovementSuppressed = true;
             }
