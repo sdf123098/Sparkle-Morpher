@@ -40,6 +40,8 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
     default void renderWithBoneAndRenderType(AnimatedGeoModel model, T animatable, float partialTick, RenderType renderType, PoseStack poseStack, @Nullable MultiBufferSource bufferSource, int i, @Nullable VertexConsumer vertexConsumer, int i2, int i3, float f2, float f3, float f4, float f5, Identifier textureLocation) {
         SubmitNodeCollector collector = SubmitRenderContext.get();
         boolean allowDirectGpuRenderer = !(animatable instanceof GeckoVehicleEntity);
+        boolean splitEmissiveBones = vertexConsumer == null && textureLocation != null
+                && ModelRendererBridge.shouldUseEmissiveBoneMaterial(model.getGeoModel());
         if (collector != null && vertexConsumer == null) {
             animatable.resetAnimationState();
             float[] matrixData = Arrays.copyOf(model.getMatrixData(), model.getMatrixData().length);
@@ -47,20 +49,51 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             boolean previewMode = ModelPreviewRenderer.isPreview();
             boolean extraPlayerMode = ModelPreviewRenderer.isExtraPlayer();
             boolean worldRenderMode = ModelPreviewRenderer.isWorldRender();
+            ModelRendererBridge.BoneRenderPass basePass = splitEmissiveBones
+                    ? ModelRendererBridge.BoneRenderPass.NON_GLOW
+                    : ModelRendererBridge.BoneRenderPass.ALL;
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                    renderSubmittedGeometry(buffer, pose, model, matrixData, absPivotData, i, i2, i3, f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode, worldRenderMode, allowDirectGpuRenderer));
+                    renderSubmittedGeometry(buffer, pose, model, matrixData, absPivotData, i, i2, i3,
+                            f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode,
+                            worldRenderMode, allowDirectGpuRenderer, basePass));
+            if (splitEmissiveBones) {
+                RenderType emissiveType = RenderTypes.entityTranslucentEmissive(textureLocation);
+                collector.submitCustomGeometry(poseStack, emissiveType, (pose, buffer) ->
+                        renderSubmittedGeometry(buffer, pose, model, matrixData, absPivotData, i, i2, i3,
+                                f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode,
+                                worldRenderMode, false, ModelRendererBridge.BoneRenderPass.GLOW));
+            }
             setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
             return;
         }
-        if (vertexConsumer == null) {
-            vertexConsumer = bufferSource.getBuffer(renderType);
-        }
         animatable.resetAnimationState();
-        ModelRendererBridge.renderMesh(vertexConsumer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5, textureLocation, allowDirectGpuRenderer);
+        if (splitEmissiveBones && bufferSource != null) {
+            VertexConsumer baseBuffer = bufferSource.getBuffer(renderType);
+            ModelRendererBridge.renderMeshPass(baseBuffer, poseStack.last(), model.getGeoModel(),
+                    model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5,
+                    textureLocation, false, ModelRendererBridge.BoneRenderPass.NON_GLOW);
+            VertexConsumer emissiveBuffer = bufferSource.getBuffer(
+                    RenderTypes.entityTranslucentEmissive(textureLocation));
+            ModelRendererBridge.renderMeshPass(emissiveBuffer, poseStack.last(), model.getGeoModel(),
+                    model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5,
+                    textureLocation, false, ModelRendererBridge.BoneRenderPass.GLOW);
+        } else {
+            if (vertexConsumer == null) {
+                vertexConsumer = bufferSource.getBuffer(renderType);
+            }
+            ModelRendererBridge.renderMesh(vertexConsumer, poseStack.last(), model.getGeoModel(),
+                    model.getMatrixData(), model.getAbsPivotData(), i, 0, i2, i3, f2, f3, f4, f5,
+                    textureLocation, allowDirectGpuRenderer);
+        }
         setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
     }
 
-    private static void renderSubmittedGeometry(VertexConsumer buffer, PoseStack.Pose pose, AnimatedGeoModel model, float[] matrixData, float[] absPivotData, int textureIndex, int packedLight, int packedOverlay, float red, float green, float blue, float alpha, Identifier textureLocation, boolean previewMode, boolean extraPlayerMode, boolean worldRenderMode, boolean allowDirectGpuRenderer) {
+    private static void renderSubmittedGeometry(VertexConsumer buffer, PoseStack.Pose pose,
+            AnimatedGeoModel model, float[] matrixData, float[] absPivotData, int textureIndex,
+            int packedLight, int packedOverlay, float red, float green, float blue, float alpha,
+            Identifier textureLocation, boolean previewMode, boolean extraPlayerMode,
+            boolean worldRenderMode, boolean allowDirectGpuRenderer,
+            ModelRendererBridge.BoneRenderPass boneRenderPass) {
         boolean previousPreviewMode = ModelPreviewRenderer.isPreview();
         boolean previousExtraPlayerMode = ModelPreviewRenderer.isExtraPlayer();
         boolean previousWorldRenderMode = ModelPreviewRenderer.isWorldRender();
@@ -68,7 +101,9 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
         ModelPreviewRenderer.setExtraPlayerMode(extraPlayerMode);
         ModelPreviewRenderer.setWorldRenderMode(worldRenderMode);
         try {
-            ModelRendererBridge.renderMesh(buffer, pose, model.getGeoModel(), matrixData, absPivotData, textureIndex, 0, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, allowDirectGpuRenderer);
+            ModelRendererBridge.renderMeshPass(buffer, pose, model.getGeoModel(), matrixData,
+                    absPivotData, textureIndex, 0, packedLight, packedOverlay, red, green, blue,
+                    alpha, textureLocation, allowDirectGpuRenderer, boneRenderPass);
         } finally {
             ModelPreviewRenderer.setWorldRenderMode(previousWorldRenderMode);
             ModelPreviewRenderer.setExtraPlayerMode(previousExtraPlayerMode);

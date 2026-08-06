@@ -35,6 +35,12 @@ import java.util.Arrays;
 public class ModelRendererBridge {
     private static final int FULL_BRIGHT_LIGHT = 0xF000F0;
 
+    public enum BoneRenderPass {
+        ALL,
+        NON_GLOW,
+        GLOW
+    }
+
     private static final Matrix4f projectionModelViewMatrix = new Matrix4f();
     private static final ThreadLocal<RenderScratch> FALLBACK_SCRATCH = ThreadLocal.withInitial(RenderScratch::new);
 
@@ -47,6 +53,16 @@ public class ModelRendererBridge {
     }
 
     public static void renderMesh(VertexConsumer buffer, PoseStack.Pose pose, GeoModel model, float[] boneParams, float[] stateBuffer, int textureIndex, int renderPartMask, int packedLight, int packedOverlay, float red, float green, float blue, float alpha, net.minecraft.resources.Identifier textureLocation, boolean allowDirectGpuRenderer) {
+        renderMeshPass(buffer, pose, model, boneParams, stateBuffer, textureIndex, renderPartMask,
+                packedLight, packedOverlay, red, green, blue, alpha, textureLocation,
+                allowDirectGpuRenderer, BoneRenderPass.ALL);
+    }
+
+    public static void renderMeshPass(VertexConsumer buffer, PoseStack.Pose pose, GeoModel model,
+            float[] boneParams, float[] stateBuffer, int textureIndex, int renderPartMask,
+            int packedLight, int packedOverlay, float red, float green, float blue, float alpha,
+            net.minecraft.resources.Identifier textureLocation, boolean allowDirectGpuRenderer,
+            BoneRenderPass boneRenderPass) {
         OculusCompat.updatePBRState();
         projectionModelViewMatrix.identity();
         boolean isPreview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
@@ -71,7 +87,7 @@ public class ModelRendererBridge {
                 model.optimizationStats == null ? -1 : model.optimizationStats.negativeSizedFaces,
                 model.optimizationStats != null,
 	                model.conservativeRenderOnly);
-        if (backend.backend == RenderBackendDecision.Backend.BLAZE3D_GPU) {
+        if (boneRenderPass == BoneRenderPass.ALL && backend.backend == RenderBackendDecision.Backend.BLAZE3D_GPU) {
             if (Blaze3DRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
                 GpuDebugLog.verbose("entry rendered through Blaze3DRenderPath texture={}", textureLocation);
                 return;
@@ -79,7 +95,7 @@ public class ModelRendererBridge {
             GpuDebugLog.verbose("entry Blaze3DRenderPath fallback texture={}", textureLocation);
             backend = RenderBackendDecision.choose(model, false, translucentTexture, disableGlow, textureLocation, nativePolicy);
         }
-        if (backend.backend == RenderBackendDecision.Backend.GPU) {
+        if (boneRenderPass == BoneRenderPass.ALL && backend.backend == RenderBackendDecision.Backend.GPU) {
             if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
                 GpuDebugLog.verbose("entry rendered through GpuRenderPath texture={}", textureLocation);
                 return;
@@ -87,7 +103,8 @@ public class ModelRendererBridge {
             GpuDebugLog.verbose("entry GpuRenderPath fallback texture={}", textureLocation);
         }
 
-        if (backend.backend == RenderBackendDecision.Backend.NATIVE_SIMD) { // WIP: SIMD MODEL RENDER
+        if (boneRenderPass == BoneRenderPass.ALL
+                && backend.backend == RenderBackendDecision.Backend.NATIVE_SIMD) { // WIP: SIMD MODEL RENDER
             GpuDebugLog.verbose("entry rendered through native SIMD texture={} partMask={}", textureLocation, renderPartMask);
             // Phase 2: run validation diagnostics (may force Java for the session
             // under STRICT_FALLBACK, or throw under CRASH_TEST). Does not change the
@@ -113,7 +130,7 @@ public class ModelRendererBridge {
                         buffer, pose, projectionModelViewMatrix,
                         OptiFineDetector.isOptifinePresent(), model, boneParams, stateBuffer,
                         textureIndex, renderPartMask, packedLight, packedOverlay,
-                        red, green, blue, alpha, isPreview, disableGlow
+                        red, green, blue, alpha, isPreview, disableGlow, boneRenderPass
                 );
             }
         } else {
@@ -137,13 +154,30 @@ public class ModelRendererBridge {
                     packedOverlay,
                     red, green, blue, alpha,
                     isPreview,
-                    disableGlow
+                    disableGlow,
+                    boneRenderPass
             );
         }
     }
 
     private static boolean shouldDisableModelGlow(boolean shaderPackInUse) {
         return shaderPackInUse && GeneralConfig.safeGet(GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK, true);
+    }
+
+    public static boolean shouldUseEmissiveBoneMaterial(GeoModel model) {
+        if (model == null || model.bakedBones == null) return false;
+        boolean hasGlow = false;
+        for (GeoModel.BakedBone bone : model.bakedBones) {
+            if (bone.glow) {
+                hasGlow = true;
+                break;
+            }
+        }
+        if (!hasGlow) return false;
+        OculusCompat.updatePBRState();
+        boolean preview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
+        boolean shaderPackInUse = OculusCompat.isShaderPackInUse() && !preview;
+        return !shouldDisableModelGlow(shaderPackInUse);
     }
 
     public static void renderModel(
@@ -189,6 +223,26 @@ public class ModelRendererBridge {
             float r, float g, float b, float a,
             boolean isPreview,
             boolean disableGlow) {
+
+        renderModel(vertexConsumer, pose, projectionModelViewMatrix, isCompatMode, mesh,
+                boneParams, stateBuffer, textureIndex, renderPartMask, packedLight, packedOverlay,
+                r, g, b, a, isPreview, disableGlow, BoneRenderPass.ALL);
+    }
+
+    public static void renderModel(
+            VertexConsumer vertexConsumer,
+            PoseStack.Pose pose,
+            Matrix4f projectionModelViewMatrix,
+            boolean isCompatMode,
+            GeoModel mesh,
+            float[] boneParams,
+            float[] stateBuffer,
+            int textureIndex, int renderPartMask,
+            int packedLight, int packedOverlay,
+            float r, float g, float b, float a,
+            boolean isPreview,
+            boolean disableGlow,
+            BoneRenderPass boneRenderPass) {
 
         if (mesh.bakedBones == null || mesh.bakedBones.isEmpty()) return;
         int boneCount = mesh.bakedBones.size();
@@ -239,6 +293,10 @@ public class ModelRendererBridge {
             }
 
             GeoModel.BakedBone bone = mesh.bakedBones.get(i);
+            if (boneRenderPass == BoneRenderPass.GLOW && !bone.glow
+                    || boneRenderPass == BoneRenderPass.NON_GLOW && bone.glow) {
+                continue;
+            }
             if (renderPartMask != 0 && bone.partMask != renderPartMask && bone.partMask != 3) {
                 continue;
             }
