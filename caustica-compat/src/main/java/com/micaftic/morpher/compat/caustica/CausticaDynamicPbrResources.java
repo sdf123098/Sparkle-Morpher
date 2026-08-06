@@ -8,6 +8,7 @@ import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
 import com.micaftic.morpher.compat.caustica.mixin.CausticaPackRepositoryAccessor;
 import com.micaftic.morpher.compat.caustica.mixin.CausticaMinecraftAccessor;
 import com.micaftic.morpher.model.ServerModelManager;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -54,6 +55,7 @@ import java.util.stream.Stream;
 /** Exposes runtime model PBR textures to resource-scanning renderers such as Caustica. */
 public final class CausticaDynamicPbrResources implements ClientRenderCompatibility {
     private static final String PACK_ID = "sparkle_morpher_dynamic_pbr";
+    private static final boolean CAUSTICA_LOADED = FabricLoader.getInstance().isModLoaded("caustica");
     private static final PackLocationInfo LOCATION = new PackLocationInfo(PACK_ID,
             Component.literal("Sparkle Morpher dynamic PBR textures"), PackSource.BUILT_IN,
             Optional.<KnownPack>empty());
@@ -69,8 +71,10 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
         return thread;
     });
     private static final RepositorySource SOURCE = output -> output.accept(createPack());
-    private static final CausticaMaterialRefresh CAUSTICA_MATERIAL_REFRESH = findCausticaMaterialRefresh();
-    private static final CausticaEntityPrewarm CAUSTICA_ENTITY_PREWARM = findCausticaEntityPrewarm();
+    private static final CausticaMaterialRefresh CAUSTICA_MATERIAL_REFRESH =
+            CAUSTICA_LOADED ? findCausticaMaterialRefresh() : null;
+    private static final CausticaEntityPrewarm CAUSTICA_ENTITY_PREWARM =
+            CAUSTICA_LOADED ? findCausticaEntityPrewarm() : null;
     private static final long REFRESH_DEBOUNCE_NANOS = 400_000_000L;
 
     private static volatile boolean materialDirty;
@@ -80,6 +84,11 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
     private static volatile boolean entityViewInvalidationPending;
 
     public CausticaDynamicPbrResources() {
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return CAUSTICA_LOADED;
     }
 
     /** Installs the always-enabled pack before Sparkle Morpher begins loading client models. */

@@ -9,6 +9,11 @@ import net.minecraft.resources.Identifier;
  * model and texture pipeline never needs to know which renderer consumes these notifications.
  */
 public interface ClientRenderCompatibility {
+    /** Allows an embedded compatibility module to stay dormant when its target renderer is absent. */
+    default boolean isAvailable() {
+        return true;
+    }
+
     /** Called immediately after discovery, before Sparkle Morpher starts loading client models. */
     default void initialize() {
     }

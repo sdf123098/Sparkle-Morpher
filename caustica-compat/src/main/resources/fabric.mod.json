@@ -20,7 +20,9 @@
     "minecraft": ">=26.2 <26.3",
     "java": ">=25",
     "fabric-api": "*",
-    "sparkle_morpher": ">=1.1.5",
+    "sparkle_morpher": ">=1.1.5"
+  },
+  "suggests": {
     "caustica": "*"
   }
 }

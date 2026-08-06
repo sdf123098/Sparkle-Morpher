@@ -17,15 +17,16 @@ public final class ClientRenderCompatibilityRegistry {
     }
 
     public static void register(ClientRenderCompatibility module) {
-        if (module != null && MODULES.add(module)) {
-            try {
+        if (module == null) return;
+        try {
+            if (module.isAvailable() && MODULES.add(module)) {
                 module.initialize();
                 YesSteveModel.LOGGER.info("[SM] Registered client render compatibility module: {}",
                         module.getClass().getName());
-            } catch (RuntimeException exception) {
-                MODULES.remove(module);
-                logFailure(module, "initialize", exception);
             }
+        } catch (RuntimeException exception) {
+            MODULES.remove(module);
+            logFailure(module, "initialize", exception);
         }
     }
 
