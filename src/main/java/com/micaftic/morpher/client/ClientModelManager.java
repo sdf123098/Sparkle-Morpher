@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.AudioStreamCache;
@@ -1304,6 +1305,7 @@ public class ClientModelManager {
                 }
                 Minecraft.getInstance().execute(() -> {
                     flushPendingModels();
+                    ClientRenderCompatibilityRegistry.flush();
                     forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
                 });
             } catch (Exception e) {
@@ -2114,6 +2116,7 @@ public class ClientModelManager {
             // The completion barrier guarantees every parser has enqueued its
             // assembly. Publish that final batch before observers see success.
             flushPendingModels();
+            ClientRenderCompatibilityRegistry.flush();
             syncState.finishSuccess();
             // 远端懒加载目录到此才完整，补做一次持久化选择恢复。
             restorePersistedModelSelection();

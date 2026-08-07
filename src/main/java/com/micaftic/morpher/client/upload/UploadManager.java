@@ -2,7 +2,9 @@ package com.micaftic.morpher.client.upload;
 
 import com.micaftic.morpher.ResourceCleanupHelper;
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.texture.ITextureMap;
+import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.google.common.collect.Queues;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.Pair;
@@ -53,7 +55,7 @@ public class UploadManager {
         if (removed != null) {
             locatable = new TextureLocatable(removed.first(), sizeHint);
         } else {
-            locatable = new TextureLocatable(sizeHint);
+            locatable = new TextureLocatable(texture, sizeHint);
         }
         if (texture instanceof ITextureMap) {
             for (AbstractTexture suffixTexture : ((ITextureMap) texture).getSuffixTextures().values()) {
@@ -75,6 +77,16 @@ public class UploadManager {
     public static void removeTexture(AbstractTexture abstractTexture) {
         RenderSystem.assertOnRenderThread();
         textureCache.remove(abstractTexture);
+    }
+
+    /** Notifies optional render integrations after GPU-cache trimming recreates a texture view. */
+    public static void onTextureUploaded(OuterFileTexture texture) {
+        RenderSystem.assertOnRenderThread();
+        WeakReference<TextureLocatable> reference = textureCache.get(texture);
+        TextureLocatable locatable = reference == null ? null : reference.get();
+        if (locatable != null && locatable.registered) {
+            ClientRenderCompatibilityRegistry.onTextureUploaded(locatable.resourceLocation, texture);
+        }
     }
 
     public static void processPendingUploads() {
@@ -106,6 +118,7 @@ public class UploadManager {
                 do {
                     ResourceLocation resourceLocationPoll = pendingReleases.poll();
                     if (resourceLocationPoll != null) {
+                        ClientRenderCompatibilityRegistry.onTextureInactive(resourceLocationPoll);
                         textureManager.release(resourceLocationPoll);
                     } else {
                         return;
@@ -118,7 +131,14 @@ public class UploadManager {
 
     private static void registerTexture(AbstractTexture texture, TextureLocatable locatable) {
         if (!locatable.registered) {
+            if (texture instanceof OuterFileTexture outerFileTexture) {
+                outerFileTexture.doLoad();
+            }
             Minecraft.getInstance().getTextureManager().register(locatable.resourceLocation, texture);
+            if (texture instanceof OuterFileTexture outerFileTexture) {
+                ClientRenderCompatibilityRegistry.onTextureRegistered(locatable.resourceLocation,
+                        outerFileTexture, false);
+            }
             ResourceCleanupHelper.registerBiCleanup(locatable, locatable.resourceLocation, locatable.resolution, (resourceLocation, num) -> {
                 expiredTextures.put(texture, ReferenceIntMutablePair.of(resourceLocation, num));
             });
@@ -141,8 +161,11 @@ public class UploadManager {
             this.resolution = resolution;
         }
 
-        TextureLocatable(int resolution) {
-            this.resourceLocation = ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "textures/" + ++textureCounter);
+        TextureLocatable(AbstractTexture texture, int resolution) {
+            ResourceLocation pbrLocation = texture instanceof OuterFileTexture outer
+                    ? ClientRenderCompatibilityRegistry.resolveTextureLocation(outer) : null;
+            this.resourceLocation = pbrLocation != null ? pbrLocation
+                    : ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "textures/" + ++textureCounter);
             this.resolution = resolution;
             this.registered = false;
         }
