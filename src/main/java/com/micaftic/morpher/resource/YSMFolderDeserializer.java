@@ -1307,6 +1307,9 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 String animKey = fileName.substring(0, fileName.length() - ".animation.json".length());
                 raf.animType = getAnimTypeFromKey(animKey);
                 model.mainEntity.animationFiles.put(animKey, raf);
+                if("extra".equals(animKey)) {
+                    raf.animations.keySet().forEach(animName -> model.properties.extraAnimations.put(animName, animName));
+                }
             }
         }
 
