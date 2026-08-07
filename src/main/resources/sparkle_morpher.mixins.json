@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.8",
   "package": "com.micaftic.morpher.mixin",
+  "plugin": "com.micaftic.morpher.mixin.plugin.MixinTweaker",
   "compatibilityLevel": "JAVA_25",
   "injectors": {
     "defaultRequire": 1

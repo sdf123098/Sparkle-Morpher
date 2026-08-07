@@ -39,6 +39,9 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
     private final Map<String, byte[]> inMemoryFiles;
 
+    /** 单个模型资源文件的大小上限（字节）。超限视为垃圾/损坏资源，跳过读取以避免内存暴涨或卡顿。 */
+    private static final long MAX_RESOURCE_BYTES = 256L * 1024L * 1024L;
+
     public YSMFolderDeserializer(Path sourcePath) throws IOException {
         if (!Files.exists(sourcePath)) {
             throw new FileNotFoundException("Model source not found: " + sourcePath);
@@ -126,6 +129,11 @@ public class YSMFolderDeserializer implements AutoCloseable {
             if (inMemoryFiles == null) {
                 Path target = resolveResourcePath(normalizedPath);
                 if (Files.exists(target) && Files.isRegularFile(target)) {
+                    long size = Files.size(target);
+                    if (size > MAX_RESOURCE_BYTES) {
+                        System.err.println("[SM] Warning: Skipping oversized model resource (" + size + " bytes): " + relativePath);
+                        return null;
+                    }
                     data = Files.readAllBytes(target);
                 }
             } else {
@@ -960,21 +968,36 @@ public class YSMFolderDeserializer implements AutoCloseable {
     private void parseGlobalResources() {
         if (inMemoryFiles != null) {
             for (Map.Entry<String, byte[]> entry : inMemoryFiles.entrySet()) {
-                processGlobalResourceFile(entry.getKey(), entry.getValue());
+                if (isGlobalResource(entry.getKey())) {
+                    processGlobalResourceFile(entry.getKey(), entry.getValue());
+                }
             }
         } else {
             try (Stream<Path> stream = Files.walk(rootPath)) {
-                stream.filter(Files::isRegularFile).forEach(path -> {
-                    String relativePath = rootPath.relativize(path).toString().replace('\\', '/');
-                    byte[] data = readResource(relativePath);
-                    if (data != null) {
-                        processGlobalResourceFile(relativePath, data);
-                    }
-                });
+                stream.filter(Files::isRegularFile)
+                        .filter(path -> isGlobalResource(rootPath.relativize(path).toString().replace('\\', '/')))
+                        .forEach(path -> {
+                            String relativePath = rootPath.relativize(path).toString().replace('\\', '/');
+                            byte[] data = readResource(relativePath);
+                            if (data != null) {
+                                processGlobalResourceFile(relativePath, data);
+                            }
+                        });
             } catch (IOException e) {
                 System.err.println("[SM] Warning: Failed to scan global resources. " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * 全局资源白名单：只有 sounds/lang/functions 目录（及任意位置的 .ogg）里的文件
+     * 才会被读取并嵌入模型，模型文件夹里的其它无关文件（说明文档、图片、视频等）直接跳过，
+     * 避免把大文件整体读入内存导致卡顿/OOM。与 processGlobalResourceFile 的判定条件保持一致。
+     */
+    private static boolean isGlobalResource(String relativePath) {
+        if (relativePath == null) return false;
+        return relativePath.startsWith("sounds/") || relativePath.endsWith(".ogg")
+                || relativePath.startsWith("lang/") || relativePath.startsWith("functions/");
     }
 
     private void processGlobalResourceFile(String relativePath, byte[] data) {
@@ -1318,7 +1341,12 @@ public class YSMFolderDeserializer implements AutoCloseable {
                     continue;
                 }
                 try (java.io.InputStream input = zipFile.getInputStream(entry)) {
-                    rawEntries.putIfAbsent(entry.getName(), input.readAllBytes());
+                    byte[] bytes = input.readNBytes((int) Math.min(MAX_RESOURCE_BYTES + 1, Integer.MAX_VALUE));
+                    if (bytes.length > MAX_RESOURCE_BYTES) {
+                        System.err.println("[SM] Warning: Skipping oversized zip entry (" + bytes.length + " bytes): " + entry.getName());
+                        continue;
+                    }
+                    rawEntries.putIfAbsent(entry.getName(), bytes);
                 }
             }
         }
