@@ -20,6 +20,7 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.NotNull;
+import java.util.Arrays;
 import org.jetbrains.annotations.Nullable;
 
 public interface IGeoRenderer<T extends AnimatableEntity<?>> {
