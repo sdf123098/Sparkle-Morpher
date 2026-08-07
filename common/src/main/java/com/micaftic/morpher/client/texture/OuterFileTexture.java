@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
+import com.micaftic.morpher.client.upload.UploadManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.platform.TextureUtil;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -63,6 +64,12 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
         } catch (IOException e) {
             YesSteveModel.LOGGER.error("[SM] Failed to upload outer file texture", e);
         }
+        UploadManager.onTextureUploaded(this);
+    }
+
+    /** Original PNG data exposed to optional runtime material integrations. */
+    public byte[] getResourceData() {
+        return this.data;
     }
 
     public void setSuffixTextures(Map<ShadersTextureType, OuterFileTexture> map) {

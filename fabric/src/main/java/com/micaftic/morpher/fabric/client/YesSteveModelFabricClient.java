@@ -1,6 +1,8 @@
 package com.micaftic.morpher.fabric.client;
 
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibility;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.renderer.AnimationDebugOverlay;
 import com.micaftic.morpher.client.renderer.ExtraPlayerOverlay;
 import com.micaftic.morpher.client.renderer.ModelSyncStateOverlay;
@@ -12,6 +14,9 @@ import com.micaftic.morpher.core.api.client.HudOverlay;
 public final class YesSteveModelFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
+        net.fabricmc.loader.api.FabricLoader.getInstance()
+                .getEntrypoints("sparkle_morpher_render_compat", ClientRenderCompatibility.class)
+                .forEach(ClientRenderCompatibilityRegistry::register);
         OrihimeDirectModelCompat.init();
         FabricClientResourceLifecycle.register();
         HudOverlay debugOverlay = AnimationDebugOverlay.createOverlay();

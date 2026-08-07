@@ -5,6 +5,7 @@ import com.micaftic.morpher.client.animation.condition.ArmorConditions;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.geckolib3.core.event.ParticleEventKeyFrame;
@@ -173,6 +174,7 @@ public class ModelAssemblyFactory {
                 resourceBundle, clientModelInfo.getInfo(),
                 buildTextureRegistry(clientModelInfo, isAuth, textureList), textureList
         );
+        ClientRenderCompatibilityRegistry.onModelAssemblyCreated(assembly);
         if (isPrimary) {
             primaryAssembly = assembly;
             primaryAssembly.getAnimationBundle().getMainAnimations().values().forEach(animation -> {

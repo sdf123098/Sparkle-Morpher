@@ -5,6 +5,7 @@ import com.micaftic.morpher.audio.ObjectPool;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.input.InputStateKey;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.client.upload.UploadManager;
 import net.minecraft.client.Minecraft;
@@ -35,6 +36,7 @@ public final class ClientTickEvent {
         tickCount++;
         InputStateKey.tick();
         UploadManager.processPendingUploads();
+        ClientRenderCompatibilityRegistry.tick();
         ModelUploadSession.tickCurrent();
         ClientModelManager.flushPendingModels();
         ClientModelManager.tickSyncWatchdog();
