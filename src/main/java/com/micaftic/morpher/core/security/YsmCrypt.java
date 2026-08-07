@@ -7,18 +7,12 @@ import com.micaftic.morpher.core.algorithms.XChaCha20;
 import com.micaftic.morpher.core.algorithms.YsmZstd;
 import io.netty.buffer.Unpooled;
 
-import java.io.InputStream;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.HexFormat;
 
 public class YsmCrypt {
     private static volatile String modelCacheIdentity;
@@ -51,7 +45,7 @@ public class YsmCrypt {
 
     public static String getModelCacheIdentity() {
         String identity = modelCacheIdentity;
-        if (identity == null || identity.contains("modVersion=unknown") || identity.contains("modHash=unknown")) {
+        if (identity == null || identity.contains("modVersion=unknown")) {
             identity = buildModelCacheIdentity();
             modelCacheIdentity = identity;
         }
@@ -59,7 +53,7 @@ public class YsmCrypt {
     }
 
     private static String buildModelCacheIdentity() {
-        return "sparkle_morpher:model_cache\nmodVersion=" + resolveModVersion() + "\nmodHash=" + resolveModHash();
+        return "sparkle_morpher:model_cache\nmodVersion=" + resolveModVersion();
     }
 
     private static String resolveModVersion() {
@@ -114,42 +108,6 @@ public class YsmCrypt {
         } catch (Throwable ignored) {
         }
         return null;
-    }
-
-    private static String resolveModHash() {
-        try {
-            URI location = YsmCrypt.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-            Path path = Path.of(location).toAbsolutePath().normalize();
-            if (Files.isRegularFile(path)) {
-                return sha256File(path);
-            }
-            if (Files.isDirectory(path)) {
-                // 仅用稳定的目录路径，不掺 mtime：否则 dev/目录加载环境每次重跑 mtime 变化
-                // 会改变缓存身份，导致客户端 prepareCacheDirectory 清空缓存 + 服务端 hash 变化 → 每次大退都重下。
-                return sha256Text(path.toString());
-            }
-        } catch (Throwable ignored) {
-        }
-        return "unknown";
-    }
-
-    private static String sha256File(Path path) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] buffer = new byte[8192];
-        try (InputStream input = Files.newInputStream(path)) {
-            int read;
-            while ((read = input.read(buffer)) >= 0) {
-                if (read > 0) {
-                    digest.update(buffer, 0, read);
-                }
-            }
-        }
-        return HexFormat.of().formatHex(digest.digest());
-    }
-
-    private static String sha256Text(String value) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 
     public static byte[] encryptServerCache(byte[] clearText, byte[] serverKey, long hash1, long hash2) throws Exception {
