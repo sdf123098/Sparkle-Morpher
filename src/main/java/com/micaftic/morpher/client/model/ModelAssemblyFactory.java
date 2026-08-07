@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.model;
 
 import com.micaftic.morpher.client.ClientModelInfo;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.animation.condition.ArmorConditions;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
@@ -173,6 +174,7 @@ public class ModelAssemblyFactory {
                 resourceBundle, clientModelInfo.getInfo(),
                 buildTextureRegistry(clientModelInfo, isAuth, textureList), textureList
         );
+        ClientRenderCompatibilityRegistry.onModelAssemblyCreated(assembly);
         if (isPrimary) {
             primaryAssembly = assembly;
             primaryAssembly.getAnimationBundle().getMainAnimations().values().forEach(animation -> {
