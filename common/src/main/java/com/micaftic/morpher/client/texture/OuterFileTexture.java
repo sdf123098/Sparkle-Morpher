@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
+import com.micaftic.morpher.client.upload.UploadManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
@@ -59,6 +60,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             image = createFallbackImage();
         }
         uploadImage(image);
+        UploadManager.onTextureUploaded(this);
     }
 
     public boolean isLoaded() {
@@ -112,6 +114,11 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
 
     public Map<ShadersTextureType, ? extends AbstractTexture> getSuffixTextures() {
         return this.suffixTextures;
+    }
+
+    /** Original PNG data exposed to optional runtime material integrations. */
+    public byte[] getResourceData() {
+        return this.data;
     }
 
     @Override
