@@ -42,7 +42,25 @@ public class MixinTweaker implements IMixinConfigPlugin {
         if (isHighRiskMixin(simpleName)) {
             System.out.println("[Sparkle Morpher] Applying high-risk migration mixin: " + str2);
         }
+        if (isTouhouLittleMaidCompatMixin(simpleName) && !isTouhouLittleMaidPresent()) {
+            System.out.println("[Sparkle Morpher] TouhouLittleMaid not installed, skipping compat mixin: " + str2);
+            return false;
+        }
         return true;
+    }
+
+    private static boolean isTouhouLittleMaidCompatMixin(String simpleName) {
+        return "TouhouMaidEntityMixin".equals(simpleName) || "TouhouLittleMaidYsmCompatMixin".equals(simpleName);
+    }
+
+    private static boolean isTouhouLittleMaidPresent() {
+        try {
+            Class.forName("com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid", false,
+                    MixinTweaker.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
     }
 
     @Keep

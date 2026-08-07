@@ -4,7 +4,6 @@
   "package": "com.micaftic.morpher.mixin",
   "plugin": "com.micaftic.morpher.mixin.plugin.MixinTweaker",
   "compatibilityLevel": "JAVA_25",
-  "refmap": "sparkle-morpher-common-common-refmap.json",
   "injectors": {
     "defaultRequire": 1
   },

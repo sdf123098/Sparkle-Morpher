@@ -160,6 +160,8 @@ public class ClientModelManager {
         });
     }
 
+    private static final long MAX_LOCAL_MODEL_FILE_BYTES = 512L * 1024L * 1024L;
+
     private static final Map<UUID, ServerModelContext> serverModels = new ConcurrentHashMap<>();
 
     private static final java.security.SecureRandom SECURE_RANDOM = new java.security.SecureRandom();
@@ -1744,6 +1746,10 @@ public class ClientModelManager {
                     return FileVisitResult.CONTINUE;
                 }
                 try {
+                    if (attrs.size() > MAX_LOCAL_MODEL_FILE_BYTES) {
+                        YesSteveModel.LOGGER.warn("[SM] Skipping oversized local model file ({} bytes): {}", attrs.size(), file);
+                        return FileVisitResult.CONTINUE;
+                    }
                     String modelId = stripImportExtension(normalizeLocalModelId(baseDir.relativize(file).toString()));
                     registerLocalCatalogEntry(catalog, modelId, file, isAuth);
                     rememberLocalModelSource(baseDir, modelId, file);
@@ -1980,6 +1986,10 @@ public class ClientModelManager {
                 rawModel = deserializer.deserialize();
             }
         } else {
+            long size = Files.size(source.path);
+            if (size > MAX_LOCAL_MODEL_FILE_BYTES) {
+                throw new IOException("Local model file too large (" + size + " bytes), skipped: " + source.path);
+            }
             byte[] data = Files.readAllBytes(source.path);
             rawModel = parseImportModel(source.path.getFileName().toString(), data);
         }

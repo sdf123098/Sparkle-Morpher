@@ -217,6 +217,8 @@ public class AnimationProcessor<TEntity extends Entity> {
                 rot.applyRotationBlendTo(snapshot.rotation, snapshot.bone.getInitialRotation(), this.rotScratch);
                 vector3f.set(snapshot.rotation);
             }
+            // molang/物理可能产生 NaN/Inf（无效数学、物理震荡等）→ 消毒，防止骨骼矩阵炸开乱飘
+            sanitizeVector(snapshot.rotation);
         }
 
         TransitionVector3f pos;
@@ -233,6 +235,7 @@ public class AnimationProcessor<TEntity extends Entity> {
             }
             snapshot.mostRecentResetPositionTick = seekTime;
             pos.applyLinearBlendTo(snapshot.position);
+            sanitizeVector(snapshot.position);
         }
 
         TransitionVector3f scale;
@@ -249,7 +252,20 @@ public class AnimationProcessor<TEntity extends Entity> {
             }
             snapshot.mostRecentResetScaleTick = seekTime;
             scale.applyLinearBlendTo(snapshot.scale);
+            sanitizeScaleVector(snapshot.scale);
         }
+    }
+
+    private static void sanitizeVector(Vector3f vector) {
+        if (!Float.isFinite(vector.x)) vector.x = 0.0f;
+        if (!Float.isFinite(vector.y)) vector.y = 0.0f;
+        if (!Float.isFinite(vector.z)) vector.z = 0.0f;
+    }
+
+    private static void sanitizeScaleVector(Vector3f vector) {
+        if (!Float.isFinite(vector.x)) vector.x = 1.0f;
+        if (!Float.isFinite(vector.y)) vector.y = 1.0f;
+        if (!Float.isFinite(vector.z)) vector.z = 1.0f;
     }
 
     @Nullable
