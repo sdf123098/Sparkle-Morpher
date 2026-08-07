@@ -98,8 +98,15 @@ public class C2SPlayAnimationPacket {
                     } else {
                         extraAnimations = modelProperties.getExtraAnimation();
                     }
-                    if (message.animationIndex >= 0 && extraAnimations.size() > message.animationIndex) {
-                        modelInfoCap.playAnimation(sender, extraAnimations.getKeyAt(message.animationIndex));
+                    // 优先使用客户端发送的准确动画 key：轮盘点击发送的 key 来自客户端模型列表，
+                    // 若服务端与客户端 extraAnimations 顺序/内容不一致，按 index 回查会错位（点 A 播 B）。
+                    String playKey = StringUtils.isNotBlank(message.animationKey)
+                            ? message.animationKey
+                            : (message.animationIndex >= 0 && extraAnimations.size() > message.animationIndex
+                                ? extraAnimations.getKeyAt(message.animationIndex)
+                                : null);
+                    if (playKey != null) {
+                        modelInfoCap.playAnimation(sender, playKey);
                     }
                 }, () -> {
                     Pair<String, String> defaultConfig = ServerModelManager.getDefaultModelConfig();

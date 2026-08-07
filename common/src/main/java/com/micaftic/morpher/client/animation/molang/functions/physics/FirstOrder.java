@@ -30,6 +30,8 @@ public class FirstOrder implements IPhysics {
         return Float.isFinite(value) ? value : 0.0f;
     }
 
+
+
     @Override
     public void setArgs(float input, float response, float arg2, float arg3) {
         this.input = input;
