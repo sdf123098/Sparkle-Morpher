@@ -108,12 +108,18 @@ public class C2SPlayAnimationPacket {
                     } else {
                         extraAnimations = modelProperties.getExtraAnimation();
                     }
-                    if (message.animationIndex >= 0 && extraAnimations.size() > message.animationIndex) {
-                        String animationKey = extraAnimations.getKeyAt(message.animationIndex);
-                        String animationValue = extraAnimations.get(animationKey);
-                        AnimationRouletteDebugLog.info("server resolved player={} model={} index={} category={} matched={} key={} value={}",
-                                sender.getGameProfile().getName(), modelInfoCap.getModelId(), message.animationIndex,
-                                message.category, categoryMatched, animationKey, animationValue);
+                    // 优先使用客户端发送的准确动画 key：轮盘点击发送的 key 来自客户端模型列表，
+                    // 若服务端与客户端 extraAnimations 顺序/内容不一致，按 index 回查会错位（点 A 播 B）。
+                    String animationKey = StringUtils.isNotBlank(message.animationKey)
+                            ? message.animationKey
+                            : (message.animationIndex >= 0 && extraAnimations.size() > message.animationIndex
+                                ? extraAnimations.getKeyAt(message.animationIndex)
+                                : null);
+                    String animationValue = animationKey == null ? null : extraAnimations.get(animationKey);
+                    AnimationRouletteDebugLog.info("server resolved player={} model={} index={} category={} matched={} key={} value={}",
+                            sender.getGameProfile().getName(), modelInfoCap.getModelId(), message.animationIndex,
+                            message.category, categoryMatched, animationKey, animationValue);
+                    if (animationKey != null) {
                         modelInfoCap.playAnimation(sender, animationKey);
                     } else {
                         AnimationRouletteDebugLog.warn("server invalid index player={} model={} index={} category={} matched={} size={}",
