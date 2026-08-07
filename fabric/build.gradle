@@ -47,6 +47,12 @@ if (rootProject.ext.isCurseForgeDist) {
 dependencies {
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
 
+    // Ship optional renderer integrations as Fabric nested JARs. The compatibility implementation
+    // stays in its own subproject/API entrypoint, while the primary distribution remains one file.
+    include(project(path: ':caustica-compat', configuration: 'namedElements')) {
+        transitive = false
+    }
+
     modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
 
 
@@ -113,6 +119,15 @@ remapJar {
     archiveFileName = rootProject.ext.isCurseForgeDist
             ? "${releaseArchiveName}-curseforge.jar"
             : "${releaseArchiveName}.jar"
+
+    doLast {
+        def bundledCompat = zipTree(archiveFile.get().asFile).matching {
+            include 'META-INF/jars/sparkle-morpher-caustica-compat-*.jar'
+        }.files
+        if (bundledCompat.size() != 1) {
+            throw new GradleException("Expected exactly one bundled Caustica compatibility JAR, found ${bundledCompat.size()}")
+        }
+    }
 }
 
 tasks.named('remapSourcesJar') {

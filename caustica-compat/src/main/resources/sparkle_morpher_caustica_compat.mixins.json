@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.micaftic.morpher.compat.caustica.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "CausticaMinecraftAccessor",
+    "CausticaPackRepositoryAccessor"
+  ]
+}

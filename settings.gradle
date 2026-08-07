@@ -13,3 +13,4 @@ plugins {
 rootProject.name = 'sparkle_morpher'
 
 include 'fabric'
+include 'caustica-compat'

@@ -1,0 +1,33 @@
+base {
+    archivesName = 'sparkle-morpher-caustica-compat'
+}
+
+def releaseArchiveName = "sparkle-morpher-caustica-compat-${project.version}-fa26.2"
+
+dependencies {
+    modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
+    def devJar = providers.gradleProperty('sparkleMorpherDevJar').orNull
+    if (devJar != null && !devJar.isBlank()) {
+        modCompileOnly files(devJar)
+    } else {
+        compileOnly(project(path: ':fabric')) { transitive = false }
+    }
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand version: project.version
+    }
+}
+
+jar {
+    archiveClassifier = 'dev'
+    archiveFileName = "${releaseArchiveName}-dev.jar"
+}
+
+remapJar {
+    archiveClassifier = null
+    archiveFileName = "${releaseArchiveName}.jar"
+}

@@ -15,6 +15,7 @@ import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
 import com.micaftic.morpher.client.model.VehicleModelBundle;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
@@ -1266,6 +1267,7 @@ public class ClientModelManager {
                 }
                 ((Executor) Minecraft.getInstance()).execute(() -> {
                     flushPendingModels();
+                    ClientRenderCompatibilityRegistry.flush();
                     forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
                 });
                 if (restoreSelection) {
@@ -2078,6 +2080,7 @@ public class ClientModelManager {
 
         ((Executor) Minecraft.getInstance()).execute(() -> {
             flushPendingModels();
+            ClientRenderCompatibilityRegistry.flush();
             syncState.finishSuccess();
             // 远端懒加载目录到此才完整，补做一次持久化选择恢复。
             restorePersistedModelSelection();

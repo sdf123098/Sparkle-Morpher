@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "sparkle_morpher_caustica_compat",
+  "version": "${version}",
+  "name": "Sparkle Morpher Caustica Compatibility",
+  "description": "Optional Caustica PBR and vanilla emissive-material integration for Sparkle Morpher.",
+  "authors": ["Micaftic"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "sparkle_morpher_render_compat": [
+      "com.micaftic.morpher.compat.caustica.CausticaDynamicPbrResources"
+    ]
+  },
+  "mixins": [
+    "sparkle_morpher_caustica_compat.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": ">=26.2 <26.3",
+    "java": ">=25",
+    "fabric-api": "*",
+    "sparkle_morpher": ">=1.1.5"
+  },
+  "suggests": {
+    "caustica": "*"
+  }
+}
