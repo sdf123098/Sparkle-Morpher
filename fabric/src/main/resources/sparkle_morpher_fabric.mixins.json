@@ -3,7 +3,6 @@
   "minVersion": "0.8",
   "package": "com.micaftic.morpher.fabric.mixin",
   "compatibilityLevel": "JAVA_25",
-  "refmap": "sparkle-morpher-fabric-fabric-refmap.json",
   "injectors": {
     "defaultRequire": 1
   },

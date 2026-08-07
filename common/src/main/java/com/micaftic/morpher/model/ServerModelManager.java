@@ -78,6 +78,9 @@ public final class ServerModelManager {
     private static final String EXT_YSM = ".ysm";
     private static final String EXT_ZIP = ".zip";
     private static final String EXT_BBMODEL = ".bbmodel";
+
+    /** 单个模型文件的大小上限（字节）。超限视为垃圾/损坏文件，跳过以避免内存暴涨或启动卡顿。 */
+    private static final long MAX_MODEL_FILE_BYTES = 512L * 1024L * 1024L;
     /**
      * 配置相关文件夹
      */
@@ -696,6 +699,10 @@ public final class ServerModelManager {
     }
 
     private static byte[] readModelFileBytes(Path file) throws IOException {
+        long size = Files.size(file);
+        if (size > MAX_MODEL_FILE_BYTES) {
+            throw new IOException("Model file too large (" + size + " bytes), skipped: " + file);
+        }
         try {
             return Files.readAllBytes(file);
         } catch (AccessDeniedException accessDenied) {
