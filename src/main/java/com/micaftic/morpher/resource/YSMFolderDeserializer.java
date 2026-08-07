@@ -44,15 +44,31 @@ public class YSMFolderDeserializer implements AutoCloseable {
             throw new FileNotFoundException("Model source not found: " + sourcePath);
         }
 
-        this.inMemoryFiles = null;
-
         if (Files.isDirectory(sourcePath)) {
+            this.inMemoryFiles = null;
             this.rootPath = sourcePath;
             this.zipFileSystem = null;
         } else if (sourcePath.toString().endsWith(".zip") || sourcePath.toString().endsWith(".ysm")) {
             URI uri = URI.create("jar:" + sourcePath.toUri());
-            this.zipFileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
-            this.rootPath = resolveArchiveModelRoot(this.zipFileSystem.getPath("/"));
+            java.nio.file.FileSystem openedFs = null;
+            Path openedRoot = null;
+            try {
+                openedFs = FileSystems.newFileSystem(uri, Collections.emptyMap());
+                openedRoot = resolveArchiveModelRoot(openedFs.getPath("/"));
+            } catch (java.util.zip.ZipException zipException) {
+                // 中文 Windows 压缩工具生成的 zip 常用 GBK 编码条目名，jdk.zipfs 按 UTF-8
+                // 解码会抛 "invalid CEN header (bad entry name)"。回退用 ZipFile + GBK 读取。
+                System.err.println("[SM] Warning: Zip entry names are not UTF-8, retrying with GBK: " + sourcePath);
+            }
+            if (openedFs != null) {
+                this.zipFileSystem = openedFs;
+                this.rootPath = openedRoot;
+                this.inMemoryFiles = null;
+            } else {
+                this.zipFileSystem = null;
+                this.rootPath = null;
+                this.inMemoryFiles = readZipEntries(sourcePath, java.nio.charset.Charset.forName("GBK"));
+            }
         } else {
             throw new IllegalArgumentException("Unsupported file type. Expected directory or .zip");
         }
@@ -1290,6 +1306,71 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
             model.projectiles.put("arrow", arrowSub);
         }
+    }
+
+    private static Map<String, byte[]> readZipEntries(Path sourcePath, java.nio.charset.Charset charset) throws IOException {
+        Map<String, byte[]> rawEntries = new LinkedHashMap<>();
+        try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(sourcePath.toFile(), charset)) {
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> enumeration = zipFile.entries();
+            while (enumeration.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = enumeration.nextElement();
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                try (java.io.InputStream input = zipFile.getInputStream(entry)) {
+                    rawEntries.putIfAbsent(entry.getName(), input.readAllBytes());
+                }
+            }
+        }
+        // 与 resolveArchiveModelRoot 一致的模型根目录探测（字符串层面）
+        String rootPrefix = detectInMemoryModelRoot(rawEntries.keySet());
+        if (rootPrefix == null) {
+            return rawEntries;
+        }
+        Map<String, byte[]> entries = new LinkedHashMap<>();
+        for (Map.Entry<String, byte[]> entry : rawEntries.entrySet()) {
+            String name = entry.getKey();
+            String stripped = name;
+            if (!rootPrefix.isEmpty() && name.startsWith(rootPrefix)) {
+                stripped = name.substring(rootPrefix.length());
+            }
+            String normalized = normalizeResourceKey(stripped);
+            if (!normalized.isEmpty()) {
+                entries.putIfAbsent(normalized, entry.getValue());
+            }
+        }
+        return entries;
+    }
+
+    private static String detectInMemoryModelRoot(java.util.Set<String> names) {
+        java.util.Set<String> normalized = new java.util.HashSet<>();
+        for (String name : names) {
+            normalized.add(normalizeResourceKey(name));
+        }
+        if (normalized.contains("ysm.json") || (normalized.contains("main.json") && normalized.contains("arm.json"))) {
+            return "";
+        }
+        String detected = null;
+        for (String name : names) {
+            int slash = name.indexOf('/');
+            if (slash <= 0) {
+                continue;
+            }
+            String segment = name.substring(0, slash);
+            String folderKey = normalizeResourceKey(segment);
+            boolean modelFolder = normalized.contains(folderKey + "/ysm.json")
+                    || (normalized.contains(folderKey + "/main.json") && normalized.contains(folderKey + "/arm.json"));
+            if (!modelFolder) {
+                continue;
+            }
+            if (detected == null) {
+                detected = segment;
+            } else if (!normalizeResourceKey(segment).equals(normalizeResourceKey(detected))) {
+                // 多个不同的模型目录 → 与 resolveArchiveModelRoot 一致，以整个压缩包为根
+                return null;
+            }
+        }
+        return detected;
     }
 
     public static boolean isModelFolder(Path dir) {
