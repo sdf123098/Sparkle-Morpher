@@ -169,8 +169,20 @@ public final class TouhouLittleMaidAccess {
 
     public static boolean isOwnedBy(Entity entity, net.minecraft.world.entity.player.Player player) {
         if (!isMaid(entity) || player == null) return false;
-        Object owner = maidInvoke(entity, "getOwnerUUID");
-        return player.getAbilities().instabuild || owner instanceof UUID uuid && uuid.equals(player.getUUID());
+        return player.getAbilities().instabuild || player.getUUID().equals(resolveOwnerUuid(entity));
+    }
+
+    /**
+     * TLM 1.21.1 and earlier exposes {@code getOwnerUUID()}; Orihime 26.1.2+ replaced it with the
+     * vanilla {@code getOwnerReference()} (an {@code EntityReference<LivingEntity>}) whose UUID is
+     * read via {@code getUUID()}. Supporting both keeps the soft-link working across TLM versions.
+     */
+    private static UUID resolveOwnerUuid(Entity entity) {
+        if (maidInvoke(entity, "getOwnerUUID") instanceof UUID uuid) {
+            return uuid;
+        }
+        Object reference = maidInvoke(entity, "getOwnerReference");
+        return invoke(reference, "getUUID") instanceof UUID uuid ? uuid : null;
     }
 
     public static String getGameAnimation(Entity entity) {
