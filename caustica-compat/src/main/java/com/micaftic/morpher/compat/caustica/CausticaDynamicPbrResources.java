@@ -5,8 +5,8 @@ import com.micaftic.morpher.client.compat.ClientRenderCompatibility;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
-import com.micaftic.morpher.compat.caustica.mixin.CausticaPackRepositoryAccessor;
 import com.micaftic.morpher.compat.caustica.mixin.CausticaMinecraftAccessor;
+import com.micaftic.morpher.compat.caustica.mixin.CausticaPackRepositoryAccessor;
 import com.micaftic.morpher.model.ServerModelManager;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -60,7 +60,8 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
             Component.literal("Sparkle Morpher dynamic PBR textures"), PackSource.BUILT_IN,
             Optional.<KnownPack>empty());
     private static final Map<Identifier, byte[]> RESOURCES = new ConcurrentHashMap<>();
-    private static final Set<Identifier> ACTIVE_TEXTURES = ConcurrentHashMap.newKeySet();
+    /** Ref-counted live claimants per content-addressed location (multiple model assemblies may share one). */
+    private static final Map<Identifier, Integer> ACTIVE_TEXTURES = new ConcurrentHashMap<>();
     private static final Path CACHE_DIRECTORY = ServerModelManager.CACHE.resolve("dynamic_pbr");
     private static final byte[] FINGERPRINT_SCHEMA =
             "sparkle-morpher-pbr-material-v1".getBytes(StandardCharsets.UTF_8);
@@ -82,6 +83,7 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
     private static volatile long refreshAfterNanos;
     private static volatile boolean entityPrewarmPending;
     private static volatile boolean entityViewInvalidationPending;
+    private static volatile boolean installed;
 
     public CausticaDynamicPbrResources() {
     }
@@ -91,15 +93,24 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
         return CAUSTICA_LOADED;
     }
 
-    /** Installs the always-enabled pack before Sparkle Morpher begins loading client models. */
+    /** Caustica needs glow bones in a dedicated emissive pass to read material semantics. */
+    @Override
+    public boolean requiresEmissiveBoneSplit() {
+        return true;
+    }
+
+    /**
+     * Loads the persisted resource cache. Pack installation is deferred to the first client tick:
+     * {@code initialize()} runs from {@code ClientModInitializer}, before the Minecraft constructor
+     * has finished setting up its own resource pack repository, so calling {@code reload()} here
+     * would race the engine's own pack setup.
+     */
     @Override
     public void initialize() {
         int persisted = loadPersistedResources();
         if (persisted > 0) {
             YesSteveModel.LOGGER.info("[SM] Preloaded {} cached PBR resources for Caustica.", persisted);
         }
-        install(((CausticaMinecraftAccessor) Minecraft.getInstance())
-                .sparkle_morpher_caustica$getResourcePackRepository());
     }
 
     /** Stable across sessions, model load order, and texture-instance recycling. */
@@ -166,35 +177,65 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
         if (changed) scheduleMaterialRefresh();
     }
 
-    /** Marks a content-hashed texture as backed by a live TextureManager entry. */
+    /** Marks a content-hashed texture as backed by a live TextureManager entry (ref-counted). */
     private static void markTextureActive(Identifier textureLocation) {
-        if (textureLocation != null && ACTIVE_TEXTURES.add(textureLocation)) {
+        if (textureLocation != null
+                && ACTIVE_TEXTURES.merge(textureLocation, 1, Integer::sum) == 1) {
             entityPrewarmPending = true;
         }
     }
 
-    /** Stops refresh prewarming from resolving a TextureManager entry that no longer exists. */
+    /**
+     * Stops refresh prewarming from resolving a TextureManager entry that no longer exists. When
+     * the last claimant releases the location, drops its in-memory byte copies; the disk cache
+     * stays so a later model reload can republish without re-downloading.
+     */
     private static void markTextureInactive(Identifier textureLocation) {
-        if (textureLocation != null) ACTIVE_TEXTURES.remove(textureLocation);
+        if (textureLocation == null) return;
+        Integer remaining = ACTIVE_TEXTURES.computeIfPresent(textureLocation,
+                (ignored, count) -> count <= 1 ? null : count - 1);
+        if (remaining == null) releaseResources(textureLocation);
+    }
+
+    private static void releaseResources(Identifier textureLocation) {
+        String basePath = textureLocation.getPath();
+        RESOURCES.remove(resource(textureLocation, basePath + ".png"));
+        RESOURCES.remove(resource(textureLocation, basePath + "_n.png"));
+        RESOURCES.remove(resource(textureLocation, basePath + "_s.png"));
     }
 
     /** A shared location now points at a different GPU image view; only Caustica's entity-view cache is stale. */
     private static void noteTextureInstanceReplaced(Identifier textureLocation) {
-        if (!ACTIVE_TEXTURES.contains(textureLocation)) return;
+        if (!ACTIVE_TEXTURES.containsKey(textureLocation)) return;
         entityViewInvalidationPending = true;
         entityPrewarmPending = true;
     }
 
     @Override
     public void tick() {
+        ensureInstalled();
         refreshMaterials(false);
         refreshEntityViews();
     }
 
     @Override
     public void flush() {
+        ensureInstalled();
         refreshMaterials(true);
         refreshEntityViews();
+    }
+
+    /** Installs the always-enabled pack on the first client tick, once the engine's pack repo is stable. */
+    private static void ensureInstalled() {
+        if (installed) return;
+        installed = true;
+        try {
+            install(((CausticaMinecraftAccessor) Minecraft.getInstance())
+                    .sparkle_morpher_caustica$getResourcePackRepository());
+        } catch (RuntimeException exception) {
+            installed = false;
+            YesSteveModel.LOGGER.error("[SM] Could not install dynamic PBR resource pack", exception);
+        }
     }
 
     private static void scheduleMaterialRefresh() {
@@ -239,7 +280,7 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
         if (!entityPrewarmPending || CAUSTICA_ENTITY_PREWARM == null) return;
         boolean invalidateViews = entityViewInvalidationPending;
         try {
-            CAUSTICA_ENTITY_PREWARM.prewarm(ACTIVE_TEXTURES, invalidateViews);
+            CAUSTICA_ENTITY_PREWARM.prewarm(ACTIVE_TEXTURES.keySet(), invalidateViews);
             entityViewInvalidationPending = false;
             entityPrewarmPending = false;
         } catch (ReflectiveOperationException exception) {
@@ -364,7 +405,7 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
             return new CausticaMaterialRefresh(contextClass.getMethod("currentOrNull"),
                     contextClass.getMethod("waitIdle"), compositeClass.getField("INSTANCE"),
                     worldPipeline, bindWorldTextures);
-        } catch (ReflectiveOperationException exception) {
+        } catch (ReflectiveOperationException | RuntimeException exception) {
             YesSteveModel.LOGGER.warn("[SM] Caustica targeted material refresh is unavailable", exception);
             return null;
         }
@@ -378,7 +419,7 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
             return new CausticaEntityPrewarm(entityTextures.getField("INSTANCE"),
                     entityTextures.getMethod("slotFor", RenderType.class),
                     entityTextures.getMethod("materialIdFor", RenderType.class, boolean.class), viewCache);
-        } catch (ReflectiveOperationException exception) {
+        } catch (ReflectiveOperationException | RuntimeException exception) {
             YesSteveModel.LOGGER.debug("[SM] Caustica entity texture prewarming is unavailable", exception);
             return null;
         }

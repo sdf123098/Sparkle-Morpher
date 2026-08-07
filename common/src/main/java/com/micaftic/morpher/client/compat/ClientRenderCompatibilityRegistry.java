@@ -42,6 +42,18 @@ public final class ClientRenderCompatibilityRegistry {
         return null;
     }
 
+    /** True when any registered module requests the emissive-bone split render pass. */
+    public static boolean requiresEmissiveBoneSplit() {
+        for (ClientRenderCompatibility module : MODULES) {
+            try {
+                if (module.requiresEmissiveBoneSplit()) return true;
+            } catch (RuntimeException exception) {
+                logFailure(module, "query emissive bone split", exception);
+            }
+        }
+        return false;
+    }
+
     public static void onModelAssemblyCreated(ModelAssembly assembly) {
         dispatch("publish model assembly", module -> module.onModelAssemblyCreated(assembly));
     }

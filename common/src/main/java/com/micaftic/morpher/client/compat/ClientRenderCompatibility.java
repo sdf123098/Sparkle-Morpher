@@ -14,6 +14,16 @@ public interface ClientRenderCompatibility {
         return true;
     }
 
+    /**
+     * True when the renderer needs glow bones submitted as a separate emissive RenderType pass
+     * (e.g. to distinguish emissive material semantics at capture boundaries). Enabling this
+     * splits the model into NON_GLOW + GLOW passes and therefore bypasses the GPU/SIMD fast
+     * paths, so it must only be requested by renderers that actually consume the distinction.
+     */
+    default boolean requiresEmissiveBoneSplit() {
+        return false;
+    }
+
     /** Called immediately after discovery, before Sparkle Morpher starts loading client models. */
     default void initialize() {
     }

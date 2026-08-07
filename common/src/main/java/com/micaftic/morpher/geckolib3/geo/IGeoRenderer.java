@@ -3,6 +3,7 @@ import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.util.Color;
@@ -40,7 +41,11 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
     default void renderWithBoneAndRenderType(AnimatedGeoModel model, T animatable, float partialTick, RenderType renderType, PoseStack poseStack, @Nullable MultiBufferSource bufferSource, int i, @Nullable VertexConsumer vertexConsumer, int i2, int i3, float f2, float f3, float f4, float f5, Identifier textureLocation) {
         SubmitNodeCollector collector = SubmitRenderContext.get();
         boolean allowDirectGpuRenderer = !(animatable instanceof GeckoVehicleEntity);
+        // Splitting glow bones into a dedicated emissive RenderType pass disables the GPU/SIMD
+        // fast paths (renderMeshPass only serves BoneRenderPass.ALL through them), so it is gated
+        // behind an explicit renderer capability request instead of running for every player.
         boolean splitEmissiveBones = vertexConsumer == null && textureLocation != null
+                && ClientRenderCompatibilityRegistry.requiresEmissiveBoneSplit()
                 && ModelRendererBridge.shouldUseEmissiveBoneMaterial(model.getGeoModel());
         if (collector != null && vertexConsumer == null) {
             animatable.resetAnimationState();
