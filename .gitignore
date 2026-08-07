@@ -123,3 +123,6 @@ level_javap.txt
 
 *.class
 *.log
+*.zig-cache/
+*.zig-cache
+.zig-cache/
