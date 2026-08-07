@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.ObjectPool;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.gui.resource.ResourceDownloadManager;
 import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
@@ -36,6 +37,7 @@ public final class ClientTickEvent {
         tickCount++;
         InputStateKey.tick();
         UploadManager.processPendingUploads();
+        ClientRenderCompatibilityRegistry.tick();
         ResourceDownloadManager.tick();
         ModelUploadSession.tickCurrent();
         ClientModelManager.flushPendingModels();
