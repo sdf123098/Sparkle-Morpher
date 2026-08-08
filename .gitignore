@@ -29,4 +29,7 @@ Thumbs.db
 # Logs
 *.log
 
+# 根目录构建产物 jar（gradle/wrapper/gradle-wrapper.jar 除外）
+/*.jar
+
 *.class
