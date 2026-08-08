@@ -49,6 +49,7 @@ public enum TokenKind {
 
     /** The "return" keyword */
     RETURN,
+    THIS,
 
     /** The dot symbol (.) */
     DOT,

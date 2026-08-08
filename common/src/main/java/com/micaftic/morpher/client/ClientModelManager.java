@@ -1716,6 +1716,7 @@ public class ClientModelManager {
             throw new IllegalArgumentException("Invalid Bedrock geometry: " + fileName);
         }
         RawYsmModel raw = assembleBedrockModel(geometry, null, null);
+        normalizeBedrockCase(raw);
         raw.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(data);
         return raw;
     }
@@ -1751,6 +1752,7 @@ public class ClientModelManager {
         }
 
         RawYsmModel raw = assembleBedrockModel(geometry, textures, animationFiles);
+        normalizeBedrockCase(raw);
         raw.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(sniff.bedrockGeoBytes);
         return raw;
     }
@@ -1783,6 +1785,48 @@ public class ClientModelManager {
         raw.mainEntity = mainEntity;
         raw.footer = new RawYsmModel.RawFooter();
         return raw;
+    }
+
+    /**
+     * Bedrock 导入边界大小写归一：骨名与动画骨名统一小写。
+     * 基岩版动画用小写（leftarm）、几何用驼峰（leftArm），
+     * 这里在入口处把两者归一为小写以便动画绑定；
+     * 仅在 Bedrock 入口生效，不影响 YSM/内置模型路径。
+     */
+    private static void normalizeBedrockCase(RawYsmModel raw) {
+        if (raw == null || raw.mainEntity == null) {
+            return;
+        }
+        Map<String, String> rename = new HashMap<>();
+        RawYsmModel.RawGeometry geometry = raw.mainEntity.mainModel;
+        if (geometry != null && geometry.bones != null) {
+            for (RawYsmModel.RawBone bone : geometry.bones) {
+                if (bone.name == null || bone.name.isEmpty()) continue;
+                String lower = bone.name.toLowerCase(Locale.ROOT);
+                if (!lower.equals(bone.name)) {
+                    rename.put(bone.name, lower);
+                }
+            }
+            for (RawYsmModel.RawBone bone : geometry.bones) {
+                if (bone.name != null) {
+                    bone.name = rename.getOrDefault(bone.name, bone.name);
+                }
+                if (bone.parentName != null) {
+                    bone.parentName = rename.getOrDefault(bone.parentName, bone.parentName);
+                }
+            }
+        }
+        for (RawYsmModel.RawAnimationFile animationFile : raw.mainEntity.animationFiles.values()) {
+            if (animationFile == null || animationFile.animations == null) continue;
+            for (RawYsmModel.RawAnimation animation : animationFile.animations.values()) {
+                if (animation == null || animation.boneAnimations == null) continue;
+                for (RawYsmModel.RawBoneAnimation boneAnimation : animation.boneAnimations) {
+                    if (boneAnimation != null && boneAnimation.boneName != null) {
+                        boneAnimation.boneName = boneAnimation.boneName.toLowerCase(Locale.ROOT);
+                    }
+                }
+            }
+        }
     }
 
     /** 从文件名推导 Bedrock 几何 identifier：去掉 .geo.json / geometry.json 后缀后的文件名。 */

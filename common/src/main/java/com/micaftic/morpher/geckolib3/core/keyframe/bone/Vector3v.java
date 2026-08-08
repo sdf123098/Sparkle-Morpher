@@ -23,8 +23,12 @@ public class Vector3v {
     }
 
     public Vector3f eval(ExpressionEvaluator<?> evaluator) {
-        return this.vector.set(x.evalAsFloat(evaluator),
-                y.evalAsFloat(evaluator),
-                z.evalAsFloat(evaluator));
+        evaluator.setCurrentAxis(0);
+        float vx = x.evalAsFloat(evaluator);
+        evaluator.setCurrentAxis(1);
+        float vy = y.evalAsFloat(evaluator);
+        evaluator.setCurrentAxis(2);
+        float vz = z.evalAsFloat(evaluator);
+        return this.vector.set(vx, vy, vz);
     }
 }
