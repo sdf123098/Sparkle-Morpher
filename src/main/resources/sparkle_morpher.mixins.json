@@ -17,12 +17,10 @@
     "client.FishingHookAccessor",
     "client.GuiEntityRendererMixin",
     "client.InventoryScreenMixin",
-    "client.LivingEntityAccessor",
     "client.LivingRendererMixin",
     "client.PauseScreenMixin",
     "client.ScreenAccessor",
     "client.ThrowableItemProjectileAccessor",
-    "client.EntityRidingAccessor",
     "client.WingsLayerMixin",
     "client.WorldRendererMixin"
   ],
