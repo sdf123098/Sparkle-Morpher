@@ -4,6 +4,7 @@ import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.capability.ModelInfoCapability;
@@ -1841,6 +1842,7 @@ public class ClientModelManager {
             }
         }
 
+        animationFiles = BedrockAnimationMapping.remapToActions(animationFiles);
         RawYsmModel raw = assembleBedrockModel(geometry, textures, animationFiles);
         normalizeBedrockCase(raw);
         raw.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(sniff.bedrockGeoBytes);
