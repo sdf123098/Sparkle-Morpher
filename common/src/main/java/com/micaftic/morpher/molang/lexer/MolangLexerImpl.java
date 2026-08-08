@@ -110,6 +110,7 @@ public final class MolangLexerImpl implements MolangLexer {
                 case "break": kind = TokenKind.BREAK; break;
                 case "continue": kind = TokenKind.CONTINUE; break;
                 case "return": kind = TokenKind.RETURN; break;
+                case "this": kind = TokenKind.THIS; break;
                 case "true": kind = TokenKind.TRUE; break;
                 case "false": kind = TokenKind.FALSE; break;
                 default: kind = TokenKind.IDENTIFIER; break;
