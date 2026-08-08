@@ -153,7 +153,9 @@ public class ModelSettingsScreen extends OptionScreen {
 
     @Override
     public void onClose() {
-        if (this.minecraft != null) com.micaftic.morpher.util.InputUtil.setScreen(parentScreen);
+        // 26.2 修复：从设置屏 ESC 退出时直接完全退出所有界面（回到游戏），
+        // 不再回到父级轮盘 —— 避免"轮盘中心 lock 图标 blit 残留在屏幕正中"的观感。
+        if (this.minecraft != null) com.micaftic.morpher.util.InputUtil.setScreen(null);
     }
 
     @Override

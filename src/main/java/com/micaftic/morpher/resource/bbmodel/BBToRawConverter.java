@@ -903,6 +903,14 @@ public class BBToRawConverter {
         animFile.animations.putIfAbsent("idle", createVanillaFallbackAnimation("idle", bones, 0f, 0f));
         animFile.animations.putIfAbsent("walk", createVanillaFallbackAnimation("walk", bones, 25f, 35f));
         animFile.animations.putIfAbsent("run", createVanillaFallbackAnimation("run", bones, 35f, 45f));
+        // 补充 AnimationRegister 注册但 bbmodel 无自带动画的高频状态，
+        // 避免这些状态「无法正常播放 / 不齐全」。
+        animFile.animations.putIfAbsent("attacked", createFallbackShakeAnimation("attacked", bones, 20f, 12f));
+        animFile.animations.putIfAbsent("death", createFallbackPoseAnimation("death", bones, 90f, 90f));
+        animFile.animations.putIfAbsent("swim", createVanillaFallbackAnimation("swim", bones, 45f, 30f));
+        animFile.animations.putIfAbsent("climb", createVanillaFallbackAnimation("climb", bones, 35f, 40f));
+        animFile.animations.putIfAbsent("climbing", createVanillaFallbackAnimation("climbing", bones, 30f, 35f));
+        animFile.animations.putIfAbsent("sleep", createVanillaFallbackAnimation("sleep", bones, 8f, 8f));
     }
 
     private static Map<String, String> collectNormalizedBoneNames(RawYsmModel.RawGeometry geometry) {
@@ -939,11 +947,47 @@ public class BBToRawConverter {
         return null;
     }
 
+    // 受击抖动：四肢快速小幅度高频摆动，配合 PLAY_ONCE 播放一次。
+    private static RawYsmModel.RawAnimation createFallbackShakeAnimation(String name, Map<String, String> bones,
+                                                                        float armAmplitude, float legAmplitude) {
+        RawYsmModel.RawAnimation anim = new RawYsmModel.RawAnimation();
+        anim.name = name;
+        anim.length = 1.0f;
+        anim.loopMode = 0; // once
+        addFallbackBoneAnimation(anim, firstBone(bones, "leftarm", "leftupperarm", "leftshoulder", "leftuparm", "leftbicep", "armleft"), shakeExpression(armAmplitude, false));
+        addFallbackBoneAnimation(anim, firstBone(bones, "rightarm", "rightupperarm", "rightshoulder", "rightuparm", "rightbicep", "armright"), shakeExpression(armAmplitude, true));
+        addFallbackBoneAnimation(anim, firstBone(bones, "leftleg", "leftupperleg", "leftthigh", "leftupleg", "legleft"), shakeExpression(legAmplitude, true));
+        addFallbackBoneAnimation(anim, firstBone(bones, "rightleg", "rightupperleg", "rightthigh", "rightupleg", "legright"), shakeExpression(legAmplitude, false));
+        return anim;
+    }
+
+    // 固定姿态（如死亡前倾）：绕 X 固定角度，播放一次后保持。
+    private static RawYsmModel.RawAnimation createFallbackPoseAnimation(String name, Map<String, String> bones,
+                                                                        float armXRot, float legXRot) {
+        RawYsmModel.RawAnimation anim = new RawYsmModel.RawAnimation();
+        anim.name = name;
+        anim.length = 1.0f;
+        anim.loopMode = 0; // once
+        addFallbackBoneAnimation(anim, firstBone(bones, "leftarm", "leftupperarm", "leftshoulder", "leftuparm", "leftbicep", "armleft"), armXRot);
+        addFallbackBoneAnimation(anim, firstBone(bones, "rightarm", "rightupperarm", "rightshoulder", "rightuparm", "rightbicep", "armright"), armXRot);
+        addFallbackBoneAnimation(anim, firstBone(bones, "leftleg", "leftupperleg", "leftthigh", "leftupleg", "legleft"), legXRot);
+        addFallbackBoneAnimation(anim, firstBone(bones, "rightleg", "rightupperleg", "rightthigh", "rightupleg", "legright"), legXRot);
+        return anim;
+    }
+
     private static String swingExpression(float amplitude, boolean oppositePhase) {
         if (amplitude == 0f) {
             return "0";
         }
         return "math.cos(query.anim_time * 360" + (oppositePhase ? " + 180" : "") + ") * " + amplitude;
+    }
+
+    // 受击抖动：更高频（4 倍速）的小幅摆动。
+    private static String shakeExpression(float amplitude, boolean oppositePhase) {
+        if (amplitude == 0f) {
+            return "0";
+        }
+        return "math.cos(query.anim_time * 1440" + (oppositePhase ? " + 180" : "") + ") * " + amplitude;
     }
 
     private static void addFallbackBoneAnimation(RawYsmModel.RawAnimation anim, String boneName, Object xRotation) {
@@ -1025,6 +1069,7 @@ public class BBToRawConverter {
             }
         }
         channelFrames.sort(Comparator.comparingDouble(kf -> kf.time));
+        int outStart = out.size();
         for (int i = 0; i < channelFrames.size(); i++) {
             BBAnimation.BBKeyframe current = channelFrames.get(i);
             RawYsmModel.RawKeyframe raw = convertKeyframe(current);
@@ -1034,6 +1079,13 @@ public class BBToRawConverter {
                 out.add(raw);
             } else {
                 out.addAll(baked);
+            }
+        }
+        // Blockbench rotation keyframe 是 THREE 'XYZ' 欧拉序；YSM 渲染端按
+        // Rz*Ry*Rx + X/Y 取负解读。多轴组合旋转必须做等效角度转换，否则镜像。
+        if ("rotation".equals(channel)) {
+            for (int i = outStart; i < out.size(); i++) {
+                BbRotationCompat.convertRotationKeyframeValues(out.get(i));
             }
         }
     }
