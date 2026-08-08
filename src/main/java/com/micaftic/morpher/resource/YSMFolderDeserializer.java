@@ -80,6 +80,15 @@ public class YSMFolderDeserializer implements AutoCloseable {
         this.model.formatVersion = 65535;
     }
 
+    /** 仅用于静态探测（parseBedrockGeometry 等不需要读取任何 zip/目录资源）。 */
+    private YSMFolderDeserializer() {
+        this.rootPath = null;
+        this.zipFileSystem = null;
+        this.inMemoryFiles = null;
+        this.model = new RawYsmModel();
+        this.model.formatVersion = 65535;
+    }
+
     private static Path resolveArchiveModelRoot(Path archiveRoot) throws IOException {
         if (isModelFolder(archiveRoot)) {
             return archiveRoot;
@@ -547,12 +556,23 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     private RawYsmModel.RawGeometry parseGeometry(byte[] data, int modelType) {
+        return parseGeometry(data, modelType, null);
+    }
+
+    /**
+     * 解析 Bedrock {@code minecraft:geometry} JSON。
+     *
+     * @param identifier 非空时按 {@code description.identifier} 选择几何（支持
+     *                   {@code geometry.xxx} 与 {@code xxx} 两种写法，大小写不敏感）；
+     *                   为空或找不到时回退到第一个（与旧行为一致，YSM 包不受影响）。
+     */
+    private RawYsmModel.RawGeometry parseGeometry(byte[] data, int modelType, String identifier) {
         String json = new String(data, StandardCharsets.UTF_8);
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
         JsonArray geometries = root.has("minecraft:geometry") ? root.getAsJsonArray("minecraft:geometry") : null;
         if (geometries == null || geometries.isEmpty()) return new RawYsmModel.RawGeometry();
 
-        JsonObject geoObj = geometries.get(0).getAsJsonObject();
+        JsonObject geoObj = selectGeometry(geometries, identifier);
         RawYsmModel.RawGeometry geo = new RawYsmModel.RawGeometry();
         geo.sha256 = sha256Hex(data);
 
@@ -673,6 +693,64 @@ public class YSMFolderDeserializer implements AutoCloseable {
             }
         }
         return geo;
+    }
+
+    /** 按 identifier 选择几何；identifier 为空或未命中时回退到第一个。 */
+    private static JsonObject selectGeometry(JsonArray geometries, String identifier) {
+        if (identifier != null && !identifier.isEmpty()) {
+            String want = identifier.trim();
+            String wantWithPrefix = want.startsWith("geometry.") ? want : "geometry." + want;
+            for (JsonElement element : geometries) {
+                if (!element.isJsonObject()) continue;
+                JsonObject candidate = element.getAsJsonObject();
+                if (!candidate.has("description") || !candidate.get("description").isJsonObject()) continue;
+                String id = getJsonString(candidate.getAsJsonObject("description").get("identifier"));
+                if (id == null || id.isEmpty()) continue;
+                if (id.equalsIgnoreCase(want) || id.equalsIgnoreCase(wantWithPrefix)
+                        || id.endsWith("." + want)) {
+                    return candidate;
+                }
+            }
+        }
+        return geometries.get(0).getAsJsonObject();
+    }
+
+    /**
+     * 静态入口：解析裸 Bedrock geo JSON（供 Bedrock 直读导入用，不依赖任何 zip/目录资源）。
+     *
+     * @param identifier 按 {@code description.identifier} 选择几何，可为 null（取第一个）。
+     */
+    public static RawYsmModel.RawGeometry parseBedrockGeometry(byte[] data, String identifier) {
+        if (data == null || data.length == 0) {
+            return new RawYsmModel.RawGeometry();
+        }
+        try (YSMFolderDeserializer probe = new YSMFolderDeserializer()) {
+            return probe.parseGeometry(data, 1, identifier);
+        } catch (Exception e) {
+            System.err.println("[SM] Failed to parse Bedrock geometry: " + e);
+            return new RawYsmModel.RawGeometry();
+        }
+    }
+
+    /** 静态入口：把 PNG 等图像字节包装成 RawTexture（供 Bedrock 直读导入用）。 */
+    public static RawYsmModel.RawTexture parseBedrockTexture(byte[] imageBytes, String name) {
+        RawYsmModel.RawTexture texture = new RawYsmModel.RawTexture();
+        if (imageBytes == null || imageBytes.length == 0) {
+            return texture;
+        }
+        try (YSMFolderDeserializer probe = new YSMFolderDeserializer()) {
+            ImageMeta meta = probe.parseImageMeta(imageBytes, name);
+            texture.hash = sha256Hex(imageBytes);
+            texture.width = meta.width();
+            texture.height = meta.height();
+            texture.imageFormat = meta.format();
+            texture.name = name;
+            texture.data = imageBytes;
+            texture.unknownFlag = 1;
+        } catch (Exception e) {
+            System.err.println("[SM] Failed to parse Bedrock texture " + name + ": " + e);
+        }
+        return texture;
     }
 
     private void bakeFaceToRaw(RawYsmModel.RawCube cube, JsonObject uvObj, String faceType, String uvFaceName, boolean mirror, float x, float y, float z, float w, float h, float d, float tw, float th, Vector3f rawNormal, Matrix4f cubeBakeMat, Matrix3f cubeNormalMat) {

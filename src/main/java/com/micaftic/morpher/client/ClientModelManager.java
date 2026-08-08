@@ -1724,6 +1724,9 @@ public class ClientModelManager {
         if (lower.endsWith(".bbmodel")) {
             return parseBbModelImport(data, fileName);
         }
+        if (lower.endsWith(".geo.json") || lower.endsWith("geometry.json")) {
+            return parseBedrockGeoImport(data, fileName);
+        }
         throw new IllegalArgumentException("Unsupported model import type: " + fileName);
     }
 
@@ -1775,6 +1778,10 @@ public class ClientModelManager {
                 break;
         }
 
+        if (sniff.kind == com.micaftic.morpher.resource.bbmodel.ZipModelSniffer.Kind.BEDROCK_PACK) {
+            return parseBedrockPackImport(sniff);
+        }
+
         // 落到这里：YSM_FOLDER 或 UNKNOWN（让 YSMFolderDeserializer 处理 / 报错）
         Path temp = Files.createTempFile("ysm-local-import-", ".zip");
         try {
@@ -1791,7 +1798,104 @@ public class ClientModelManager {
         }
     }
 
-    private static RawYsmModel parseBbModelImport(byte[] data, String source) throws Exception {
+    private static RawYsmModel parseBedrockGeoImport(byte[] data, String fileName) throws Exception {
+        String identifier = bedrockIdentifierFromFileName(fileName);
+        YesSteveModel.LOGGER.info("[SM] Importing Bedrock geometry file {} (identifier={})", fileName, identifier);
+        RawYsmModel.RawGeometry geometry = YSMFolderDeserializer.parseBedrockGeometry(data, identifier);
+        if (geometry == null || geometry.bones.isEmpty()) {
+            throw new IllegalArgumentException("Invalid Bedrock geometry: " + fileName);
+        }
+        RawYsmModel raw = assembleBedrockModel(geometry, null, null);
+        raw.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(data);
+        return raw;
+    }
+
+    private static RawYsmModel parseBedrockPackImport(com.micaftic.morpher.resource.bbmodel.ZipModelSniffer sniff) throws Exception {
+        String identifier = bedrockIdentifierFromFileName(sniff.bedrockGeoPath);
+        YesSteveModel.LOGGER.info("[SM] Detected Bedrock pack (geo={}, textures={}, animations={})",
+                sniff.bedrockGeoPath, sniff.sideTextures.size(), sniff.bedrockAnimations.size());
+        RawYsmModel.RawGeometry geometry = YSMFolderDeserializer.parseBedrockGeometry(sniff.bedrockGeoBytes, identifier);
+        if (geometry == null || geometry.bones.isEmpty()) {
+            throw new IllegalArgumentException("Invalid Bedrock pack (no usable geometry): " + sniff.bedrockGeoPath);
+        }
+
+        Map<String, RawYsmModel.RawTexture> textures = new LinkedHashMap<>();
+        for (Map.Entry<String, byte[]> entry : sniff.sideTextures.entrySet()) {
+            RawYsmModel.RawTexture texture = YSMFolderDeserializer.parseBedrockTexture(entry.getValue(), entry.getKey());
+            if (texture.data != null) {
+                textures.put(entry.getKey(), texture);
+            }
+        }
+
+        Map<String, RawYsmModel.RawAnimationFile> animationFiles = new LinkedHashMap<>();
+        int index = 0;
+        for (Map.Entry<String, byte[]> entry : sniff.bedrockAnimations.entrySet()) {
+            try {
+                RawYsmModel.RawAnimationFile animationFile = YSMFolderDeserializer.parseAnimationFile(entry.getValue());
+                if (!animationFile.animations.isEmpty()) {
+                    animationFiles.put("bedrock-anim-" + (index++), animationFile);
+                }
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.warn("[SM] Failed to parse Bedrock animation {}: {}", entry.getKey(), e.toString());
+            }
+        }
+
+        RawYsmModel raw = assembleBedrockModel(geometry, textures, animationFiles);
+        raw.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(sniff.bedrockGeoBytes);
+        return raw;
+    }
+
+    /** 组装 Bedrock 直读模型：几何 + 可选纹理 + 可选动画，属性对齐 bbmodel 导入（scale=1）。 */
+    private static RawYsmModel assembleBedrockModel(RawYsmModel.RawGeometry geometry,
+                                                    Map<String, RawYsmModel.RawTexture> textures,
+                                                    Map<String, RawYsmModel.RawAnimationFile> animationFiles) {
+        RawYsmModel raw = new RawYsmModel();
+        raw.modelId = (geometry.identifier == null || geometry.identifier.isEmpty()) ? "bedrock" : geometry.identifier;
+        raw.formatVersion = 65535;
+        raw.metadata = new RawYsmModel.RawMetadata();
+        raw.properties = new RawYsmModel.RawProperties();
+        raw.properties.widthScale = 1.0f;
+        raw.properties.heightScale = 1.0f;
+        raw.properties.defaultTexture = "default";
+
+        geometry.modelType = 1;
+        RawYsmModel.RawMainEntity mainEntity = new RawYsmModel.RawMainEntity();
+        mainEntity.mainModel = geometry;
+        if (textures != null) {
+            mainEntity.textures.putAll(textures);
+            if (!textures.isEmpty()) {
+                raw.properties.defaultTexture = textures.keySet().iterator().next();
+            }
+        }
+        if (animationFiles != null) {
+            mainEntity.animationFiles.putAll(animationFiles);
+        }
+        raw.mainEntity = mainEntity;
+        raw.footer = new RawYsmModel.RawFooter();
+        return raw;
+    }
+
+    /** 从文件名推导 Bedrock 几何 identifier：去掉 .geo.json / geometry.json 后缀后的文件名。 */
+    private static String bedrockIdentifierFromFileName(String fileName) {
+        if (fileName == null || fileName.isEmpty()) return null;
+        String lower = fileName.toLowerCase(Locale.ROOT);
+        String base;
+        if (lower.endsWith(".geo.json")) {
+            base = fileName.substring(0, fileName.length() - ".geo.json".length());
+        } else if (lower.endsWith("geometry.json")) {
+            base = fileName.substring(0, fileName.length() - "geometry.json".length());
+        } else {
+            base = fileName;
+        }
+        int slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
+        if (slash >= 0) {
+            base = base.substring(slash + 1);
+        }
+        base = base.trim();
+        return base.isEmpty() ? null : base;
+    }
+
+private static RawYsmModel parseBbModelImport(byte[] data, String source) throws Exception {
         try {
             String json = new String(data, java.nio.charset.StandardCharsets.UTF_8);
             com.micaftic.morpher.resource.bbmodel.BBModelFile bbmodel = com.micaftic.morpher.resource.bbmodel.BBModelParser.parse(json);
