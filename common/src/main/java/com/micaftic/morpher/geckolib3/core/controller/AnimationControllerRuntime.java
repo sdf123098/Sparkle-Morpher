@@ -482,6 +482,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                             }
                         }
                         if (!isTransition) {
+                            Vector3f current = boneQueue.controllerSnapshot.rotation;
+                            evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             Vector3f lerpPoint = animationPoint.getLerpPoint(evaluator);
                             float blendWeight = boneQueue.getBlendWeight();
                             if (animationPoint instanceof ConstantPoint) {
@@ -493,6 +495,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                             }
                             transitionVector3f.fma(blendWeight, lerpPoint);
                         } else if (lerpFactor <= -1.0E-5f || lerpFactor >= 1.0E-5f) {
+                            Vector3f current = boneQueue.controllerSnapshot.rotation;
+                            evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             transitionVector3f.fma(boneQueue.getBlendWeight(), ((TransitionPoint) animationPoint).evaluateRaw(evaluator));
                         } else {
                             transitionVector3f.set(offsetPoint);
@@ -540,6 +544,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                             }
                         }
                         if (!isTransition) {
+                            Vector3f current = boneQueue.controllerSnapshot.position;
+                            evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             Vector3f lerpPoint = point.getLerpPoint(evaluator);
                             float blendWeight = boneQueue.getBlendWeight();
                             if (point instanceof ConstantPoint) {
@@ -551,6 +557,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                             }
                             result.fma(blendWeight, lerpPoint);
                         } else if (lerpFactor <= -1.0E-5f || lerpFactor >= 1.0E-5f) {
+                            Vector3f current = boneQueue.controllerSnapshot.position;
+                            evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             result.fma(boneQueue.getBlendWeight(), ((TransitionPoint) point).evaluateRaw(evaluator));
                         } else {
                             result.set(offsetPoint);
@@ -599,6 +607,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                             }
                         }
                         if (!isTransition) {
+                            Vector3f current = boneQueue.controllerSnapshot.scale;
+                            evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             Vector3f lerpPoint = point.getLerpPoint(evaluator);
                             float blendWeight = boneQueue.getBlendWeight();
                             if (point instanceof ConstantPoint) {
@@ -615,6 +625,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                                 result.mul(tmp);
                             }
                         } else if (lerpFactor <= -1.0E-5f || lerpFactor >= 1.0E-5f) {
+                            Vector3f current = boneQueue.controllerSnapshot.scale;
+                            evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             MathUtil.lerpAnglesInPlace(((TransitionPoint) point).evaluateRaw(evaluator), boneQueue.getBlendWeight(), tmp);
                             result.mul(tmp);
                         } else {

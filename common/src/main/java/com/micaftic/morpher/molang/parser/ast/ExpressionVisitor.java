@@ -52,6 +52,17 @@ public interface ExpressionVisitor<R> {
     }
 
     /**
+     * Bedrock Molang {@code this} 关键字。
+     *
+     * @param expression The this expression.
+     * @return The result.
+     * @since 3.0.0
+     */
+    default R visitThis(@NotNull ThisExpression expression) {
+        return visit(expression);
+    }
+
+    /**
      * Evaluate for execution scope expression.
      *
      * @param expression The expression.
