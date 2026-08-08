@@ -630,8 +630,8 @@ public class YSMClientMapper {
                     }
                 }
             }
-            if (b.name.equals("LeftArm")) b.partMask = 1;
-            else if (b.name.equals("RightArm")) b.partMask = 2;
+            if (b.name.equalsIgnoreCase("LeftArm")) b.partMask = 1;
+            else if (b.name.equalsIgnoreCase("RightArm")) b.partMask = 2;
             else if (b.name.equals("Background")) b.partMask = 3;
             else if (b.parentIdx != -1) b.partMask = bakedBones.get(b.parentIdx).partMask;
             else b.partMask = 0;

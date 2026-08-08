@@ -31,6 +31,7 @@ public final class ZipModelSniffer {
         YSM_FOLDER,
         FIGURA_AVATAR,
         PLAIN_BBMODEL,
+        BEDROCK_PACK,
         UNKNOWN
     }
 
@@ -45,16 +46,26 @@ public final class ZipModelSniffer {
     public final byte[] avatarJsonBytes;
     /** 检测到 ysm.json / main.json / arm.json 时为 true。 */
     public final boolean hasYsmMarkers;
+    /** Bedrock geometry JSON 内容（geometry.json / *.geo.json，取体积最大的）。 */
+    public final byte[] bedrockGeoBytes;
+    /** Bedrock geometry JSON 在 zip 内的相对路径。 */
+    public final String bedrockGeoPath;
+    /** Bedrock 动画文件（*.animation.json），key 为条目名。 */
+    public final Map<String, byte[]> bedrockAnimations;
 
     private ZipModelSniffer(Kind kind, byte[] bbmodelBytes, String bbmodelPath,
                             Map<String, byte[]> sideTextures, byte[] avatarJsonBytes,
-                            boolean hasYsmMarkers) {
+                            boolean hasYsmMarkers, byte[] bedrockGeoBytes, String bedrockGeoPath,
+                            Map<String, byte[]> bedrockAnimations) {
         this.kind = kind;
         this.bbmodelBytes = bbmodelBytes;
         this.bbmodelPath = bbmodelPath;
         this.sideTextures = sideTextures;
         this.avatarJsonBytes = avatarJsonBytes;
         this.hasYsmMarkers = hasYsmMarkers;
+        this.bedrockGeoBytes = bedrockGeoBytes;
+        this.bedrockGeoPath = bedrockGeoPath;
+        this.bedrockAnimations = bedrockAnimations;
     }
 
     /**
@@ -66,16 +77,20 @@ public final class ZipModelSniffer {
      */
     public static ZipModelSniffer sniff(byte[] zipBytes, long sizeLimit) {
         if (zipBytes == null || zipBytes.length < 22 /* EOCD min size */) {
-            return new ZipModelSniffer(Kind.UNKNOWN, null, null, null, null, false);
+            return new ZipModelSniffer(Kind.UNKNOWN, null, null, null, null, false, null, null, null);
         }
 
         byte[] bbmodel = null;
         String bbmodelPath = null;
         byte[] avatar = null;
+        byte[] bedrockGeo = null;
+        String bedrockGeoPath = null;
+        Map<String, byte[]> bedrockAnimations = new LinkedHashMap<>();
         Map<String, byte[]> textures = new LinkedHashMap<>();
         boolean ysmMarker = false;
         // 选 bbmodel 时优先：体积大的（主模型）> 其它
         long bestBbmodelSize = -1;
+        long bestBedrockGeoSize = -1;
 
         try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
             ZipEntry entry;
@@ -105,11 +120,23 @@ public final class ZipModelSniffer {
                     if (data != null) {
                         textures.put(base, data);
                     }
+                } else if (lower.endsWith(".geo.json") || "geometry.json".equals(base)) {
+                    byte[] data = readEntry(zin, sizeLimit);
+                    if (data != null && entry.getSize() > bestBedrockGeoSize) {
+                        bedrockGeo = data;
+                        bedrockGeoPath = fullName;
+                        bestBedrockGeoSize = entry.getSize();
+                    }
+                } else if (lower.endsWith(".animation.json")) {
+                    byte[] data = readEntry(zin, sizeLimit);
+                    if (data != null) {
+                        bedrockAnimations.put(fullName, data);
+                    }
                 }
             }
         } catch (IOException e) {
             // 损坏的 zip：直接走 UNKNOWN，让上层处理
-            return new ZipModelSniffer(Kind.UNKNOWN, null, null, null, null, false);
+            return new ZipModelSniffer(Kind.UNKNOWN, null, null, null, null, false, null, null, null);
         }
 
         Kind kind;
@@ -119,11 +146,14 @@ public final class ZipModelSniffer {
             kind = Kind.FIGURA_AVATAR;
         } else if (bbmodel != null) {
             kind = Kind.PLAIN_BBMODEL;
+        } else if (bedrockGeo != null || !bedrockAnimations.isEmpty()) {
+            kind = Kind.BEDROCK_PACK;
         } else {
             kind = Kind.UNKNOWN;
         }
 
-        return new ZipModelSniffer(kind, bbmodel, bbmodelPath, textures, avatar, ysmMarker);
+        return new ZipModelSniffer(kind, bbmodel, bbmodelPath, textures, avatar, ysmMarker,
+                bedrockGeo, bedrockGeoPath, bedrockAnimations);
     }
 
     /** 拆下 zip 条目，超过 {@code sizeLimit} 时丢弃返回 null。0 表示无上限。 */
@@ -168,6 +198,6 @@ public final class ZipModelSniffer {
 
     private ZipModelSniffer() {
         // not instantiable except via static factory
-        this(Kind.UNKNOWN, null, null, null, null, false);
+        this(Kind.UNKNOWN, null, null, null, null, false, null, null, null);
     }
 }
