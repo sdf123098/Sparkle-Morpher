@@ -5,14 +5,34 @@ import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import org.joml.Matrix3x2fc;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public final class Pie {
     public static final float tau = (float) (Math.PI * 2.0);
     private static final Matrix4f mvpScratch = new Matrix4f();
+    private static final Matrix4f poseScratch = new Matrix4f();
     private static final float[] mvpFloats = new float[16];
+
+    // Scanline fallback geometry is static per (center, radii, angles): only the
+    // color changes per frame (hover states). Cache the computed runs so the
+    // per-frame cost drops from O(area) math + thousands of fills to a plain
+    // replay of cached pixel runs.
+    private static final int MAX_FALLBACK_GEOMETRY_CACHE = 64;
+    private static final Map<FallbackGeomKey, int[]> FALLBACK_GEOMETRY_CACHE = new HashMap<>();
+
+    private record FallbackGeomKey(int cxBits, int cyBits, int innerBits, int outerBits, int startBits, int endBits) {
+        static FallbackGeomKey of(float cx, float cy, float inner, float outer, float start, float end) {
+            return new FallbackGeomKey(Float.floatToIntBits(cx), Float.floatToIntBits(cy),
+                    Float.floatToIntBits(inner), Float.floatToIntBits(outer),
+                    Float.floatToIntBits(start), Float.floatToIntBits(end));
+        }
+    }
 
     public static void draw(GuiGraphicsExtractor graphics, float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float endAngle, int rgba) {
         draw(graphics, centerX, centerY, innerRadius, outerRadius, startAngle, endAngle, rgba, 1.0f);
@@ -36,6 +56,17 @@ public final class Pie {
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         mvpScratch.identity().setOrtho(0.0f, (float) mc.getWindow().getGuiScaledWidth(),
                 (float) mc.getWindow().getGuiScaledHeight(), 0.0f, -1000.0f, 1000.0f);
+        // Honor the active GUI pose transform (e.g. the roulette's layoutScale
+        // translate/scale around the screen center) so raw-GL pies line up with
+        // pose-drawn labels and icons when the wheel is scaled down.
+        Matrix3x2fc pose = graphics.pose();
+        if (pose != null && !isIdentity2D(pose)) {
+            poseScratch.identity();
+            poseScratch.m00(pose.m00()).m01(pose.m01()).m03(pose.m20());
+            poseScratch.m10(pose.m10()).m11(pose.m11()).m13(pose.m21());
+            // m02/m12 stay 0, m20..m33 stay identity -> [m00 m01 0 m20; m10 m11 0 m21; 0 0 1 0; 0 0 0 1]
+            mvpScratch.mul(poseScratch);
+        }
         mvpScratch.get(mvpFloats);
 
         float cr = ((rgba >> 16) & 0xFF) / 255.0f;
@@ -72,6 +103,30 @@ public final class Pie {
 
     private static void drawFallback(GuiGraphicsExtractor graphics, float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float endAngle, int rgba) {
         float inner = Math.max(0.0f, innerRadius);
+        FallbackGeomKey key = FallbackGeomKey.of(centerX, centerY, inner, outerRadius, startAngle, endAngle);
+        int[] runs = FALLBACK_GEOMETRY_CACHE.get(key);
+        if (runs == null) {
+            runs = computeFallbackRuns(centerX, centerY, inner, outerRadius, startAngle, endAngle);
+            if (FALLBACK_GEOMETRY_CACHE.size() >= MAX_FALLBACK_GEOMETRY_CACHE) {
+                FALLBACK_GEOMETRY_CACHE.clear();
+            }
+            FALLBACK_GEOMETRY_CACHE.put(key, runs);
+        }
+        for (int i = 0; i < runs.length; i += 3) {
+            int y = runs[i];
+            graphics.fill(runs[i + 1], y, runs[i + 2] + 1, y + 1, rgba);
+        }
+    }
+
+    /**
+     * Scanline analytic geometry: on a fixed row, coverage of a ring segment can
+     * only change at intersections with the outer circle, the inner circle and
+     * the two angle-boundary rays. Collect those x candidates (&lt;= 6), sort and
+     * dedupe, then a mid-point test per adjacent pair yields at most 3 fill runs
+     * per row -- O(rows) instead of O(area) with atan2 per pixel. Backend-agnostic.
+     * Runs are emitted as flattened [y, x0, x1] triples and cached per geometry.
+     */
+    private static int[] computeFallbackRuns(float centerX, float centerY, float inner, float outerRadius, float startAngle, float endAngle) {
         float outerSq = outerRadius * outerRadius;
         float innerSq = inner * inner;
         float span = endAngle - startAngle;
@@ -84,11 +139,8 @@ public final class Pie {
         int minY = (int) Math.floor(centerY - outerRadius);
         int maxY = (int) Math.ceil(centerY + outerRadius);
 
-        // Scanline analytic geometry: on a fixed row, coverage of a ring segment can
-        // only change at intersections with the outer circle, the inner circle and
-        // the two angle-boundary rays. Collect those x candidates (<= 6), sort and
-        // dedupe, then a mid-point test per adjacent pair yields at most 3 fill runs
-        // per row -- O(rows) instead of O(area) with atan2 per pixel. Backend-agnostic.
+        int[] runs = new int[96];
+        int size = 0;
         float[] xs = new float[6];
         for (int y = minY; y < maxY; y++) {
             float py = y + 0.5f;
@@ -131,10 +183,23 @@ public final class Pie {
                     x1 = maxX - 1;
                 }
                 if (x1 >= x0) {
-                    graphics.fill(x0, y, x1 + 1, y + 1, rgba);
+                    if (size + 3 > runs.length) {
+                        runs = java.util.Arrays.copyOf(runs, runs.length * 2);
+                    }
+                    runs[size++] = y;
+                    runs[size++] = x0;
+                    runs[size++] = x1;
                 }
             }
         }
+        return size == runs.length ? runs : java.util.Arrays.copyOf(runs, size);
+    }
+
+
+
+    private static boolean isIdentity2D(Matrix3x2fc pose) {
+        return pose.m00() == 1.0f && pose.m01() == 0.0f && pose.m10() == 0.0f
+                && pose.m11() == 1.0f && pose.m20() == 0.0f && pose.m21() == 0.0f;
     }
 
     private static float cot(float angle) {

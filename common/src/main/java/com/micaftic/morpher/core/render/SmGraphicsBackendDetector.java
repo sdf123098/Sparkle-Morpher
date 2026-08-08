@@ -1,6 +1,8 @@
 package com.micaftic.morpher.core.render;
 
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.mixin.client.GpuDeviceAccessor;
+import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 
 import java.util.Locale;
@@ -18,14 +20,14 @@ public final class SmGraphicsBackendDetector {
             return backend;
         }
         detect();
-        return cachedBackend;
+        return cachedBackend != null ? cachedBackend : SmGraphicsBackend.UNKNOWN;
     }
 
     public static String reason() {
         if (cachedReason == null) {
             detect();
         }
-        return cachedReason;
+        return cachedReason != null ? cachedReason : "backend detection pending (render device not created yet)";
     }
 
     public static boolean isRawOpenGlAllowed() {
@@ -77,32 +79,35 @@ public final class SmGraphicsBackendDetector {
         }
 
         try {
-            Object device = RenderSystem.getDevice();
-            if (device != null) {
-                String className = device.getClass().getName();
-                String normalized = className.toLowerCase(Locale.ROOT);
-                if (normalized.contains("vulkan")) {
-                    cachedBackend = SmGraphicsBackend.VULKAN;
-                    cachedReason = "RenderSystem device class: " + className;
-                    return;
-                }
-                if (normalized.contains("opengl") || normalized.contains(".gl") || normalized.contains("gl")) {
-                    cachedBackend = SmGraphicsBackend.OPENGL;
-                    cachedReason = "RenderSystem device class: " + className;
-                    return;
-                }
-                cachedBackend = SmGraphicsBackend.UNKNOWN;
-                cachedReason = "unknown RenderSystem device class: " + className;
+            GpuDevice device = RenderSystem.getDevice();
+            if (device == null) {
+                // Render device not created yet (CLIENT_STARTED / client setup runs
+                // before the render thread initializes the GpuDevice). Do NOT cache:
+                // re-detect on the next call once the device exists.
+                cachedReason = "RenderSystem device is null (will re-detect)";
                 return;
             }
+            Object backend = ((GpuDeviceAccessor) device).sparkleMorpher$getBackend();
+            String className = backend == null ? device.getClass().getName() : backend.getClass().getName();
+            String normalized = className.toLowerCase(Locale.ROOT);
+            if (normalized.contains("vulkan")) {
+                cachedBackend = SmGraphicsBackend.VULKAN;
+                cachedReason = "RenderSystem backend class: " + className;
+                return;
+            }
+            if (normalized.contains("opengl") || normalized.contains(".gl") || normalized.contains("gl")) {
+                cachedBackend = SmGraphicsBackend.OPENGL;
+                cachedReason = "RenderSystem backend class: " + className;
+                return;
+            }
+            // Unknown backend (e.g. D3D12): stable for the session, cache it so the
+            // hot path does not re-run detection every frame.
+            cachedBackend = SmGraphicsBackend.UNKNOWN;
+            cachedReason = "unknown RenderSystem backend class: " + className;
         } catch (Throwable t) {
             cachedBackend = SmGraphicsBackend.UNKNOWN;
             cachedReason = "RenderSystem device unavailable before init: " + t.getClass().getSimpleName();
-            return;
         }
-
-        cachedBackend = SmGraphicsBackend.UNKNOWN;
-        cachedReason = "RenderSystem device is null";
     }
 
     private static SmGraphicsBackend parseBackend(String value) {
