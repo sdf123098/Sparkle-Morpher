@@ -8,7 +8,6 @@ import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.client.animation.AnimationTracker;
 import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.mixin.client.EntityRidingAccessor;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
@@ -467,7 +466,7 @@ public final class ModelPreviewRenderer {
                 poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - bodyRotation));
                 RenderUtils.prepMatrixForLocator(poseStack, list);
                 poseStack.mulPose(Axis.YN.rotationDegrees(180.0f - bodyRotation));
-                Vec3 passengerAttachment = ((EntityRidingAccessor) vehicle).invokeGetPassengerAttachmentPoint(entity, entity.getDimensions(entity.getPose()), 1.0F);
+                Vec3 passengerAttachment = vehicle.getPassengerRidingPosition(entity).subtract(vehicle.position());
                 double myRidingOffset = -passengerAttachment.y();
                 poseStack.translate(0.0d, myRidingOffset, 0.0d);
             });
@@ -711,7 +710,7 @@ public final class ModelPreviewRenderer {
     private static void renderVehicleEntity(float yaw, Entity riderEntity, PoseStack poseStack, EntityRenderDispatcher entityRenderDispatcher, MultiBufferSource.BufferSource bufferSource, Entity vehicleEntity, float partialTick) {
         poseStack.pushPose();
         poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
-        Vec3 passengerAttachment = ((EntityRidingAccessor) vehicleEntity).invokeGetPassengerAttachmentPoint(riderEntity, riderEntity.getDimensions(riderEntity.getPose()), 1.0F);
+        Vec3 passengerAttachment = vehicleEntity.getPassengerRidingPosition(riderEntity).subtract(vehicleEntity.position());
         // MC 26.x: EntityRenderDispatcher.render() signature changed
         // entityRenderDispatcher.render(vehicleEntity, 0.0d, passengerAttachment.y(), 0.0d, 0.0f, partialTick, poseStack, bufferSource, 15728880);
         poseStack.popPose();
