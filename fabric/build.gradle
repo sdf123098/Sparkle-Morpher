@@ -2,6 +2,10 @@ plugins {
     id 'com.github.johnrengelman.shadow'
 }
 
+loom {
+    accessWidenerPath = file('src/main/resources/sparkle_morpher.accesswidener')
+}
+
 apply from: rootProject.file('gradle/verify-native-abi.gradle')
 
 architectury {

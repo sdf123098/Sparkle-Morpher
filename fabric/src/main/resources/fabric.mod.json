@@ -31,6 +31,7 @@
     "sparkle_morpher.mixins.json",
     "sparkle_morpher_fabric.mixins.json"
   ],
+  "accessWidener": "sparkle_morpher.accesswidener",
   "depends": {
     "fabricloader": ">=0.16.10",
     "minecraft": "~1.21.1",

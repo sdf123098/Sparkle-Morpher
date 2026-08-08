@@ -2,6 +2,12 @@ architectury {
     common rootProject.enabled_platforms.split(',')
 }
 
+loom {
+    // Classic Architectury multi-module layout: common 模块独立编译（:common:compileJava），
+    // 必须自己声明 AW，否则 common 里对 access-widened 成员的直调在编译期仍是 protected。
+    accessWidenerPath = file('../fabric/src/main/resources/sparkle_morpher.accesswidener')
+}
+
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 if (rootProject.ext.isCurseForgeDist) {

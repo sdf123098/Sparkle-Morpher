@@ -10,7 +10,6 @@ import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.geckolib3.model.provider.data.EntityModelData;
 import com.micaftic.morpher.geckolib3.util.EModelRenderCycle;
 import com.micaftic.morpher.geckolib3.util.IRenderCycle;
-import com.micaftic.morpher.mixin.client.LivingEntityAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -163,7 +162,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             tentity.deathTime = 0;
         }
         if (zIsAutoSpinAttack) {
-            ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, false);
+            tentity.setLivingEntityFlag(4, false);
         }
         if (tentity.onClimbable() && !extraPlayer) {
             Optional<BlockPos> lastClimbablePos = tentity.getLastClimbablePos();
@@ -177,7 +176,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         boolean extraPlayerFallFlying = tentity.isFallFlying() && ModelPreviewRenderer.isExtraPlayer();
         boolean animationHandlesFallFlyingPitch = tentity.isFallFlying() && this.fallFlyingPitchHandledByAnimation;
         if (extraPlayerFallFlying || animationHandlesFallFlyingPitch) {
-            ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(7, false);
+            tentity.setLivingEntityFlag(7, false);
         }
         try {
             if (extraPlayer && tentity.getPose() != Pose.SLEEPING) {
@@ -187,7 +186,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             }
         } finally {
             if (extraPlayerFallFlying || animationHandlesFallFlyingPitch) {
-                ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(7, true);
+                tentity.setLivingEntityFlag(7, true);
             }
         }
         if (animationHandlesFallFlyingPitch && !extraPlayerFallFlying) {
@@ -197,7 +196,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             tentity.deathTime = t;
         }
         if (zIsAutoSpinAttack) {
-            ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, true);
+            tentity.setLivingEntityFlag(4, true);
         }
     }
 
