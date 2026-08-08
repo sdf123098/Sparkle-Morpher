@@ -54,6 +54,9 @@ public final class MolangParserImpl implements MolangParser {
             case FALSE:
                 lexer.next();
                 return FloatExpression.ZERO;
+            case THIS:
+                lexer.next();
+                return new ThisExpression();
             case LPAREN:
                 lexer.next();
                 // wrapped expression: (expression)
