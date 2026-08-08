@@ -1,3 +1,7 @@
+# Run / IDE 运行产物
+run/
+.vscode/
+
 # Build
 build/
 dist/
