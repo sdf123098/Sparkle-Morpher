@@ -677,6 +677,7 @@
   "message.sparkle_morpher.model.debug_animation.true": "§6§l[§asparkle§6§l] §rAnimation debug enable",
   "message.sparkle_morpher.model.disable.false": "§6§l[§asparkle§6§l] §rEnabled show  model for player '%s'",
   "message.sparkle_morpher.model.disable.true": "§6§l[§asparkle§6§l] §rDisabled show  model for player '%s'",
+  "commands.sparkle_morpher.model.disable.no_permission": "You can only disable your own model display",
   "message.sparkle_morpher.model.need_auth": "§6§l[Warning§6§l] §rThe current model lacks permissions, contact the administrator to obtain permissions！",
   "message.sparkle_morpher.model.reload.complete": "§6§l【§asparkle§6§l】§eAll models have been reloaded, use time: %.2fms",
   "message.sparkle_morpher.model.reload.in_progress": "§6§l【§asparkle§6§l】§eThere is one another reloading task in progress.",

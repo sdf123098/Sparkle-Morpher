@@ -23,12 +23,14 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.selector.EntitySelector;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.StopWatch;
 import com.micaftic.morpher.core.api.PlatformAPI;
 
 import java.util.Collection;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class ModelCommand {
@@ -56,10 +58,12 @@ public class ModelCommand {
     private static final String ARG_VALUE = "value";
 
     public static LiteralArgumentBuilder<CommandSourceStack> register() {
-        LiteralArgumentBuilder<CommandSourceStack> model = Commands.literal(MODEL_NAME).requires(commandSourceStack -> YSMMessageFormatter.hasCommandPermission(commandSourceStack, 2));
-        model.then(Commands.literal(LITERAL_RELOAD).executes(ModelCommand::reloadAllPack));
+        // /ysm model 对所有玩家可见：非管理员也能执行 disable 关闭自身模型展示（恢复原版）。
+        // 管理子命令（reload / set）保留 OP 等级 2 门槛。
+        LiteralArgumentBuilder<CommandSourceStack> model = Commands.literal(MODEL_NAME);
+        model.then(Commands.literal(LITERAL_RELOAD).requires(commandSourceStack -> YSMMessageFormatter.hasCommandPermission(commandSourceStack, 2)).executes(ModelCommand::reloadAllPack));
         model.then(Commands.literal(DISABLE_NAME).then(Commands.argument(PLAYERS_NAME, EntityArgument.players()).then(Commands.argument(ARG_VALUE, BoolArgumentType.bool()).executes(ModelCommand::disableModel))));
-        LiteralArgumentBuilder<CommandSourceStack> set = Commands.literal(SET_NAME);
+        LiteralArgumentBuilder<CommandSourceStack> set = Commands.literal(SET_NAME).requires(commandSourceStack -> YSMMessageFormatter.hasCommandPermission(commandSourceStack, 2));
         RequiredArgumentBuilder<CommandSourceStack, EntitySelector> targets = Commands.argument(TARGETS_NAME, EntityArgument.players());
         RequiredArgumentBuilder<CommandSourceStack, String> modelId = Commands.argument(MODEL_ID_NAME, StringArgumentType.string()).suggests(CommandRegistry.MODEL_IDS);
         RequiredArgumentBuilder<CommandSourceStack, String> textureId = Commands.argument(TEXTURE_ID_NAME, StringArgumentType.string()).suggests(CommandRegistry.TEXTURE_IDS);
@@ -155,6 +159,17 @@ public class ModelCommand {
         String str;
         Collection<ServerPlayer> targets = EntityArgument.getPlayers(context, PLAYERS_NAME);
         boolean bool = BoolArgumentType.getBool(context, ARG_VALUE);
+        // 非管理员只能对自己的模型执行 disable（恢复原版）；操作其他玩家需要 OP 等级 2。
+        boolean operator = YSMMessageFormatter.hasCommandPermission(context.getSource(), 2);
+        if (!operator) {
+            Entity sourceEntity = context.getSource().getEntity();
+            UUID sourceUuid = sourceEntity != null ? sourceEntity.getUUID() : null;
+            boolean selfOnly = targets.size() == 1 && sourceUuid != null && targets.iterator().next().getUUID().equals(sourceUuid);
+            if (!selfOnly) {
+                context.getSource().sendFailure(Component.translatable("commands.sparkle_morpher.model.disable.no_permission"));
+                return Command.SINGLE_SUCCESS;
+            }
+        }
         if (bool) {
             str = "message.sparkle_morpher.model.disable.true";
         } else {
@@ -165,7 +180,7 @@ public class ModelCommand {
             cap.setDisabled(bool);
             PlayerModelSelectionStore.saveCurrentSelection(player, cap);
             PlayerDataSaveBridge.save(player);
-            context.getSource().sendSuccess(() -> Component.translatable(str2, player.getScoreboardName()), true);
+            context.getSource().sendSuccess(() -> Component.translatable(str2, player.getScoreboardName()), operator);
         }));
         return Command.SINGLE_SUCCESS;
     }
