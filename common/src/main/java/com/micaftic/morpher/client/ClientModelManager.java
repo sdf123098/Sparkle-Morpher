@@ -2,6 +2,7 @@ package com.micaftic.morpher.client;
 
 import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.audio.AudioTrackData;
@@ -1842,6 +1843,7 @@ public class ClientModelManager {
             }
         }
 
+        animationFiles = BedrockAnimationMapping.remapToActions(animationFiles);
         RawYsmModel raw = assembleBedrockModel(geometry, textures, animationFiles);
         normalizeBedrockCase(raw);
         raw.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(sniff.bedrockGeoBytes);

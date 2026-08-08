@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.model.VehicleModelBundle;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
@@ -198,7 +199,12 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     @Override
     @Nullable
     public Animation getAnimation(String str) {
-        return getModelAssembly().getAnimationBundle().getMainAnimations().get(str);
+        Animation animation = getModelAssembly().getAnimationBundle().getMainAnimations().get(str);
+        if (animation == null) {
+            // Bedrock 动画名兆底：bbmodel 内嵌基岩名动画也能被动作名命中
+            animation = BedrockAnimationMapping.findByAction(getModelAssembly().getAnimationBundle().getMainAnimations(), str);
+        }
+        return animation;
     }
 
     @Override
