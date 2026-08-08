@@ -47,12 +47,16 @@ public class ModelAssemblyFactory {
             Map.entry("chest", "BODY"),
             Map.entry("leftarm", "LEFT_UPPER_ARM"),
             Map.entry("rightarm", "RIGHT_UPPER_ARM"),
+            Map.entry("armleft", "LEFT_UPPER_ARM"),
+            Map.entry("armright", "RIGHT_UPPER_ARM"),
             Map.entry("leftforearm", "LEFT_FOREARM"),
             Map.entry("rightforearm", "RIGHT_FOREARM"),
             Map.entry("lefthand", "LEFT_HAND"),
             Map.entry("righthand", "RIGHT_HAND"),
             Map.entry("leftleg", "LEFT_UPPER_LEG"),
             Map.entry("rightleg", "RIGHT_UPPER_LEG"),
+            Map.entry("legleft", "LEFT_UPPER_LEG"),
+            Map.entry("legright", "RIGHT_UPPER_LEG"),
             Map.entry("leftlowerleg", "LEFT_LOWER_LEG"),
             Map.entry("rightlowerleg", "RIGHT_LOWER_LEG"),
             Map.entry("leftfoot", "LEFT_FOOT"),
@@ -369,14 +373,14 @@ public class ModelAssemblyFactory {
         LinkedHashMap<String, String> bones = new LinkedHashMap<>();
         registerSemanticBone(normalizedToActual, bones, "HEAD", "head", "allhead", "vanillahead");
         registerSemanticBone(normalizedToActual, bones, "BODY", "body", "torso", "chest", "upperbody", "vanillabody", "waist");
-        registerSemanticBone(normalizedToActual, bones, "LEFT_UPPER_ARM", "leftarm", "leftupperarm", "leftshoulder", "vanillaleftarm");
-        registerSemanticBone(normalizedToActual, bones, "RIGHT_UPPER_ARM", "rightarm", "rightupperarm", "rightshoulder", "vanillarightarm");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_UPPER_ARM", "leftarm", "leftupperarm", "leftshoulder", "vanillaleftarm", "armleft");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_UPPER_ARM", "rightarm", "rightupperarm", "rightshoulder", "vanillarightarm", "armright");
         registerSemanticBone(normalizedToActual, bones, "LEFT_FOREARM", "leftforearm", "leftlowerarm", "leftelbow");
         registerSemanticBone(normalizedToActual, bones, "RIGHT_FOREARM", "rightforearm", "rightlowerarm", "rightelbow");
         registerSemanticBone(normalizedToActual, bones, "LEFT_HAND", "lefthand", "leftwrist", "leftpalm");
         registerSemanticBone(normalizedToActual, bones, "RIGHT_HAND", "righthand", "rightwrist", "rightpalm");
-        registerSemanticBone(normalizedToActual, bones, "LEFT_UPPER_LEG", "leftleg", "leftupperleg", "leftthigh", "vanillaleftleg");
-        registerSemanticBone(normalizedToActual, bones, "RIGHT_UPPER_LEG", "rightleg", "rightupperleg", "rightthigh", "vanillarightleg");
+        registerSemanticBone(normalizedToActual, bones, "LEFT_UPPER_LEG", "leftleg", "leftupperleg", "leftthigh", "vanillaleftleg", "legleft");
+        registerSemanticBone(normalizedToActual, bones, "RIGHT_UPPER_LEG", "rightleg", "rightupperleg", "rightthigh", "vanillarightleg", "legright");
         registerSemanticBone(normalizedToActual, bones, "LEFT_LOWER_LEG", "leftlowerleg", "leftshin", "leftcalf");
         registerSemanticBone(normalizedToActual, bones, "RIGHT_LOWER_LEG", "rightlowerleg", "rightshin", "rightcalf");
         registerSemanticBone(normalizedToActual, bones, "LEFT_FOOT", "leftfoot", "leftboot");
