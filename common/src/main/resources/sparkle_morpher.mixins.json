@@ -11,9 +11,9 @@
     "client.GpuDeviceAccessor", "client.ArrowEntityAccessor", "client.BufferSourceMixin",
     "client.CameraAccessor",
     "client.MinecraftAccessor",
-    "client.ClientPacketListenerMixin", "client.EntityRenderDispatcherAccessor", "client.EntityRenderDispatcherMixin", "client.FishingHookAccessor", "client.GuiEntityRendererMixin", "client.InventoryScreenMixin", "client.LivingEntityAccessor",
+    "client.ClientPacketListenerMixin", "client.EntityRenderDispatcherAccessor", "client.EntityRenderDispatcherMixin", "client.FishingHookAccessor", "client.GuiEntityRendererMixin", "client.InventoryScreenMixin",
     "client.LivingRendererMixin", "client.PauseScreenMixin", "client.ScreenAccessor",
-    "client.ThrowableItemProjectileAccessor", "client.EntityRidingAccessor", "client.WorldRendererMixin"
+    "client.ThrowableItemProjectileAccessor", "client.WorldRendererMixin"
   ],
   "mixins": [
     "AbstractArrowEntityMixin", "ConnectionAccessor", "ProjectileEntityMixin", "ServerCommonPacketListenerImplAccessor", "ServerPlayerMixin",

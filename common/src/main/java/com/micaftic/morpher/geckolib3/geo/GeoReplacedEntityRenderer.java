@@ -10,7 +10,6 @@ import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.geckolib3.model.provider.data.EntityModelData;
 import com.micaftic.morpher.geckolib3.util.EModelRenderCycle;
 import com.micaftic.morpher.geckolib3.util.IRenderCycle;
-import com.micaftic.morpher.mixin.client.LivingEntityAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -172,7 +171,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             tentity.deathTime = 0;
         }
         if (zIsAutoSpinAttack) {
-            ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, false);
+            tentity.setLivingEntityFlag(4, false);
         }
         if (tentity.onClimbable() && !ModelPreviewRenderer.isExtraPlayer()) {
             Optional<BlockPos> lastClimbablePos = tentity.getLastClimbablePos();
@@ -199,7 +198,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             tentity.deathTime = t;
         }
         if (zIsAutoSpinAttack) {
-            ((LivingEntityAccessor) tentity).invokeSetLivingEntityFlag(4, true);
+            tentity.setLivingEntityFlag(4, true);
         }
     }
 
