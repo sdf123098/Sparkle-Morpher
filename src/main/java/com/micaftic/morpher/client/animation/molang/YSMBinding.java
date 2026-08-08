@@ -86,6 +86,30 @@ public class YSMBinding extends ContextBinding {
         var("head_yaw", ctx -> ctx.data().netHeadYaw);
         var("head_pitch", ctx -> ctx.data().headPitch);
 
+        // ===== Bedrock 动画直读兼容（基岩版 player/humanoid 动画依赖的变量与查询）=====
+        function("get_equipped_item_name", new GetEquippedItemName());
+        function("get_root_locator_offset", (context, arguments) -> 0f);
+
+        var("tcos0", ctx -> {
+            float speed = (ctx.entity() instanceof Entity entity) ? entity.moveDist : 0f;
+            float life = ctx.geoInstance().getSeekTime() / 20.0f;
+            return (float) (Math.cos(life * 103.2 * Math.PI / 180.0) * Math.min(1.0f, speed * 4.0f) * 20.0f);
+        });
+        var("swim_amount", ctx -> ctx.entity() instanceof LivingEntity le && le.isSwimming() ? 1f : 0f);
+        var("item_use_normalized", ctx -> ctx.entity() instanceof LivingEntity le && le.isUsingItem() ? 1f : 0f);
+        var("map_angle", ctx -> Math.max(0f, Math.min(1f, 1f - ctx.data().headPitch / 45.1f)));
+        var("is_holding_right", ctx -> ctx.entity() instanceof LivingEntity le && !le.getMainHandItem().isEmpty() ? 1f : 0f);
+        var("is_holding_left", ctx -> ctx.entity() instanceof LivingEntity le && !le.getOffhandItem().isEmpty() ? 1f : 0f);
+
+        playerEntityVar("target_x_rotation", ctx -> ctx.data().headPitch);
+        playerEntityVar("target_y_rotation", ctx -> ctx.data().netHeadYaw);
+        playerEntityVar("sleep_rotation", ctx -> 0f);
+        playerEntityVar("item_is_charged", ctx -> {
+            ItemStack stack = ctx.entity().getOffhandItem();
+            return stack.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(stack) ? 1f : 0f;
+        });
+        entityVar("modified_move_speed", ctx -> ctx.entity().moveDist * 20f);
+
         var("weather", ctx -> getWeather(ctx.level()));
         var("dimension_name", ctx -> ctx.level().dimension().location().toString());
         var("fps", ctx -> Minecraft.getInstance().getFps());

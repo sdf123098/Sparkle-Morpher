@@ -13,6 +13,10 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
     private static final Double DOUBLE_ZERO = 0.0d;
     private static final Float FLOAT_ZERO = 0.0f;
 
+    // Bedrock Molang `this` 关键字支持：当前通道值 + 当前求值轴
+    private final float[] channelCurrentValues = new float[3];
+    private int currentAxis = 0;
+
     private static final Evaluator[] BINARY_EVALUATORS = {
             (evaluator, a, b) -> {
                 if (!ValueConversions.asBoolean(a.visit(evaluator))) return Boolean.FALSE;
@@ -521,6 +525,28 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
                 ? expression.trueExpression().visit(this)
                 : expression.falseExpression().visit(this);
         return obj;
+    }
+
+    @Override
+    public float currentValue() {
+        return this.channelCurrentValues[this.currentAxis];
+    }
+
+    @Override
+    public void setCurrentAxis(int axis) {
+        this.currentAxis = axis;
+    }
+
+    @Override
+    public void setCurrentChannelValues(float x, float y, float z) {
+        this.channelCurrentValues[0] = x;
+        this.channelCurrentValues[1] = y;
+        this.channelCurrentValues[2] = z;
+    }
+
+    @Override
+    public Object visitThis(@NotNull ThisExpression expression) {
+        return this.currentValue();
     }
 
     @Override
