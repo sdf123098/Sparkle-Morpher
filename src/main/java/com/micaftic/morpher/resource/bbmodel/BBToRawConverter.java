@@ -612,12 +612,35 @@ public class BBToRawConverter {
                 inflatedTo[2] - inflatedFrom[2]
         };
 
+        // Blockbench 新版(5.0+ / minecraft:geometry)支持 cube 级独立旋转：
+        // 每个方块可绕自身枢轴(element.origin)旋转，旧版格式不支持。若不处理，
+        // 导入后旋转丢失(方块回到未旋转姿态)。mesh 路径已处理，cube 路径同样处理。
+        float[] elementOrigin = element.origin == null ? new float[3] : element.origin;
+        float[] elementRotation = element.rotation == null ? new float[3] : element.rotation;
+        boolean hasNonzeroRotation = elementRotation[0] != 0 || elementRotation[1] != 0 || elementRotation[2] != 0;
+
         float texW = (bbmodel.resolution == null || bbmodel.resolution.width <= 0) ? 16f : bbmodel.resolution.width;
         float texH = (bbmodel.resolution == null || bbmodel.resolution.height <= 0) ? 16f : bbmodel.resolution.height;
 
         for (String dir : new String[]{"north", "south", "east", "west", "up", "down"}) {
             BBElement.BBFace bbFace = element.cube_faces == null ? null : element.cube_faces.get(dir);
-            cube.faces.add(createFace(inflatedFrom, size, dir, bbFace, texW, texH));
+            RawYsmModel.RawFace face = createFace(inflatedFrom, size, dir, bbFace, texW, texH);
+            if (hasNonzeroRotation) {
+                // calculateFaceVertices 输出块单位(像素/16)，origin 同样换算后绕其旋转
+                float[] originBlock = new float[]{
+                        elementOrigin[0] / 16f,
+                        elementOrigin[1] / 16f,
+                        elementOrigin[2] / 16f
+                };
+                for (int i = 0; i < 4; i++) {
+                    face.positions[i] = rotateAroundOrigin(face.positions[i], originBlock, elementRotation);
+                }
+                // 法线不能重算叉积：calculateFaceVertices 顶点顺序配合 computeNormal 得
+                // 向内法线（north 面叉积 +Z 而正确是 -Z）。应旋转 createFace 的原始外向法线
+                // （纯方向旋转，平移不影响方向，绕原点即可）。
+                face.normal = rotateAroundOrigin(face.normal, new float[3], elementRotation);
+            }
+            cube.faces.add(face);
         }
         return cube;
     }
