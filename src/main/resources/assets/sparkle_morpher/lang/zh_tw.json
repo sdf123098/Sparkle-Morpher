@@ -676,6 +676,7 @@
   "message.sparkle_morpher.model.debug_animation.true": "§6§l[§asparkle§6§l] §r動畫除錯模式啟用",
   "message.sparkle_morpher.model.disable.false": "§6§l[§asparkle§6§l] §r已顯示玩家 '%s' 的  模型",
   "message.sparkle_morpher.model.disable.true": "§6§l[§asparkle§6§l] §r已隱藏玩家 '%s' 的  模型",
+  "commands.sparkle_morpher.model.disable.no_permission": "只能關閉自己的模型顯示",
   "message.sparkle_morpher.model.need_auth": "§6§l[警告§6§l] §r當前模型缺少許可權，請聯絡管理員獲取！",
   "message.sparkle_morpher.model.reload.complete": "§6§l【§asparkle§6§l】§e成功重載模型，耗時：%.2fms",
   "message.sparkle_morpher.model.reload.in_progress": "§6§l【§asparkle§6§l】§e已有其它重載任務正在進行",
