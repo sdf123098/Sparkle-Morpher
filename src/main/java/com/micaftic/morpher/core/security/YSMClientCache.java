@@ -66,6 +66,31 @@ public class YSMClientCache {
         }
     }
 
+    /** 同 3 参版本，但额外用 rtKey 做解密+解压校验，可识别“trailer 合法但载荷已损坏”的坏缓存文件。 */
+    public static boolean verifyFileContent(File cacheFile, long hash1, long hash2, byte[] rtKey) {
+        if (cacheFile == null || !cacheFile.exists() || cacheFile.length() <= 8) {
+            return false;
+        }
+        try {
+            byte[] fileData = Files.readAllBytes(cacheFile.toPath());
+            int payloadLen = fileData.length - 8;
+            long realHash = ByteBuffer.wrap(fileData, payloadLen, 8).order(ByteOrder.LITTLE_ENDIAN).getLong();
+            byte[] payload = Arrays.copyOfRange(fileData, 0, payloadLen);
+            CityHash ch = new CityHash();
+            long calculatedHash = ch.hash64WithSeed(payload, YsmCrypt.SEED_CACHE_VERIFICATION);
+            long verif = calculatedHash ^ hash1 ^ hash2;
+            if (verif != realHash) {
+                return false;
+            }
+            if (rtKey != null) {
+                YsmCrypt.read(fileData, rtKey);
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     public static UUID getModelUUIDFromFileName(String fileName, byte[] rtKey) {
         if (fileName == null || fileName.length() != 40 || rtKey == null || rtKey.length != 56) {
             return null;

@@ -477,7 +477,9 @@ public class ClientModelManager {
                     ServerModelContext ctx = entry.ctx;
                     File cachedFile = entry.cachedFile;
                     boolean isFileValid = cachedFile != null
-                            && YSMClientCache.verifyFileContent(cachedFile, entry.hash.hash1, entry.hash.hash2);
+                            // 传 clientKey 做解密+解压校验：仅校验 trailer 无法发现“trailer 合法但载荷是垃圾”的坏文件
+                            // （服务端损坏数据经 transcode 后会重新计算合法 trailer），坏文件会被删除并重新请求。
+                            && YSMClientCache.verifyFileContent(cachedFile, entry.hash.hash1, entry.hash.hash2, clientKey);
                     if (taskGeneration != MODEL_TASK_GENERATION.get()) {
                         return;
                     }
@@ -647,6 +649,13 @@ public class ClientModelManager {
             submitModelTask(() -> {
                 try {
                     if (clientKey == null) return;
+                    // 落盘前校验服务端原始缓存数据：服务端缓存文件损坏（旧版本非原子写）时，
+                    // transcode 会把垃圾数据重新打包成带合法 trailer 的客户端缓存文件，
+                    // 之后所有校验都通过但模型永远解析失败。此处拒绝缓存坏数据，下轮同步重请求。
+                    if (!YsmCrypt.verifyServerCache(fileBuffer, hash1, hash2)) {
+                        YesSteveModel.LOGGER.warn("[SM] Server sent corrupt cache data for model {} (hash mismatch); refusing to cache, will re-request on next sync", ctx.modelKey);
+                        return;
+                    }
                     String folder = currentCacheFolderName != null ? currentCacheFolderName : "default_cache";
                     File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(folder).toFile();
                     if (!cacheDir.exists()) cacheDir.mkdirs();
