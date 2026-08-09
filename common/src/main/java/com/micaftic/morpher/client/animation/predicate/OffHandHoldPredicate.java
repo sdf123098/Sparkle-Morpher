@@ -41,11 +41,7 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         }
         if (!checkSwingAndUse(entity, InteractionHand.OFF_HAND)) return PlayState.PAUSE;
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
-        if (isBinaryYsmSpear(event, itemInHand)) {
-            // Binary YSM spear entries can be one-shot switch sequences rather
-            // than a hold pose; use the renderer's stable item orientation.
-            return PlayState.STOP;
-        }
+
         if (itemInHand.is(Items.CROSSBOW) && CrossbowItem.isCharged(itemInHand)) {
             return IAnimationPredicate.playAnimationWithValid(event, "hold_offhand:charged_crossbow", ILoopType.EDefaultLoopTypes.LOOP, i);
         }
@@ -53,17 +49,13 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         if (conditionHold != null) {
             String str = conditionHold.doTest(entity, InteractionHand.OFF_HAND);
             if (StringUtils.isNoneBlank(str)) {
+                if("hold_offhand:lance".equals(str)) {
+                    return IAnimationPredicate.playAnimationWithValid(event, str, ILoopType.EDefaultLoopTypes.HOLD_ON_LAST_FRAME, i);
+                }
                 return IAnimationPredicate.playAnimationWithValid(event, str, ILoopType.EDefaultLoopTypes.LOOP, i);
             }
         }
         return PlayState.STOP;
-    }
-
-    private boolean isBinaryYsmSpear(AnimationEvent<LivingAnimatable<?>> event, ItemStack stack) {
-        // Folder models use the synthetic format 65535.  Old binary .ysm files
-        // can store a one-shot switch pose as hold_*:spear, which must not loop.
-        return event.getAnimatable().getModelAssembly().getModelData().getFormatVersion() != 65535
-                && InnerClassify.getWeaponKind(stack) == WeaponKind.SPEAR;
     }
 
     private boolean isSameItem(ItemStack stack, LivingEntityFrameState<?> frameState, InteractionHand hand) {

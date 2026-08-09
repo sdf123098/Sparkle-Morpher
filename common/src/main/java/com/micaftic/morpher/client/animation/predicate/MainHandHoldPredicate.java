@@ -53,12 +53,6 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         }
         if (!checkSwingAndUse(entity, InteractionHand.MAIN_HAND)) return PlayState.PAUSE;
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
-        if (isBinaryYsmSpear(event, mainHandItem)) {
-            // A legacy binary YSM "hold_*:spear" entry may be a complete
-            // weapon-switch sequence, not a stable hold pose. Its item
-            // orientation is handled by the binary-YSM hand locator instead.
-            return PlayState.STOP;
-        }
         PlayState playState = TacCompat.handleGunHoldAnimState(mainHandItem, event);
         if (playState != null) {
             return playState;
@@ -78,17 +72,13 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         if (conditionHold != null) {
             String str = conditionHold.doTest(entity, InteractionHand.MAIN_HAND);
             if (StringUtils.isNoneBlank(str)) {
+                if("hold_mainhand:lance".equals(str)) {
+                    return IAnimationPredicate.playAnimationWithValid(event, str, ILoopType.EDefaultLoopTypes.HOLD_ON_LAST_FRAME, i);
+                }
                 return IAnimationPredicate.playAnimationWithValid(event, str, ILoopType.EDefaultLoopTypes.LOOP, i);
             }
         }
         return PlayState.STOP;
-    }
-
-    private boolean isBinaryYsmSpear(AnimationEvent<LivingAnimatable<?>> event, ItemStack stack) {
-        // Folder models use the synthetic format 65535.  Old binary .ysm files
-        // can store a one-shot switch pose as hold_*:spear, which must not loop.
-        return event.getAnimatable().getModelAssembly().getModelData().getFormatVersion() != 65535
-                && InnerClassify.getWeaponKind(stack) == WeaponKind.SPEAR;
     }
 
     private boolean isSameItem(ItemStack itemStack, LivingEntityFrameState<?> frameState, InteractionHand hand) {
