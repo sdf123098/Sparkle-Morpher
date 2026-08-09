@@ -78,6 +78,11 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
                 if (resolved != null) {
                     animation = resolved.name();
                     targetAnimation = resolved.animation();
+                } else if (state.kind() == WeaponKind.SPEAR) {
+                    // A vanilla spear must not fall through to the short looping generic
+                    // use animation. Legacy models commonly reserve that animation for a
+                    // different action, which makes a held right-click visibly twitch.
+                    return PlayState.STOP;
                 }
                 applyKineticChargeAnimationTickOverride(event, itemStack, state.lance().useTicks(), targetAnimation);
             }
