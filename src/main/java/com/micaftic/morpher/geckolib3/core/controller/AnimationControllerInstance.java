@@ -103,7 +103,7 @@ public class  AnimationControllerInstance {
     }
 
     public void setAnimation(@Nullable String animationName, @Nullable ILoopType loopType) {
-        if (animationName == null) {
+        if (animationName == null || animationName.isBlank()) {
             cancelAnimation();
             return;
         }
