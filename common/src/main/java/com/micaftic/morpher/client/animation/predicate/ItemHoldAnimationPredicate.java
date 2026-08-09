@@ -148,9 +148,6 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
     }
 
     private static String getFallbackSwingAnimation(AnimationEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, InteractionHand swingingHand) {
-        if (swingingHand == InteractionHand.MAIN_HAND && livingEntity.getMainHandItem().isEmpty() && event.getAnimatable().getAnimation("attack_empty") != null) {
-            return "attack_empty";
-        }
         String defaultName = swingingHand == InteractionHand.MAIN_HAND ? "swing_hand" : "swing_offhand";
         if (event.getAnimatable().getAnimation(defaultName) != null) {
             return defaultName;
