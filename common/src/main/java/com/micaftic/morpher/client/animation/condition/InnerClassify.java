@@ -49,7 +49,7 @@ public class InnerClassify {
         }
         return switch (getWeaponKind(itemStack)) {
             case TRIDENT -> "spear";
-            case SPEAR -> "spear";
+            case SPEAR -> "lance";
             case LANCE -> "lance";
             case MACE -> "mace";
             case NONE -> getNonWeaponItemType(itemStack);
