@@ -9,19 +9,19 @@ hashes for the native files included with this release line.
 - Original upstream: [OpenYSMDev/openysm.cpp](https://github.com/OpenYSMDev/openysm.cpp)
 - Upstream base commit: [`3e86bb01b370ecf225d8d89442e6089840f999c5`](https://github.com/OpenYSMDev/openysm.cpp/commit/3e86bb01b370ecf225d8d89442e6089840f999c5)
 - Modified source used by Sparkle Morpher: [sdf123098/openysm.cpp](https://github.com/sdf123098/openysm.cpp)
-- Exact source commit: [`382e46c98e9fdd64c6852ecb493d4db1bbb43835`](https://github.com/sdf123098/openysm.cpp/commit/382e46c98e9fdd64c6852ecb493d4db1bbb43835)
-- License: MIT; see the fork's [LICENSE](https://github.com/sdf123098/openysm.cpp/blob/382e46c98e9fdd64c6852ecb493d4db1bbb43835/LICENSE)
-- Modifications: [MODIFICATIONS.md](https://github.com/sdf123098/openysm.cpp/blob/382e46c98e9fdd64c6852ecb493d4db1bbb43835/MODIFICATIONS.md)
-- Third-party header notices: [THIRD_PARTY_NOTICES.md](https://github.com/sdf123098/openysm.cpp/blob/382e46c98e9fdd64c6852ecb493d4db1bbb43835/THIRD_PARTY_NOTICES.md)
+- Exact source commit: [`8d572acf572e62817de5a08086df2188d91c989f`](https://github.com/sdf123098/openysm.cpp/commit/8d572acf572e62817de5a08086df2188d91c989f)
+- License: MIT; see the fork's [LICENSE](https://github.com/sdf123098/openysm.cpp/blob/8d572acf572e62817de5a08086df2188d91c989f/LICENSE)
+- Modifications: [MODIFICATIONS.md](https://github.com/sdf123098/openysm.cpp/blob/8d572acf572e62817de5a08086df2188d91c989f/MODIFICATIONS.md)
+- Third-party header notices: [THIRD_PARTY_NOTICES.md](https://github.com/sdf123098/openysm.cpp/blob/8d572acf572e62817de5a08086df2188d91c989f/THIRD_PARTY_NOTICES.md)
 
 The fork contains the modified `dllmain.cpp`, `build.zig`, Zig manifest, JNI
 headers, and SSE2NEON header used by the build.
 
 ## Transparent build
 
-The fork's [GitHub Actions workflow](https://github.com/sdf123098/openysm.cpp/blob/382e46c98e9fdd64c6852ecb493d4db1bbb43835/.github/workflows/build-natives.yml)
+The fork's [GitHub Actions workflow](https://github.com/sdf123098/openysm.cpp/blob/8d572acf572e62817de5a08086df2188d91c989f/.github/workflows/build-natives.yml)
 builds all packaged targets on Windows with Zig 0.16.0 and Android NDK
-27.2.12479018, then uploads the generated libraries and SHA-256 sums as an
+25.2.9519653, then uploads the generated libraries and SHA-256 sums as an
 Actions artifact.
 
 Equivalent local build command:
