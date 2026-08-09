@@ -11,6 +11,7 @@ import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.geckolib3.core.enums.PlayState;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -88,9 +89,9 @@ public final class TouhouLittleMaidClientCompatImpl {
         if (!(minecraft.hitResult instanceof EntityHitResult hit)) return;
         MaidCapability.get(hit.getEntity()).ifPresent(cap -> {
             if (minecraft.screen == null && cap.getModelAssembly() != null) {
-                minecraft.setScreen(new UnifiedRouletteScreen(cap.getModelId(), cap.getModelAssembly(), cap));
+                InputUtil.setScreen(new UnifiedRouletteScreen(cap.getModelId(), cap.getModelAssembly(), cap));
             } else if (minecraft.screen instanceof UnifiedRouletteScreen) {
-                minecraft.setScreen(null);
+                InputUtil.setScreen(null);
             }
         });
     }

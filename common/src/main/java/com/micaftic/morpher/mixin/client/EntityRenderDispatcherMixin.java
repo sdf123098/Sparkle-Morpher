@@ -6,6 +6,7 @@ import com.micaftic.morpher.client.renderer.CustomVehicleRenderer;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.CustomProjectileRenderer;
 import com.micaftic.morpher.client.renderer.MaidEntityRenderer;
+import com.micaftic.morpher.client.renderer.SubmitMultiBufferSource;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -53,37 +54,24 @@ public class EntityRenderDispatcherMixin {
         float partialTick = captured.partialTick();
         float entityYaw = entity.getYRot();
         int packedLight = captured.packedLight();
-        MultiBufferSource.BufferSource bufferSource = ModelPreviewRenderer.getLegacyBufferSourceOrNull();
-        if (bufferSource == null) {
-            return true;
-        }
+        MultiBufferSource bufferSource = new SubmitMultiBufferSource(collector, poseStack);
         if (entity instanceof Projectile projectile) {
             if (!GeneralConfig.DISABLE_PROJECTILE_MODEL.get()) {
                 if (projectile instanceof FishingHook fishingHook) {
                     boolean shouldRenderVanilla = CustomFishingHookRenderer.tryRenderCustomHook(fishingHook, entityYaw, partialTick, poseStack, bufferSource, packedLight);
-                    if (!shouldRenderVanilla) {
-                        bufferSource.endBatch();
-                    }
                     return shouldRenderVanilla;
                 }
                 boolean shouldRenderVanilla = CustomProjectileRenderer.renderProjectile(projectile, entityYaw, partialTick, poseStack, bufferSource, packedLight);
-                if (!shouldRenderVanilla) {
-                    bufferSource.endBatch();
-                }
                 return shouldRenderVanilla;
             }
         }
         boolean maidVanilla = MaidEntityRenderer.tryRender(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
         if (!maidVanilla) {
-            bufferSource.endBatch();
             return false;
         }
         if (!GeneralConfig.DISABLE_VEHICLE_MODEL.get().booleanValue()) {
             ModelPreviewRenderer.renderVehicleModel(entity, poseStack, partialTick);
             boolean shouldRenderVanilla = CustomVehicleRenderer.renderVehicle(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
-            if (!shouldRenderVanilla) {
-                bufferSource.endBatch();
-            }
             return shouldRenderVanilla;
         }
         return true;

@@ -31,6 +31,7 @@ import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.util.ClientUiUtil;
+import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.LocalStarModelsStore;
 import com.micaftic.morpher.util.ModelIdUtil;
 import net.minecraft.ChatFormatting;
@@ -260,7 +261,7 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     public void onClose() {
         if (this.parentScreen != null && this.minecraft != null) {
-            this.minecraft.setScreen(this.parentScreen);
+            InputUtil.setScreen(this.parentScreen);
         } else {
             super.onClose();
         }
@@ -1601,7 +1602,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void openCustomFolderUpload() {
-        Minecraft.getInstance().setScreen(new CustomFolderUploadScreen(this));
+        InputUtil.setScreen(new CustomFolderUploadScreen(this));
     }
 
     private Component getCustomFolderUploadTooltip() {
@@ -1680,7 +1681,7 @@ public class ModernPlayerModelScreen extends Screen {
             String modelId = cap.getModelId();
             ModelAssembly modelAssembly = cap.getModelAssembly();
             if (modelAssembly != null && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
-                minecraft.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
+                InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
             }
         });
     }
