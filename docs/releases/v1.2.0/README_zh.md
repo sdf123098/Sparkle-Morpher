@@ -38,19 +38,3 @@ SparkleMorpher 1.2.0 扩展了 Bedrock 与 Blockbench 模型兼容性，改进�
 - 修复状态动画数组空字符串占位导致上一状态动画残留的问题（静止站立时不再播放行走摆动动画）。
 - 26.2 自定义箭：模型登记 `minecraft:arrow` 时，在没有更具体投射物模型的情况下也会应用于各类箭实体。
 
----
-
-## 包含构建产物
-
-- `sparkle-morpher-1.2.0-fa1.21.1.jar` — Fabric 1.21.1 / Java 21
-- `sparkle-morpher-1.2.0-fa26.1.x.jar` — Fabric 26.1.x / Java 25
-- `sparkle-morpher-1.2.0-fa26.2.jar` — Fabric 26.2 / Java 25
-- `sparkle-morpher-1.2.0-neo1.21.1.jar` — NeoForge 1.21.1 / Java 21
-- `sparkle-morpher-1.2.0-neo26.1.x.jar` — NeoForge 26.1.x / Java 25
-- `sparkle-morpher-1.2.0-neo26.2.jar` — NeoForge 26.2 / Java 25
-
----
-
-## 验证
-
-六个维护中的加载器/版本变体均已通过干净构建验证；CurseForge 目标包也已检查，不包含原生可执行库。
