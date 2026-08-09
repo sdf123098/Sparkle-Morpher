@@ -42,7 +42,7 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         if (!checkSwingAndUse(entity, InteractionHand.OFF_HAND)) return PlayState.PAUSE;
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         if (isBinaryYsmSpear(event, itemInHand)) {
-            return PlayState.STOP;
+            return holdBinaryYsmSpear(event, "hold_offhand:spear");
         }
         if (itemInHand.is(Items.CROSSBOW) && CrossbowItem.isCharged(itemInHand)) {
             return IAnimationPredicate.playAnimationWithValid(event, "hold_offhand:charged_crossbow", ILoopType.EDefaultLoopTypes.LOOP, i);
@@ -62,6 +62,13 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         // can store a one-shot switch pose as hold_*:spear, which must not loop.
         return event.getAnimatable().getModelAssembly().getModelData().getFormatVersion() != 65535
                 && InnerClassify.getWeaponKind(stack) == WeaponKind.SPEAR;
+    }
+
+    private PlayState holdBinaryYsmSpear(AnimationEvent<LivingAnimatable<?>> event, String animationName) {
+        if (event.getAnimatable().getAnimation(animationName) == null) {
+            return PlayState.STOP;
+        }
+        return IAnimationPredicate.playAnimationWithLoop(event, animationName, ILoopType.EDefaultLoopTypes.HOLD_ON_LAST_FRAME);
     }
 
     private boolean isSameItem(ItemStack stack, LivingEntityFrameState<?> frameState, InteractionHand hand) {
