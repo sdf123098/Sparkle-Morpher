@@ -45,6 +45,8 @@ public class InputStateKey {
 
     private static volatile boolean lastUseKeyDown;
 
+    private static volatile boolean rawMouseAttackPulsePending;
+
     private InputStateKey() {
     }
 
@@ -100,6 +102,8 @@ public class InputStateKey {
     private static void tickAttackKey() {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
+        boolean rawMouseAttackPulse = rawMouseAttackPulsePending;
+        rawMouseAttackPulsePending = false;
         if (player == null || minecraft.screen != null || !YesSteveModel.isAvailable() || !InputUtil.isPlayerReady()) {
             return;
         }
@@ -116,7 +120,7 @@ public class InputStateKey {
         if (attackChanged || useChanged) {
             logInputSnapshot("key attack=" + attackDown + " use=" + useDown);
         }
-        if (attackDown && attackChanged && !isUsingOffhandShield(player)) {
+        if (attackDown && attackChanged && !rawMouseAttackPulse && !isUsingOffhandShield(player)) {
             recordSwingPulse(InteractionHand.MAIN_HAND);
         }
     }
@@ -245,8 +249,13 @@ public class InputStateKey {
             return;
         }
         if (button == 0) {
-            // keyAttack's rising edge is the canonical local attack pulse. Recording the raw
-            // mouse event as well can advance controller-driven combo animations twice.
+            if (action == 1) {
+                LocalPlayer player = Minecraft.getInstance().player;
+                if (player != null && !isUsingOffhandShield(player)) {
+                    rawMouseAttackPulsePending = true;
+                    recordSwingPulse(InteractionHand.MAIN_HAND);
+                }
+            }
             return;
         }
         if (button == 1 && action == 0) { clearUsePulse(); return; }
