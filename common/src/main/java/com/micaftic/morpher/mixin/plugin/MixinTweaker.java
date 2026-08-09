@@ -34,13 +34,8 @@ public class MixinTweaker implements IMixinConfigPlugin {
     }
 
     private static boolean isTouhouLittleMaidPresent() {
-        try {
-            Class.forName("com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid", false,
-                    MixinTweaker.class.getClassLoader());
-            return true;
-        } catch (ClassNotFoundException | LinkageError e) {
-            return false;
-        }
+        return MixinTweaker.class.getClassLoader().getResource(
+                "com/github/tartaricacid/touhoulittlemaid/entity/passive/EntityMaid.class") != null;
     }
 
     @Keep
