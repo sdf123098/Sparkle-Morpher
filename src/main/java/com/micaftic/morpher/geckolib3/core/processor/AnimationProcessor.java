@@ -2,6 +2,7 @@ package com.micaftic.morpher.geckolib3.core.processor;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.AudioPlayerManager;
+import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.geckolib3.core.manager.AnimationData;
 import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
@@ -27,6 +28,8 @@ import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.level.levelgen.RandomSupport;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import org.jetbrains.annotations.Nullable;
@@ -43,6 +46,7 @@ import java.util.function.Consumer;
 public class AnimationProcessor<TEntity extends Entity> {
 
     private static final int ROAMING_STRUCT_NAME = StringPool.computeIfAbsent("roaming");
+    private static final int LEGACY_SWING_SWORD_NAME = StringPool.computeIfAbsent("swing_sword");
     private static final Set<String> REPORTED_CONTROLLER_FAILURES = ConcurrentHashMap.newKeySet();
 
     private final AnimatableEntity<TEntity> animatable;
@@ -67,6 +71,10 @@ public class AnimationProcessor<TEntity extends Entity> {
 
     private boolean needsInit = false;
 
+    private int lastLegacySwingPulseSequence;
+
+    private boolean legacyEmptyHandSwingActive;
+
     // tickAnimation 给每帧 forEachTransform 复用同一个 Consumer
     private final Consumer<BoneTransformProvider> transformConsumer = this::applyTransform;
     private ExpressionEvaluator<AnimationContext<?>> currentEvaluator;
@@ -87,6 +95,7 @@ public class AnimationProcessor<TEntity extends Entity> {
         context.setStorage(this.animationStorage);
         context.setRandom(this.random);
         context.setAudioPlayerManager(this.audioPlayerManager);
+        applyLegacyEmptyHandSwingCompatibility(context);
         ExpressionEvaluator<AnimationContext<?>> evaluator = ExpressionEvaluator.evaluator(context);
         float seekTime = event.currentTick;
         if (seekTime - this.lastAudioTickTime >= 1200.0f) {
@@ -185,6 +194,32 @@ public class AnimationProcessor<TEntity extends Entity> {
             YesSteveModel.LOGGER.warn("[SM-ANIM] Animation controller '{}' failed; keeping its last valid pose and continuing other controllers",
                     controller.getName(), exception);
         }
+    }
+
+    /**
+     * Keeps older model controllers that use {@code v.swing_sword} working for
+     * an empty main hand. The legacy variable is a one-shot pulse so a controller
+     * can clear it in {@code on_exit} without every frame re-entering the combo.
+     */
+    private void applyLegacyEmptyHandSwingCompatibility(AnimationContext<?> context) {
+        if (!(context.entity() instanceof LivingEntity entity) || !entity.getMainHandItem().isEmpty()) {
+            this.legacyEmptyHandSwingActive = false;
+            return;
+        }
+        if (!InputStateKey.isSwinging(entity, InteractionHand.MAIN_HAND)) {
+            this.legacyEmptyHandSwingActive = false;
+            return;
+        }
+        boolean newSwing = !this.legacyEmptyHandSwingActive;
+        if (InputStateKey.isLocalPlayerEntity(entity)) {
+            int sequence = InputStateKey.getLocalSwingPulseSequence();
+            newSwing = sequence != this.lastLegacySwingPulseSequence;
+            this.lastLegacySwingPulseSequence = sequence;
+        }
+        if (newSwing) {
+            this.animationStorage.setScoped(LEGACY_SWING_SWORD_NAME, 1.0f);
+        }
+        this.legacyEmptyHandSwingActive = true;
     }
 
     private void applyTransform(BoneTransformProvider provider) {
