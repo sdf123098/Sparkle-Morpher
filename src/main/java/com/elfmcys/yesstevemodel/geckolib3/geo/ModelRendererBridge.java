@@ -363,7 +363,7 @@ public class ModelRendererBridge {
         float unk2 = boneParams[pOffset + 10];
         float unk3 = boneParams[pOffset + 11];
 
-        if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
+        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f) {
             isVisible = false;
         } else if (unk1 == 1.0f || unk2 == 1.0f) {
             isVisible = false;
@@ -436,7 +436,7 @@ public class ModelRendererBridge {
             //"".hashCode();
         }
 
-        if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
+        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f) {
             isVisible = false;
         } else if (unk1 == 1.0f || unk2 == 1.0f) {
             isVisible = false;
