@@ -42,7 +42,7 @@ public final class AnimationFrameProfiler {
         }
         YesSteveModel.LOGGER.info("[SM-ANIM] reuse frame={} entity={} model={} tick={} partial={} frameTime={} seekTime={}",
                 renderFrameId,
-                animatable.getEntity().getId(),
+                getProfilerEntityId(animatable.getEntity()),
                 getModelId(animatable),
                 event.getTickCount(),
                 event.getPartialTick(),
@@ -56,7 +56,7 @@ public final class AnimationFrameProfiler {
         }
         YesSteveModel.LOGGER.info("[SM-ANIM] reeval frame={} entity={} model={} reason={} tick={} partial={} frameTime={} seekTime={} prevSeekTime={} active={} prevActive={} bones={} prevBones={} controllers={} prevControllers={}",
                 renderFrameId,
-                animatable.getEntity().getId(),
+                getProfilerEntityId(animatable.getEntity()),
                 getModelId(animatable),
                 reason,
                 event.getTickCount(),
@@ -77,7 +77,7 @@ public final class AnimationFrameProfiler {
             return null;
         }
         Entity entity = animatable.getEntity();
-        int entityId = entity.getId();
+        int entityId = getProfilerEntityId(entity);
         long evaluationKey = getEvaluationKey(entityId, animatable, firstPersonPass, boneCount, controllerCount);
         int count = EVALUATIONS_THIS_FRAME.addTo(evaluationKey, 1) + 1;
         return new Scope(
@@ -142,7 +142,7 @@ public final class AnimationFrameProfiler {
         if (animatable instanceof PlayerCapability playerCapability) {
             YesSteveModel.LOGGER.info("[SM-ANIM] state frame={} entity={} model={} tick={} partial={} seekTime={} limbSwing={} limbSwingAmount={} moving={} renderState={} rsWalkSpeed={} rsWalkPos={} controllers=[{}]",
                     renderFrameId,
-                    animatable.getEntity().getId(),
+                    getProfilerEntityId(animatable.getEntity()),
                     getModelId(animatable),
                     event.getTickCount(),
                     event.getPartialTick(),
@@ -157,7 +157,7 @@ public final class AnimationFrameProfiler {
         } else {
             YesSteveModel.LOGGER.info("[SM-ANIM] state frame={} entity={} model={} tick={} partial={} seekTime={} limbSwing={} limbSwingAmount={} moving={} controllers=[{}]",
                     renderFrameId,
-                    animatable.getEntity().getId(),
+                    getProfilerEntityId(animatable.getEntity()),
                     getModelId(animatable),
                     event.getTickCount(),
                     event.getPartialTick(),
@@ -175,6 +175,19 @@ public final class AnimationFrameProfiler {
 
     private static String getModelId(AnimatableEntity<?> animatable) {
         return animatable instanceof GeoEntity<?> geoEntity ? geoEntity.getModelId() : "-";
+    }
+
+    /**
+     * GUI preview entities are never added to a level, so recent Minecraft versions do not
+     * assign them an entity ID. The profiler must not turn this diagnostics-only case into a
+     * rendering crash; an identity hash remains stable for the lifetime of the preview entity.
+     */
+    private static int getProfilerEntityId(Entity entity) {
+        try {
+            return entity.getId();
+        } catch (IllegalStateException ignored) {
+            return System.identityHashCode(entity);
+        }
     }
 
     private static long getEvaluationKey(int entityId, AnimatableEntity<?> animatable, boolean firstPersonPass, int boneCount, int controllerCount) {
