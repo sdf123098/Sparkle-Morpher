@@ -47,6 +47,9 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
     private static final float EQUIPMENT_SPEAR_HOLD_ROLL_DEGREES = 0.0f;
 
     // YSM 自定义骨骼矛使用姿态参数：与上面完全独立，改这里只影响 YSM
+    // 旧版二进制 YSM 的持矛动画可能是整段切换演出，不能作为待机姿势。
+    // 此处抵消通用物品的 -90° 横置，使矛按挂点的原始竖直方向稳定显示。
+    private static final float BINARY_YSM_SPEAR_HOLD_PITCH_DEGREES = 90.0f;
     private static final float AUTHORED_SPEAR_TIRED_TIP_PLANE_ROLL_DEGREES = 90.0f;
     private static final float AUTHORED_SPEAR_ENGAGED_FORWARD_DEGREES = 90.0f;
     private static final float AUTHORED_SPEAR_ENGAGED_TIP_PLANE_COMPENSATION_DEGREES = 60.0f;
@@ -73,6 +76,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
             poseStack.pushPose();
             boolean useExtraPlayer = entityLivingBaseIn.isRenderLayersFirst();
             HandLocatorProfile handLocatorProfile = entityLivingBaseIn.getModelAssembly().getAnimationBundle().getHandLocatorProfile();
+            boolean binaryYsmModel = entityLivingBaseIn.getModelAssembly().getModelData().getFormatVersion() != 65535;
             HumanoidArm mainArm = entity.getMainArm();
             HumanoidArm offArm = mainArm.getOpposite();
             if (hasHandAnchor(animatedGeoModel, mainArm)) {
@@ -80,7 +84,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                     SlashBladeRenderer.renderOnEntity(entity, animatedGeoModel, poseStack, bufferSource, packedLightIn, mainHandItem, partialTick);
                 } else {
                     TacCompat.handleGunSound(entity, mainHandItem);
-                    renderItem(animatedGeoModel, entity, mainHandItem, getDisplayContext(mainArm), mainArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
+                    renderItem(animatedGeoModel, entity, mainHandItem, getDisplayContext(mainArm), mainArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile, binaryYsmModel);
                     if (useExtraPlayer && !mainHandItem.isEmpty() && (bufferSource instanceof BufferSourceAccessor)) {
                         ((BufferSourceAccessor) bufferSource).initialize();
                     }
@@ -92,7 +96,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                     SlashBladeRenderer.renderRightWaist(animatedGeoModel, poseStack, bufferSource, packedLightIn, offhandItem);
                 } else {
                     if (!SWarfareCompat.isGunItem(offhandItem)) {
-                        renderItem(animatedGeoModel, entity, offhandItem, getDisplayContext(offArm), offArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
+                        renderItem(animatedGeoModel, entity, offhandItem, getDisplayContext(offArm), offArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile, binaryYsmModel);
                     }
                     if (useExtraPlayer && !offhandItem.isEmpty() && (bufferSource instanceof BufferSourceAccessor)) {
                         ((BufferSourceAccessor) bufferSource).initialize();
@@ -105,7 +109,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         }
     }
 
-    public void renderItem(AnimatedGeoModel model, LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, MultiBufferSource multiBufferSource, int i, float partialTick, HandLocatorProfile handLocatorProfile) {
+    public void renderItem(AnimatedGeoModel model, LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, MultiBufferSource multiBufferSource, int i, float partialTick, HandLocatorProfile handLocatorProfile, boolean binaryYsmModel) {
         if (!itemStack.isEmpty()) {
             boolean isLeftHand = humanoidArm == HumanoidArm.LEFT;
             boolean renderedDirectly = false;
@@ -116,7 +120,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                 poseStack.pushPose();
                 if (hasDirectAnchor && applyItemBoneTransform(humanoidArm, poseStack, model, itemStack, handLocatorProfile)) {
                     if (vanillaEquipment) {
-                        applyFallbackHandTransform(itemStack, poseStack, true, true);
+                        applyFallbackHandTransform(itemStack, poseStack, true, true, binaryYsmModel);
                         if (SWarfareCompat.isGunItem(itemStack)) {
                             poseStack.translate(0.1d, 0.0d, 0.0d);
                             poseStack.scale(1.25f, 1.25f, 1.25f);
@@ -127,7 +131,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                         renderVanillaItem(livingEntity, itemStack, itemDisplayContext, humanoidArm, poseStack, i);
                     }
                 } else {
-                    applyFallbackHandTransform(itemStack, poseStack, true, vanillaEquipment);
+                        applyFallbackHandTransform(itemStack, poseStack, true, vanillaEquipment, binaryYsmModel);
                     if (SWarfareCompat.isGunItem(itemStack)) {
                         poseStack.translate(0.1d, 0.0d, 0.0d);
                         poseStack.scale(1.25f, 1.25f, 1.25f);
@@ -141,7 +145,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                 (isLeftHand ? model.leftHandChains() : model.rightHandChains()).forEach(list -> {
                     poseStack.pushPose();
                     if (list != null && !list.isEmpty() && applyItemLocatorTransform(itemStack, poseStack, list, handLocatorProfile)) {
-                        applyFallbackHandTransform(itemStack, poseStack, false, vanillaEquipment);
+                        applyFallbackHandTransform(itemStack, poseStack, false, vanillaEquipment, binaryYsmModel);
                         if (SWarfareCompat.isGunItem(itemStack)) {
                             poseStack.scale(1.25f, 1.25f, 1.25f);
                         }
@@ -153,11 +157,11 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         }
     }
 
-    private void applyFallbackHandTransform(ItemStack itemStack, PoseStack poseStack, boolean directHandBone, boolean vanillaEquipment) {
+    private void applyFallbackHandTransform(ItemStack itemStack, PoseStack poseStack, boolean directHandBone, boolean vanillaEquipment, boolean binaryYsmModel) {
         if (vanillaEquipment) {
             applyEquipmentHandTransform(itemStack, poseStack, directHandBone);
         } else {
-            applyAuthoredHandTransform(itemStack, poseStack, directHandBone);
+            applyAuthoredHandTransform(itemStack, poseStack, directHandBone, binaryYsmModel);
         }
     }
 
@@ -211,10 +215,11 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
     }
 
     // ==================== YSM 自定义骨骼挂点变换：独立一套 ====================
-    private void applyAuthoredHandTransform(ItemStack itemStack, PoseStack poseStack, boolean directHandBone) {
+    private void applyAuthoredHandTransform(ItemStack itemStack, PoseStack poseStack, boolean directHandBone, boolean binaryYsmModel) {
         switch (InnerClassify.getWeaponKind(itemStack)) {
             case TRIDENT -> applyAuthoredTridentHandTransform(poseStack, directHandBone);
-            case LANCE, SPEAR -> applyAuthoredLanceHandTransform(poseStack, directHandBone);
+            case LANCE -> applyAuthoredLanceHandTransform(poseStack, directHandBone);
+            case SPEAR -> applyAuthoredSpearHandTransform(poseStack, directHandBone, binaryYsmModel);
             case MACE -> applyAuthoredMaceHandTransform(poseStack, directHandBone);
             case NONE -> applyAuthoredDefaultHandTransform(poseStack);
         }
@@ -230,6 +235,13 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
     private void applyAuthoredLanceHandTransform(PoseStack poseStack, boolean directHandBone) {
         applyAuthoredDefaultHandTransform(poseStack);
         poseStack.translate(0.0d, directHandBone ? -0.01875d : -0.0125d, -0.025d);
+    }
+
+    private void applyAuthoredSpearHandTransform(PoseStack poseStack, boolean directHandBone, boolean binaryYsmModel) {
+        applyAuthoredLanceHandTransform(poseStack, directHandBone);
+        if (binaryYsmModel) {
+            poseStack.mulPose(Axis.XP.rotationDegrees(BINARY_YSM_SPEAR_HOLD_PITCH_DEGREES));
+        }
     }
 
     private void applyAuthoredMaceHandTransform(PoseStack poseStack, boolean directHandBone) {
