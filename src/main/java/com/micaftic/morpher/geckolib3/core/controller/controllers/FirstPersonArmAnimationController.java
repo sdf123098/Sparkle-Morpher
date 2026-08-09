@@ -51,9 +51,7 @@ public class FirstPersonArmAnimationController {
     }
 
     public static Consumer<PlayerGeoEntity> buildControllers(PlayerModelBundle modelBundle, ModelResourceBundle resourceBundle) {
-        if (processorRegistry.isEmpty()) {
-            registerDefaultProcessors();
-        }
+        processorRegistry.initializeOnce(FirstPersonArmAnimationController::registerDefaultProcessors);
         return processorRegistry.buildAll(modelBundle, resourceBundle);
     }
 
