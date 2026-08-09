@@ -887,16 +887,18 @@ public final class ServerModelManager {
                 }
                 // 原子写：先写临时文件再改名，避免进程中断/并发写/读写竞争产生半截缓存文件；
                 // 半截文件会被原样发给客户端并转成带合法 trailer 的坏缓存，导致模型永远加载失败。
-                Path cacheTmp = Files.createTempFile(serverCacheDir, cacheFileName, ".tmp");
+                // 写入是尽力而为：Windows 上目标文件正被并发读取（发送模型给玩家）时 replace
+                // 会瞬时 AccessDenied，重试后仍失败则跳过——模型目录照常发布，发送路径会按需重建。
                 try {
-                    Files.write(cacheTmp, encryptedCache);
+                    Path cacheTmp = Files.createTempFile(serverCacheDir, cacheFileName, ".tmp");
                     try {
-                        Files.move(cacheTmp, cacheFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                    } catch (AtomicMoveNotSupportedException e) {
-                        Files.move(cacheTmp, cacheFile, StandardCopyOption.REPLACE_EXISTING);
+                        Files.write(cacheTmp, encryptedCache);
+                        moveWithRetry(cacheTmp, cacheFile);
+                    } finally {
+                        Files.deleteIfExists(cacheTmp);
                     }
-                } finally {
-                    Files.deleteIfExists(cacheTmp);
+                } catch (Exception e) {
+                    YesSteveModel.LOGGER.warn("[SM] Failed to update server cache file {} (will be rebuilt on demand): {}", cacheFileName, e.toString());
                 }
             }
             validCacheFiles.add(cacheFileName);
@@ -918,6 +920,33 @@ public final class ServerModelManager {
             YesSteveModel.LOGGER.warn("[SM] Rebuilding unreadable server model cache: {}", modelId);
             return false;
         }
+    }
+
+    /**
+     * 原子替换目标文件：Windows 上并发 REPLACE 偶尔瞬时 AccessDenied，重试几次；
+     * 目标文件始终是完整内容（旧或新），重试是安全的。
+     */
+    private static void moveWithRetry(Path source, Path target) throws IOException {
+        IOException last = null;
+        for (int attempt = 0; attempt < 6; attempt++) {
+            try {
+                try {
+                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+                return;
+            } catch (IOException e) {
+                last = e;
+                try {
+                    Thread.sleep(20L << attempt); // 20/40/80/160/320/640ms
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
+        throw last;
     }
 
     /**
