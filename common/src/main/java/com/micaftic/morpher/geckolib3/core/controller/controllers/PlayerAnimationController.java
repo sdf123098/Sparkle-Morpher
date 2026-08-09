@@ -67,9 +67,7 @@ public class PlayerAnimationController {
     }
 
     public static Consumer<CustomPlayerEntity> buildControllers(PlayerModelBundle modelBundle, ModelResourceBundle resourceBundle) {
-        if (REGISTRY.isEmpty()) {
-            registerControllers();
-        }
+        REGISTRY.initializeOnce(PlayerAnimationController::registerControllers);
         return REGISTRY.buildAll(modelBundle, resourceBundle);
     }
 

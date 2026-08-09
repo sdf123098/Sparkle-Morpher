@@ -61,7 +61,6 @@ import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.logging.log4j.message.StringFormattedMessage;
 import org.jetbrains.annotations.Nullable;
 import com.micaftic.morpher.core.legacy.YesModelUtils;
 import com.micaftic.morpher.core.security.YSMByteBuf;
@@ -183,6 +182,12 @@ public class ClientModelManager {
     private static volatile Boolean lastLazyModelLoading;
     private static volatile long lastModelTrimMillis;
 
+    // ---- 模型处理失败日志去重 ----
+    // 同一模型短时间反复失败（如损坏模型被反复重载）时只打印首条完整堆栈，
+    // 之后每 100 次输出一次计数摘要，避免日志刷屏；模型成功处理后清除计数。
+    private static final ConcurrentHashMap<String, long[]> MODEL_PROCESS_FAILURES = new ConcurrentHashMap<>();
+    private static final long MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS = 5L * 60L * 1000L;
+
     private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
     private static final WeakHashMap<IGuiWidget, Object> guiWidgets = new WeakHashMap<>();
     private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
@@ -233,23 +238,34 @@ public class ClientModelManager {
         YesSteveModel.LOGGER.info("[SM] Loading builtin default model...");
         try {
             String resourcePath = "/assets/sparkle_morpher/builtin/default";
-            URL resourceUrl = YesSteveModel.class.getResource(resourcePath);
-            if (resourceUrl == null) {
-                YesSteveModel.LOGGER.error("[SM] Builtin default model not found in classpath: " + resourcePath);
+            // 生产环境（jar / NeoForge 模块类加载器）下对"目录"做 getResource 经常解析不到
+            // （目录不是可枚举的 classpath 条目），因此改为探测目录内的真实文件 ysm.json，
+            // 再从它的 URL 推导出目录路径。
+            String probeFile = "/ysm.json";
+            URL probeUrl = YesSteveModel.class.getResource(resourcePath + probeFile);
+            if (probeUrl == null) {
+                YesSteveModel.LOGGER.warn("[SM] Builtin default model not found in classpath: " + resourcePath
+                        + " (client will rely on server-provided models)");
                 return;
             }
-            URI uri = resourceUrl.toURI();
+            URI uri = probeUrl.toURI();
             Path defaultPath;
             FileSystem jarFs = null;
             if ("jar".equals(uri.getScheme())) {
+                // jar:file:/.../sparkle-morpher-*.jar!/assets/.../default/ysm.json -> 去掉文件名得到目录 URI
+                URI dirUri = URI.create(uri.toString().substring(0, uri.toString().length() - probeFile.length()));
                 try {
-                    jarFs = FileSystems.getFileSystem(uri);
+                    jarFs = FileSystems.getFileSystem(dirUri);
                 } catch (FileSystemNotFoundException e) {
-                    jarFs = FileSystems.newFileSystem(uri, Collections.emptyMap());
+                    jarFs = FileSystems.newFileSystem(dirUri, Collections.emptyMap());
                 }
                 defaultPath = jarFs.getPath(resourcePath);
+            } else if ("file".equals(uri.getScheme())) {
+                defaultPath = Paths.get(uri).getParent();
             } else {
-                defaultPath = Paths.get(uri);
+                YesSteveModel.LOGGER.warn("[SM] Unsupported builtin default model resource URL scheme: " + probeUrl
+                        + " (client will rely on server-provided models)");
+                return;
             }
 
             try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(defaultPath)) {
@@ -2220,12 +2236,34 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         }
     }
 
+    private static void logModelProcessFailure(@Nullable String modelId, Throwable error) {
+        String key = modelId == null ? "(unknown)" : modelId;
+        long now = System.currentTimeMillis();
+        long[] state = MODEL_PROCESS_FAILURES.computeIfAbsent(key, k -> new long[2]);
+        long count;
+        synchronized (state) {
+            if (state[1] != 0L && now - state[1] > MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS) {
+                state[0] = 0L; // 时间窗口过期：重新计数并允许再次打印完整堆栈
+            }
+            state[1] = now;
+            count = ++state[0];
+        }
+        if (count == 1) {
+            YesSteveModel.LOGGER.error("Failed to process model: {}", key, error);
+        } else if (count % 100 == 0) {
+            YesSteveModel.LOGGER.error("Failed to process model: {} - repeated {} times since first failure, stack trace suppressed", key, count);
+        }
+    }
+
     public static boolean processModelData(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) {
         modelId = canonicalRuntimeModelKey(modelId);
         if (parsedBundle != null) {
             try {
                 ModelMemoryProfiler.log("assembly-build-start", modelId);
                 ModelAssembly runtimeModel = ModelAssemblyFactory.buildAssembly(parsedBundle, isPrimary, isAuth);
+                if (modelId != null) {
+                    MODEL_PROCESS_FAILURES.remove(modelId);
+                }
                 ModelMemoryProfiler.log("assembly-build-finished", modelId);
                 ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
                 pendingModelQueue.add(Pair.of(runtimeModel, modelId));
@@ -2240,8 +2278,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                 }
             } catch (Exception e) {
                 if (isPrimary) throw e;
-                YesSteveModel.LOGGER.error(
-                        new StringFormattedMessage("Failed to process {}", modelId), e);
+                logModelProcessFailure(modelId, e);
                 return false;
             }
         }

@@ -54,9 +54,7 @@ public class VehicleAnimationController {
     }
 
     public static Consumer<GeckoVehicleEntity> buildControllers(VehicleModelBundle modelBundle, ModelResourceBundle resourceBundle) {
-        if (REGISTRY.isEmpty()) {
-            registerControllers();
-        }
+        REGISTRY.initializeOnce(VehicleAnimationController::registerControllers);
         return REGISTRY.buildAll(modelBundle, resourceBundle);
     }
 
