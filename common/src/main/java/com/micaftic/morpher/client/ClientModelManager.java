@@ -245,6 +245,21 @@ public class ClientModelManager {
                 return;
             }
             URI uri = probeUrl.toURI();
+            if ("union".equals(uri.getScheme())) {
+                // NeoForge 模块类加载器（HMCL 外部启动，jar 放 mods/）返回 union: URL：
+                // union:/path/to/sparkle-morpher-*.jar%23<idx>!/assets/.../ysm.json
+                // 将其转换为标准 jar:file: URL，后续统一走 jar 分支处理。
+                String urlStr = probeUrl.toString();
+                String inner = urlStr.substring("union:".length());
+                int bang = inner.indexOf('!');
+                if (bang <= 0) {
+                    YesSteveModel.LOGGER.warn("[SM] Malformed union URL: " + probeUrl
+                            + " (client will rely on server-provided models)");
+                    return;
+                }
+                String filePart = inner.substring(0, bang).replaceAll("%23\\d+$", "");
+                uri = URI.create("jar:file:" + filePart + inner.substring(bang));
+            }
             Path defaultPath;
             FileSystem jarFs = null;
             if ("jar".equals(uri.getScheme())) {
