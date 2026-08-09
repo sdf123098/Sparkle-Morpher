@@ -22,6 +22,7 @@ import org.apache.commons.lang3.StringUtils;
 import com.micaftic.morpher.core.api.item.WeaponKind;
 
 public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatable<?>> {
+    private static final float BINARY_YSM_SPEAR_HOLD_TICK = 10.0f;
     @Override
     public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
         LivingEntity entity = event.getAnimatable().getEntity();
@@ -68,6 +69,9 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         if (event.getAnimatable().getAnimation(animationName) == null) {
             return PlayState.STOP;
         }
+        // Legacy binary models keep the authored vertical spear pose near 0.5 s
+        // and return to a horizontal default transform at their nominal end.
+        event.getController().setAnimationTickOverride(BINARY_YSM_SPEAR_HOLD_TICK);
         return IAnimationPredicate.playAnimationWithLoop(event, animationName, ILoopType.EDefaultLoopTypes.HOLD_ON_LAST_FRAME);
     }
 
