@@ -505,11 +505,6 @@ public class ModelAssemblyFactory {
     }
 
     private static void addWeaponAnimationAliases(Object2ReferenceMap<String, Animation> animations) {
-        aliasAnimation(animations, LANCE_MAINHAND_HOLD, SPEAR_MAINHAND_HOLD);
-        aliasAnimation(animations, LANCE_OFFHAND_HOLD, SPEAR_OFFHAND_HOLD);
-        aliasAnimation(animations, LANCE_SWING, SPEAR_SWING);
-        aliasAnimation(animations, LANCE_MAINHAND_USE, SPEAR_MAINHAND_USE);
-        aliasAnimation(animations, LANCE_OFFHAND_USE, SPEAR_OFFHAND_USE);
         aliasAnimation(animations, LANCE_STAND, LANCE_MAINHAND_HOLD);
         aliasAnimation(animations, LANCE_JAB, LANCE_SWING);
         aliasAnimation(animations, LANCE_LUNGE, LANCE_SWING);

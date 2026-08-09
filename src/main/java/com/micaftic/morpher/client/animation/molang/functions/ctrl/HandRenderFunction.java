@@ -8,6 +8,7 @@ import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.geckolib3.util.MolangUtils;
 import com.micaftic.morpher.geckolib3.core.molang.funciton.entity.LivingEntityFunction;
 import com.micaftic.morpher.client.animation.condition.InnerClassify;
+import com.micaftic.morpher.core.api.item.WeaponKind;
 import com.micaftic.morpher.molang.runtime.ExecutionContext;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -107,6 +108,12 @@ public class HandRenderFunction extends LivingEntityFunction {
         if (id.startsWith(TYPE_PREFIX)) {
             String itemType = InnerClassify.getItemType(itemBySlot);
             String legacyAlias = InnerClassify.getLegacyAlias(itemType);
+            WeaponKind weaponKind = InnerClassify.getWeaponKind(itemBySlot);
+            if (weaponKind != WeaponKind.NONE) {
+                int result = matchesWeaponType(weaponKind, strSubstring) ? RESULT_TRUE : RESULT_FALSE;
+                debugSwing(entity, hand, id, itemBySlot, "weapon:" + weaponKind, result);
+                return result;
+            }
             if ((!StringUtils.isNotBlank(itemType) || !itemType.equals(strSubstring))
                     && (!StringUtils.isNotBlank(legacyAlias) || !legacyAlias.equals(strSubstring))
                     && !itemBySlot.getUseAnimation().name().toLowerCase(Locale.ENGLISH).equals(strSubstring)) {
@@ -118,6 +125,15 @@ public class HandRenderFunction extends LivingEntityFunction {
         }
         debugSwing(entity, hand, id, itemBySlot, "unknown", 0);
         return 0;
+    }
+
+    private static boolean matchesWeaponType(WeaponKind weaponKind, String itemType) {
+        return switch (weaponKind) {
+            case TRIDENT -> "spear".equals(itemType) || "trident".equals(itemType);
+            case LANCE, SPEAR -> "lance".equals(itemType);
+            case MACE -> "mace".equals(itemType);
+            case NONE -> false;
+        };
     }
 
     private void debugSwing(LivingEntity entity, InteractionHand hand, String id, ItemStack itemStack, String stage, int result) {
