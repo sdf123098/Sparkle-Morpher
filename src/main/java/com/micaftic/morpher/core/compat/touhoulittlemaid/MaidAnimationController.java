@@ -91,9 +91,7 @@ public final class MaidAnimationController {
     }
 
     public static Consumer<MaidCapability> buildControllers(PlayerModelBundle model, ModelResourceBundle resources) {
-        if (REGISTRY.isEmpty()) {
-            registerControllers();
-        }
+        REGISTRY.initializeOnce(MaidAnimationController::registerControllers);
         return REGISTRY.buildAll(model, resources);
     }
 

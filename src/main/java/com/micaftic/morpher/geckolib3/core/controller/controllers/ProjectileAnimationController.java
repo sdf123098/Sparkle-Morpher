@@ -41,9 +41,7 @@ public class ProjectileAnimationController {
     }
 
     public static Consumer<GeckoProjectileEntity> buildControllers(ProjectileModelBundle modelBundle, ModelResourceBundle resourceBundle) {
-        if (REGISTRY.isEmpty()) {
-            registerControllers();
-        }
+        REGISTRY.initializeOnce(ProjectileAnimationController::registerControllers);
         return REGISTRY.buildAll(modelBundle, resourceBundle);
     }
 
