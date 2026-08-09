@@ -57,7 +57,7 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         }
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         if (isBinaryYsmSpear(event, mainHandItem)) {
-            return PlayState.STOP;
+            return holdBinaryYsmSpear(event, "hold_mainhand:spear");
         }
         PlayState playState = TacCompat.handleGunHoldAnimState(mainHandItem, event);
         if (playState != null) {
@@ -89,6 +89,13 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         // can store a one-shot switch pose as hold_*:spear, which must not loop.
         return event.getAnimatable().getModelAssembly().getModelData().getFormatVersion() != 65535
                 && InnerClassify.getWeaponKind(stack) == WeaponKind.SPEAR;
+    }
+
+    private PlayState holdBinaryYsmSpear(AnimationEvent<LivingAnimatable<?>> event, String animationName) {
+        if (event.getAnimatable().getAnimation(animationName) == null) {
+            return PlayState.STOP;
+        }
+        return IAnimationPredicate.playAnimationWithLoop(event, animationName, ILoopType.EDefaultLoopTypes.HOLD_ON_LAST_FRAME);
     }
 
     private boolean isSameItem(ItemStack itemStack, LivingEntityFrameState<?> frameState, InteractionHand hand) {
