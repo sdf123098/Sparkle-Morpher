@@ -393,7 +393,7 @@ public final class GpuRenderPath {
         float animSz = boneParams[pOffset + 8];
         float unk3 = boneParams[pOffset + 11];
 
-        if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
+        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f) {
             isVisible = false;
         }
 
@@ -458,7 +458,7 @@ public final class GpuRenderPath {
         float animSz = boneParams[pOffset + 8];
         float unk3 = boneParams[pOffset + 11];
 
-        if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
+        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f) {
             isVisible = false;
         }
 
@@ -845,7 +845,7 @@ public final class GpuRenderPath {
             float animSy = boneParams[pOffset + 7];
             float animSz = boneParams[pOffset + 8];
 
-            if (animSx == 0.0f && animSy == 0.0f && animSz == 0.0f) {
+        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f) {
                 isVisible = false;
             }
 
