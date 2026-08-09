@@ -24,7 +24,7 @@ public final class RenderUtils {
         float scaleY = bone.getScaleY();
         float scaleZ = bone.getScaleZ();
         poseStack.scale(scaleX, scaleY, scaleZ);
-        return scaleX == 0 && scaleY == 0 && scaleZ == 0;
+        return scaleX == 0 || scaleY == 0 || scaleZ == 0;
     }
 
     public static void translateToPivotPoint(PoseStack poseStack, IBone bone) {
