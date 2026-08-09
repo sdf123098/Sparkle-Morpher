@@ -52,14 +52,9 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<P
             return playIfPresent(event, animation, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
         }
 
-        if (!lance.holding()) {
-            return PlayState.STOP;
-        }
-
-        String animation = lance.riding()
-                ? selectAnimation(animatable, "lance_riding_idle", "lance_stand", "hold_mainhand:lance")
-                : selectAnimation(animatable, "lance_stand", "hold_mainhand:lance");
-        return playIfPresent(event, animation, ILoopType.EDefaultLoopTypes.LOOP);
+        // Legacy hold animations are often one-shot weapon-switch poses.  Do not
+        // reinterpret them as a continuously looping lance idle while no input is active.
+        return PlayState.STOP;
     }
 
     private boolean shouldRestartAttackAnimation(LocalPlayer player) {
