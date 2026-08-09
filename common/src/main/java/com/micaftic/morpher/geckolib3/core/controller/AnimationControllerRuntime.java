@@ -497,7 +497,11 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                         } else if (lerpFactor <= -1.0E-5f || lerpFactor >= 1.0E-5f) {
                             Vector3f current = boneQueue.controllerSnapshot.rotation;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
-                            transitionVector3f.fma(boneQueue.getBlendWeight(), ((TransitionPoint) animationPoint).evaluateRaw(evaluator));
+                            if (animationPoint instanceof TransitionPoint transition) {
+                                transitionVector3f.fma(boneQueue.getBlendWeight(), transition.evaluateRaw(evaluator));
+                            } else {
+                                transitionVector3f.fma(boneQueue.getBlendWeight(), animationPoint.getLerpPoint(evaluator));
+                            }
                         } else {
                             transitionVector3f.set(offsetPoint);
                             return transitionVector3f;
@@ -559,7 +563,11 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                         } else if (lerpFactor <= -1.0E-5f || lerpFactor >= 1.0E-5f) {
                             Vector3f current = boneQueue.controllerSnapshot.position;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
-                            result.fma(boneQueue.getBlendWeight(), ((TransitionPoint) point).evaluateRaw(evaluator));
+                            if (point instanceof TransitionPoint transition) {
+                                result.fma(boneQueue.getBlendWeight(), transition.evaluateRaw(evaluator));
+                            } else {
+                                result.fma(boneQueue.getBlendWeight(), point.getLerpPoint(evaluator));
+                            }
                         } else {
                             result.set(offsetPoint);
                             return result;
@@ -627,7 +635,11 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                         } else if (lerpFactor <= -1.0E-5f || lerpFactor >= 1.0E-5f) {
                             Vector3f current = boneQueue.controllerSnapshot.scale;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
-                            MathUtil.lerpAnglesInPlace(((TransitionPoint) point).evaluateRaw(evaluator), boneQueue.getBlendWeight(), tmp);
+                            if (point instanceof TransitionPoint transition) {
+                                MathUtil.lerpAnglesInPlace(transition.evaluateRaw(evaluator), boneQueue.getBlendWeight(), tmp);
+                            } else {
+                                MathUtil.lerpAnglesInPlace(point.getLerpPoint(evaluator), boneQueue.getBlendWeight(), tmp);
+                            }
                             result.mul(tmp);
                         } else {
                             result.set(offsetPoint);
