@@ -885,7 +885,19 @@ public final class ServerModelManager {
                         encryptedCache = YsmCrypt.encryptServerCache(serialized.toArray(), serverKey, hashes[0], hashes[1]);
                     }
                 }
-                Files.write(cacheFile, encryptedCache);
+                // 原子写：先写临时文件再改名，避免进程中断/并发写/读写竞争产生半截缓存文件；
+                // 半截文件会被原样发给客户端并转成带合法 trailer 的坏缓存，导致模型永远加载失败。
+                Path cacheTmp = Files.createTempFile(serverCacheDir, cacheFileName, ".tmp");
+                try {
+                    Files.write(cacheTmp, encryptedCache);
+                    try {
+                        Files.move(cacheTmp, cacheFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                    } catch (AtomicMoveNotSupportedException e) {
+                        Files.move(cacheTmp, cacheFile, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                } finally {
+                    Files.deleteIfExists(cacheTmp);
+                }
             }
             validCacheFiles.add(cacheFileName);
 
@@ -906,6 +918,64 @@ public final class ServerModelManager {
             YesSteveModel.LOGGER.warn("[SM] Rebuilding unreadable server model cache: {}", modelId);
             return false;
         }
+    }
+
+    /**
+     * 按内容哈希定位模型并重建服务端缓存文件（发送路径自愈：缓存损坏/缺失时从源模型重新生成）。
+     */
+    private static boolean rebuildServerCacheByHashes(long hash1, long hash2) {
+        for (Map.Entry<String, ServerModelData> entry : CACHE_NAME_INFO.entrySet()) {
+            ServerModelInfo info = entry.getValue().getLoadedModelData();
+            if (info == null) continue;
+            String sha = info.getModelHash();
+            if (sha == null || sha.isEmpty()) continue;
+            long[] hashes;
+            try {
+                hashes = YsmCrypt.calculateModelHashes(sha, serverKey);
+            } catch (Exception e) {
+                continue;
+            }
+            if (hashes[0] != hash1 || hashes[1] != hash2) continue;
+            String modelId = entry.getKey();
+            try {
+                RawYsmModel raw = readSourceModelFor(modelId);
+                if (raw == null) {
+                    YesSteveModel.LOGGER.warn("[SM] Cannot rebuild server cache for {}: source model not found", modelId);
+                    return false;
+                }
+                return processAndCacheModel(modelId, raw, CACHE_SERVER, entry.getValue().isAuth(), new HashSet<>()) != null;
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[SM] Failed to rebuild server cache for {}", modelId, e);
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** 从 BUILT/CUSTOM/AUTH 源目录重新读取指定 modelId 的原始模型。 */
+    @Nullable
+    private static RawYsmModel readSourceModelFor(String modelId) {
+        for (Path baseDir : new Path[]{BUILT, CUSTOM, AUTH}) {
+            if (!Files.isDirectory(baseDir)) continue;
+            try (Stream<Path> stream = Files.walk(baseDir)) {
+                Optional<Path> hit = stream
+                        .filter(p -> modelId.equals(normalizeScannedModelId(baseDir.relativize(p).toString().replace('\\', '/'))))
+                        .findFirst();
+                if (!hit.isPresent()) continue;
+                Path source = hit.get();
+                if (Files.isDirectory(source) && YSMFolderDeserializer.isModelFolder(source)) {
+                    try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(source)) {
+                        return deserializer.deserialize();
+                    }
+                }
+                ImportKind kind = importKindFromFileName(source.getFileName().toString());
+                if (kind == ImportKind.UNKNOWN) continue;
+                return parseUploadedModel(readModelFileBytes(source), source.toString(), kind);
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.warn("[SM] Failed to read source model {} for cache rebuild", modelId, e);
+            }
+        }
+        return null;
     }
 
 
@@ -1071,9 +1141,27 @@ public final class ServerModelManager {
                     String fileName = String.format("%016x%016x", hash1, hash2);
                     Path file = ServerModelManager.CACHE_SERVER.resolve(fileName);
 
-                    if (!Files.exists(file)) continue;
-
-                    byte[] fileData = Files.readAllBytes(file);
+                    // 发送前校验缓存完整性：旧版本非原子写/读写竞争可能留下损坏文件，
+                    // 直接发送会让客户端缓存坏数据并永久加载失败。损坏/缺失时尝试从源模型即时重建。
+                    byte[] fileData = null;
+                    if (Files.exists(file)) {
+                        fileData = Files.readAllBytes(file);
+                        if (!YsmCrypt.verifyServerCache(fileData, hash1, hash2)) {
+                            YesSteveModel.LOGGER.warn("[SM] Corrupt server cache file {}; deleting and rebuilding from source model", fileName);
+                            try { Files.deleteIfExists(file); } catch (Exception ignored) {}
+                            fileData = null;
+                        }
+                    }
+                    if (fileData == null) {
+                        if (rebuildServerCacheByHashes(hash1, hash2) && Files.exists(file)) {
+                            fileData = Files.readAllBytes(file);
+                            if (!YsmCrypt.verifyServerCache(fileData, hash1, hash2)) fileData = null;
+                        }
+                        if (fileData == null) {
+                            YesSteveModel.LOGGER.warn("[SM] Model cache missing or corrupt for {}; skipping transfer, client will re-request on next sync", fileName);
+                            continue;
+                        }
+                    }
                     int totalSize = fileData.length;
                     int maxChunkSize = 30720;
                     int chunkCount = (totalSize + maxChunkSize - 1) / maxChunkSize;
