@@ -28,7 +28,6 @@ import net.minecraft.world.item.Items;
 import org.apache.commons.lang3.StringUtils;
 
 public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatable<?>> {
-    private static final float BINARY_YSM_SPEAR_HOLD_TICK = 10.0f;
     @Override
     public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
         LivingEntity entity = event.getAnimatable().getEntity();
@@ -58,7 +57,10 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         }
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         if (isBinaryYsmSpear(event, mainHandItem)) {
-            return holdBinaryYsmSpear(event, "hold_mainhand:spear");
+            // A legacy binary YSM "hold_*:spear" entry may be a complete
+            // weapon-switch sequence, not a stable hold pose. Its item
+            // orientation is handled by the binary-YSM hand locator instead.
+            return PlayState.STOP;
         }
         PlayState playState = TacCompat.handleGunHoldAnimState(mainHandItem, event);
         if (playState != null) {
@@ -90,16 +92,6 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         // can store a one-shot switch pose as hold_*:spear, which must not loop.
         return event.getAnimatable().getModelAssembly().getModelData().getFormatVersion() != 65535
                 && InnerClassify.getWeaponKind(stack) == WeaponKind.SPEAR;
-    }
-
-    private PlayState holdBinaryYsmSpear(AnimationEvent<LivingAnimatable<?>> event, String animationName) {
-        if (event.getAnimatable().getAnimation(animationName) == null) {
-            return PlayState.STOP;
-        }
-        // Legacy binary models keep the authored vertical spear pose near 0.5 s
-        // and return to a horizontal default transform at their nominal end.
-        event.getController().setAnimationTickOverride(BINARY_YSM_SPEAR_HOLD_TICK);
-        return IAnimationPredicate.playAnimationWithLoop(event, animationName, ILoopType.EDefaultLoopTypes.HOLD_ON_LAST_FRAME);
     }
 
     private boolean isSameItem(ItemStack itemStack, LivingEntityFrameState<?> frameState, InteractionHand hand) {
