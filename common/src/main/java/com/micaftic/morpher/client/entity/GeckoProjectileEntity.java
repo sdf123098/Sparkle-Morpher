@@ -10,6 +10,7 @@ import com.micaftic.morpher.client.model.ProjectileModelBundle;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.projectile.Projectile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -33,7 +34,7 @@ public class GeckoProjectileEntity extends GeoEntity<Projectile> {
     @Nullable
     public GeoEntity.ModelWrapper buildRenderShape(ModelAssembly modelAssembly, boolean isDefault) {
         ProjectileModelBundle modelBundle;
-        if (!isDefault && (modelBundle = modelAssembly.getProjectileModels().get(getEntityTypeId())) != null) {
+        if (!isDefault && (modelBundle = resolveProjectileModel(modelAssembly)) != null) {
             return new ProjectileModelWrapper(modelAssembly, false, modelBundle);
         }
         return null;
@@ -42,7 +43,22 @@ public class GeckoProjectileEntity extends GeoEntity<Projectile> {
     @Override
     public void onModelLoaded(ModelAssembly modelAssembly) {
         super.onModelLoaded(modelAssembly);
-        this.projectileModelContext = modelAssembly.getProjectileModels().get(getEntityTypeId());
+        this.projectileModelContext = resolveProjectileModel(modelAssembly);
+    }
+
+    @Nullable
+    private ProjectileModelBundle resolveProjectileModel(ModelAssembly modelAssembly) {
+        ProjectileModelBundle exactMatch = modelAssembly.getProjectileModels().get(getEntityTypeId());
+        if (exactMatch != null) {
+            return exactMatch;
+        }
+        // A model that supplies minecraft:arrow is the generic arrow model. 26.2 exposes
+        // several AbstractArrow entity ids, so let the generic mapping cover those unless
+        // the model explicitly registered a more specific projectile model.
+        if (this.entity instanceof AbstractArrow) {
+            return modelAssembly.getProjectileModels().get(Identifier.withDefaultNamespace("arrow"));
+        }
+        return null;
     }
 
     @Nullable

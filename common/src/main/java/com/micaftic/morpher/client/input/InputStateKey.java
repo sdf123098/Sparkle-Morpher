@@ -46,7 +46,12 @@ public class InputStateKey {
 
     private static volatile boolean lastUseKeyDown;
 
-    private static volatile boolean rawMouseAttackPulsePending;
+    // GLFW input can arrive one client tick before keyAttack reflects the same press.
+    // Keep the suppression alive across that hand-off so a single click cannot create
+    // both a raw pulse and a later key-state pulse.
+    private static final int RAW_ATTACK_DEDUP_TICKS = 2;
+
+    private static volatile int rawMouseAttackDedupTicks;
 
     private InputStateKey() {
     }
@@ -108,8 +113,10 @@ public class InputStateKey {
     private static void tickAttackKey() {
         Minecraft minecraft = Minecraft.getInstance();
         LocalPlayer player = minecraft.player;
-        boolean rawMouseAttackPulse = rawMouseAttackPulsePending;
-        rawMouseAttackPulsePending = false;
+        boolean rawMouseAttackPulse = rawMouseAttackDedupTicks > 0;
+        if (rawMouseAttackDedupTicks > 0) {
+            rawMouseAttackDedupTicks--;
+        }
         if (player == null || InputUtil.getCurrentScreen() != null || !YesSteveModel.isAvailable() || !InputUtil.isPlayerReady()) {
             return;
         }
@@ -272,7 +279,7 @@ public class InputStateKey {
             if (action == 1) {
                 LocalPlayer player = Minecraft.getInstance().player;
                 if (player != null && !isUsingOffhandShield(player)) {
-                    rawMouseAttackPulsePending = true;
+                    rawMouseAttackDedupTicks = RAW_ATTACK_DEDUP_TICKS;
                     recordSwingPulse(InteractionHand.MAIN_HAND);
                 }
             }

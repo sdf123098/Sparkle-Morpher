@@ -4,6 +4,7 @@ import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.animation.condition.ConditionHold;
+import com.micaftic.morpher.client.animation.condition.InnerClassify;
 import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
@@ -15,6 +16,7 @@ import com.micaftic.morpher.client.model.ModelActionProfile;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.core.api.item.ToolActionBridge;
+import com.micaftic.morpher.core.api.item.WeaponKind;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -51,6 +53,9 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         }
         if (!checkSwingAndUse(entity, InteractionHand.MAIN_HAND)) return PlayState.PAUSE;
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
+        if (isBinaryYsmSpear(event, mainHandItem)) {
+            return PlayState.STOP;
+        }
         PlayState playState = TacCompat.handleGunHoldAnimState(mainHandItem, event);
         if (playState != null) {
             return playState;
@@ -74,6 +79,13 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
             }
         }
         return PlayState.STOP;
+    }
+
+    private boolean isBinaryYsmSpear(AnimationEvent<LivingAnimatable<?>> event, ItemStack stack) {
+        // Folder models use the synthetic format 65535.  Old binary .ysm files
+        // can store a one-shot switch pose as hold_*:spear, which must not loop.
+        return event.getAnimatable().getModelAssembly().getModelData().getFormatVersion() != 65535
+                && InnerClassify.getWeaponKind(stack) == WeaponKind.SPEAR;
     }
 
     private boolean isSameItem(ItemStack itemStack, LivingEntityFrameState<?> frameState, InteractionHand hand) {

@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.animation.predicate;
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.animation.condition.ConditionHold;
+import com.micaftic.morpher.client.animation.condition.InnerClassify;
 import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.enums.PlayState;
@@ -18,6 +19,7 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.apache.commons.lang3.StringUtils;
+import com.micaftic.morpher.core.api.item.WeaponKind;
 
 public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatable<?>> {
     @Override
@@ -39,6 +41,9 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         }
         if (!checkSwingAndUse(entity, InteractionHand.OFF_HAND)) return PlayState.PAUSE;
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
+        if (isBinaryYsmSpear(event, itemInHand)) {
+            return PlayState.STOP;
+        }
         if (itemInHand.is(Items.CROSSBOW) && CrossbowItem.isCharged(itemInHand)) {
             return IAnimationPredicate.playAnimationWithValid(event, "hold_offhand:charged_crossbow", ILoopType.EDefaultLoopTypes.LOOP, i);
         }
@@ -50,6 +55,13 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
             }
         }
         return PlayState.STOP;
+    }
+
+    private boolean isBinaryYsmSpear(AnimationEvent<LivingAnimatable<?>> event, ItemStack stack) {
+        // Folder models use the synthetic format 65535.  Old binary .ysm files
+        // can store a one-shot switch pose as hold_*:spear, which must not loop.
+        return event.getAnimatable().getModelAssembly().getModelData().getFormatVersion() != 65535
+                && InnerClassify.getWeaponKind(stack) == WeaponKind.SPEAR;
     }
 
     private boolean isSameItem(ItemStack stack, LivingEntityFrameState<?> frameState, InteractionHand hand) {
