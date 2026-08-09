@@ -175,23 +175,19 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
                 }
             }
         }
-        boolean extraPlayerFallFlying = tentity.isFallFlying() && ModelPreviewRenderer.isExtraPlayer();
         boolean animationHandlesFallFlyingPitch = tentity.isFallFlying() && this.fallFlyingPitchHandledByAnimation;
-        if (extraPlayerFallFlying || animationHandlesFallFlyingPitch) {
-            tentity.setLivingEntityFlag(7, false);
+        if (extraPlayer && tentity.getPose() != Pose.SLEEPING) {
+            poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
+        } else if (animationHandlesFallFlyingPitch) {
+            // The model's elytra animation owns pitch. Do not toggle the entity's
+            // fall-flying flag just to bypass vanilla's pitch transform: that flag
+            // is synced gameplay state and writing it from the render loop can
+            // permanently latch the player in FALL_FLYING.
+            poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
+        } else {
+            super.setupRotations(tentity, poseStack, ageInTicks, rotationYaw, partialTicks, 1.0f);
         }
-        try {
-            if (extraPlayer && tentity.getPose() != Pose.SLEEPING) {
-                poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
-            } else {
-                super.setupRotations(tentity, poseStack, ageInTicks, rotationYaw, partialTicks, 1.0f);
-            }
-        } finally {
-            if (extraPlayerFallFlying || animationHandlesFallFlyingPitch) {
-                tentity.setLivingEntityFlag(7, true);
-            }
-        }
-        if (animationHandlesFallFlyingPitch && !extraPlayerFallFlying) {
+        if (animationHandlesFallFlyingPitch && !extraPlayer) {
             applyFallFlyingYawRotation(tentity, poseStack, partialTicks);
         }
         if (t > 0) {
