@@ -10,6 +10,10 @@ loom {
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
+test {
+    useJUnitPlatform()
+}
+
 if (rootProject.ext.isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
@@ -31,6 +35,10 @@ dependencies {
     // which get remapped to the correct annotations on each platform.
     // Do NOT use other classes from Fabric Loader.
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+
+    // R0: JVM 单测（JUnit 5），测试代码在 common/src/test/java，仅依赖核心纯 Java 类。
+    testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 
     // Architectury API common artifact — 提供 Event<>、ClientLifecycleEvent、PlayerEvent 等抽象事件类型。
     modCompileOnly "dev.architectury:architectury:$rootProject.architectury_api_version"
