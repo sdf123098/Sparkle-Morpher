@@ -14,6 +14,8 @@ import com.micaftic.morpher.client.gui.IGuiWidget;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
+import com.micaftic.morpher.core.model.ModelRef;
+import com.micaftic.morpher.core.model.ModelSourceType;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
@@ -211,6 +213,8 @@ public class ClientModelManager {
         public final boolean isAuth;
         public final int isCustomSkinModel;
         public final int version;
+        /** R5.1 试点：服务器下发模型的来源语义（LEGACY_SERVER）；modelId 为空时 null。 */
+        public final ModelRef ref;
 
         public byte[] fileBuffer;
         public int totalSize;
@@ -225,6 +229,9 @@ public class ClientModelManager {
             this.isAuth = isAuth;
             this.isCustomSkinModel = isCustomSkinModel;
             this.version = version;
+            this.ref = (modelId != null && !modelId.isEmpty())
+                    ? ModelRef.of(ModelSourceType.LEGACY_SERVER, modelId)
+                    : null;
         }
     }
 
