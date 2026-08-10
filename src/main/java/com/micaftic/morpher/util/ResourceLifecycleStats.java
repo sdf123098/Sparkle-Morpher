@@ -97,6 +97,26 @@ public final class ResourceLifecycleStats {
         return gpuMeshLiveBytesEstimate.get();
     }
 
+    /** R0.5 基线只读接口：累计分配的 direct buffer 估算字节。 */
+    public static long directBufferAllocatedBytesEstimate() {
+        return directBufferAllocatedBytesEstimate.get();
+    }
+
+    /** R0.5 基线只读接口：累计释放的 direct buffer 估算字节。 */
+    public static long directBufferFreedBytesEstimate() {
+        return directBufferFreedBytesEstimate.get();
+    }
+
+    /** R0.5 基线只读接口：累计缓存的音频轨字节。 */
+    public static long audioTrackCachedBytes() {
+        return audioTrackCachedBytes.get();
+    }
+
+    /** R0.5 基线只读接口：累计释放的音频轨字节。 */
+    public static long audioTrackReleasedBytes() {
+        return audioTrackReleasedBytes.get();
+    }
+
     private static void log(String stage, String modelId, String message, Object... args) {
         if (!ModelMemoryProfiler.enabled()) {
             return;

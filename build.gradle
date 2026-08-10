@@ -169,12 +169,16 @@ dependencies {
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 
-    // R0: JVM 单测（JUnit 5），测试代码在 src/test/java，仅依赖核心纯 Java 类。
-    // moddev 将 MC 依赖链剥离出 test 运行时，故显式补齐 gson/joml（版本对齐 MC 26.2）。
+    // R0: JVM 单测（JUnit 5），测试代码在 src/test/java。
+    // moddev 将 MC 依赖链剥离出 test 运行时：neoforge + minecraft-dependencies（gson/joml/fastutil 等库）
+    // + moddev 生成的 MC 类 jar（接口签名引用 MC 类需要）。
     testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-    testImplementation "com.google.code.gson:gson:2.14.0"
-    testImplementation "org.joml:joml:1.10.8"
+    testImplementation "net.neoforged:neoforge:$neo_version"
+    testImplementation "net.neoforged:minecraft-dependencies:$minecraft_version"
+    testRuntimeOnly files(fileTree("build/moddev/artifacts") {
+        include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
+    })
 }
 
 test {

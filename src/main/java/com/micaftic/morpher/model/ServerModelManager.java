@@ -1728,7 +1728,7 @@ public final class ServerModelManager {
 
         while (connection.isConnected()) {
             if (((ConnectionAccessor) connection).ysm$getChannel().unsafe().outboundBuffer().size() > pendingTransfer.pendingBytes) {
-                if (!YSMThreadPool.awaitTermination(10)) {
+                if (!YSMThreadPool.sleepMillis(10)) {
                     return false;
                 }
             } else {
