@@ -123,3 +123,6 @@ level_javap.txt
 
 *.class
 *.log
+
+# 运行时日志（游戏/测试产生，勿入库）
+fabric/logs/

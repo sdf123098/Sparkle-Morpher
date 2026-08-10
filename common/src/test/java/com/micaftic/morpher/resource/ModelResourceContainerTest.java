@@ -93,8 +93,9 @@ class ModelResourceContainerTest {
     }
 
     @Test
-    void zipBomb_perFileLimitRejected() throws Exception {
-        // 构造单个超大条目（超过 MAX_PER_FILE_BYTES）——用大量重复数据压缩后很小
+    void zipBomb_oversizedEntrySkipped() throws Exception {
+        // 构造单个超大条目（超过 MAX_PER_FILE_BYTES）——用大量重复数据压缩后很小。
+        // R4.2 起限额统一为 warn-skip：超限条目被跳过，正常条目仍可读（不抛异常）。
         Path zip = tempDir.resolve("bomb.zip");
         byte[] big = new byte[(int) ModelResourceContainer.MAX_PER_FILE_BYTES + 1024];
         java.util.Arrays.fill(big, (byte) 'A');
@@ -102,8 +103,70 @@ class ModelResourceContainerTest {
             out.putNextEntry(new ZipEntry("big.bin"));
             out.write(big);
             out.closeEntry();
+            out.putNextEntry(new ZipEntry("ysm.json"));
+            out.write("{}".getBytes(StandardCharsets.UTF_8));
+            out.closeEntry();
         }
-        assertThrows(IOException.class, () -> ModelResourceContainer.zip(zip), "超单文件限额应拒绝");
+        try (ModelResourceContainer container = ModelResourceContainer.zip(zip)) {
+            assertNull(container.read("big.bin"), "超单文件限额条目应被跳过");
+            assertArrayEquals("{}".getBytes(StandardCharsets.UTF_8), container.read("ysm.json"),
+                    "正常条目不受超限条目影响");
+        }
+    }
+
+    @Test
+    void caseInsensitive_readFindsDifferentCase() throws Exception {
+        // YSM 模型包在 Windows 解压后大小写常不一致：read 先精确匹配，未命中按大小写不敏感回退
+        try (ModelResourceContainer container = ModelResourceContainer.memory(
+                Map.of("Tex.PNG", "PNG".getBytes(StandardCharsets.UTF_8)))) {
+            assertArrayEquals("PNG".getBytes(StandardCharsets.UTF_8), container.read("Tex.PNG"), "精确匹配优先");
+            assertArrayEquals("PNG".getBytes(StandardCharsets.UTF_8), container.read("tex.png"), "大小写不敏感回退");
+            assertArrayEquals("PNG".getBytes(StandardCharsets.UTF_8), container.read("TEX.PNG"));
+            assertTrue(container.exists("tex.png"));
+        }
+    }
+
+    @Test
+    void memory_duplicateCaseCollisionRejected() {
+        // 大小写归一后冲突（Tex.png 与 tex.png 并存）是调用方数据错误
+        assertThrows(IllegalArgumentException.class, () -> ModelResourceContainer.memory(
+                java.util.Map.of("Tex.png", new byte[]{1}, "tex.png", new byte[]{2})));
+    }
+
+    @Test
+    void zip_rootPrefixStripped() throws Exception {
+        // zip 内嵌唯一模型根目录（ModelFolder/ 下含 ysm.json）→ 剥离前缀，read("ysm.json") 命中
+        Path zip = tempDir.resolve("nested.zip");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(zip))) {
+            out.putNextEntry(new ZipEntry("ModelFolder/ysm.json"));
+            out.write("{\"files\":{}}".getBytes(StandardCharsets.UTF_8));
+            out.closeEntry();
+            out.putNextEntry(new ZipEntry("ModelFolder/tex.png"));
+            out.write("PNG".getBytes(StandardCharsets.UTF_8));
+            out.closeEntry();
+        }
+        try (ModelResourceContainer container = ModelResourceContainer.zip(zip)) {
+            assertArrayEquals("{\"files\":{}}".getBytes(StandardCharsets.UTF_8), container.read("ysm.json"));
+            assertArrayEquals("PNG".getBytes(StandardCharsets.UTF_8), container.read("tex.png"));
+            assertEquals(2, container.fileCount());
+        }
+    }
+
+    @Test
+    void folderSource_isLazyAndCaseInsensitive() throws Exception {
+        // R4.2：folder 源懒加载——构造不预读，读取时实时读磁盘文件
+        Path root = tempDir.resolve("lazy");
+        Files.createDirectories(root);
+        Files.writeString(root.resolve("YSM.JSON"), "{}");
+        try (ModelResourceContainer container = ModelResourceContainer.folder(root)) {
+            assertEquals(1, container.fileCount(), "构造时已收集条目清单");
+            assertArrayEquals("{}".getBytes(StandardCharsets.UTF_8), container.read("ysm.json"),
+                    "大小写不敏感回退命中磁盘原 case 文件");
+            assertArrayEquals("{}".getBytes(StandardCharsets.UTF_8), container.read("YSM.JSON"));
+            // 懒加载：读的是实时磁盘内容
+            Files.writeString(root.resolve("YSM.JSON"), "{\"changed\":true}");
+            assertArrayEquals("{\"changed\":true}".getBytes(StandardCharsets.UTF_8), container.read("ysm.json"));
+        }
     }
 
     @Test
