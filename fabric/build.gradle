@@ -27,6 +27,17 @@ sourceSets {
             exclude 'native/**'
         }
     }
+    // R0: JVM 单测挂靠 fabric 模块，但测试代码随核心代码放 common/src/test/java，
+    // 未来抽 spm-core 模块时测试自然跟随。
+    test {
+        java {
+            srcDir rootProject.file('common/src/test/java')
+        }
+    }
+}
+
+test {
+    useJUnitPlatform()
 }
 
 if (rootProject.ext.isCurseForgeDist) {
@@ -50,6 +61,9 @@ if (rootProject.ext.isCurseForgeDist) {
 
 dependencies {
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+
+    testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 
     // Ship optional renderer integrations as Fabric nested JARs. The compatibility implementation
     // stays in its own subproject/API entrypoint, while the primary distribution remains one file.
