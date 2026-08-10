@@ -11,3 +11,7 @@ local-maven/
 .codegraph/
 
 *.class
+
+# 运行时日志（游戏/测试产生，勿入库）
+logs/
+common/logs/
