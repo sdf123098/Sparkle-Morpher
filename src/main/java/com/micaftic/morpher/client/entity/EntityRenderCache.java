@@ -12,8 +12,6 @@ public class EntityRenderCache {
 
     private static final ReferenceArrayList<WeakReference<GeoEntity<?>>> weakRefs = new ReferenceArrayList<>(64);
 
-    private static final ReferenceArrayList<GeoEntity<?>> strongRefs = new ReferenceArrayList<>(16);
-
     public static void register(GeoEntity<?> entity) {
         weakRefs.add(new WeakReference<>(entity));
     }
@@ -37,24 +35,13 @@ public class EntityRenderCache {
     }
 
     public static void clear() {
-        ObjectListIterator<GeoEntity<?>> it = strongRefs.iterator();
-        while (it.hasNext()) {
-            try {
-                it.next().awaitAsyncResult();
-            } catch (Throwable th) {
-                th.printStackTrace();
-            }
-        }
-        strongRefs.clear();
+        // R1.5：strongRefs 从未被 register 填充（恒空），其 awaitAsyncResult 等待从未执行，
+        // 删除 dead path。异步动画任务等待的实际语义见 R10（生命周期收敛）。
+        weakRefs.clear();
     }
 
     public static boolean isModelAssemblyInUse(ModelAssembly assembly) {
         if (assembly == null) return false;
-        for (GeoEntity<?> geoEntity : strongRefs) {
-            if (geoEntity.referencesModelAssembly(assembly)) {
-                return true;
-            }
-        }
         ObjectListIterator<WeakReference<GeoEntity<?>>> it = weakRefs.iterator();
         while (it.hasNext()) {
             GeoEntity<?> geoEntity = it.next().get();

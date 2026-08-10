@@ -52,16 +52,20 @@ public class YSMFolderDeserializer implements AutoCloseable {
             this.rootPath = sourcePath;
             this.zipFileSystem = null;
         } else if (sourcePath.toString().endsWith(".zip") || sourcePath.toString().endsWith(".ysm")) {
-            URI uri = URI.create("jar:" + sourcePath.toUri());
+            // zipfs 路径：JDK 裸 classpath JVM 上 FileSystems.newFileSystem("jar:...") 可能
+            // ProviderNotFoundException（zipfs 模块默认未解析）或 ZipException（GBK 条目名）。
+            // 因此任何失败都回退到 ZipFile API（java.util.zip，java.base，不依赖 zipfs）：
+            // 先按 UTF-8 读（现代 .ysm/.zip 标准），失败再按 GBK（中文 Windows 压缩工具产物）。
+            URI uri = URI.create("jar:" + sourcePath.toUri() + "!/");
             java.nio.file.FileSystem openedFs = null;
             Path openedRoot = null;
             try {
                 openedFs = FileSystems.newFileSystem(uri, Collections.emptyMap());
                 openedRoot = resolveArchiveModelRoot(openedFs.getPath("/"));
-            } catch (java.util.zip.ZipException zipException) {
-                // 中文 Windows 压缩工具生成的 zip 常用 GBK 编码条目名，jdk.zipfs 按 UTF-8
-                // 解码会抛 "invalid CEN header (bad entry name)"。回退用 ZipFile + GBK 读取。
-                System.err.println("[SM] Warning: Zip entry names are not UTF-8, retrying with GBK: " + sourcePath);
+            } catch (Exception archiveException) {
+                // ProviderNotFoundException / UnsupportedOperationException / ZipException 等一律回退
+                System.err.println("[SM] Warning: zipfs unavailable for " + sourcePath
+                        + " (" + archiveException.getClass().getSimpleName() + "), falling back to ZipFile");
             }
             if (openedFs != null) {
                 this.zipFileSystem = openedFs;
@@ -70,7 +74,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
             } else {
                 this.zipFileSystem = null;
                 this.rootPath = null;
-                this.inMemoryFiles = readZipEntries(sourcePath, java.nio.charset.Charset.forName("GBK"));
+                this.inMemoryFiles = readZipEntriesWithFallback(sourcePath);
             }
         } else {
             throw new IllegalArgumentException("Unsupported file type. Expected directory or .zip");
@@ -1423,6 +1427,17 @@ public class YSMFolderDeserializer implements AutoCloseable {
             }
 
             model.projectiles.put("arrow", arrowSub);
+        }
+    }
+
+    private static Map<String, byte[]> readZipEntriesWithFallback(Path sourcePath) throws IOException {
+        try {
+            return readZipEntries(sourcePath, StandardCharsets.UTF_8);
+        } catch (java.util.zip.ZipException e) {
+            // 中文 Windows 压缩工具生成的 zip 常用 GBK 编码条目名（jdk.zipfs 按 UTF-8 解码会报
+            // "invalid CEN header (bad entry name)"）。UTF-8 读取失败时回退 GBK。
+            System.err.println("[SM] Warning: Zip entry names are not UTF-8, retrying with GBK: " + sourcePath);
+            return readZipEntries(sourcePath, java.nio.charset.Charset.forName("GBK"));
         }
     }
 
