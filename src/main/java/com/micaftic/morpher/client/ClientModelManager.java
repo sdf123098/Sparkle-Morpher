@@ -15,6 +15,8 @@ import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
 import com.micaftic.morpher.core.model.ModelRef;
 import com.micaftic.morpher.core.model.ModelSourceType;
+import com.micaftic.morpher.core.model.selection.EntityModelResolver;
+import com.micaftic.morpher.core.model.selection.ModelRevisionGuard;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
@@ -188,6 +190,12 @@ public class ClientModelManager {
     // 同一模型短时间反复失败（如损坏模型被反复重载）时只打印首条完整堆栈，
     // 之后每 100 次输出一次计数摘要，避免日志刷屏；模型成功处理后清除计数。
     private static final ConcurrentHashMap<String, long[]> MODEL_PROCESS_FAILURES = new ConcurrentHashMap<>();
+    /**
+     * R6：实体模型决策器（候选优先级 + revision 竞态防护）。
+     * 选择变化（rememberSelectedModel）推进 revision，作废在途异步结果；
+     * 异步模型加载完成时以 shouldApply(generation) 校验再 apply。
+     */
+    public static final EntityModelResolver MODEL_RESOLVER = new EntityModelResolver(new ModelRevisionGuard());
     private static final long MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS = 5L * 60L * 1000L;
 
     private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
@@ -1050,6 +1058,8 @@ public class ClientModelManager {
     }
 
     public static void rememberSelectedModel(String modelId, String textureId) {
+        // R6：选择变化推进 revision——作废所有在途异步模型结果（竞态防护）
+        MODEL_RESOLVER.request();
         selectedModelId = modelId;
         selectedTextureId = textureId;
         if (isLocalOnlyModel(modelId)) {
