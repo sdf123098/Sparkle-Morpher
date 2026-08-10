@@ -30,12 +30,22 @@ public final class YSMThreadPool {
         return SYNC_EXECUTOR.submit(runnable);
     }
 
-    public static boolean awaitTermination(int i) {
+    /**
+     * 退避等待毫秒数。仅用于发送重试等 backoff 场景（历史实现是 Thread.sleep）。
+     * 注意：这不是线程池终止等待；真正关闭请使用 ExecutorService 的 shutdown/awaitTermination。
+     */
+    public static boolean sleepMillis(int i) {
         try {
             Thread.sleep(i);
             return true;
         } catch (InterruptedException e) {
             return false;
         }
+    }
+
+    /** @deprecated 语义实为退避 sleep，非线程池终止等待；请改用 {@link #sleepMillis(int)}。 */
+    @Deprecated
+    public static boolean awaitTermination(int i) {
+        return sleepMillis(i);
     }
 }
