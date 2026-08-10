@@ -126,3 +126,6 @@ level_javap.txt
 *.zig-cache/
 *.zig-cache
 .zig-cache/
+
+# 运行时日志（游戏/测试产生，勿入库）
+fabric/logs/
