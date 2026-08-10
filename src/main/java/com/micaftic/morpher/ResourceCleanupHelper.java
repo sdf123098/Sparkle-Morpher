@@ -2,14 +2,10 @@ package com.micaftic.morpher;
 
 import io.netty.util.internal.ObjectCleaner;
 
-import java.lang.ref.PhantomReference;
-import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class ResourceCleanupHelper {
-
-    private static final WeakHashMap<Object, PhantomReference<Object>> cleanupReferences = new WeakHashMap<>();
 
     public static <T> void registerCleanup(Object obj, T t, Consumer<T> consumer) {
         ObjectCleaner.register(obj, () -> {
