@@ -17,15 +17,11 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.*;
-import java.util.stream.Stream;
 
 import static com.micaftic.morpher.util.DigestUtil.md5Hex;
 import static com.micaftic.morpher.util.DigestUtil.sha256Hex;
@@ -33,49 +29,20 @@ import static com.micaftic.morpher.util.DigestUtil.sha256Hex;
 public class YSMFolderDeserializer implements AutoCloseable {
     private final Map<String, String> readFilesMd5Map = new TreeMap<>();
     private String finalFolderHash;
-    private final Path rootPath;
-    private final FileSystem zipFileSystem;
+    private final ModelResourceContainer container;
     private final RawYsmModel model;
-
-    private final Map<String, byte[]> inMemoryFiles;
-
-    /** 单个模型资源文件的大小上限（字节）。超限视为垃圾/损坏资源，跳过读取以避免内存暴涨或卡顿。 */
-    private static final long MAX_RESOURCE_BYTES = 256L * 1024L * 1024L;
 
     public YSMFolderDeserializer(Path sourcePath) throws IOException {
         if (!Files.exists(sourcePath)) {
             throw new FileNotFoundException("Model source not found: " + sourcePath);
         }
-
         if (Files.isDirectory(sourcePath)) {
-            this.inMemoryFiles = null;
-            this.rootPath = sourcePath;
-            this.zipFileSystem = null;
+            // R4.2：folder 源统一走 ModelResourceContainer（懒加载：构造只收集条目清单，读取时实时读文件）
+            this.container = ModelResourceContainer.folder(sourcePath);
         } else if (sourcePath.toString().endsWith(".zip") || sourcePath.toString().endsWith(".ysm")) {
-            // zipfs 路径：JDK 裸 classpath JVM 上 FileSystems.newFileSystem("jar:...") 可能
-            // ProviderNotFoundException（zipfs 模块默认未解析）或 ZipException（GBK 条目名）。
-            // 因此任何失败都回退到 ZipFile API（java.util.zip，java.base，不依赖 zipfs）：
-            // 先按 UTF-8 读（现代 .ysm/.zip 标准），失败再按 GBK（中文 Windows 压缩工具产物）。
-            URI uri = URI.create("jar:" + sourcePath.toUri() + "!/");
-            java.nio.file.FileSystem openedFs = null;
-            Path openedRoot = null;
-            try {
-                openedFs = FileSystems.newFileSystem(uri, Collections.emptyMap());
-                openedRoot = resolveArchiveModelRoot(openedFs.getPath("/"));
-            } catch (Exception archiveException) {
-                // ProviderNotFoundException / UnsupportedOperationException / ZipException 等一律回退
-                System.err.println("[SM] Warning: zipfs unavailable for " + sourcePath
-                        + " (" + archiveException.getClass().getSimpleName() + "), falling back to ZipFile");
-            }
-            if (openedFs != null) {
-                this.zipFileSystem = openedFs;
-                this.rootPath = openedRoot;
-                this.inMemoryFiles = null;
-            } else {
-                this.zipFileSystem = null;
-                this.rootPath = null;
-                this.inMemoryFiles = readZipEntriesWithFallback(sourcePath);
-            }
+            // R4.2：zip/ysm 统一走 ModelResourceContainer（ZipFile + GBK 回退 + 限额 warn-skip
+            // + 模型根探测剥离）。不再使用 zipfs——测试环境与生产路径行为一致。
+            this.container = ModelResourceContainer.zip(sourcePath);
         } else {
             throw new IllegalArgumentException("Unsupported file type. Expected directory or .zip");
         }
@@ -86,78 +53,36 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
     /** 仅用于静态探测（parseBedrockGeometry 等不需要读取任何 zip/目录资源）。 */
     private YSMFolderDeserializer() {
-        this.rootPath = null;
-        this.zipFileSystem = null;
-        this.inMemoryFiles = null;
+        this.container = null;
         this.model = new RawYsmModel();
         this.model.formatVersion = 65535;
     }
 
-    private static Path resolveArchiveModelRoot(Path archiveRoot) throws IOException {
-        if (isModelFolder(archiveRoot)) {
-            return archiveRoot;
-        }
-
-        Path detectedRoot = null;
-        try (Stream<Path> stream = Files.list(archiveRoot)) {
-            Iterator<Path> iterator = stream.iterator();
-            while (iterator.hasNext()) {
-                Path child = iterator.next();
-                if (!Files.isDirectory(child) || !isModelFolder(child)) {
-                    continue;
-                }
-                if (detectedRoot != null) {
-                    return archiveRoot;
-                }
-                detectedRoot = child;
-            }
-        }
-        return detectedRoot != null ? detectedRoot : archiveRoot;
-    }
-
     public YSMFolderDeserializer(Map<String, byte[]> memoryFiles) {
-        this.inMemoryFiles = new LinkedHashMap<>();
-        for (Map.Entry<String, byte[]> entry : memoryFiles.entrySet()) {
-            String key = normalizeResourceKey(entry.getKey());
-            byte[] previous = this.inMemoryFiles.putIfAbsent(key, entry.getValue());
-            if (previous != null && previous != entry.getValue()) throw new IllegalArgumentException("Duplicate resource path after case normalization: " + entry.getKey());
-        }
-        this.rootPath = null;
-        this.zipFileSystem = null;
+        // R4.2：memory 源统一走 container（大小写归一冲突检测在 container.memory 内）
+        this.container = ModelResourceContainer.memory(memoryFiles);
         this.model = new RawYsmModel();
         this.model.formatVersion = 65535;
     }
 
     private byte[] readResource(String relativePath) {
+        if (container == null) return null; // 静态探测构造（parseBedrockGeometry 等不读资源）
         if (relativePath == null || relativePath.isEmpty()) return null;
         relativePath = cleanJsonString(relativePath);
         if (relativePath.isEmpty()) return null;
+        if (relativePath.startsWith("/")) {
+            relativePath = relativePath.substring(1);
+        }
         try {
-            if (relativePath.startsWith("/")) {
-                relativePath = relativePath.substring(1);
-            }
-            String normalizedPath = normalizeResourceKey(relativePath);
-            byte[] data = null;
-
-            if (inMemoryFiles == null) {
-                Path target = resolveResourcePath(normalizedPath);
-                if (Files.exists(target) && Files.isRegularFile(target)) {
-                    long size = Files.size(target);
-                    if (size > MAX_RESOURCE_BYTES) {
-                        System.err.println("[SM] Warning: Skipping oversized model resource (" + size + " bytes): " + relativePath);
-                        return null;
-                    }
-                    data = Files.readAllBytes(target);
+            // R4.2：sandbox（词法逃逸拒绝）+ case-insensitive 回退 + 限额统一由 container 负责
+            byte[] data = container.read(relativePath);
+            if (data != null) {
+                String key = normalizeResourceKey(relativePath);
+                if (!readFilesMd5Map.containsKey(key)) {
+                    readFilesMd5Map.put(key, md5Hex(data));
                 }
-            } else {
-                data = inMemoryFiles.get(normalizedPath);
-            }
-
-            if (data != null && !readFilesMd5Map.containsKey(normalizedPath)) {
-                readFilesMd5Map.put(normalizedPath, md5Hex(data));
             }
             return data;
-
         } catch (Exception e) {
             System.err.println("[SM] Warning: Failed to read resource: " + relativePath);
         }
@@ -166,28 +91,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
     private static String normalizeResourceKey(String path) {
         return path.replace('\\', '/').replaceAll("^/+|/+$", "").replaceAll("/+", "/").toLowerCase(Locale.ROOT);
-    }
-
-    private Path resolveResourcePath(String normalizedPath) throws IOException {
-        // S0.1 安全修复：以绝对规范化根为基准，任何词法上逃逸模型根目录的路径
-        // （..、绝对路径、Windows 盘符、UNC）一律拒绝，防止恶意模型读取模型目录外文件。
-        Path root = rootPath.toAbsolutePath().normalize();
-        Path direct = root.resolve(normalizedPath).normalize();
-        if (!direct.startsWith(root)) {
-            throw new IOException("Model resource path escapes model root: " + normalizedPath);
-        }
-        if (Files.exists(direct)) return direct;
-        Path current = rootPath;
-        for (String segment : normalizedPath.split("/")) {
-            if (!Files.isDirectory(current)) return direct;
-            Path matched;
-            try (Stream<Path> children = Files.list(current)) {
-                matched = children.filter(child -> child.getFileName().toString().equalsIgnoreCase(segment)).findFirst().orElse(null);
-            }
-            if (matched == null) return direct;
-            current = matched;
-        }
-        return current;
     }
 
     public RawYsmModel deserialize() {
@@ -213,11 +116,8 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     @Override
-    public void close() throws IOException {
-        if (this.zipFileSystem != null) {
-            this.zipFileSystem.close();
-        }
-        if (inMemoryFiles != null) inMemoryFiles.clear();
+    public void close() {
+        if (container != null) container.close();
     }
 
     private void parseYsmJson(JsonObject ysmJson) {
@@ -1054,25 +954,23 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     private void parseGlobalResources() {
-        if (inMemoryFiles != null) {
-            for (Map.Entry<String, byte[]> entry : inMemoryFiles.entrySet()) {
-                if (isGlobalResource(entry.getKey())) {
-                    processGlobalResourceFile(entry.getKey(), entry.getValue());
+        // R4.2：统一经 container 枚举条目（folder 懒加载 walk 清单 / zip 剥离根后 / memory 原样）。
+        // 原 folder/zipfs 模式用磁盘原 case 匹配小写前缀（sounds/ lang/ functions/），
+        // memory 模式用小写 key——此处两案都尝试，向宽容方向统一且不回归。
+        for (String name : container.names()) {
+            String candidate = name;
+            if (!isGlobalResource(candidate)) {
+                String lower = candidate.toLowerCase(Locale.ROOT);
+                if (isGlobalResource(lower)) {
+                    candidate = lower;
                 }
             }
-        } else {
-            try (Stream<Path> stream = Files.walk(rootPath)) {
-                stream.filter(Files::isRegularFile)
-                        .filter(path -> isGlobalResource(rootPath.relativize(path).toString().replace('\\', '/')))
-                        .forEach(path -> {
-                            String relativePath = rootPath.relativize(path).toString().replace('\\', '/');
-                            byte[] data = readResource(relativePath);
-                            if (data != null) {
-                                processGlobalResourceFile(relativePath, data);
-                            }
-                        });
-            } catch (IOException e) {
-                System.err.println("[SM] Warning: Failed to scan global resources. " + e.getMessage());
+            if (!isGlobalResource(candidate)) {
+                continue;
+            }
+            byte[] data = readResource(candidate);
+            if (data != null) {
+                processGlobalResourceFile(candidate, data);
             }
         }
     }
@@ -1304,21 +1202,13 @@ public class YSMFolderDeserializer implements AutoCloseable {
         }
 
         List<String> pngFiles = new ArrayList<>();
-        if (inMemoryFiles != null) {
-            for (String pathKey : inMemoryFiles.keySet()) {
-                if (pathKey.endsWith(".png") && !pathKey.contains("/")) {
-                    pngFiles.add(pathKey);
-                }
+        // R4.2：统一经 container 枚举顶层条目。原 memory 模式 key 已小写、folder 模式为磁盘原 case，
+        // 此处统一按大小写不敏感匹配（.png 后缀与 arrow.png 比较），向宽容方向统一且不回归。
+        for (String pathKey : container.names()) {
+            String lower = pathKey.toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".png") && !lower.contains("/")) {
+                pngFiles.add(lower);
             }
-        } else {
-            try (Stream<Path> stream = Files.list(rootPath)) {
-                stream.filter(Files::isRegularFile).forEach(path -> {
-                    String fileName = path.getFileName().toString();
-                    if (fileName.endsWith(".png")) {
-                        pngFiles.add(fileName);
-                    }
-                });
-            } catch (IOException e) { e.printStackTrace(); }
         }
 
         boolean hasMainTexture = false;
@@ -1420,100 +1310,6 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
             model.projectiles.put("arrow", arrowSub);
         }
-    }
-
-    private static Map<String, byte[]> readZipEntriesWithFallback(Path sourcePath) throws IOException {
-        try {
-            return readZipEntries(sourcePath, StandardCharsets.UTF_8);
-        } catch (java.util.zip.ZipException e) {
-            // 中文 Windows 压缩工具生成的 zip 常用 GBK 编码条目名（jdk.zipfs 按 UTF-8 解码会报
-            // "invalid CEN header (bad entry name)"）。UTF-8 读取失败时回退 GBK。
-            System.err.println("[SM] Warning: Zip entry names are not UTF-8, retrying with GBK: " + sourcePath);
-            return readZipEntries(sourcePath, java.nio.charset.Charset.forName("GBK"));
-        }
-    }
-
-    private static Map<String, byte[]> readZipEntries(Path sourcePath, java.nio.charset.Charset charset) throws IOException {
-        Map<String, byte[]> rawEntries = new LinkedHashMap<>();
-        long totalExpanded = 0L;
-        try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(sourcePath.toFile(), charset)) {
-            java.util.Enumeration<? extends java.util.zip.ZipEntry> enumeration = zipFile.entries();
-            while (enumeration.hasMoreElements()) {
-                java.util.zip.ZipEntry entry = enumeration.nextElement();
-                if (entry.isDirectory()) {
-                    continue;
-                }
-                // R4.3 zip bomb 防御：总条目数与总解压字节限额
-                if (rawEntries.size() >= ModelResourceContainer.MAX_FILE_COUNT) {
-                    System.err.println("[SM] Warning: Skipping rest of archive (file count limit "
-                            + ModelResourceContainer.MAX_FILE_COUNT + "): " + sourcePath);
-                    break;
-                }
-                try (java.io.InputStream input = zipFile.getInputStream(entry)) {
-                    byte[] bytes = input.readNBytes((int) Math.min(ModelResourceContainer.MAX_PER_FILE_BYTES + 1, Integer.MAX_VALUE));
-                    if (bytes.length > ModelResourceContainer.MAX_PER_FILE_BYTES) {
-                        System.err.println("[SM] Warning: Skipping oversized zip entry (" + bytes.length + " bytes): " + entry.getName());
-                        continue;
-                    }
-                    totalExpanded += bytes.length;
-                    if (totalExpanded > ModelResourceContainer.MAX_EXPANDED_BYTES) {
-                        System.err.println("[SM] Warning: Skipping rest of archive (total expanded limit "
-                                + ModelResourceContainer.MAX_EXPANDED_BYTES + " bytes): " + sourcePath);
-                        break;
-                    }
-                    rawEntries.putIfAbsent(entry.getName(), bytes);
-                }
-            }
-        }
-        // 与 resolveArchiveModelRoot 一致的模型根目录探测（字符串层面）
-        String rootPrefix = detectInMemoryModelRoot(rawEntries.keySet());
-        if (rootPrefix == null) {
-            return rawEntries;
-        }
-        Map<String, byte[]> entries = new LinkedHashMap<>();
-        for (Map.Entry<String, byte[]> entry : rawEntries.entrySet()) {
-            String name = entry.getKey();
-            String stripped = name;
-            if (!rootPrefix.isEmpty() && name.startsWith(rootPrefix)) {
-                stripped = name.substring(rootPrefix.length());
-            }
-            String normalized = normalizeResourceKey(stripped);
-            if (!normalized.isEmpty()) {
-                entries.putIfAbsent(normalized, entry.getValue());
-            }
-        }
-        return entries;
-    }
-
-    private static String detectInMemoryModelRoot(java.util.Set<String> names) {
-        java.util.Set<String> normalized = new java.util.HashSet<>();
-        for (String name : names) {
-            normalized.add(normalizeResourceKey(name));
-        }
-        if (normalized.contains("ysm.json") || (normalized.contains("main.json") && normalized.contains("arm.json"))) {
-            return "";
-        }
-        String detected = null;
-        for (String name : names) {
-            int slash = name.indexOf('/');
-            if (slash <= 0) {
-                continue;
-            }
-            String segment = name.substring(0, slash);
-            String folderKey = normalizeResourceKey(segment);
-            boolean modelFolder = normalized.contains(folderKey + "/ysm.json")
-                    || (normalized.contains(folderKey + "/main.json") && normalized.contains(folderKey + "/arm.json"));
-            if (!modelFolder) {
-                continue;
-            }
-            if (detected == null) {
-                detected = segment;
-            } else if (!normalizeResourceKey(segment).equals(normalizeResourceKey(detected))) {
-                // 多个不同的模型目录 → 与 resolveArchiveModelRoot 一致，以整个压缩包为根
-                return null;
-            }
-        }
-        return detected;
     }
 
     public static boolean isModelFolder(Path dir) {
