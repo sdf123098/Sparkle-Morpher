@@ -113,7 +113,7 @@ public class ClientModelManager {
     private static final Semaphore MODEL_PARSE_MEMORY = new Semaphore(MODEL_PARSE_MEMORY_BUDGET_MIB, true);
     private static final AtomicInteger MODEL_TASK_GENERATION = new AtomicInteger(0);
     private static final ThreadPoolExecutor modelTaskDispatcher = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<>(), r -> {
+            new LinkedBlockingQueue<>(256), r -> {
         Thread t = new Thread(r, "SM-Model-Dispatch");
         t.setDaemon(true);
         return t;
