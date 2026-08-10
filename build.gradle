@@ -165,9 +165,20 @@ processResources {
 
 
 dependencies {
-    // zstd-jni dependency removed: project now uses YSM native �?pure-Java ZstdUtil �?raw-frame fallback chain.
+    // zstd-jni dependency removed: project now uses YSM native �?pure-Java ZstdUtil �?raw-frame fallback chain.
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+
+    // R0: JVM 单测（JUnit 5），测试代码在 src/test/java，仅依赖核心纯 Java 类。
+    // moddev 将 MC 依赖链剥离出 test 运行时，故显式补齐 gson/joml。
+    testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testImplementation "com.google.code.gson:gson:2.14.0"
+    testImplementation "org.joml:joml:1.10.8"
+}
+
+test {
+    useJUnitPlatform()
 }
 
 tasks.register("printRepositories") {
