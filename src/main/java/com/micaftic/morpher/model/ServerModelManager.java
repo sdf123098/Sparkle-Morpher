@@ -1678,7 +1678,7 @@ public final class ServerModelManager {
         final AtomicInteger atomicInteger = new AtomicInteger(0);
         while (connection.isConnected()) {
             if (((ConnectionAccessor) connection).ysm$getChannel().unsafe().outboundBuffer().size() > pendingTransfer.pendingBytes) {
-                if (!YSMThreadPool.awaitTermination(10)) {
+                if (!YSMThreadPool.sleepMillis(10)) {
                     return false;
                 }
             } else {
@@ -1696,14 +1696,14 @@ public final class ServerModelManager {
                         }
                     });
                     while (atomicInteger.get() == 0) {
-                        if (!YSMThreadPool.awaitTermination(5)) {
+                        if (!YSMThreadPool.sleepMillis(5)) {
                             return false;
                         }
                     }
                     if (atomicInteger.get() == 1) {
                         return true;
                     }
-                    if (!YSMThreadPool.awaitTermination(100)) {
+                    if (!YSMThreadPool.sleepMillis(100)) {
                         return false;
                     }
                     atomicInteger.set(0);

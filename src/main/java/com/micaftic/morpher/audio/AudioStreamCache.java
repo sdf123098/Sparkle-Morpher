@@ -109,9 +109,10 @@ public class AudioStreamCache {
             if (trackData.getData() == null) {
                 throw new UnsupportedAudioFileException();
             }
-            if (trackData.getDuration() / trackData.getSampleRate() <= 4 && !this.pendingTracks.contains(trackData)) {
+            // S0.2 修复：contains(Object) 是 value 查询（value 恒为 LOCK sentinel），去重永远失效；
+            // 改用 putIfAbsent 原子占位，同一音轨的 cache builder 至多创建一次。
+            if (trackData.getDuration() / trackData.getSampleRate() <= 4 && this.pendingTracks.putIfAbsent(trackData, AudioStreamCache.LOCK) == null) {
                 cacheBuilder = new AudioCacheBuilder(this, trackData);
-                this.pendingTracks.put(trackData, AudioStreamCache.LOCK);
             } else {
                 cacheBuilder = null;
             }
