@@ -167,9 +167,12 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     private Path resolveResourcePath(String normalizedPath) throws IOException {
-        Path direct = rootPath.resolve(normalizedPath).normalize();
-        if (!direct.startsWith(rootPath.normalize())) {
-            return direct;
+        // S0.1 安全修复：以绝对规范化根为基准，任何词法上逃逸模型根目录的路径
+        // （..、绝对路径、Windows 盘符、UNC）一律拒绝，防止恶意模型读取模型目录外文件。
+        Path root = rootPath.toAbsolutePath().normalize();
+        Path direct = root.resolve(normalizedPath).normalize();
+        if (!direct.startsWith(root)) {
+            throw new IOException("Model resource path escapes model root: " + normalizedPath);
         }
         if (Files.exists(direct)) {
             return direct;
