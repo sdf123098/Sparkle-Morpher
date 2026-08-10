@@ -6,6 +6,7 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
+import com.micaftic.morpher.util.SmExecutors;
 import com.micaftic.morpher.client.entity.PlayerPreviewEntity;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
 import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
@@ -85,11 +86,7 @@ public class ModernPlayerModelScreen extends Screen {
     private static final int MODEL_PAGE_BUTTON_WIDTH = 46;
     private static final int MODEL_PAGE_BUTTON_HEIGHT = 18;
     private static final int ICON = 18;
-    private static final ExecutorService RESOURCE_EXECUTOR = Executors.newCachedThreadPool(runnable -> {
-        Thread thread = new Thread(runnable, "SM Modern Resource");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private static final ExecutorService RESOURCE_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.MODEL_IO);
 
     private final List<Hit> hits = new ArrayList<>();
     private final List<ModelRepoEntry> resourceEntries = new ArrayList<>();
