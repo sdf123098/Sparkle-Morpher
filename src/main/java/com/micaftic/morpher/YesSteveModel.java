@@ -8,6 +8,7 @@ import com.micaftic.morpher.util.obfuscate.Keep;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.micaftic.morpher.core.architectury.platform.Platform;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import net.minecraft.network.chat.Component;
 import net.neoforged.fml.config.ModConfig;
 import org.apache.logging.log4j.LogManager;
@@ -34,6 +35,7 @@ public class YesSteveModel {
     }
 
     public static void init() {
+        ModelStoragePaths.init(Platform.getConfigFolder().resolve(MOD_ID));
         migrateLegacyConfigDir();
         LOGGER.info("Initializing Sparkle's Morpher, platform: " + PlatformAPI.getPlatformName());
         try {
