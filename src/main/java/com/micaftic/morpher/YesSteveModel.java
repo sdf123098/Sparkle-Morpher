@@ -1,6 +1,7 @@
 package com.micaftic.morpher;
 
 import com.micaftic.morpher.config.*;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.event.CommonEvent;
 import com.micaftic.morpher.event.YsmEventBootstrap;
 import com.micaftic.morpher.util.obfuscate.Keep;
@@ -18,6 +19,7 @@ public class YesSteveModel {
     public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
     private YesSteveModel() {}
     public static void init() {
+        ModelStoragePaths.init(net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve(MOD_ID));
         migrateLegacyConfigDir();
         LOGGER.info("Initializing Sparkle's Morpher, platform: " + PlatformAPI.getPlatformName());
         try { RuntimeAccelerationLoader.init(); } catch (IOException e) { LOGGER.error("Failed to initialize native lib", e); }
