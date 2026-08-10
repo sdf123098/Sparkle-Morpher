@@ -5,6 +5,7 @@ import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.client.ExportResult;
 import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.mixin.ConnectionAccessor;
 import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
 import com.micaftic.morpher.model.format.ServerAnimationInfo;
@@ -84,24 +85,21 @@ public final class ServerModelManager {
     /**
      * 配置相关文件夹
      */
-    public static final Path FOLDER = Platform.getConfigFolder().resolve(YesSteveModel.MOD_ID);
-
-    /**
-     * 自定义模型所放置的文件夹
-     */
-    public static final Path BUILT = FOLDER.resolve("built");
-    public static final Path CUSTOM = FOLDER.resolve("custom");
-    public static final Path AUTH = FOLDER.resolve("auth");
-    public static final Path EXPORT = FOLDER.resolve("export");
+    // R3.1：路径定义迁移至 ModelStoragePaths（此处保留常量委托，兼容既有引用）
+    public static final Path FOLDER = ModelStoragePaths.folder();
+    public static final Path BUILT = ModelStoragePaths.built();
+    public static final Path CUSTOM = ModelStoragePaths.custom();
+    public static final Path AUTH = ModelStoragePaths.auth();
+    public static final Path EXPORT = ModelStoragePaths.export();
 
     /**
      * 生成缓存文件的文件夹
      */
-    public static final Path CACHE = FOLDER.resolve("cache");
-    public static final Path CACHE_SERVER_INDEX_FILE = CACHE.resolve("server_index");
-    public static final Path CACHE_SERVER = CACHE.resolve("server");
-    public static final Path CACHE_CLIENT = CACHE.resolve("client");
-    public static final Path CACHE_BBMODEL_IMPORT_IDENTITY_FILE = CACHE.resolve(".bbmodel_import_cache_identity");
+    public static final Path CACHE = ModelStoragePaths.cache();
+    public static final Path CACHE_SERVER_INDEX_FILE = ModelStoragePaths.cacheServerIndexFile();
+    public static final Path CACHE_SERVER = ModelStoragePaths.cacheServer();
+    public static final Path CACHE_CLIENT = ModelStoragePaths.cacheClient();
+    public static final Path CACHE_BBMODEL_IMPORT_IDENTITY_FILE = ModelStoragePaths.cacheBbmodelImportIdentityFile();
 
     /**
      * 模型名称 -> 模型额外信息缓存
