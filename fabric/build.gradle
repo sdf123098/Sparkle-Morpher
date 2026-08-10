@@ -38,6 +38,8 @@ sourceSets {
 
 test {
     useJUnitPlatform()
+    // jdk.zipfs 不在默认 ALL-DEFAULT 解析集（java.se 闭包不含），.ysm 容器解析需要 jar: FileSystem
+    jvmArgs "--add-modules", "jdk.zipfs"
 }
 
 if (rootProject.ext.isCurseForgeDist) {

@@ -117,6 +117,16 @@ public final class ResourceLifecycleStats {
         return audioTrackReleasedBytes.get();
     }
 
+    /** R0.5 基线只读接口：累计加载的模型 assembly 数。 */
+    public static long modelAssemblyLoadedCount() {
+        return modelAssemblyLoaded.get();
+    }
+
+    /** R0.5 基线只读接口：累计驱逐的模型 assembly 数。 */
+    public static long modelAssemblyEvictedCount() {
+        return modelAssemblyEvicted.get();
+    }
+
     private static void log(String stage, String modelId, String message, Object... args) {
         if (!ModelMemoryProfiler.enabled()) {
             return;
