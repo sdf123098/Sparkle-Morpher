@@ -18,6 +18,7 @@ import com.micaftic.morpher.core.model.ModelRef;
 import com.micaftic.morpher.core.model.ModelSourceType;
 import com.micaftic.morpher.core.model.selection.EntityModelResolver;
 import com.micaftic.morpher.core.model.selection.ModelRevisionGuard;
+import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
@@ -196,6 +197,11 @@ public class ClientModelManager {
      * 异步模型加载完成时以 shouldApply(generation) 校验再 apply。
      */
     public static final EntityModelResolver MODEL_RESOLVER = new EntityModelResolver(new ModelRevisionGuard());
+    /**
+     * R7.1：本地模型导入持久化（原子写 + 路径沙箱 + sibling 清理），
+     * 从 ClientModelManager 抽取为独立可测组件。
+     */
+    private static final LocalModelImportStore LOCAL_IMPORT_STORE = new LocalModelImportStore(ServerModelManager.CUSTOM);
     private static final long MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS = 5L * 60L * 1000L;
 
     private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
@@ -1310,7 +1316,7 @@ public class ClientModelManager {
                     localOnlyModelIds.remove(modelKey);
                     throw new IllegalStateException("Failed to build local model");
                 }
-                Path persisted = persistImportedModel(modelKey, fileName, importData);
+                Path persisted = LOCAL_IMPORT_STORE.persist(modelKey, fileName, importData);
                 rememberLocalModelSource(ServerModelManager.CUSTOM, modelKey, persisted);
                 if (persisted != null) {
                     LazyModelSource previousSource = lazyModelSources.get(modelKey);
@@ -1336,63 +1342,6 @@ public class ClientModelManager {
                 Minecraft.getInstance().execute(() -> callback.accept(result));
             }
         });
-    }
-
-    private static Path persistImportedModel(String modelId, String fileName, byte[] data) throws IOException {
-        if (modelId == null || modelId.isBlank() || data == null) {
-            return null;
-        }
-        String extension = importExtension(fileName);
-        if (extension.isBlank()) {
-            extension = ".ysm";
-        }
-        Path target = ServerModelManager.CUSTOM.resolve(modelId + extension).normalize();
-        if (!isInside(ServerModelManager.CUSTOM, target)) {
-            throw new IOException("Invalid import target: " + modelId);
-        }
-        Files.createDirectories(target.getParent());
-        Path temp = Files.createTempFile(target.getParent(), target.getFileName().toString(), ".tmp");
-        boolean moved = false;
-        try {
-            Files.write(temp, data);
-            try {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-            moved = true;
-            removeSiblingImportFiles(modelId, target);
-            return target;
-        } finally {
-            if (!moved) {
-                Files.deleteIfExists(temp);
-            }
-        }
-    }
-
-    private static String importExtension(String fileName) {
-        String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
-        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
-            if (lower.endsWith(extension)) {
-                return extension;
-            }
-        }
-        return "";
-    }
-
-    private static void removeSiblingImportFiles(String modelId, Path keepTarget) throws IOException {
-        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
-            Path sibling = ServerModelManager.CUSTOM.resolve(modelId + extension).normalize();
-            if (isInside(ServerModelManager.CUSTOM, sibling) && !sibling.toAbsolutePath().normalize().equals(keepTarget.toAbsolutePath().normalize())) {
-                Files.deleteIfExists(sibling);
-            }
-        }
-    }
-
-    private static boolean isInside(Path root, Path path) {
-        Path absoluteRoot = root.toAbsolutePath().normalize();
-        Path absolutePath = path.toAbsolutePath().normalize();
-        return absolutePath.startsWith(absoluteRoot);
     }
 
     public static void reloadLocalModels(@Nullable Consumer<Component> callback) {
