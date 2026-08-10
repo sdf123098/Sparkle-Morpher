@@ -4,6 +4,7 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.util.SmExecutors;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -31,11 +32,7 @@ public final class ResourceDownloadManager {
     private static final long SERVER_UPLOAD_START_TIMEOUT_MS = 15_000L;
     private static final long SERVER_UPLOAD_STALL_TIMEOUT_MS = 30_000L;
     private static final long SERVER_UPLOAD_VERIFY_TIMEOUT_MS = 90_000L;
-    private static final ExecutorService DOWNLOAD_EXECUTOR = Executors.newCachedThreadPool(runnable -> {
-        Thread thread = new Thread(runnable, "SM Resource Download");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private static final ExecutorService DOWNLOAD_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.NETWORK_IO);
     private static final Object LOCK = new Object();
     private static final ArrayDeque<DownloadTask> QUEUE = new ArrayDeque<>();
     private static final List<DownloadTask> HISTORY = new ArrayList<>();

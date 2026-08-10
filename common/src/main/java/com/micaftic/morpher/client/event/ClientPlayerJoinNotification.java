@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
+import com.micaftic.morpher.util.SmExecutors;
 import com.micaftic.morpher.mixin.client.MinecraftAccessor;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientPlayerEvent;
@@ -44,16 +45,15 @@ public final class ClientPlayerJoinNotification {
         if (((MinecraftAccessor) Minecraft.getInstance()).ysm$isLocalServer()) {
             return;
         }
-        Thread handshakeWatchdog = new Thread(() -> {
+        // R2.1：原裸线程（handshake watchdog + 60s 服务器未响应提示）改为 BACKGROUND 池提交
+        SmExecutors.submit(SmExecutors.Pool.BACKGROUND, () -> {
             try {
                 Thread.sleep(3000L);
                 ((Executor) Minecraft.getInstance()).execute(ClientModelManager::markVanillaServerIfNoHandshake);
             } catch (InterruptedException ignored) {
             }
         });
-        handshakeWatchdog.setDaemon(true);
-        handshakeWatchdog.start();
-        Thread thread = new Thread(() -> {
+        SmExecutors.submit(SmExecutors.Pool.BACKGROUND, () -> {
             try {
                 Thread.sleep(60000L);
                 ((Executor) Minecraft.getInstance()).execute(() -> {
@@ -65,8 +65,6 @@ public final class ClientPlayerJoinNotification {
             } catch (InterruptedException ignored) {
             }
         });
-        thread.setDaemon(true);
-        thread.start();
     }
 
     private static void onPlayerQuit(LocalPlayer player) {
