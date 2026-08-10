@@ -1443,6 +1443,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
 
     private static Map<String, byte[]> readZipEntries(Path sourcePath, java.nio.charset.Charset charset) throws IOException {
         Map<String, byte[]> rawEntries = new LinkedHashMap<>();
+        long totalExpanded = 0L;
         try (java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(sourcePath.toFile(), charset)) {
             java.util.Enumeration<? extends java.util.zip.ZipEntry> enumeration = zipFile.entries();
             while (enumeration.hasMoreElements()) {
@@ -1450,11 +1451,23 @@ public class YSMFolderDeserializer implements AutoCloseable {
                 if (entry.isDirectory()) {
                     continue;
                 }
+                // R4.3 zip bomb 防御：总条目数与总解压字节限额
+                if (rawEntries.size() >= ModelResourceContainer.MAX_FILE_COUNT) {
+                    System.err.println("[SM] Warning: Skipping rest of archive (file count limit "
+                            + ModelResourceContainer.MAX_FILE_COUNT + "): " + sourcePath);
+                    break;
+                }
                 try (java.io.InputStream input = zipFile.getInputStream(entry)) {
-                    byte[] bytes = input.readNBytes((int) Math.min(MAX_RESOURCE_BYTES + 1, Integer.MAX_VALUE));
-                    if (bytes.length > MAX_RESOURCE_BYTES) {
+                    byte[] bytes = input.readNBytes((int) Math.min(ModelResourceContainer.MAX_PER_FILE_BYTES + 1, Integer.MAX_VALUE));
+                    if (bytes.length > ModelResourceContainer.MAX_PER_FILE_BYTES) {
                         System.err.println("[SM] Warning: Skipping oversized zip entry (" + bytes.length + " bytes): " + entry.getName());
                         continue;
+                    }
+                    totalExpanded += bytes.length;
+                    if (totalExpanded > ModelResourceContainer.MAX_EXPANDED_BYTES) {
+                        System.err.println("[SM] Warning: Skipping rest of archive (total expanded limit "
+                                + ModelResourceContainer.MAX_EXPANDED_BYTES + " bytes): " + sourcePath);
+                        break;
                     }
                     rawEntries.putIfAbsent(entry.getName(), bytes);
                 }
