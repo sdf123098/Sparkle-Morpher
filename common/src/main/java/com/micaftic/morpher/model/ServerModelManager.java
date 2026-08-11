@@ -5,6 +5,7 @@ import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.client.ExportResult;
 import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.model.catalog.LocalModelScanner;
 import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.mixin.ConnectionAccessor;
 import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
@@ -523,73 +524,27 @@ public final class ServerModelManager {
     private static void scanDirectoryModels(Path baseDir, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth) {
         if (baseDir == null || !Files.isDirectory(baseDir)) return;
 
+        // R8：遍历发现集中到 LocalModelScanner（纯 Java 可测，id 归一/kind 判定/文件夹判定统一）；
+        // 解析与缓存仍在本类（server cache 语义），单条目失败 catch 后继续。
         try {
-            Files.walkFileTree(baseDir, new SimpleFileVisitor<>() {
-                @Override
-                public @NotNull FileVisitResult preVisitDirectory(@NotNull Path dir, @NotNull BasicFileAttributes attrs) {
-                    if (dir.equals(baseDir)) {
-                        return FileVisitResult.CONTINUE;
-                    }
-
-                    try {
-                        if (YSMFolderDeserializer.isModelFolder(dir)) {
-                            String modelId = normalizeScannedModelId(baseDir.relativize(dir).toString().replace('\\', '/'));
-                            if (modelId == null) {
-                                YesSteveModel.LOGGER.warn("[SM] Skipping local model folder with invalid id: {}", dir);
-                                return FileVisitResult.SKIP_SUBTREE;
-                            }
-
-                            RawYsmModel rawModel = null;
-                            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(dir)) {
-                                rawModel = deserializer.deserialize();
-                            } catch (Exception e) {
-                                YesSteveModel.LOGGER.error("Failed to load model at: " + dir, e);
-                            }
-
-                            if (rawModel != null) {
-                                try {
-                                    ServerModelData data = processAndCacheModel(modelId, rawModel, cacheDir, isAuth, validCaches);
-                                    rawModel = null;
-                                    if (data != null) {
-                                        loaded.put(modelId, data);
-                                        if (isAuth) authIds.add(modelId);
-                                    }
-                                } catch (Exception e) {
-                                    YesSteveModel.LOGGER.error("Failed to process model at: " + dir, e);
-                                }
-                            }
-
-                            return FileVisitResult.SKIP_SUBTREE;
+            LocalModelScanner.scan(baseDir, YSMFolderDeserializer::isModelFolder, hit -> {
+                try {
+                    RawYsmModel rawModel;
+                    if (hit.kind() == LocalModelScanner.Kind.FOLDER) {
+                        try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(hit.source())) {
+                            rawModel = deserializer.deserialize();
                         }
-                    } catch (Exception e) {
-                        YesSteveModel.LOGGER.error("Error checking directory: " + dir, e);
+                    } else {
+                        byte[] raw = readModelFileBytes(hit.source());
+                        rawModel = parseUploadedModel(raw, hit.source().toString(), hit.kind());
                     }
-
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public @NotNull FileVisitResult visitFile(@NotNull Path file, @NotNull BasicFileAttributes attrs) {
-                    ImportKind importKind = importKindFromFileName(file.getFileName().toString());
-                    if (importKind == ImportKind.UNKNOWN) return FileVisitResult.CONTINUE;
-                    try {
-                        String modelId = normalizeScannedModelId(baseDir.relativize(file).toString().replace('\\', '/'));
-                        if (modelId == null) {
-                            YesSteveModel.LOGGER.warn("[SM] Skipping local model file with invalid id: {}", file);
-                            return FileVisitResult.CONTINUE;
-                        }
-                        byte[] raw = readModelFileBytes(file);
-                        RawYsmModel rawModel = parseUploadedModel(raw, file.toString(), importKind);
-
-                        ServerModelData data = processAndCacheModel(modelId, rawModel, cacheDir, isAuth, validCaches);
-                        if (data != null) {
-                            loaded.put(modelId, data);
-                            if (isAuth) authIds.add(modelId);
-                        }
-                    } catch (Exception e) {
-                        YesSteveModel.LOGGER.error("Failed to load imported model at: " + file, e);
+                    ServerModelData data = processAndCacheModel(hit.modelId(), rawModel, cacheDir, isAuth, validCaches);
+                    if (data != null) {
+                        loaded.put(hit.modelId(), data);
+                        if (isAuth) authIds.add(hit.modelId());
                     }
-                    return FileVisitResult.CONTINUE;
+                } catch (Exception e) {
+                    YesSteveModel.LOGGER.error("Failed to load model at: " + hit.source(), e);
                 }
             });
         } catch (IOException e) {
@@ -750,56 +705,13 @@ public final class ServerModelManager {
         }
     }
 
-    private static RawYsmModel parseUploadedModel(byte[] raw, String source, ImportKind importKind) throws Exception {
+    private static RawYsmModel parseUploadedModel(byte[] raw, String source, LocalModelScanner.Kind importKind) throws Exception {
         return switch (importKind) {
             case YSM -> parseBinaryModel(raw, source);
             case ZIP -> parseArchiveModel(raw, source);
             case BBMODEL -> parseBbModelImport(raw, source);
             case UNKNOWN -> throw new IllegalArgumentException("Unsupported model import type for file: " + source);
-        };
-    }
-
-    private static String stripImportExtension(String modelId) {
-        String lower = modelId.toLowerCase(Locale.ROOT);
-        for (String extension : new String[]{EXT_YSM, EXT_ZIP, EXT_BBMODEL}) {
-            if (lower.endsWith(extension)) {
-                return modelId.substring(0, modelId.length() - extension.length());
-            }
-        }
-        return modelId;
-    }
-
-    @Nullable
-    private static String normalizeScannedModelId(@Nullable String modelId) {
-        String normalized = ModelIdUtil.normalizeImportModelId(stripImportExtension(modelId == null ? "" : modelId));
-        if (!ModelIdUtil.isValidModelId(normalized) || !ModelIdUtil.hasLetterOrNumber(normalized)) {
-            return null;
-        }
-        return normalized;
-    }
-
-    private static ImportKind importKindFromFileName(String fileName) {
-        if (fileName == null) {
-            return ImportKind.UNKNOWN;
-        }
-        String lower = fileName.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(EXT_YSM)) {
-            return ImportKind.YSM;
-        }
-        if (lower.endsWith(EXT_ZIP)) {
-            return ImportKind.ZIP;
-        }
-        if (lower.endsWith(EXT_BBMODEL)) {
-            return ImportKind.BBMODEL;
-        }
-        return ImportKind.UNKNOWN;
-    }
-
-    private static String extensionFor(ImportKind importKind) {
-        return switch (importKind) {
-            case ZIP -> EXT_ZIP;
-            case BBMODEL -> EXT_BBMODEL;
-            default -> EXT_YSM;
+            case FOLDER -> throw new IllegalArgumentException("Folder is not a file import: " + source);
         };
     }
 
@@ -936,7 +848,7 @@ public final class ServerModelManager {
             if (!Files.isDirectory(baseDir)) continue;
             try (Stream<Path> stream = Files.walk(baseDir)) {
                 Optional<Path> hit = stream
-                        .filter(p -> modelId.equals(normalizeScannedModelId(baseDir.relativize(p).toString().replace('\\', '/'))))
+                        .filter(p -> modelId.equals(LocalModelScanner.normalizeModelId(baseDir.relativize(p).toString().replace('\\', '/'))))
                         .findFirst();
                 if (!hit.isPresent()) continue;
                 Path source = hit.get();
@@ -945,8 +857,8 @@ public final class ServerModelManager {
                         return deserializer.deserialize();
                     }
                 }
-                ImportKind kind = importKindFromFileName(source.getFileName().toString());
-                if (kind == ImportKind.UNKNOWN) continue;
+                LocalModelScanner.Kind kind = LocalModelScanner.kindFromFileName(source.getFileName().toString());
+                if (kind == LocalModelScanner.Kind.UNKNOWN) continue;
                 return parseUploadedModel(readModelFileBytes(source), source.toString(), kind);
             } catch (Exception e) {
                 YesSteveModel.LOGGER.warn("[SM] Failed to read source model {} for cache rebuild", modelId, e);
@@ -1309,8 +1221,8 @@ public final class ServerModelManager {
             return UploadStartResult.reject((byte) 3, "No import permission");
         }
         String modelId = normalizeUploadedModelId(requestedModelId);
-        ImportKind importKind = importKindFromFileName(fileName);
-        if (modelId == null || importKind == ImportKind.UNKNOWN || sha256 == null || !sha256.matches("[0-9a-fA-F]{64}")) {
+        LocalModelScanner.Kind importKind = LocalModelScanner.kindFromFileName(fileName);
+        if (modelId == null || importKind == LocalModelScanner.Kind.UNKNOWN || sha256 == null || !sha256.matches("[0-9a-fA-F]{64}")) {
             return UploadStartResult.reject((byte) 5, "Invalid model id or hash");
         }
         int maxBytes = getModelUploadMaxBytes();
@@ -1375,7 +1287,7 @@ public final class ServerModelManager {
             if (processAndCacheModel(state.modelId, rawModel, CACHE_SERVER, false, new HashSet<>()) == null) {
                 return UploadFinishResult.reject(uploadId, (byte) 2, "Server failed to cache model");
             }
-            Path target = CUSTOM.resolve(state.modelId + extensionFor(state.importKind)).normalize();
+            Path target = CUSTOM.resolve(state.modelId + LocalModelScanner.extensionFor(state.importKind)).normalize();
             Path customRoot = CUSTOM.toAbsolutePath().normalize();
             Path absoluteTarget = target.toAbsolutePath().normalize();
             if (!absoluteTarget.startsWith(customRoot)) {
@@ -1830,14 +1742,14 @@ public final class ServerModelManager {
         private final UUID owner;
         private final String modelId;
         private final String fileName;
-        private final ImportKind importKind;
+        private final LocalModelScanner.Kind importKind;
         private final byte[] data;
         private final String sha256;
         private int receivedBytes;
         private boolean failed;
         private long lastTouchedMs;
 
-        private ModelUploadState(long uploadId, UUID owner, String modelId, String fileName, ImportKind importKind, int totalBytes, String sha256) {
+        private ModelUploadState(long uploadId, UUID owner, String modelId, String fileName, LocalModelScanner.Kind importKind, int totalBytes, String sha256) {
             this.uploadId = uploadId;
             this.owner = owner;
             this.modelId = modelId;
@@ -1851,13 +1763,6 @@ public final class ServerModelManager {
         private void touch() {
             this.lastTouchedMs = System.currentTimeMillis();
         }
-    }
-
-    private enum ImportKind {
-        YSM,
-        ZIP,
-        BBMODEL,
-        UNKNOWN
     }
 
     private static class PendingTransfer {
