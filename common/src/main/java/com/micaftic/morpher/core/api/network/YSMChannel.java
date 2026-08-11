@@ -27,6 +27,11 @@ public final class YSMChannel {
         com.micaftic.morpher.core.api.network.fabric.YSMChannelImpl.sendToServer(packet);
     }
 
+    /** 客户端连接是否已注册 SPM payload channel（未装 SPM 客户端返回 false）。 */
+    public static boolean canSendToClient(ServerPlayer player) {
+        return com.micaftic.morpher.core.api.network.fabric.YSMChannelImpl.canSendToClient(player);
+    }
+
     public static void sendToClientPlayer(Object packet, ServerPlayer player) {
         com.micaftic.morpher.core.api.network.fabric.YSMChannelImpl.sendToClientPlayer(packet, player);
     }
