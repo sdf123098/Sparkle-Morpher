@@ -32,6 +32,11 @@ public final class YSMChannel {
     }
 
     @ExpectPlatform
+    public static boolean canSendToClient(ServerPlayer player) {
+        throw new AssertionError();
+    }
+
+    @ExpectPlatform
     public static void sendToClientPlayer(Object packet, ServerPlayer player) {
         throw new AssertionError();
     }

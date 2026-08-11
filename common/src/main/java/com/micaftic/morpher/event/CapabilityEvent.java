@@ -8,6 +8,7 @@ import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
 import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.core.api.network.YSMChannel;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.S2CSetModelAndTexturePacket;
 import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
@@ -216,7 +217,8 @@ public final class CapabilityEvent {
     }
 
     private static void sendModelStateIfNeeded(ServerPlayer source, ModelInfoCapability cap, ServerPlayer receiver, String stateKey) {
-        if (!NetworkHandler.isPlayerConnected(receiver)) {
+        // R9.1：接收方未装 SPM（未协商 channel）时跳过——避免每 tick 无效发送尝试与状态记录
+        if (!NetworkHandler.isPlayerConnected(receiver) || !YSMChannel.canSendToClient(receiver)) {
             return;
         }
         UUID sourceId = source.getUUID();
