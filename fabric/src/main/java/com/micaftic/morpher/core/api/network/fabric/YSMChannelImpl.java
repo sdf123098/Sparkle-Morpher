@@ -92,7 +92,24 @@ public final class YSMChannelImpl {
         YSMChannelClientImpl.sendToServer(encode(packet));
     }
 
+    /**
+     * 客户端连接是否已注册 SPM payload channel。
+     *
+     * <p>未装 SPM 的客户端（原版/NeoForge/低版本）未注册 {@code sparkle_morpher}
+     * channel——向其发送会使 fabric {@code ServerPlayNetworking.send} 抛异常，
+     * 服务器 tick 场景异常冒泡导致服务器崩溃。发送前必须检测。</p>
+     */
+    public static boolean canSendToClient(ServerPlayer player) {
+        if (player == null || channelId == null) {
+            return false;
+        }
+        return ServerPlayNetworking.canSend(player, channelId);
+    }
+
     public static void sendToClientPlayer(Object packet, ServerPlayer player) {
+        if (!canSendToClient(player)) {
+            return;
+        }
         ServerPlayNetworking.send(player, new YSMPayload(encode(packet)));
     }
 
@@ -102,13 +119,17 @@ public final class YSMChannelImpl {
             return;
         }
         for (ServerPlayer player : PlayerLookup.all(server)) {
-            ServerPlayNetworking.send(player, new YSMPayload(encode(packet)));
+            if (canSendToClient(player)) {
+                ServerPlayNetworking.send(player, new YSMPayload(encode(packet)));
+            }
         }
     }
 
     public static void sendToTrackingEntity(Object packet, Entity entity) {
         for (ServerPlayer player : PlayerLookup.tracking(entity)) {
-            ServerPlayNetworking.send(player, new YSMPayload(encode(packet)));
+            if (canSendToClient(player)) {
+                ServerPlayNetworking.send(player, new YSMPayload(encode(packet)));
+            }
         }
     }
 
