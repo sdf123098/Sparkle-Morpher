@@ -7,7 +7,6 @@ import com.micaftic.morpher.client.ExportResult;
 import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.core.model.ModelUploadSession;
 import com.micaftic.morpher.core.model.catalog.LocalModelScanner;
-import com.micaftic.morpher.core.storage.AtomicFileMover;
 import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.mixin.ConnectionAccessor;
 import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
@@ -15,6 +14,7 @@ import com.micaftic.morpher.model.format.ServerAnimationInfo;
 import com.micaftic.morpher.model.format.ServerModelData;
 import com.micaftic.morpher.model.format.ServerModelInfo;
 import com.micaftic.morpher.model.catalog.ServerModelCatalog;
+import com.micaftic.morpher.model.cache.ServerModelCache;
 import com.micaftic.morpher.model.format.UUIDComponentData;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.S2CModelSyncPayload;
@@ -717,8 +717,9 @@ public final class ServerModelManager {
         if (sha256 == null || sha256.isEmpty()) return null;
 
         try {
-            long[] hashes = YsmCrypt.calculateModelHashes(sha256, serverKey);
-            String cacheFileName = String.format("%016x%016x", hashes[0], hashes[1]);
+            // R8 遗留①：缓存引擎（哈希命名/校验/加密原子写）抽到 ServerModelCache
+            long[] hashes = ServerModelCache.hashes(sha256, serverKey);
+            String cacheFileName = ServerModelCache.fileName(hashes);
             Path cacheFile = serverCacheDir.resolve(cacheFileName);
             if (!serverCacheDir.toFile().isDirectory()) {
                 Files.createDirectories(serverCacheDir);
@@ -726,20 +727,22 @@ public final class ServerModelManager {
             boolean needsUpdate = true;
             if (Files.exists(cacheFile)) {
                 byte[] existingData = Files.readAllBytes(cacheFile);
-                if (YsmCrypt.verifyServerCache(existingData, hashes[0], hashes[1]) && canReadServerCache(existingData, modelId)) {
+                if (ServerModelCache.isValid(existingData, hashes, serverKey)) {
                     needsUpdate = false;
+                } else {
+                    YesSteveModel.LOGGER.warn("[SM] Rebuilding unreadable server model cache: {}", modelId);
                 }
             }
             if (needsUpdate) {
-                byte[] encryptedCache;
-                try (YSMByteBuf serialized = YSMBinarySerializer.serialize(model, 32, true)) {
-                    io.netty.buffer.ByteBuf raw = serialized.getRawBuf();
+                byte[] serialized;
+                try (YSMByteBuf serializedBuf = YSMBinarySerializer.serialize(model, 32, true)) {
+                    io.netty.buffer.ByteBuf raw = serializedBuf.getRawBuf();
                     if (raw.hasArray()) {
                         int off = raw.arrayOffset() + raw.readerIndex();
                         int len = raw.readableBytes();
-                        encryptedCache = YsmCrypt.encryptServerCache(raw.array(), off, len, serverKey, hashes[0], hashes[1]);
+                        serialized = Arrays.copyOfRange(raw.array(), off, off + len);
                     } else {
-                        encryptedCache = YsmCrypt.encryptServerCache(serialized.toArray(), serverKey, hashes[0], hashes[1]);
+                        serialized = serializedBuf.toArray();
                     }
                 }
                 // 原子写：先写临时文件再改名，避免进程中断/并发写/读写竞争产生半截缓存文件；
@@ -747,13 +750,7 @@ public final class ServerModelManager {
                 // 写入是尽力而为：Windows 上目标文件正被并发读取（发送模型给玩家）时 replace
                 // 会瞬时 AccessDenied，重试后仍失败则跳过——模型目录照常发布，发送路径会按需重建。
                 try {
-                    Path cacheTmp = Files.createTempFile(serverCacheDir, cacheFileName, ".tmp");
-                    try {
-                        Files.write(cacheTmp, encryptedCache);
-                        AtomicFileMover.moveWithRetry(cacheTmp, cacheFile);
-                    } finally {
-                        Files.deleteIfExists(cacheTmp);
-                    }
+                    ServerModelCache.write(cacheFile, serialized, hashes, serverKey);
                 } catch (Exception e) {
                     YesSteveModel.LOGGER.warn("[SM] Failed to update server cache file {} (will be rebuilt on demand): {}", cacheFileName, e.toString());
                 }
@@ -766,16 +763,6 @@ public final class ServerModelManager {
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("Failed to process and cache model: " + modelId, e);
             return null;
-        }
-    }
-
-    private static boolean canReadServerCache(byte[] existingData, String modelId) {
-        try {
-            YsmCrypt.read(existingData, serverKey);
-            return true;
-        } catch (Exception e) {
-            YesSteveModel.LOGGER.warn("[SM] Rebuilding unreadable server model cache: {}", modelId);
-            return false;
         }
     }
 
