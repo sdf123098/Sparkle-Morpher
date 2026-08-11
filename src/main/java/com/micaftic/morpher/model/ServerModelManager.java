@@ -161,15 +161,6 @@ public final class ServerModelManager {
         }
     }
 
-    public static class ServerPackData {
-        public String folderPath;
-        public byte[] iconData;
-        public int iconWidth, iconHeight, iconFormat;
-        public String name;
-        public String description;
-        public Map<String, Map<String, String>> lang;
-    }
-
     public static void reloadPacks() throws IOException {
         initialized = false;
         CATALOG.clear();
@@ -602,37 +593,8 @@ public final class ServerModelManager {
                 Path packJson = path.resolve("ysm-pack.json");
                 if (Files.exists(packJson)) {
                     try {
-                        ServerPackData packData = new ServerPackData();
-                        packData.folderPath = baseDir.toFile().toURI().relativize(path.toFile().toURI()).getPath();
-
-                        String jsonStr = Files.readString(packJson, StandardCharsets.UTF_8);
-                        JsonObject json = JsonParser.parseString(jsonStr).getAsJsonObject();
-                        if (json.has("name")) packData.name = json.get("name").toString();
-                        if (json.has("description")) packData.description = json.get("description").toString();
-
-                        if (json.has("lang") && json.get("lang").isJsonObject()) {
-                            packData.lang = new HashMap<>();
-                            JsonObject langObj = json.getAsJsonObject("lang");
-                            for (Map.Entry<String, JsonElement> entry : langObj.entrySet()) {
-                                if (entry.getValue().isJsonObject()) {
-                                    Map<String, String> translations = new HashMap<>();
-                                    for (Map.Entry<String, JsonElement> transEntry : entry.getValue().getAsJsonObject().entrySet()) {
-                                        translations.put(transEntry.getKey(), transEntry.getValue().toString());
-                                    }
-                                    packData.lang.put(entry.getKey(), translations);
-                                }
-                            }
-                        }
-
-                        Path packPng = path.resolve("ysm-pack.png");
-                        if (Files.exists(packPng)) {
-                            byte[] data = Files.readAllBytes(packPng);
-                            int[] dims = getPngDimensions(data);
-                            packData.iconData = data;
-                            packData.iconWidth = dims[0];
-                            packData.iconHeight = dims[1];
-                            packData.iconFormat = 2; // 2=PNG
-                        }
+                        // R8-4：pack 元数据解析集中到 ServerPackReader（纯 Java 可测）
+                        ServerPackData packData = ServerPackReader.read(baseDir, path);
                         packs.put(packData.folderPath, packData);
                     } catch (Exception e) {
                         YesSteveModel.LOGGER.error("Failed to load pack metadata: " + packJson, e);
@@ -747,14 +709,6 @@ public final class ServerModelManager {
             case UNKNOWN -> throw new IllegalArgumentException("Unsupported model import type for file: " + source);
             case FOLDER -> throw new IllegalArgumentException("Folder is not a file import: " + source);
         };
-    }
-
-    private static int[] getPngDimensions(byte[] data) {
-        if (data == null || data.length < 24) return new int[]{0, 0};
-        if ((data[0] & 0xFF) != 0x89 || data[1] != 0x50 || data[2] != 0x4E || data[3] != 0x47) return new int[]{0, 0};
-        int width = ((data[16] & 0xFF) << 24) | ((data[17] & 0xFF) << 16) | ((data[18] & 0xFF) << 8) | (data[19] & 0xFF);
-        int height = ((data[20] & 0xFF) << 24) | ((data[21] & 0xFF) << 16) | ((data[22] & 0xFF) << 8) | (data[23] & 0xFF);
-        return new int[]{width, height};
     }
 
     private static ServerModelData processAndCacheModel(String modelId, RawYsmModel model, Path serverCacheDir, boolean isAuth, Set<String> validCacheFiles) {
