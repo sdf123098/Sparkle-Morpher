@@ -103,7 +103,8 @@ class LocalModelCatalogTest {
         Path file = tempDir.resolve("m.ysm");
         write(file, "data-v1");
         long first = LocalModelCatalog.fingerprint(file);
-        write(file, "data-v2");
+        // 内容长度不同 → size 参与指纹，避免同毫秒 mtime 相同导致的 flaky
+        write(file, "data-v2-with-longer-content");
         long second = LocalModelCatalog.fingerprint(file);
         assertNotEquals(first, second, "内容变化指纹应变化");
     }
@@ -113,7 +114,7 @@ class LocalModelCatalogTest {
         Path dir = tempDir.resolve("pack");
         write(dir.resolve("a.txt"), "a1");
         long first = LocalModelCatalog.fingerprint(dir);
-        write(dir.resolve("a.txt"), "a2");
+        write(dir.resolve("a.txt"), "a2-with-longer-content");
         long second = LocalModelCatalog.fingerprint(dir);
         assertNotEquals(first, second, "目录内文件内容变化指纹应变化");
         write(dir.resolve("b.txt"), "b1");
