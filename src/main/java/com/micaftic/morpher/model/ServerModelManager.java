@@ -6,6 +6,7 @@ import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.client.ExportResult;
 import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.core.model.catalog.LocalModelScanner;
+import com.micaftic.morpher.core.storage.AtomicFileMover;
 import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.mixin.ConnectionAccessor;
 import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
@@ -803,7 +804,7 @@ public final class ServerModelManager {
                     Path cacheTmp = Files.createTempFile(serverCacheDir, cacheFileName, ".tmp");
                     try {
                         Files.write(cacheTmp, encryptedCache);
-                        moveWithRetry(cacheTmp, cacheFile);
+                        AtomicFileMover.moveWithRetry(cacheTmp, cacheFile);
                     } finally {
                         Files.deleteIfExists(cacheTmp);
                     }
@@ -830,33 +831,6 @@ public final class ServerModelManager {
             YesSteveModel.LOGGER.warn("[SM] Rebuilding unreadable server model cache: {}", modelId);
             return false;
         }
-    }
-
-    /**
-     * 原子替换目标文件：Windows 上并发 REPLACE 偶尔瞬时 AccessDenied，重试几次；
-     * 目标文件始终是完整内容（旧或新），重试是安全的。
-     */
-    private static void moveWithRetry(Path source, Path target) throws IOException {
-        IOException last = null;
-        for (int attempt = 0; attempt < 6; attempt++) {
-            try {
-                try {
-                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                } catch (AtomicMoveNotSupportedException e) {
-                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
-                }
-                return;
-            } catch (IOException e) {
-                last = e;
-                try {
-                    Thread.sleep(20L << attempt); // 20/40/80/160/320/640ms
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw e;
-                }
-            }
-        }
-        throw last;
     }
 
     /**
