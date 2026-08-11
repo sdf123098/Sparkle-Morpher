@@ -13,6 +13,7 @@ import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
 import com.micaftic.morpher.model.format.ServerAnimationInfo;
 import com.micaftic.morpher.model.format.ServerModelData;
 import com.micaftic.morpher.model.format.ServerModelInfo;
+import com.micaftic.morpher.model.catalog.ServerModelCatalog;
 import com.micaftic.morpher.model.format.UUIDComponentData;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.S2CModelSyncPayload;
@@ -104,19 +105,10 @@ public final class ServerModelManager {
     public static final Path CACHE_BBMODEL_IMPORT_IDENTITY_FILE = ModelStoragePaths.cacheBbmodelImportIdentityFile();
 
     /**
-     * 模型名称 -> 模型额外信息缓存
-     * 可以方便的通过此缓存，来判断客户端发来的 MD5 在不在服务端
-     * 从而将服务器文件发送给玩家
-     * 还可以获取其他服务端模型信息
+     * R8-3：服务端模型目录状态（byName/authModels/modelHashes）收敛到 ServerModelCatalog。
+     * 原 CATALOG / CATALOG.authModels() / CATALOG.modelHashes() 三个静态字段的整表替换 + 归一回退查询语义。
      */
-    private static Map<String, ServerModelData> CACHE_NAME_INFO = Maps.newHashMap();
-
-    private static IntOpenHashSet modelHashSet = new IntOpenHashSet();
-
-    /**
-     * 放置授权模型名称
-     */
-    private static Set<String> AUTH_MODELS = Sets.newHashSet();
+    private static final ServerModelCatalog<ServerModelData> CATALOG = new ServerModelCatalog<>();
 
     private static final Map<UUID, PlayerSyncState> syncStates = new ConcurrentHashMap<>();
     private static final Map<Long, ModelUploadState> uploadStates = new ConcurrentHashMap<>();
@@ -180,8 +172,7 @@ public final class ServerModelManager {
 
     public static void reloadPacks() throws IOException {
         initialized = false;
-        CACHE_NAME_INFO.clear();
-        AUTH_MODELS.clear();
+        CATALOG.clear();
 
         createFolder(FOLDER);
         createFolder(BUILT);
@@ -562,7 +553,7 @@ public final class ServerModelManager {
             } catch (Exception ignored) {}
 
             ModelLoadResult result = new ModelLoadResult(true, null, loadedModels, authIds.toArray(new String[0]));
-            AUTH_MODELS = authIds;
+            CATALOG.replaceAuth(authIds);
 
             onModelLoadComplete(result, callback);
             return true;
@@ -837,7 +828,7 @@ public final class ServerModelManager {
      * 按内容哈希定位模型并重建服务端缓存文件（发送路径自愈：缓存损坏/缺失时从源模型重新生成）。
      */
     private static boolean rebuildServerCacheByHashes(long hash1, long hash2) {
-        for (Map.Entry<String, ServerModelData> entry : CACHE_NAME_INFO.entrySet()) {
+        for (Map.Entry<String, ServerModelData> entry : CATALOG.all().entrySet()) {
             ServerModelInfo info = entry.getValue().getLoadedModelData();
             if (info == null) continue;
             String sha = info.getModelHash();
@@ -917,7 +908,7 @@ public final class ServerModelManager {
 
                 for (UUID uuid : uuids) {
                     PlayerSyncState candidate = new PlayerSyncState();
-                    candidate.allowedModels.addAll(CACHE_NAME_INFO.values());
+                    candidate.allowedModels.addAll(CATALOG.all().values());
                     candidate.step = 1;
                     candidate.connection = getPlayerConnection(uuid);
                     PlayerSyncState state = syncStates.compute(uuid, (key, existing) -> {
@@ -1129,7 +1120,7 @@ public final class ServerModelManager {
     public static void nativeExportModel(String modelID, @Nullable String extra, @Nullable Consumer<ExportResult> callback) {
         YSMThreadPool.submit(() -> {
             try {
-                ServerModelData modelData = CACHE_NAME_INFO.get(modelID);
+                ServerModelData modelData = CATALOG.lookup(modelID);
                 if (modelData == null) {
                     if (callback != null) {
                         callback.accept(new ExportResult(false, (Component) YSMComponentHelper.createTranslatableComponent("commands.sparkle_morpher.export.failure",new Object[]{": " + modelID + "\n Model not found"}), "", "", 0));
@@ -1193,15 +1184,11 @@ public final class ServerModelManager {
     }
 
     public static Optional<ServerModelData> getModelDefinition(String str) {
-        ServerModelData data = CACHE_NAME_INFO.get(str);
-        if (data == null) {
-            data = CACHE_NAME_INFO.get(ModelIdUtil.normalizeImportModelId(str));
-        }
-        return Optional.ofNullable(data);
+        return Optional.ofNullable(CATALOG.lookupNormalized(str));
     }
 
     public static Map<String, ServerModelData> getServerModelInfo() {
-        return CACHE_NAME_INFO;
+        return CATALOG.all();
     }
 
     public static boolean isModelCatalogReady() {
@@ -1209,7 +1196,7 @@ public final class ServerModelManager {
     }
 
     public static Set<String> getAuthModels() {
-        return AUTH_MODELS;
+        return CATALOG.authModels();
     }
 
     public static boolean isModelUploadAllowed() {
@@ -1253,7 +1240,7 @@ public final class ServerModelManager {
         if (totalBytes <= 0 || totalBytes > maxBytes) {
             return UploadStartResult.reject((byte) 2, "File exceeds server limit");
         }
-        if (CACHE_NAME_INFO.containsKey(modelId) || uploadStates.values().stream().anyMatch(state -> state.modelId.equals(modelId))) {
+        if (CATALOG.contains(modelId) || uploadStates.values().stream().anyMatch(state -> state.modelId.equals(modelId))) {
             return UploadStartResult.reject((byte) 1, "Model ID already exists");
         }
 
@@ -1532,9 +1519,7 @@ public final class ServerModelManager {
                     for (ServerModelData data : modelLoadResult.getModelDefinitions().values()) {
                         intOpenHashSet.add(data.getLoadedModelData().getHashId());
                     }
-                    CACHE_NAME_INFO = modelLoadResult.getModelDefinitions();
-                    modelHashSet = intOpenHashSet;
-                    AUTH_MODELS = modelLoadResult.getAuthModelIds();
+                    CATALOG.replaceAll(modelLoadResult.getModelDefinitions(), modelLoadResult.getAuthModelIds(), intOpenHashSet);
                     initialized = true;
                 }
                 if (consumer != null) {
@@ -1544,8 +1529,7 @@ public final class ServerModelManager {
             return;
         }
         if (modelLoadResult.isSuccess()) {
-            CACHE_NAME_INFO = modelLoadResult.getModelDefinitions();
-            AUTH_MODELS = modelLoadResult.getAuthModelIds();
+            CATALOG.replaceDefinitionsAndAuth(modelLoadResult.getModelDefinitions(), modelLoadResult.getAuthModelIds());
             initialized = true;
         }
         if (consumer != null) {
@@ -1649,10 +1633,7 @@ public final class ServerModelManager {
 
     @Nullable
     public static String resolveTextureOrDefault(String modelId, @Nullable String requestedTexture) {
-        ServerModelData modelData = CACHE_NAME_INFO.get(modelId);
-        if (modelData == null) {
-            modelData = CACHE_NAME_INFO.get(ModelIdUtil.normalizeImportModelId(modelId));
-        }
+        ServerModelData modelData = CATALOG.lookupNormalized(modelId);
         if (modelData == null) {
             return null;
         }
@@ -1693,17 +1674,17 @@ public final class ServerModelManager {
         if (!initialized) {
             return;
         }
-        if (!CACHE_NAME_INFO.isEmpty()) {
+        if (!CATALOG.isEmpty()) {
             ModelInfoCapability.get(serverPlayer).ifPresent(modelInfoCap -> {
                 AuthModelsCapability.get(serverPlayer).ifPresent(authModelsCap -> {
                     if (authModelsCap.getAuthModels().removeIf(str -> getModelDefinition(str).isEmpty())) {
                         NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(authModelsCap.getAuthModels()), serverPlayer);
                     }
                     String selectedModelId = modelInfoCap.getModelId();
-                    String modelId = CACHE_NAME_INFO.containsKey(selectedModelId) ? selectedModelId : ModelIdUtil.normalizeImportModelId(selectedModelId);
+                    String modelId = CATALOG.contains(selectedModelId) ? selectedModelId : ModelIdUtil.normalizeImportModelId(selectedModelId);
                     boolean changed = false;
                     boolean hasAuth = authModelsCap.containsModel(selectedModelId) || authModelsCap.containsModel(modelId);
-                    if (!getServerModelInfo().containsKey(modelId) || (AUTH_MODELS.contains(modelId) && !hasAuth)) {
+                    if (!getServerModelInfo().containsKey(modelId) || (CATALOG.authModels().contains(modelId) && !hasAuth)) {
                         modelInfoCap.resetToDefault();
                         changed = true;
                     } else {
@@ -1721,7 +1702,7 @@ public final class ServerModelManager {
                         PlayerModelSelectionStore.saveCurrentSelection(serverPlayer, modelInfoCap);
                         PlayerDataSaveBridge.save(serverPlayer);
                     }
-                    modelInfoCap.retainAnimationKeys(modelHashSet);
+                    modelInfoCap.retainAnimationKeys(CATALOG.modelHashes());
                 });
             });
         }
