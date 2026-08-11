@@ -51,10 +51,6 @@ public final class ClientPacketHandlers {
         return connection != null && connection.getConnection() != null && NetworkHandler.isConnectionValid(connection.getConnection());
     }
 
-    public static boolean isPrivacyModeActive() {
-        return PrivacyMode.isActive();
-    }
-
     public static boolean isLocalPlayer(Object player) {
         return player instanceof LocalPlayer;
     }

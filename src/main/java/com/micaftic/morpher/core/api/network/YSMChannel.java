@@ -16,6 +16,7 @@ public final class YSMChannel {
     public static void init(ResourceLocation channelId, String version) { YSMChannelImpl.init(channelId, version); }
     public static <T> void register(int discriminator, Class<T> type, BiConsumer<T, FriendlyByteBuf> encoder, Function<FriendlyByteBuf, T> decoder, BiConsumer<T, PacketContext> handler, PacketDirection direction) { YSMChannelImpl.register(discriminator, type, encoder, decoder, handler, direction); }
     public static void sendToServer(Object packet) { YSMChannelImpl.sendToServer(packet); }
+    public static boolean canSendToClient(ServerPlayer player) { return YSMChannelImpl.canSendToClient(player); }
     public static void sendToClientPlayer(Object packet, ServerPlayer player) { YSMChannelImpl.sendToClientPlayer(packet, player); }
     public static void sendToAll(Object packet) { YSMChannelImpl.sendToAll(packet); }
     public static void sendToTrackingEntity(Object packet, Entity entity) { YSMChannelImpl.sendToTrackingEntity(packet, entity); }
