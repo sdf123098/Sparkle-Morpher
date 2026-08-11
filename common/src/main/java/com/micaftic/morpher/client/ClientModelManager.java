@@ -15,8 +15,10 @@ import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
 import com.micaftic.morpher.core.model.ModelRef;
 import com.micaftic.morpher.core.model.ModelSourceType;
+import com.micaftic.morpher.core.model.ModelRetention;
 import com.micaftic.morpher.core.model.selection.EntityModelResolver;
 import com.micaftic.morpher.core.model.selection.ModelRevisionGuard;
+import com.micaftic.morpher.core.model.selection.ModelSelectionState;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
@@ -199,6 +201,10 @@ public class ClientModelManager {
      */
     public static final EntityModelResolver MODEL_RESOLVER = new EntityModelResolver(new ModelRevisionGuard());
     /**
+     * R7.3：模型选择状态（selected / localOnly 双轨），从本类 4 个 volatile 字段抽取。
+     */
+    public static final ModelSelectionState MODEL_SELECTION = new ModelSelectionState();
+    /**
      * R7.1：本地模型导入持久化（原子写 + 路径沙箱 + sibling 清理），
      * 从 ClientModelManager 抽取为独立可测组件。
      */
@@ -213,10 +219,6 @@ public class ClientModelManager {
     private static final SyncStatus syncState = new SyncStatus();
     private static volatile boolean isOysmServer = false;
     private static volatile boolean allowUpload = false;
-    private static volatile String selectedModelId;
-    private static volatile String selectedTextureId;
-    private static volatile String selectedLocalOnlyModelId;
-    private static volatile String selectedLocalOnlyTextureId;
 
     public enum SyncState {
         WAITING, LOADING, IDLE, PREPARING, SYNCING
@@ -827,21 +829,16 @@ public class ClientModelManager {
         // 断线/换服：释放过期服务端模型装配（含纹理源 byte[] 与 GPU/native 资源），
         // 否则它们会被 modelAssemblyMap 强引用跨会话累积（主要内存泄漏源）。
         // 保留 localModelContext（默认模型）与本地导入模型：reloadLocalModels 会重建后者。
+        // R7.3：保留/释放判定集中到 ModelRetention（纯函数，单测覆盖）。
         if (!modelAssemblyMap.isEmpty()) {
-            Object2ReferenceOpenHashMap<String, ModelAssembly> snapshot = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+            ModelRetention.Split<ModelAssembly> retention = ModelRetention.partition(
+                    new ArrayList<>(modelAssemblyMap.entrySet()), localOnlyModelIds::contains, localModelContext);
             Object2ReferenceOpenHashMap<String, ModelAssembly> survivors = new Object2ReferenceOpenHashMap<>();
-            ArrayList<ModelAssembly> toRelease = new ArrayList<>();
-            for (Map.Entry<String, ModelAssembly> entry : snapshot.entrySet()) {
-                String id = entry.getKey();
-                ModelAssembly asm = entry.getValue();
-                if (asm == localModelContext || localOnlyModelIds.contains(id) || "default".equals(id)) {
-                    survivors.put(id, asm);
-                } else {
-                    toRelease.add(asm);
-                }
+            for (Map.Entry<String, ModelAssembly> entry : retention.survivors()) {
+                survivors.put(entry.getKey(), entry.getValue());
             }
             modelAssemblyMap = survivors;
-            for (ModelAssembly asm : toRelease) {
+            for (ModelAssembly asm : retention.toRelease()) {
                 releaseModelAssembly(asm);
             }
         }
@@ -1029,20 +1026,15 @@ public class ClientModelManager {
     }
 
     public static boolean isSelectedLocalOnlyModel(String modelId) {
-        return modelId != null && sameRuntimeModelId(modelId, selectedModelId) && isLocalOnlyModel(modelId);
+        return modelId != null && sameRuntimeModelId(modelId, MODEL_SELECTION.selectedModelId()) && isLocalOnlyModel(modelId);
     }
 
     public static void rememberSelectedModel(String modelId, String textureId) {
         // R6：选择变化推进 revision——作废所有在途异步模型结果（竞态防护）
         MODEL_RESOLVER.request();
-        selectedModelId = modelId;
-        selectedTextureId = textureId;
-        if (isLocalOnlyModel(modelId)) {
-            selectedLocalOnlyModelId = modelId;
-            selectedLocalOnlyTextureId = textureId;
-        } else if (modelId != null && sameRuntimeModelId(modelId, selectedLocalOnlyModelId)) {
-            clearSelectedLocalOnlyModel();
-        }
+        // R7.3：双轨选择状态（selected / localOnly）集中到 ModelSelectionState
+        MODEL_SELECTION.remember(modelId, textureId, isLocalOnlyModel(modelId),
+                sameRuntimeModelId(modelId, MODEL_SELECTION.localOnlyModelId()));
         // 持久化模型选择到本地文件，以便在无模组服务器上自动恢复
         LocalModelSelectionStore.save(modelId, textureId);
     }
@@ -1055,8 +1047,8 @@ public class ClientModelManager {
      */
     public static void restorePersistedModelSelection() {
         // 1. 先尝试内存中的选择
-        String modelId = selectedModelId;
-        String textureId = selectedTextureId;
+        String modelId = MODEL_SELECTION.selectedModelId();
+        String textureId = MODEL_SELECTION.selectedTextureId();
 
         // 2. 如果内存中的选择不是仅本地模型（在断开YSM服务器后可能已不可用），尝试从文件恢复
         if (modelId == null || (!isLocalOnlyModel(modelId) && !containsRuntimeModel(modelId))) {
@@ -1087,7 +1079,7 @@ public class ClientModelManager {
         // 6. 在渲染线程上应用
         ((Executor) Minecraft.getInstance()).execute(() -> {
             // 再次检查，防止在 execute 延迟期间选择已改变
-            if (!sameRuntimeModelId(finalModelId, selectedModelId) && !isLocalOnlyModel(finalModelId) && !containsRuntimeModel(finalModelId)) {
+            if (!sameRuntimeModelId(finalModelId, MODEL_SELECTION.selectedModelId()) && !isLocalOnlyModel(finalModelId) && !containsRuntimeModel(finalModelId)) {
                 // 内存中的选择已经变了，且持久化的模型也不再可用，放弃恢复
                 return;
             }
@@ -1135,8 +1127,7 @@ public class ClientModelManager {
                 return;
             }
             cap.initModelWithTexture(modelId, textureId);
-            selectedModelId = modelId;
-            selectedTextureId = textureId;
+            MODEL_SELECTION.rememberPlain(modelId, textureId);
         });
     }
 
@@ -1176,16 +1167,16 @@ public class ClientModelManager {
     }
 
     public static void resendSelectedServerModel() {
-        String modelId = selectedModelId;
-        String textureId = selectedTextureId;
+        String modelId = MODEL_SELECTION.selectedModelId();
+        String textureId = MODEL_SELECTION.selectedTextureId();
         NetworkOnlineDebugLog.info("resendSelected: modelId={} textureId={} connected={}", modelId, textureId, NetworkHandler.isClientConnected());
         if (modelId == null || modelId.isBlank() || textureId == null || isLocalOnlyModel(modelId) || !NetworkHandler.isClientConnected()) {
             NetworkOnlineDebugLog.info("resendSelected: EARLY_RETURN (null/blank/localOnly/disconnected)");
             return;
         }
         ((Executor) Minecraft.getInstance()).execute(() -> {
-            String currentModelId = selectedModelId;
-            String currentTextureId = selectedTextureId;
+            String currentModelId = MODEL_SELECTION.selectedModelId();
+            String currentTextureId = MODEL_SELECTION.selectedTextureId();
             if (!sameRuntimeModelId(modelId, currentModelId) || currentTextureId == null || isLocalOnlyModel(modelId) || !containsRuntimeModel(modelId)) {
                 return;
             }
@@ -1206,11 +1197,11 @@ public class ClientModelManager {
                 localModelSourcePaths.remove(modelKey);
                 lazyModelSources.computeIfPresent(modelKey, (key, source) -> source.remote ? source : null);
                 cpuReloadInFlight.remove(modelKey);
-                if (sameRuntimeModelId(modelId, selectedLocalOnlyModelId)) {
-                    clearSelectedLocalOnlyModel();
+                if (sameRuntimeModelId(modelId, MODEL_SELECTION.localOnlyModelId())) {
+                    MODEL_SELECTION.clearLocalOnly();
                 }
-                if (sameRuntimeModelId(modelId, selectedModelId)) {
-                    clearSelectedModel();
+                if (sameRuntimeModelId(modelId, MODEL_SELECTION.selectedModelId())) {
+                    MODEL_SELECTION.clear();
                 }
                 modelLastUsedAt.remove(modelKey);
                 gpuCacheTrimmedModels.remove(modelKey);
@@ -1533,11 +1524,11 @@ public class ClientModelManager {
                     if (localOnlyModelIds.contains(modelKey)) {
                         continue;
                     }
-                    if (sameRuntimeModelId(str, selectedLocalOnlyModelId)) {
-                        clearSelectedLocalOnlyModel();
+                    if (sameRuntimeModelId(str, MODEL_SELECTION.localOnlyModelId())) {
+                        MODEL_SELECTION.clearLocalOnly();
                     }
-                    if (sameRuntimeModelId(str, selectedModelId)) {
-                        clearSelectedModel();
+                    if (sameRuntimeModelId(str, MODEL_SELECTION.selectedModelId())) {
+                        MODEL_SELECTION.clear();
                     }
                     ModelAssembly assembly = map.remove(modelKey);
                     if (assembly != null) {
@@ -1555,11 +1546,11 @@ public class ClientModelManager {
                 for (int i = 0; i < previousModelIds.length; i++) {
                     String previousKey = LocalModelCatalog.canonicalKey(previousModelIds[i]);
                     localOnlyModelIds.remove(previousKey);
-                    if (sameRuntimeModelId(previousModelIds[i], selectedLocalOnlyModelId)) {
-                        clearSelectedLocalOnlyModel();
+                    if (sameRuntimeModelId(previousModelIds[i], MODEL_SELECTION.localOnlyModelId())) {
+                        MODEL_SELECTION.clearLocalOnly();
                     }
-                    if (sameRuntimeModelId(previousModelIds[i], selectedModelId)) {
-                        selectedModelId = updatedModelIds[i];
+                    if (sameRuntimeModelId(previousModelIds[i], MODEL_SELECTION.selectedModelId())) {
+                        MODEL_SELECTION.setSelectedId(updatedModelIds[i]);
                     }
                     modelAssemblies[i] = map.remove(previousKey);
                 }
@@ -1578,17 +1569,6 @@ public class ClientModelManager {
                 });
             }
         });
-    }
-
-    private static void clearSelectedLocalOnlyModel() {
-        selectedLocalOnlyModelId = null;
-        selectedLocalOnlyTextureId = null;
-    }
-
-    private static void clearSelectedModel() {
-        selectedModelId = null;
-        selectedTextureId = null;
-        clearSelectedLocalOnlyModel();
     }
 
     private static void onModelDataReceived(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) throws Exception {
@@ -2051,7 +2031,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
 
     private static void onSyncComplete() {
         NetworkOnlineDebugLog.info("onSyncComplete: selectedModelId={} selectedTextureId={} assemblyMapSize={}",
-                selectedModelId, selectedTextureId, modelAssemblyMap.size());
+                MODEL_SELECTION.selectedModelId(), MODEL_SELECTION.selectedTextureId(), modelAssemblyMap.size());
         syncStep = 1;
         cachedModelHashes.clear();
         lastSyncActivityMillis = 0L;
@@ -2318,9 +2298,9 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                 }
             }
         }
-        if (selectedModelId != null && !selectedModelId.isBlank()) {
-            protectedModels.add(LocalModelCatalog.canonicalKey(selectedModelId));
-            touchModel(selectedModelId);
+        if (MODEL_SELECTION.selectedModelId() != null && !MODEL_SELECTION.selectedModelId().isBlank()) {
+            protectedModels.add(LocalModelCatalog.canonicalKey(MODEL_SELECTION.selectedModelId()));
+            touchModel(MODEL_SELECTION.selectedModelId());
         }
         if (minecraft.level != null) {
             for (Player player : minecraft.level.players()) {
