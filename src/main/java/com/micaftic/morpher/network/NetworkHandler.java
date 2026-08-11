@@ -11,6 +11,9 @@ import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 import com.micaftic.morpher.core.api.network.PacketDirection;
 import com.micaftic.morpher.core.api.network.YSMChannel;
+import com.micaftic.morpher.core.api.network.state.LegacySpmHandshakeState;
+import com.micaftic.morpher.core.api.network.state.PrivacyState;
+import com.micaftic.morpher.network.state.MinecraftConnectionState;
 
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -21,9 +24,8 @@ public final class NetworkHandler {
 
     public static final Identifier CHANNEL_ID = Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
 
+    /** 服务端按连接记录的 SPM 协商版本（平台存储，R9.2 保留在本层）。 */
     private static final Map<Connection, String> CHANNEL_VERSIONS = new WeakHashMap<>();
-
-    private static volatile boolean clientHandshakeComplete = false;
 
     public static boolean setChannelVersion(Connection connection, String str) {
         if (connection == null || str == null) {
@@ -35,25 +37,23 @@ public final class NetworkHandler {
     }
 
     public static void markClientHandshakeComplete() {
-        clientHandshakeComplete = true;
+        LegacySpmHandshakeState.markClientComplete();
     }
 
+    /** 复位客户端 legacy 会话（握手完成 + oySm/allowUpload 能力），用于退出服务器 / 进入隐私模式。 */
     public static void resetClientHandshake() {
-        clientHandshakeComplete = false;
+        LegacySpmHandshakeState.resetClientSession();
     }
 
     public static boolean isPlayerConnected(ServerPlayer serverPlayer) {
-        return serverPlayer.connection != null && isConnectionValid(serverPlayer.connection.getConnection());
+        return MinecraftConnectionState.isPlayerConnected(serverPlayer)
+                && isConnectionValid(serverPlayer.connection.getConnection());
     }
 
     public static boolean isClientConnected() {
-        if (ClientNetworkBridge.isPrivacyModeActive()) {
-            return false;
-        }
-        if (clientHandshakeComplete) {
-            return true;
-        }
-        return ClientNetworkBridge.isClientConnected();
+        // R9.2：只做组合——隐私未激活，且 legacy 会话活跃（握手完成或 MC 连接已协商）
+        return PrivacyState.isInactive()
+                && LegacySpmHandshakeState.isClientSessionActive(MinecraftConnectionState.isClientConnected());
     }
 
     public static boolean isConnectionValid(@Nullable Connection connection) {
@@ -95,7 +95,8 @@ public final class NetworkHandler {
     }
 
     public static void sendToServer(Object obj) {
-        if (!ClientNetworkBridge.isPrivacyModeActive() && isClientConnected()) {
+        // R9.2：隐私检查已内建于 isClientConnected（PrivacyState），不再重复判断
+        if (isClientConnected()) {
             YSMChannel.sendToServer(obj);
         }
     }
