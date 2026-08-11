@@ -101,6 +101,11 @@ public final class NetworkHandler {
     }
 
     public static void sendToClientPlayer(Object obj, Player player) {
+        // R9.1：统一发送入口预检——客户端未协商 SPM channel（未装 SPM）时跳过，
+        // 避免 NetworkRegistry.checkPacket / fabric ServerPlayNetworking 抛异常崩溃。
+        if (player instanceof ServerPlayer serverPlayer && !YSMChannel.canSendToClient(serverPlayer)) {
+            return;
+        }
         YSMChannel.sendToClientPlayer(obj, (ServerPlayer) player);
     }
 
