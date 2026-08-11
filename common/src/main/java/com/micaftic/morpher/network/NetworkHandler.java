@@ -1,13 +1,10 @@
 package com.micaftic.morpher.network;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.mixin.ConnectionAccessor;
 import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
 import com.micaftic.morpher.network.message.*;
 import io.netty.util.AttributeKey;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.resources.ResourceLocation;
@@ -17,6 +14,9 @@ import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 import com.micaftic.morpher.core.api.network.PacketDirection;
 import com.micaftic.morpher.core.api.network.YSMChannel;
+import com.micaftic.morpher.core.api.network.state.LegacySpmHandshakeState;
+import com.micaftic.morpher.core.api.network.state.PrivacyState;
+import com.micaftic.morpher.network.state.MinecraftConnectionState;
 
 public final class NetworkHandler {
 
@@ -24,38 +24,38 @@ public final class NetworkHandler {
 
     public static final ResourceLocation CHANNEL_ID = ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
 
+    /** 服务端按连接记录的 SPM 协商版本（平台存储：netty Channel attribute，R9.2 保留在本层）。 */
     private static final AttributeKey<String> CHANNEL_VERSION_KEY = AttributeKey.valueOf("sparkle_morpher_channel_version");
-
-    private static volatile boolean clientHandshakeComplete = false;
 
     public static boolean setChannelVersion(Connection connection, String str) {
         return ((ConnectionAccessor) connection).ysm$getChannel().attr(CHANNEL_VERSION_KEY).compareAndSet(null, str);
     }
 
     public static void markClientHandshakeComplete() {
-        clientHandshakeComplete = true;
+        LegacySpmHandshakeState.markClientComplete();
     }
 
+    /** 复位客户端 legacy 会话（握手完成 + oySm/allowUpload 能力），用于退出服务器 / 进入隐私模式。 */
     public static void resetClientHandshake() {
-        clientHandshakeComplete = false;
+        LegacySpmHandshakeState.resetClientSession();
     }
 
     public static boolean isPlayerConnected(ServerPlayer serverPlayer) {
-        return serverPlayer.connection != null && isConnectionValid(((ServerCommonPacketListenerImplAccessor) serverPlayer.connection).ysm$getConnection());
+        return MinecraftConnectionState.isPlayerConnected(serverPlayer)
+                && isConnectionValid(((ServerCommonPacketListenerImplAccessor) serverPlayer.connection).ysm$getConnection());
     }
 
     public static boolean isClientConnected() {
-        if (PrivacyMode.isActive()) {
+        // R9.2：隐私未激活 + legacy 会话活跃（握手完成，或当前 MC 连接已协商 SPM channel）
+        return PrivacyState.isInactive()
+                && LegacySpmHandshakeState.isClientSessionActive(clientChannelNegotiated());
+    }
+
+    private static boolean clientChannelNegotiated() {
+        if (!MinecraftConnectionState.isClientConnected()) {
             return false;
         }
-        if (clientHandshakeComplete) {
-            return true;
-        }
-        ClientPacketListener connection = Minecraft.getInstance().getConnection();
-        if (connection == null) {
-            return false;
-        }
-        return isConnectionValid(connection.getConnection());
+        return isConnectionValid(MinecraftConnectionState.clientConnection().getConnection());
     }
 
     public static boolean isConnectionValid(@Nullable Connection connection) {
@@ -91,7 +91,8 @@ public final class NetworkHandler {
     }
 
     public static void sendToServer(Object obj) {
-        if (!PrivacyMode.isActive() && isClientConnected()) {
+        // R9.2：隐私检查已内建于 isClientConnected（PrivacyState），不再重复判断
+        if (isClientConnected()) {
             YSMChannel.sendToServer(obj);
         }
     }
