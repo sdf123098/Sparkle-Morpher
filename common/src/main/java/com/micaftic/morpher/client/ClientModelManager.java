@@ -13,6 +13,7 @@ import com.micaftic.morpher.client.gui.IGuiWidget;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
+import com.micaftic.morpher.core.api.network.state.LegacySpmHandshakeState;
 import com.micaftic.morpher.core.model.ModelRef;
 import com.micaftic.morpher.core.model.ModelSourceType;
 import com.micaftic.morpher.core.model.ModelRetention;
@@ -217,8 +218,6 @@ public class ClientModelManager {
     private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, Path> localModelSourcePaths = new ConcurrentHashMap<>();
     private static final SyncStatus syncState = new SyncStatus();
-    private static volatile boolean isOysmServer = false;
-    private static volatile boolean allowUpload = false;
 
     public enum SyncState {
         WAITING, LOADING, IDLE, PREPARING, SYNCING
@@ -1369,8 +1368,7 @@ public class ClientModelManager {
     }
 
     public static synchronized void resetSync() {
-        isOysmServer = false;
-        allowUpload = false;
+        // R9.2：oySm/allowUpload 与握手标志统一由 resetClientHandshake（→ LegacySpmHandshakeState.resetClientSession）复位
         processServerData(null);
         NetworkHandler.resetClientHandshake();
         ((Executor) Minecraft.getInstance()).execute(() -> {
@@ -1379,8 +1377,6 @@ public class ClientModelManager {
     }
 
     public static void enterPrivacyMode() {
-        isOysmServer = false;
-        allowUpload = false;
         processServerData(null);
         NetworkHandler.resetClientHandshake();
         ((Executor) Minecraft.getInstance()).execute(() -> {
@@ -1398,11 +1394,11 @@ public class ClientModelManager {
     }
 
     public static boolean isAllowUpload() {
-        return allowUpload;
+        return LegacySpmHandshakeState.isAllowUpload();
     }
 
     public static boolean isOysmServer() {
-        return isOysmServer;
+        return LegacySpmHandshakeState.isOysmServer();
     }
 
     private static void sendModelFile(ByteBuffer byteBuffer) {
@@ -2050,11 +2046,11 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
     }
 
     public static void setAllowUpload(boolean allowUpload) {
-        ClientModelManager.allowUpload = allowUpload;
+        LegacySpmHandshakeState.setAllowUpload(allowUpload);
     }
 
     public static void setOysmServer(boolean isOysmServer) {
-        ClientModelManager.isOysmServer = isOysmServer;
+        LegacySpmHandshakeState.setOysmServer(isOysmServer);
     }
 
     private static void onSyncError(@Nullable Object obj) {
