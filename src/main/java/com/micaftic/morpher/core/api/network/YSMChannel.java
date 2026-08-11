@@ -15,6 +15,7 @@ import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlers
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -50,20 +51,47 @@ public final class YSMChannel {
         ClientPacketDistributor.sendToServer(encodePacket(packet));
     }
 
+    /**
+     * 客户端连接是否已协商 SPM payload channel。
+     *
+     * <p>未装 SPM 的客户端（原版/Fabric/低版本）在配置阶段不注册 {@code sparkle_morpher}
+     * payload——向其发送会使 {@code NetworkRegistry.checkPacket} 抛
+     * {@code UnsupportedOperationException}：NeoForge 端踢玩家，原版/Fabric 客户端
+     * 场景异常在服务器 tick 冒泡导致服务器崩溃。发送前必须检测。</p>
+     */
+    public static boolean canSendToClient(ServerPlayer player) {
+        if (player == null || player.connection == null || channelId == null) {
+            return false;
+        }
+        return NetworkRegistry.hasChannel(player.connection, channelId);
+    }
+
     public static void sendToClientPlayer(Object packet, ServerPlayer player) {
+        if (!canSendToClient(player)) {
+            return;
+        }
         PacketDistributor.sendToPlayer(player, encodePacket(packet));
     }
 
     public static void sendToAll(Object packet) {
-        PacketDistributor.sendToAllPlayers(encodePacket(packet));
+        safeSend(() -> PacketDistributor.sendToAllPlayers(encodePacket(packet)));
     }
 
     public static void sendToTrackingEntity(Object packet, Entity entity) {
-        PacketDistributor.sendToPlayersTrackingEntity(entity, encodePacket(packet));
+        safeSend(() -> PacketDistributor.sendToPlayersTrackingEntity(entity, encodePacket(packet)));
     }
 
     public static void sendToTrackingEntityAndSelf(Object packet, Player player) {
-        PacketDistributor.sendToPlayersTrackingEntityAndSelf(player, encodePacket(packet));
+        safeSend(() -> PacketDistributor.sendToPlayersTrackingEntityAndSelf(player, encodePacket(packet)));
+    }
+
+    /** 批量发送无法逐玩家预检：存在未协商 SPM payload 的客户端时整批跳过（防御性兜底）。 */
+    private static void safeSend(Runnable send) {
+        try {
+            send.run();
+        } catch (UnsupportedOperationException ignored) {
+            // 目标玩家集合含未装 SPM 的客户端——该批数据无法送达，静默跳过
+        }
     }
 
     public static Packet<?> toClientboundPacket(Object packet) {
