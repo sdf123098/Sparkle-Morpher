@@ -16,6 +16,7 @@ import com.micaftic.morpher.model.format.ServerModelInfo;
 import com.micaftic.morpher.model.catalog.ServerModelCatalog;
 import com.micaftic.morpher.model.cache.ServerModelCache;
 import com.micaftic.morpher.model.format.UUIDComponentData;
+import com.micaftic.morpher.model.validation.UploadPolicy;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.S2CModelSyncPayload;
 import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
@@ -1117,23 +1118,21 @@ public final class ServerModelManager {
 
     public static UploadStartResult beginModelUpload(ServerPlayer sender, String requestedModelId, String fileName, int totalBytes, String sha256) {
         cleanupExpiredUploads();
-        if (!isModelUploadAllowed()) {
-            return UploadStartResult.reject((byte) 6, "Model import disabled");
-        }
-        if (sender == null || !NetworkHandler.isPlayerConnected(sender)) {
-            return UploadStartResult.reject((byte) 3, "No import permission");
-        }
+        // R8 遗留②：上传校验链抽到 UploadPolicy（纯判定 + 拒绝码/消息）
         String modelId = normalizeUploadedModelId(requestedModelId);
         LocalModelScanner.Kind importKind = LocalModelScanner.kindFromFileName(fileName);
-        if (modelId == null || importKind == LocalModelScanner.Kind.UNKNOWN || sha256 == null || !sha256.matches("[0-9a-fA-F]{64}")) {
-            return UploadStartResult.reject((byte) 5, "Invalid model id or hash");
-        }
         int maxBytes = getModelUploadMaxBytes();
-        if (totalBytes <= 0 || totalBytes > maxBytes) {
-            return UploadStartResult.reject((byte) 2, "File exceeds server limit");
-        }
-        if (CATALOG.contains(modelId) || uploadStates.values().stream().anyMatch(state -> state.modelId().equals(modelId))) {
-            return UploadStartResult.reject((byte) 1, "Model ID already exists");
+        UploadPolicy.RejectReason reason = UploadPolicy.validate(
+                isModelUploadAllowed(),
+                sender != null && NetworkHandler.isPlayerConnected(sender),
+                modelId,
+                importKind != LocalModelScanner.Kind.UNKNOWN,
+                sha256,
+                totalBytes,
+                maxBytes,
+                CATALOG.contains(modelId) || uploadStates.values().stream().anyMatch(state -> state.modelId().equals(modelId)));
+        if (reason != UploadPolicy.RejectReason.NONE) {
+            return UploadStartResult.reject(UploadPolicy.statusCode(reason), UploadPolicy.statusMessage(reason));
         }
 
         long uploadId;
