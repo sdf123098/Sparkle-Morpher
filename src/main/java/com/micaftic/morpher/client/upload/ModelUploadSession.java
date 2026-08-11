@@ -1,10 +1,8 @@
 package com.micaftic.morpher.client.upload;
 
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SModelUploadChunkPacket;
-import com.micaftic.morpher.network.message.C2SModelUploadFinishPacket;
-import com.micaftic.morpher.network.message.C2SModelUploadStartPacket;
 import com.micaftic.morpher.util.DigestUtil;
 import com.micaftic.morpher.util.PerformanceProfiler;
 import net.minecraft.network.chat.Component;
@@ -15,6 +13,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public final class ModelUploadSession {
     private static final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
+    /** R9.3：发包交给 transport；当前默认 legacy 服务器通道，行为与旧版本一致。 */
+    private static volatile ModelUploadTransport transport = LegacyServerUploadTransport.INSTANCE;
     private static volatile ModelUploadSession instance;
     private static volatile boolean serverLimitsKnown = false;
     private static volatile int lastMaxTotalBytes = 16777216; // 16MB
@@ -76,8 +76,13 @@ public final class ModelUploadSession {
         ModelUploadSession session = new ModelUploadSession(modelId, fileName, data, syncSelectionOnComplete);
         instance = session;
         notifyListeners();
-        NetworkHandler.sendToServer(new C2SModelUploadStartPacket(modelId, fileName == null ? "" : fileName, data.length, session.sha256));
+        transport.sendStart(modelId, fileName == null ? "" : fileName, data.length, session.sha256);
         return null;
+    }
+
+    /** R9.3：切换上传传输实现（默认 LegacyServerUploadTransport；云接入后由上层切换）。 */
+    public static void setTransport(ModelUploadTransport transport) {
+        ModelUploadSession.transport = transport;
     }
 
     public static boolean hasServerLimits() {
@@ -261,7 +266,7 @@ public final class ModelUploadSession {
         for (int i = 0; i < budget && nextOffset < data.length; i++) {
             int end = Math.min(nextOffset + chunkSize, data.length);
             int length = end - nextOffset;
-            NetworkHandler.sendToServer(new C2SModelUploadChunkPacket(uploadId, nextOffset, data, nextOffset, length));
+            transport.sendChunk(uploadId, nextOffset, data, nextOffset, length);
             nextOffset = end;
             chunks++;
             bytes += length;
@@ -271,7 +276,7 @@ public final class ModelUploadSession {
         if (nextOffset >= data.length) {
             state = State.FINISHING;
             message = Component.translatable("gui.sparkle_morpher.import.state.verifying");
-            NetworkHandler.sendToServer(new C2SModelUploadFinishPacket(uploadId));
+            transport.sendFinish(uploadId);
         }
         notifyListeners();
     }
