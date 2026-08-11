@@ -9,6 +9,7 @@ import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.EntityRenderCache;
 import com.micaftic.morpher.client.gui.IGuiWidget;
+import com.micaftic.morpher.client.gui.GuiWidgetRegistry;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
@@ -214,7 +215,6 @@ public class ClientModelManager {
     private static final long MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS = 5L * 60L * 1000L;
 
     private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
-    private static final WeakHashMap<IGuiWidget, Object> guiWidgets = new WeakHashMap<>();
     private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, Path> localModelSourcePaths = new ConcurrentHashMap<>();
     private static final SyncStatus syncState = new SyncStatus();
@@ -1346,25 +1346,20 @@ public class ClientModelManager {
         return defaultTexture.getResourceLocation().get();
     }
 
+    // R7 剩余：GUI observers 迁至 GuiWidgetRegistry（注册/遍历委托）
+
     public static <T extends IGuiWidget> T registerGuiWidget(T t) {
-        guiWidgets.put(t, null);
-        return t;
+        return GuiWidgetRegistry.register(t);
     }
 
     public static void unregisterGuiWidget(IGuiWidget guiWidget) {
-        guiWidgets.remove(guiWidget, null);
+        GuiWidgetRegistry.unregister(guiWidget);
     }
 
     private static void forEachGuiWidget(Consumer<IGuiWidget> consumer) {
-        Iterator<IGuiWidget> it = guiWidgets.keySet().iterator();
-        while (it.hasNext()) {
-            try {
-                consumer.accept(it.next());
-            } catch (Throwable th) {
-                th.printStackTrace();
-            }
-        }
+        GuiWidgetRegistry.forEach(consumer);
     }
+
 
     public static synchronized void resetSync() {
         // R9.2：oySm/allowUpload 与握手标志统一由 resetClientHandshake（→ LegacySpmHandshakeState.resetClientSession）复位
