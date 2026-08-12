@@ -22,4 +22,9 @@ public final class RenderBackends {
             case JAVA -> JavaRenderBackend.INSTANCE;
         };
     }
+
+    /** R10.2：OpenGL GPU 后端（持有 GPU mesh 资源，release 需经此 revoke 租约）。 */
+    public static RenderBackend gpu() {
+        return OpenGlGpuRenderBackend.INSTANCE;
+    }
 }

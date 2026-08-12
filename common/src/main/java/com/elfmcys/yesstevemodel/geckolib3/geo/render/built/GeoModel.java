@@ -12,7 +12,7 @@ import it.unimi.dsi.fastutil.ints.IntLists;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectLists;
 import org.jetbrains.annotations.NotNull;
-import com.micaftic.morpher.core.gpu.GpuRenderPath;
+import com.elfmcys.yesstevemodel.geckolib3.geo.RenderBackends;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -419,7 +419,8 @@ public class GeoModel {
 
     public boolean freeGpuCache() {
         if (gpuMeshHandle != 0) {
-            GpuRenderPath.disposeMesh(this);
+            // R10.2：GPU mesh 释放走 RenderBackend 租约 revoke，边界与渲染一致。
+            RenderBackends.gpu().release(this);
             return true;
         }
         return false;
