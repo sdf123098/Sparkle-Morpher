@@ -3,8 +3,6 @@ package com.micaftic.morpher.client;
 import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
-import com.micaftic.morpher.audio.AudioStreamCache;
-import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.EntityRenderCache;
@@ -1631,20 +1629,6 @@ public class ClientModelManager {
        }
    }
 
-   private static void releaseAssemblyTextures(ModelAssembly assembly) {
-       for (AbstractTexture tex : assembly.getTextures()) {
-            if (tex == null) {
-                continue;
-            }
-           UploadManager.removeTexture(tex);
-            if (tex instanceof OuterFileTexture outerFileTexture) {
-                outerFileTexture.closeAndReleaseSource();
-            } else {
-                tex.close();
-            }
-        }
-    }
-
     private static void releaseModelAssembly(ModelAssembly assembly) {
         releaseModelAssembly(null, assembly);
     }
@@ -1664,28 +1648,9 @@ public class ClientModelManager {
         }
         deferredAssemblyReleases.remove(assembly);
         ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
-       AudioStreamCache.clearForModel(assembly);
-        releaseAssemblyTextures(assembly);
-        if (assembly.getProjectileModels() != null) {
-            for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-                if (entry.getValue().getModel() != null) entry.getValue().getModel().freeNativeCache();
-            }
-        }
-        if (assembly.getVehicleModels() != null) {
-            for (Map.Entry<Identifier, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-                if (entry.getValue().getModel() != null) entry.getValue().getModel().freeNativeCache();
-            }
-        }
-        if (assembly.getAnimationBundle() != null) {
-            if (assembly.getAnimationBundle().getMainModel() != null) assembly.getAnimationBundle().getMainModel().freeNativeCache();
-            if (assembly.getAnimationBundle().getArmModel() != null) assembly.getAnimationBundle().getArmModel().freeNativeCache();
-        }
-       if (assembly.getExpressionCache() != null) {
-           for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) {
-               if (trackData != null) trackData.close();
-           }
-       }
-        assembly.unloadRuntime();
+        // R10.4：资源释放收拢到装配自身（纹理 + audio + GPU/native + runtime），
+        // GC Cleaner 仅作兜底，正常路径走确定性 close()。
+        assembly.close();
         ModelMemoryProfiler.log("assembly-released", modelId);
         }
     }
@@ -1782,22 +1747,8 @@ public class ClientModelManager {
         }
         synchronized (assembly) {
         if (EntityRenderCache.isModelAssemblyInUse(assembly)) return;
-        AudioStreamCache.clearForModel(assembly);
-        if (assembly.getProjectileModels() != null) {
-            for (ProjectileModelBundle bundle : assembly.getProjectileModels().values()) if (bundle.getModel() != null) bundle.getModel().freeNativeCache();
-        }
-        if (assembly.getVehicleModels() != null) {
-            for (VehicleModelBundle bundle : assembly.getVehicleModels().values()) if (bundle.getModel() != null) bundle.getModel().freeNativeCache();
-        }
-        if (assembly.getAnimationBundle() != null) {
-            if (assembly.getAnimationBundle().getMainModel() != null) assembly.getAnimationBundle().getMainModel().freeNativeCache();
-            if (assembly.getAnimationBundle().getArmModel() != null) assembly.getAnimationBundle().getArmModel().freeNativeCache();
-        }
-       if (assembly.getExpressionCache() != null) {
-           for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) if (trackData != null) trackData.close();
-       }
-        releaseAssemblyTextures(assembly);
-       assembly.unloadRuntime();
+        // R10.4：完整确定性释放收拢到装配自身（保留装配外壳供懒加载重建）。
+        assembly.close();
         gpuCacheTrimmedModels.remove(modelId);
         ModelMemoryProfiler.log("cpu-model-unloaded", modelId);
         }
@@ -1860,34 +1811,10 @@ public class ClientModelManager {
             ((Executor) Minecraft.getInstance()).execute(() -> trimGpuCache(modelId, assembly));
             return;
         }
-        int releasedMeshes = 0;
-        if (assembly.getProjectileModels() != null) {
-            for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-                if (entry.getValue().getModel().freeGpuCache()) {
-                    releasedMeshes++;
-                }
-           }
-       }
-        if (assembly.getVehicleModels() != null) {
-            for (Map.Entry<Identifier, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-                if (entry.getValue().getModel().freeGpuCache()) {
-                    releasedMeshes++;
-                }
-           }
-       }
-        if (assembly.getAnimationBundle() != null) {
-            if (assembly.getAnimationBundle().getMainModel().freeGpuCache()) {
-                releasedMeshes++;
-            }
-            if (assembly.getAnimationBundle().getArmModel().freeGpuCache()) {
-                releasedMeshes++;
-            }
-       }
-        if (releasedMeshes > 0) {
-            ModelMemoryProfiler.log("gpu-cache-trimmed meshes=" + releasedMeshes
-                    + " liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
-                    + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelId);
-        }
+        // R10.4：仅释放 GPU mesh（native 缓存保留，模型可立即重渲染），收拢到装配自身。
+        assembly.releaseGpuMeshes();
+        ModelMemoryProfiler.log("gpu-cache-trimmed liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
+                + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelId);
     }
 
     private static void touchModel(String modelId) {
