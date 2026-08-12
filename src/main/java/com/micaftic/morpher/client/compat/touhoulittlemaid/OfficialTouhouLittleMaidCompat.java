@@ -3,6 +3,8 @@ package com.micaftic.morpher.client.compat.touhoulittlemaid;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidAccess;
 
 import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
+import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.network.message.C2SSetMaidModelPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -72,6 +74,13 @@ final class OfficialTouhouLittleMaidCompat {
     private static void applyModel(Entity maid, String modelId, String texture) {
         if (modelId == null || modelId.isBlank()) {
             return;
+        }
+        // SPM 自有链路：发 C2SSetMaidModelPacket → server 端 MaidModelSync.applySelectedModel（含 auth 校验）
+        try {
+            NetworkHandler.sendToServer(new C2SSetMaidModelPacket(maid.getId(), modelId, texture == null ? "" : texture));
+            return;
+        } catch (Throwable ignored) {
+            // SPM 包不可用时回退官方女仆协议
         }
         for (String packetName : MODEL_PACKETS) {
             try {
