@@ -20,6 +20,7 @@ import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.vector.JdkVectorModelMath;
 import com.micaftic.morpher.core.vector.VectorApiCapability;
+import com.micaftic.morpher.core.render.RenderBackend;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -88,63 +89,30 @@ public class ModelRendererBridge {
                 && GeneralConfig.USE_GPU_RENDERER.get()
                 && !OculusCompat.isShaderPackInUse();
 
+        // R10.1：后端通过 RenderBackend 接口隔离（决策保留内联，动作经 RenderBackends）
+        RenderBackend.RenderRequest request = new RenderBackend.RenderRequest(
+                buffer, pose, projectionModelViewMatrix, model, boneParams, stateBuffer,
+                textureIndex, renderPartMask, packedLight, packedOverlay,
+                red, green, blue, alpha, textureLocation, model.isTranslucentTexture(textureIndex),
+                isPreview, OptiFineDetector.isOptifinePresent(), boneRenderPass);
         if (useGpuRenderer) {
-
-            if(!GpuCapability.isAvailable())
-            {
+            if (!GpuCapability.isAvailable()) {
                 ChatLogger.INSTANCE.logFormatted("Disabled GPU renderer for: " + GpuCapability.getReason());
                 GeneralConfig.USE_GPU_RENDERER.set(false);
                 return;
             }
-
-            if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, model.isTranslucentTexture(textureIndex))) {
+            if (RenderBackends.gpu().tryRender(request)) {
                 return;
             }
         }
-
         if (boneRenderPass == BoneRenderPass.ALL
                 && AccelerationCapability.canRenderSimd() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()) { // WIP: SIMD MODEL RENDER
-            boolean nativeRendered = nativeRenderModel(
-                    buffer,
-                    pose,
-                    projectionModelViewMatrix,
-                    OptiFineDetector.isOptifinePresent(),
-                    model,
-                    boneParams,
-                    stateBuffer,
-                    textureIndex,
-                    renderPartMask,
-                    packedLight,
-                    packedOverlay,
-                    red, green, blue, alpha,
-                    isPreview
-            );
-            if (!nativeRendered) {
-                renderModel(
-                        buffer, pose, projectionModelViewMatrix,
-                        OptiFineDetector.isOptifinePresent(), model, boneParams, stateBuffer,
-                        textureIndex, renderPartMask, packedLight, packedOverlay,
-                        red, green, blue, alpha, isPreview, boneRenderPass
-                );
+            if (RenderBackends.simd().tryRender(request)) {
+                return;
             }
-        } else {
-            renderModel(
-                    buffer,
-                    pose,
-                    projectionModelViewMatrix,
-                    OptiFineDetector.isOptifinePresent(),
-                    model,
-                    boneParams,
-                    stateBuffer,
-                    textureIndex,
-                    renderPartMask,
-                    packedLight,
-                    packedOverlay,
-                    red, green, blue, alpha,
-                    isPreview,
-                    boneRenderPass
-            );
         }
+        // Java 兜底
+        RenderBackends.java().tryRender(request);
     }
 
     public static void renderModel(
