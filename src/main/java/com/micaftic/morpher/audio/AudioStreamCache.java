@@ -10,10 +10,23 @@ import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.UnsupportedAudioFileException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * R10.3 Audio cache：per-assembly provider ownership + weighted LRU。
+ *
+ * <p>ownership 语义：{@link CachedAudioStreamProvider} 归 {@link ModelAssembly} 所有——
+ * {@link #getOrCreateProvider} 建立关联，模型释放路径（{@code ClientModelManager}
+ * releaseModelAssembly / unloadModelRuntime）调用 {@link #clearForModel} 立即清空并解除关联；
+ * provider 内缓存随模型消亡，无跨会话残留。全局预算超限时按
+ * {@link AudioEvictionPolicy}（weighted LRU：未使用时长 × 字节数）跨 provider 驱逐。</p>
+ *
+ * <p>解码说明：本模块无独立解码线程——音频解码在 SoundEngine 的同步流读取内联执行
+ * （MC 线程域），缓存构建（{@link AudioCacheBuilder}）随之内联，不引入新线程。</p>
+ */
 public class AudioStreamCache {
 
     private static final IdentityHashMap<ModelAssembly, CachedAudioStreamProvider> providerCache = new IdentityHashMap<>();
@@ -137,24 +150,32 @@ public class AudioStreamCache {
         private void trimToBudget() {
             long budget = maxCacheBytes();
             while (globalCachedBytes.get() > budget) {
-                CachedAudioStreamProvider oldestProvider = null;
-                AudioTrackData oldestKey = null;
-                CachedAudioEntry oldestEntry = null;
-                for (CachedAudioStreamProvider provider : providerCache.values()) {
-                    for (var entry : provider.cachedEntries.entrySet()) {
-                        if (oldestEntry == null || entry.getValue().lastUsedAt < oldestEntry.lastUsedAt) {
-                            oldestProvider = provider;
-                            oldestKey = entry.getKey();
-                            oldestEntry = entry.getValue();
+                long now = System.currentTimeMillis();
+                // 收集全局候选（各 provider 的全部缓存条目投影）+ 驱逐目标定位
+                ArrayList<AudioEvictionPolicy.Candidate> candidates = new ArrayList<>();
+                ArrayList<Object[]> owners = new ArrayList<>(); // [provider, AudioTrackData]
+                synchronized (LOCK) {
+                    for (CachedAudioStreamProvider provider : providerCache.values()) {
+                        for (var entry : provider.cachedEntries.entrySet()) {
+                            candidates.add(new AudioEvictionPolicy.Candidate(entry.getValue().lastUsedAt, entry.getValue().byteSize));
+                            owners.add(new Object[]{provider, entry.getKey()});
                         }
                     }
                 }
-                if (oldestProvider == null || oldestKey == null || oldestEntry == null) {
+                // R10.3：weighted LRU——优先驱逐"又旧又大"的条目，每次释放更多字节
+                int victim = AudioEvictionPolicy.selectVictim(now, candidates);
+                if (victim < 0) {
                     return;
                 }
-                if (oldestProvider.cachedEntries.remove(oldestKey, oldestEntry)) {
-                    oldestProvider.cachedBytes.addAndGet(-oldestEntry.byteSize);
-                    releaseBytes(oldestEntry.byteSize);
+                Object[] owner = owners.get(victim);
+                CachedAudioStreamProvider provider = (CachedAudioStreamProvider) owner[0];
+                AudioTrackData key = (AudioTrackData) owner[1];
+                synchronized (LOCK) {
+                    CachedAudioEntry entry = provider.cachedEntries.get(key);
+                    if (entry != null && provider.cachedEntries.remove(key, entry)) {
+                        provider.cachedBytes.addAndGet(-entry.byteSize);
+                        releaseBytes(entry.byteSize);
+                    }
                 }
             }
         }
