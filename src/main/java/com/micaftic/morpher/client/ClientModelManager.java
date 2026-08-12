@@ -14,6 +14,7 @@ import com.micaftic.morpher.client.gui.GuiWidgetRegistry;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
+import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import com.micaftic.morpher.core.model.ModelRef;
 import com.micaftic.morpher.core.model.ModelSourceType;
 import com.micaftic.morpher.core.model.ModelRetention;
@@ -1696,6 +1697,8 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
     public static void trimUnusedGpuCaches() {
         updateModelLoadingMode();
         drainDeferredAssemblyReleases();
+        // R10.2：孤儿 GPU mesh 兜底回收（owner 弱引用失效/异常替换路径残留），渲染线程执行。
+        GpuRenderPath.sweepOrphanedMeshes("periodic trim");
         long checkNow = System.currentTimeMillis();
         if (checkNow - lastModelTrimMillis < 1_000L) {
             return;
