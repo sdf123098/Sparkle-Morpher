@@ -27,10 +27,7 @@ import org.lwjgl.opengl.*;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class GpuRenderPath {
     private static final int FULL_BRIGHT_LIGHT = 0xF000F0;
@@ -45,8 +42,7 @@ public final class GpuRenderPath {
     private static final Matrix3f localNormalScratchMat = new Matrix3f();
     private static final Matrix3f globalNormalScratchMat = new Matrix3f();
     private static final Vector3f[] currentLights = new Vector3f[2];
-    private static final ConcurrentHashMap<Long, GpuMesh> meshMap = new ConcurrentHashMap<>();
-    private static final AtomicLong ref = new AtomicLong(1);
+    private static final GpuMeshRegistry<GpuMesh> MESH_REGISTRY = new GpuMeshRegistry<>();
     private static final Matrix4f pivotAbsScratchMat = new Matrix4f();
     private static int[] pivotAbsPathScratch = new int[64];
     private static Matrix4f[] boneLocalScratch = new Matrix4f[0];
@@ -101,7 +97,7 @@ public final class GpuRenderPath {
                 GpuDebugLog.warn("frame={} fallback: mesh build returned null texture={}", frameId, textureLocation);
                 return false;
             }
-            model.gpuMeshHandle = encodeMeshRef(mesh);
+            model.gpuMeshHandle = encodeMeshRef(model, mesh);
         }
         GpuMesh mesh = decodeMeshRef(model.gpuMeshHandle);
         if (mesh == null) {
@@ -111,7 +107,7 @@ public final class GpuRenderPath {
             if (rebuilt == null) {
                 return false;
             }
-            model.gpuMeshHandle = encodeMeshRef(rebuilt);
+            model.gpuMeshHandle = encodeMeshRef(model, rebuilt);
             mesh = rebuilt;
         }
 
@@ -604,9 +600,48 @@ public final class GpuRenderPath {
 
     public static void disposeMesh(GeoModel model) {
         if (model.gpuMeshHandle == 0) return;
-        GpuMesh mesh = meshMap.remove(model.gpuMeshHandle);
+        GpuMesh mesh = MESH_REGISTRY.remove(model.gpuMeshHandle);
         if (mesh != null) mesh.dispose();
         model.gpuMeshHandle = 0;
+    }
+
+    /**
+     * R10.2：释放指定模型（GeoModel，即租约 owner）名下的全部 GPU mesh。
+     * 与 {@link #disposeMesh} 等价（每个 GeoModel 至多一个 mesh），但语义按 owner 释放，
+     * 供 RenderBackend.release 走统一的租约 revoke 路径。
+     */
+    public static void disposeOwner(GeoModel model) {
+        if (model.gpuMeshHandle != 0) {
+            disposeMesh(model);
+            return;
+        }
+        for (GpuMesh mesh : MESH_REGISTRY.releaseOwner(model)) {
+            mesh.dispose();
+        }
+    }
+
+    /**
+     * R10.2：回收孤儿 GPU mesh（owner 弱引用已失效 / 无 owner 的残留），GC 兜底防泄漏。
+     * 正常路径由模型装配释放显式 disposeMesh，本方法只兜底异常/替换路径。
+     */
+    public static void sweepOrphanedMeshes(String reason) {
+        if (!RenderSystem.isOnRenderThread()) {
+            ((Executor) Minecraft.getInstance()).execute(() -> sweepOrphanedMeshes(reason));
+            return;
+        }
+        int releasedMeshes = 0;
+        long releasedBytes = 0L;
+        for (GpuMesh mesh : MESH_REGISTRY.sweepOrphans()) {
+            if (mesh != null) {
+                releasedMeshes++;
+                releasedBytes += mesh.estimatedBytes;
+                mesh.dispose();
+            }
+        }
+        if (releasedMeshes > 0) {
+            GpuDebugLog.info("disposed orphan GPU meshes reason={} releasedMeshes={} estimatedReleasedBytes={}",
+                    reason, releasedMeshes, releasedBytes);
+        }
     }
 
     public static void disposeAllMeshes(String reason) {
@@ -616,9 +651,8 @@ public final class GpuRenderPath {
         }
         int releasedMeshes = 0;
         long releasedBytes = 0L;
-        for (Map.Entry<Long, GpuMesh> entry : meshMap.entrySet()) {
-            GpuMesh mesh = entry.getValue();
-            if (mesh != null && meshMap.remove(entry.getKey(), mesh)) {
+        for (GpuMesh mesh : MESH_REGISTRY.clearAll()) {
+            if (mesh != null) {
                 releasedMeshes++;
                 releasedBytes += mesh.estimatedBytes;
                 mesh.dispose();
@@ -634,19 +668,17 @@ public final class GpuRenderPath {
         if (model.gpuMeshHandle == 0) {
             GpuMesh mesh = GpuMeshBuilder.build(model);
             if (mesh == null) return null;
-            model.gpuMeshHandle = encodeMeshRef(mesh);
+            model.gpuMeshHandle = encodeMeshRef(model, mesh);
         }
         return decodeMeshRef(model.gpuMeshHandle);
     }
 
-    private static long encodeMeshRef(GpuMesh mesh) {
-        long ref = GpuRenderPath.ref.getAndIncrement();
-        meshMap.put(ref, mesh);
-        return ref;
+    private static long encodeMeshRef(GeoModel owner, GpuMesh mesh) {
+        return MESH_REGISTRY.register(owner, mesh);
     }
 
     private static GpuMesh decodeMeshRef(long ref) {
-        return meshMap.get(ref);
+        return MESH_REGISTRY.get(ref);
     }
 
     private static final class RenderStateCache {

@@ -6,7 +6,7 @@ import com.micaftic.morpher.core.render.RenderBackend;
 import com.micaftic.morpher.core.render.RenderBackendDecision;
 
 /**
- * R10.1 RenderBackend 注册表：Backend 决策 → 具体实现。
+ * R10.1/R10.2 RenderBackend 注册表：Backend 决策 → 具体实现。
  *
  * <p>BLAZE3D_GPU/GPU 实现位于 core/gpu（依赖 Blaze3D/Gpu 渲染路径），
  * NATIVE_SIMD/JAVA 实现与本类同包（依赖 ModelRendererBridge 内部入口）。
@@ -23,5 +23,10 @@ public final class RenderBackends {
             case NATIVE_SIMD -> NativeSimdRenderBackend.INSTANCE;
             case JAVA -> JavaRenderBackend.INSTANCE;
         };
+    }
+
+    /** R10.2：OpenGL GPU 后端（持有 GPU mesh 资源，release 需经此 revoke 租约）。 */
+    public static RenderBackend gpu() {
+        return OpenGlGpuRenderBackend.INSTANCE;
     }
 }
