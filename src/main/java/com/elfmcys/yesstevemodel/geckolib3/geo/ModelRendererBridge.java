@@ -21,6 +21,7 @@ import com.micaftic.morpher.core.gpu.GpuCapability;
 import com.micaftic.morpher.core.gpu.GpuDebugLog;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
+import com.micaftic.morpher.core.render.RenderBackend;
 import com.micaftic.morpher.core.render.RenderBackendDecision;
 import com.micaftic.morpher.core.render.NativeSimdValidator;
 import com.micaftic.morpher.core.vector.JdkVectorModelMath;
@@ -87,77 +88,32 @@ public class ModelRendererBridge {
                 model.optimizationStats == null ? -1 : model.optimizationStats.negativeSizedFaces,
                 model.optimizationStats != null,
 	                model.conservativeRenderOnly);
+        // R10.1：后端通过 RenderBackend 接口隔离（决策 RenderBackendDecision + 实现 RenderBackends）
+        RenderBackend.RenderRequest request = new RenderBackend.RenderRequest(
+                buffer, pose, projectionModelViewMatrix, model, boneParams, stateBuffer,
+                textureIndex, renderPartMask, packedLight, packedOverlay,
+                red, green, blue, alpha, textureLocation, translucentTexture, disableGlow,
+                isPreview, OptiFineDetector.isOptifinePresent(), boneRenderPass);
         if (boneRenderPass == BoneRenderPass.ALL && backend.backend == RenderBackendDecision.Backend.BLAZE3D_GPU) {
-            if (Blaze3DRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
-                GpuDebugLog.verbose("entry rendered through Blaze3DRenderPath texture={}", textureLocation);
+            if (RenderBackends.get(RenderBackendDecision.Backend.BLAZE3D_GPU).tryRender(request)) {
                 return;
             }
             GpuDebugLog.verbose("entry Blaze3DRenderPath fallback texture={}", textureLocation);
             backend = RenderBackendDecision.choose(model, false, translucentTexture, disableGlow, textureLocation, nativePolicy);
         }
         if (boneRenderPass == BoneRenderPass.ALL && backend.backend == RenderBackendDecision.Backend.GPU) {
-            if (GpuRenderPath.tryRender(model, pose, boneParams, stateBuffer, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, textureLocation, translucentTexture)) {
-                GpuDebugLog.verbose("entry rendered through GpuRenderPath texture={}", textureLocation);
+            if (RenderBackends.get(RenderBackendDecision.Backend.GPU).tryRender(request)) {
                 return;
             }
             GpuDebugLog.verbose("entry GpuRenderPath fallback texture={}", textureLocation);
         }
-
-        if (boneRenderPass == BoneRenderPass.ALL
-                && backend.backend == RenderBackendDecision.Backend.NATIVE_SIMD) { // WIP: SIMD MODEL RENDER
-            GpuDebugLog.verbose("entry rendered through native SIMD texture={} partMask={}", textureLocation, renderPartMask);
-            // Phase 2: run validation diagnostics (may force Java for the session
-            // under STRICT_FALLBACK, or throw under CRASH_TEST). Does not change the
-            // rendered path under LOG_MISMATCH.
-            NativeSimdValidator.onNativeSimdRender(model, boneParams, renderPartMask, textureLocation);
-            boolean nativeRendered = nativeRenderModel(
-                    buffer,
-                    pose,
-                    projectionModelViewMatrix,
-                    OptiFineDetector.isOptifinePresent(),
-                    model,
-                    boneParams,
-                    stateBuffer,
-                    textureIndex,
-                    renderPartMask,
-                    packedLight,
-                    packedOverlay,
-                    red, green, blue, alpha,
-                    isPreview
-            );
-            if (!nativeRendered) {
-                renderModel(
-                        buffer, pose, projectionModelViewMatrix,
-                        OptiFineDetector.isOptifinePresent(), model, boneParams, stateBuffer,
-                        textureIndex, renderPartMask, packedLight, packedOverlay,
-                        red, green, blue, alpha, isPreview, disableGlow, boneRenderPass
-                );
+        if (boneRenderPass == BoneRenderPass.ALL && backend.backend == RenderBackendDecision.Backend.NATIVE_SIMD) { // WIP: SIMD MODEL RENDER
+            if (RenderBackends.get(RenderBackendDecision.Backend.NATIVE_SIMD).tryRender(request)) {
+                return;
             }
-        } else {
-            GpuDebugLog.verbose("entry rendered through Java model path texture={} nativeSimdPolicy={} vectorCfg={} vectorAvailable={} vectorReason={} translucent={} preview={} firstPerson={} compat={} disableGlow={}",
-                    textureLocation, nativePolicy,
-                    GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false),
-                    VectorApiCapability.isAvailable(), VectorApiCapability.getReason(),
-                    translucentTexture, isPreview, ModelPreviewRenderer.isFirstPerson(),
-                    GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), disableGlow);
-            renderModel(
-                    buffer,
-                    pose,
-                    projectionModelViewMatrix,
-                    OptiFineDetector.isOptifinePresent(),
-                    model,
-                    boneParams,
-                    stateBuffer,
-                    textureIndex,
-                    renderPartMask,
-                    packedLight,
-                    packedOverlay,
-                    red, green, blue, alpha,
-                    isPreview,
-                    disableGlow,
-                    boneRenderPass
-            );
         }
+        // Java 兜底（含 GLOW/NON_GLOW pass 与非 ALL pass）
+        RenderBackends.get(RenderBackendDecision.Backend.JAVA).tryRender(request);
     }
 
     private static boolean shouldDisableModelGlow(boolean shaderPackInUse) {
