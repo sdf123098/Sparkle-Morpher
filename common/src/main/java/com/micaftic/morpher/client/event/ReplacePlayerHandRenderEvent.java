@@ -35,8 +35,9 @@ public class ReplacePlayerHandRenderEvent {
                 if (context == null || !hasArmBone(arm, context.getAnimationBundle().getArmModel())) {
                     return;
                 }
-                RendererManager.getHandRenderer().renderHandItem(localPlayer, context, cap, arm, poseStack, collector, packedLight, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false));
-                cancelled[0] = true;
+                // 仅在自定义手真正渲染成功时才取消原版手：renderHandItem 可能因模型未就绪等
+                // 静默返回 false，若此时仍取消原版手会得到"手部区域空白"。
+                cancelled[0] = RendererManager.getHandRenderer().renderHandItem(localPlayer, context, cap, arm, poseStack, collector, packedLight, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false));
             });
         } catch (Exception e) {
             YesSteveModel.LOGGER.warn("Failed to render custom hand model, falling back to vanilla", e);
