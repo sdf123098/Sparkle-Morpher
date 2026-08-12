@@ -21,7 +21,13 @@ public class HandItemRenderer {
 
     private PlayerGeoEntity geoModel = null;
 
-    public void renderHandItem(LocalPlayer localPlayer, ModelAssembly modelAssembly, PlayerCapability capability, HumanoidArm arm, PoseStack poseStack, SubmitNodeCollector collector, int packedLight, float partialTick) {
+    /**
+     * 渲染第一人称自定义手模型。
+     *
+     * @return true = 已成功提交自定义手几何（调用方应取消原版手渲染）；false = 未渲染
+     *         （模型未就绪/事件拦截等），调用方应回退原版手，避免"取消原版手但什么都没画"的空白。
+     */
+    public boolean renderHandItem(LocalPlayer localPlayer, ModelAssembly modelAssembly, PlayerCapability capability, HumanoidArm arm, PoseStack poseStack, SubmitNodeCollector collector, int packedLight, float partialTick) {
         AnimatedGeoModel model;
         if (this.geoModel == null || this.geoModel.getEntity() != localPlayer) {
             this.geoModel = new PlayerGeoEntity(localPlayer, capability);
@@ -30,7 +36,7 @@ public class HandItemRenderer {
         ModelPreviewRenderer.setFirstPersonMode(true);
         try {
             if (this.geoModel.processAnimationImpl(partialTick, true) == null || (model = this.geoModel.getCurrentModel()) == null) {
-                return;
+                return false;
             }
         } finally {
             ModelPreviewRenderer.setFirstPersonMode(false);
@@ -38,7 +44,7 @@ public class HandItemRenderer {
         ClientModelManager.markModelUsed(this.geoModel.getModelId());
         SpecialPlayerRenderEvent event = new SpecialPlayerRenderEvent(localPlayer, capability, capability.getModelId());
         if (SpecialPlayerRenderEvent.post(event).isFalse()) {
-            return;
+            return false;
         }
         Identifier Identifier = event.getTextureLocation() == null ? capability.getTextureLocation() : event.getTextureLocation();
         int textureIndex = event.getTextureLocation() == null ? capability.getTextureIndex() : 0;
@@ -50,9 +56,10 @@ public class HandItemRenderer {
             poseStack.translate(-0.25d, 1.8d, 0.0d);
         }
         poseStack.scale(-1.0f, -1.0f, 1.0f);
-        RenderType renderType = model.getGeoModel().isTranslucentTexture(textureIndex)
-                ? RenderTypes.entityTranslucent(Identifier)
-                : RenderTypes.entityCutout(Identifier);
+        // 第一人称手部 pass 按 vanilla 语义只收集 translucent 几何（AvatarRenderer.renderHand
+        // 恒用 entityTranslucent）；对不透明贴图改用 entityCutout 会让手部几何不进入该 pass，
+        // 表现为手完全不可见。恒用 translucent 与 1.21.1 分支（CustomEntityTranslucentRenderType）一致。
+        RenderType renderType = RenderTypes.entityTranslucent(Identifier);
         float[] boneParams = model.getMatrixData().clone();
         float[] absPivotData = model.getAbsPivotData().clone();
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
@@ -65,5 +72,6 @@ public class HandItemRenderer {
             }
         });
         poseStack.popPose();
+        return true;
     }
 }
