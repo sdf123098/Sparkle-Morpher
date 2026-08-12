@@ -6,7 +6,7 @@ import com.micaftic.morpher.core.render.RenderBackendDecision;
 import com.mojang.blaze3d.vertex.PoseStack;
 
 /**
- * R10.1 RenderBackend 实现：OpenGL GPU 路径，
+ * R10.1/R10.2 RenderBackend 实现：OpenGL GPU 路径，
  * 委托 {@link GpuRenderPath}。未启用/不适用时返回 false（协调层回退）。
  */
 public final class OpenGlGpuRenderBackend implements RenderBackend {
@@ -30,5 +30,11 @@ public final class OpenGlGpuRenderBackend implements RenderBackend {
                 request.packedLight(), request.packedOverlay(),
                 request.red(), request.green(), request.blue(), request.alpha(),
                 request.textureLocation(), request.translucentTexture());
+    }
+
+    @Override
+    public void release(GeoModel model) {
+        // R10.2：GPU mesh 租约 revoke——mesh ownership 与 model runtime 绑定。
+        GpuRenderPath.disposeOwner(model);
     }
 }
