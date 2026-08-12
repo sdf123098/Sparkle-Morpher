@@ -2,6 +2,7 @@ package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
+import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.core.compat.api.CompatServices;
 import com.micaftic.morpher.network.message.S2CSyncVehicleModelPacket;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
@@ -44,6 +45,38 @@ public final class MaidModelSync {
         VehicleModelCapability.get(maid).filter(VehicleModelCapability::isInitialized)
                 .ifPresent(state -> CompatServices.maidNetworkService().sendToTrackingEntity(
                         new S2CSyncVehicleModelPacket(maid.getId(), state), maid));
+    }
+
+    public static void handleBaseModelChanged(Entity maid) {
+        if (maid.level().isClientSide() || maid.tickCount <= 0) {
+            return;
+        }
+        VehicleModelCapability.get(maid).filter(VehicleModelCapability::isInitialized).ifPresent(state -> {
+            state.clearMaidModel();
+            syncNow(maid, state);
+        });
+    }
+
+    public static void applySelectedModel(Entity maid, ServerPlayer player, String modelId, String textureId) {
+        if (maid == null || player == null || modelId == null || modelId.isBlank()
+                || !ServerConfig.CAN_SWITCH_MODEL.get()
+                || !TouhouMaidCompat.isMaidEntity(maid)
+                || !TouhouLittleMaidCompat.isMaidOwnedBy(maid, player)
+                || !CompatServices.maidModelService().containsModel(modelId)) {
+            return;
+        }
+        boolean authorized = CompatServices.maidModelService().isAuthorized(modelId, player);
+        if (!authorized) {
+            return;
+        }
+        String resolvedTexture = CompatServices.maidModelService().resolveTextureOrDefault(modelId, textureId);
+        if (resolvedTexture == null) {
+            return;
+        }
+        VehicleModelCapability.get(maid).ifPresent(state -> {
+            state.setMaidModel(modelId, resolvedTexture, new Object2FloatOpenHashMap<>());
+            syncNow(maid, state, player);
+        });
     }
 
     public static void syncNow(Entity maid, VehicleModelCapability state) {
