@@ -2,6 +2,8 @@ package com.micaftic.morpher.fabric.client;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
+import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.network.message.C2SSetMaidModelPacket;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.loader.api.FabricLoader;
@@ -73,6 +75,13 @@ final class OrihimeDirectModelCompat {
     private static void applyModel(Entity maid, String modelId, String texture) {
         if (modelId == null || modelId.isBlank()) {
             return;
+        }
+        // SPM 自有链路：发 C2SSetMaidModelPacket → server 端 MaidModelSync.applySelectedModel（含 auth 校验）
+        try {
+            NetworkHandler.sendToServer(new C2SSetMaidModelPacket(maid.getId(), modelId, texture == null ? "" : texture));
+            return;
+        } catch (Throwable ignored) {
+            // SPM 包不可用时回退官方女仆协议
         }
         try {
             Class<?> packetClass = Class.forName(MODEL_PACKET, false,
