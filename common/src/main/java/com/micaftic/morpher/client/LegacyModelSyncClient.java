@@ -56,14 +56,14 @@ public final class LegacyModelSyncClient {
                 decrypted = YsmCrypt.decrypt(packetBytes, lastKey);
                 if (decrypted != null) {
                     try (YSMByteBuf buf = new YSMByteBuf(Unpooled.wrappedBuffer(decrypted))) {
-                        ClientModelManager.handlePacket03(buf);
+                        LegacyModelCacheClient.handlePacket03(buf);
                     }
                 }
             } else if (syncStep == 3) {
                 decrypted = YsmCrypt.decrypt(packetBytes, key1);
                 if (decrypted != null) {
                     try (YSMByteBuf buf = new YSMByteBuf(Unpooled.wrappedBuffer(decrypted))) {
-                        ClientModelManager.handlePacket05(buf);
+                        LegacyModelCacheClient.handlePacket05(buf);
                     }
                 }
             }
