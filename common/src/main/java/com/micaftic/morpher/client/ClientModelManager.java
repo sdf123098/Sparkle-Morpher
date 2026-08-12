@@ -92,12 +92,6 @@ import java.util.zip.ZipFile;
 
 @Environment(EnvType.CLIENT)
 public class ClientModelManager {
-    private static int syncStep = 1;
-    private static byte[] key1;
-    private static byte[] lastKey;
-    private static byte[] serverKey;
-    private static byte[] clientKey;
-    private static String currentCacheFolderName;
     private static final AtomicInteger pendingModelsCount = new AtomicInteger(0);
     private static final AtomicBoolean syncCompletionScheduled = new AtomicBoolean(false);
     private static volatile boolean syncManifestProcessed = false;
@@ -170,12 +164,11 @@ public class ClientModelManager {
 
     private static final Map<UUID, ServerModelContext> serverModels = new ConcurrentHashMap<>();
 
-    private static final java.security.SecureRandom SECURE_RANDOM = new java.security.SecureRandom();
+    static final java.security.SecureRandom SECURE_RANDOM = new java.security.SecureRandom();
     private static volatile ModelAssembly localModelContext;
     private static volatile Runnable pendingModelCallback;
     private static IResourceLocatable defaultTexture;
     private static volatile boolean defaultModelLoadAttempted;
-    private static volatile Connection serverConnection;
 
     private static volatile Map<String, ModelAssembly> modelAssemblyMap = Object2ReferenceMaps.emptyMap();
     private static volatile Map<String, ModelPackData> modelPackMap = new Object2ReferenceOpenHashMap<>();
@@ -318,67 +311,6 @@ public class ClientModelManager {
         }
     }
 
-    private static void processServerData(ByteBuffer data) {
-        if (data == null) {
-            resetClientState();
-            return;
-        }
-        try {
-            if (!data.hasRemaining() && data.position() > 0) {
-                data.flip();
-            }
-            if (!data.hasRemaining()) return;
-
-            byte[] packetBytes = new byte[data.remaining()];
-            data.get(packetBytes);
-
-            byte[] decrypted;
-            if (syncStep == 1) {
-                decrypted = YsmCrypt.decrypt(packetBytes, YsmCrypt.publicKey);
-                if (decrypted != null) handlePacket01(decrypted);
-            } else if (syncStep == 2) {
-                decrypted = YsmCrypt.decrypt(packetBytes, lastKey);
-                if (decrypted != null) {
-                    try (YSMByteBuf buf = new YSMByteBuf(Unpooled.wrappedBuffer(decrypted))) {
-                        handlePacket03(buf);
-                    }
-                }
-            } else if (syncStep == 3) {
-                decrypted = YsmCrypt.decrypt(packetBytes, key1);
-                if (decrypted != null) {
-                    try (YSMByteBuf buf = new YSMByteBuf(Unpooled.wrappedBuffer(decrypted))) {
-                        handlePacket05(buf);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            YesSteveModel.LOGGER.error("[SM] Sync Error at step " + syncStep, e);
-        }
-    }
-
-    private static void handlePacket01(byte[] decryptedBuffer) throws Exception {
-        key1 = new byte[56];
-        System.arraycopy(decryptedBuffer, decryptedBuffer.length - 56, key1, 0, 56);
-        syncStep = 2;
-
-        YesSteveModel.LOGGER.info("[SM] Exchanged Key1. Preparing to send Packet 02.");
-        onSyncProgress(-1); // Preparing GUI stage
-
-        int garbageLen = 16 + SECURE_RANDOM.nextInt(48);
-        byte[] garbage = new byte[garbageLen];
-        SECURE_RANDOM.nextBytes(garbage);
-
-        try (YSMByteBuf outBuf = new YSMByteBuf(Unpooled.buffer())) {
-            outBuf.writeGarbageHeader(garbageLen, garbage);
-            outBuf.getRawBuf().writeByte(0x02);
-            outBuf.getRawBuf().writeByte(0x00);
-
-            YsmCrypt.EncryptedPacket result = YsmCrypt.encrypt(outBuf.toArray(), key1, true);
-            lastKey = result.nextKey();
-
-            sendModelFile(ByteBuffer.wrap(result.data()));
-        }
-    }
 
     private record ModelHash(long hash1, long hash2) {
     }
@@ -392,24 +324,24 @@ public class ClientModelManager {
 
     private static final List<ModelHash> cachedModelHashes = new ArrayList<>();
 
-    private static void handlePacket03(YSMByteBuf buf) throws Exception {
+    static void handlePacket03(YSMByteBuf buf) throws Exception {
         buf.skipGarbageHeader();
         int type = buf.readVarInt(); // expect 3
         long folderHash = buf.readVarLong();
-        currentCacheFolderName = Long.toHexString(folderHash);
+        LegacyModelSyncClient.currentCacheFolderName = Long.toHexString(folderHash);
 
-        serverKey = new byte[56];
-        buf.getRawBuf().readBytes(serverKey);
+        LegacyModelSyncClient.serverKey = new byte[56];
+        buf.getRawBuf().readBytes(LegacyModelSyncClient.serverKey);
 
-        clientKey = new byte[56];
-        buf.getRawBuf().readBytes(clientKey);
+        LegacyModelSyncClient.clientKey = new byte[56];
+        buf.getRawBuf().readBytes(LegacyModelSyncClient.clientKey);
 
-        File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(currentCacheFolderName).toFile();
+        File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(LegacyModelSyncClient.currentCacheFolderName).toFile();
         if (!cacheDir.exists()) cacheDir.mkdirs();
         YSMClientCache.prepareCacheDirectory(cacheDir);
 
         // 仅列目录 + 文件名解密(轻量,无文件内容 IO);完整校验在后台线程完成
-        Map<UUID, File> localCacheMap = YSMClientCache.buildCacheIndex(cacheDir, clientKey);
+        Map<UUID, File> localCacheMap = YSMClientCache.buildCacheIndex(cacheDir, LegacyModelSyncClient.clientKey);
         List<CacheVerificationEntry> cacheEntries = new ArrayList<>();
         Set<UUID> expectedCacheModels = new HashSet<>();
 
@@ -446,7 +378,7 @@ public class ClientModelManager {
             File cachedFile = localCacheMap.get(ctx.uuid);
             if (cachedFile != null) {
                 cachedModelFiles.put(ctx.modelKey, cachedFile);
-                registerRemoteLazySource(ctx.modelKey, cachedFile.toPath(), clientKey, ctx.isAuth);
+                registerRemoteLazySource(ctx.modelKey, cachedFile.toPath(), LegacyModelSyncClient.clientKey, ctx.isAuth);
             }
             cacheEntries.add(new CacheVerificationEntry(ctx, mHash, cachedFile));
         }
@@ -514,9 +446,9 @@ public class ClientModelManager {
                     ServerModelContext ctx = entry.ctx;
                     File cachedFile = entry.cachedFile;
                     boolean isFileValid = cachedFile != null
-                            // 传 clientKey 做解密+解压校验：仅校验 trailer 无法发现“trailer 合法但载荷是垃圾”的坏文件
+                            // 传 LegacyModelSyncClient.clientKey 做解密+解压校验：仅校验 trailer 无法发现“trailer 合法但载荷是垃圾”的坏文件
                             // （服务端损坏数据经 transcode 后会重新计算合法 trailer），坏文件会被删除并重新请求。
-                            && YSMClientCache.verifyFileContent(cachedFile, entry.hash.hash1, entry.hash.hash2, clientKey);
+                            && YSMClientCache.verifyFileContent(cachedFile, entry.hash.hash1, entry.hash.hash2, LegacyModelSyncClient.clientKey);
                     if (taskGeneration != MODEL_TASK_GENERATION.get()) {
                         return;
                     }
@@ -538,10 +470,10 @@ public class ClientModelManager {
                             pendingModelsCount.incrementAndGet();
                             submitModelTask(() -> {
                                 try {
-                                    if (clientKey == null) return;
+                                    if (LegacyModelSyncClient.clientKey == null) return;
                                     byte[] fileBytes = Files.readAllBytes(cachedFile.toPath());
                                     ModelMemoryProfiler.logBytes("cache-read", ctx.modelId, fileBytes);
-                                    byte[] decompressed = YsmCrypt.readInPlace(fileBytes, clientKey);
+                                    byte[] decompressed = YsmCrypt.readInPlace(fileBytes, LegacyModelSyncClient.clientKey);
                                     ModelMemoryProfiler.logBytes("cache-decrypted", ctx.modelId, decompressed);
                                     fileBytes = null;
                                     parseAndLoadModel(decompressed, ctx.modelKey, ctx.isAuth);
@@ -569,7 +501,7 @@ public class ClientModelManager {
                 YesSteveModel.LOGGER.error("[SM] Failed to verify cached models on background thread", e);
             }
             try {
-                YSMClientCache.cleanupCacheDirectory(cacheDir, expectedCacheModels, clientKey);
+                YSMClientCache.cleanupCacheDirectory(cacheDir, expectedCacheModels, LegacyModelSyncClient.clientKey);
             } catch (Exception e) {
                 YesSteveModel.LOGGER.warn("[SM] Failed to cleanup cache directory", e);
             }
@@ -608,7 +540,7 @@ public class ClientModelManager {
                         YesSteveModel.LOGGER.info("[SM] Cleaned up {} outdated models and updated {} existing models during sync.", modelsToRemove.size(), previousModelIds.size());
                     }
 
-                    syncStep = 3;
+                    LegacyModelSyncClient.syncStep = 3;
                     markSyncActivity();
 
                     int garbageLen = 16 + SECURE_RANDOM.nextInt(48);
@@ -625,8 +557,8 @@ public class ClientModelManager {
                             outBuf.writeVarLong(h.hash2);
                         }
 
-                        YsmCrypt.EncryptedPacket result = YsmCrypt.encrypt(outBuf.toArray(), key1, false);
-                        sendModelFile(ByteBuffer.wrap(result.data()));
+                        YsmCrypt.EncryptedPacket result = YsmCrypt.encrypt(outBuf.toArray(), LegacyModelSyncClient.key1, false);
+                        LegacyModelSyncClient.sendModelFile(ByteBuffer.wrap(result.data()));
                     }
 
                 syncManifestProcessed = true;
@@ -638,7 +570,7 @@ public class ClientModelManager {
         });
     }
 
-    private static void handlePacket05(YSMByteBuf buf) throws Exception {
+    static void handlePacket05(YSMByteBuf buf) throws Exception {
         buf.skipGarbageHeader();
         int type = buf.readVarInt();
         if (type != 5) return;
@@ -685,7 +617,7 @@ public class ClientModelManager {
 
             submitModelTask(() -> {
                 try {
-                    if (clientKey == null) return;
+                    if (LegacyModelSyncClient.clientKey == null) return;
                     // 落盘前校验服务端原始缓存数据：服务端缓存文件损坏（旧版本非原子写）时，
                     // transcode 会把垃圾数据重新打包成带合法 trailer 的客户端缓存文件，
                     // 之后所有校验都通过但模型永远解析失败。此处拒绝缓存坏数据，下轮同步重请求。
@@ -693,14 +625,14 @@ public class ClientModelManager {
                         YesSteveModel.LOGGER.warn("[SM] Server sent corrupt cache data for model {} (hash mismatch); refusing to cache, will re-request on next sync", ctx.modelKey);
                         return;
                     }
-                    String folder = currentCacheFolderName != null ? currentCacheFolderName : "default_cache";
+                    String folder = LegacyModelSyncClient.currentCacheFolderName != null ? LegacyModelSyncClient.currentCacheFolderName : "default_cache";
                     File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(folder).toFile();
                     if (!cacheDir.exists()) cacheDir.mkdirs();
 
-                    byte[] cachedFileData = YsmCrypt.transcodeServerDataToClientCache(fileBuffer, serverKey, clientKey, hash1, hash2);
+                    byte[] cachedFileData = YsmCrypt.transcodeServerDataToClientCache(fileBuffer, LegacyModelSyncClient.serverKey, LegacyModelSyncClient.clientKey, hash1, hash2);
                     ModelMemoryProfiler.logBytes("download-transcoded-cache", ctx.modelId, cachedFileData);
 
-                    String legitFileName = YSMClientCache.generateCacheFileName(hash1, hash2, clientKey);
+                    String legitFileName = YSMClientCache.generateCacheFileName(hash1, hash2, LegacyModelSyncClient.clientKey);
                     File outFile = new File(cacheDir, legitFileName);
 
                     Path tempFile = Files.createTempFile(cacheDir.toPath(), legitFileName, ".tmp");
@@ -717,11 +649,11 @@ public class ClientModelManager {
 
                     YesSteveModel.LOGGER.info("[SM] Downloaded & Cached: " + outFile.getAbsolutePath());
                     cachedModelFiles.put(ctx.modelKey, outFile);
-                    registerRemoteLazySource(ctx.modelKey, outFile.toPath(), clientKey, ctx.isAuth);
+                    registerRemoteLazySource(ctx.modelKey, outFile.toPath(), LegacyModelSyncClient.clientKey, ctx.isAuth);
                     if (isLazyModelLoading()) {
                         YesSteveModel.LOGGER.info("[SM] Deferred downloaded model until first use: {}", ctx.modelKey);
                     } else {
-                        byte[] decompressed = YsmCrypt.readInPlace(cachedFileData, clientKey);
+                        byte[] decompressed = YsmCrypt.readInPlace(cachedFileData, LegacyModelSyncClient.clientKey);
                         ModelMemoryProfiler.logBytes("download-decrypted", ctx.modelId, decompressed);
                         cachedFileData = null;
                         parseAndLoadModel(decompressed, ctx.modelKey, ctx.isAuth);
@@ -795,21 +727,15 @@ public class ClientModelManager {
         );
     }
 
-    private static void resetClientState() {
+    static void resetClientState() {
         MODEL_TASK_GENERATION.incrementAndGet();
         modelTaskDispatcher.getQueue().clear();
-        serverConnection = null;
-        syncStep = 1;
-        key1 = null;
-        lastKey = null;
-        serverKey = null;
-        clientKey = null;
+        LegacyModelSyncClient.resetSyncState();
 
         int discardedModelTasks = modelPhraseExecutor.getQueue().size();
         modelPhraseExecutor.getQueue().clear();
         MODEL_PARSE_SLOTS.release(discardedModelTasks);
 
-        currentCacheFolderName = null;
         pendingModelsCount.set(0);
         syncManifestProcessed = false;
         syncCompletionScheduled.set(false);
@@ -1403,7 +1329,7 @@ public class ClientModelManager {
 
     public static synchronized void resetSync() {
         // R9.2：oySm/allowUpload 与握手标志统一由 resetClientHandshake（→ LegacySpmHandshakeState.resetClientSession）复位
-        processServerData(null);
+        LegacyModelSyncClient.processServerData(null);
         NetworkHandler.resetClientHandshake();
         Minecraft.getInstance().execute(() -> {
             syncState.setState(SyncState.WAITING);
@@ -1411,7 +1337,7 @@ public class ClientModelManager {
     }
 
     public static void enterPrivacyMode() {
-        processServerData(null);
+        LegacyModelSyncClient.processServerData(null);
         NetworkHandler.resetClientHandshake();
         Minecraft.getInstance().execute(() -> {
             syncState.setState(SyncState.LOADING);
@@ -1435,47 +1361,12 @@ public class ClientModelManager {
         return LegacySpmHandshakeState.isOysmServer();
     }
 
-    private static void sendModelFile(ByteBuffer byteBuffer) {
-        if (PrivacyMode.isActive()) {
-            return;
-        }
-        if (Minecraft.getInstance().player != null) {
-            try {
-                NetworkHandler.sendToServer(new C2SModelSyncPayload(byteBuffer));
-                return;
-            } catch (Exception e) {
-                e.printStackTrace();
-                return;
-            }
-        }
-        Connection connection = serverConnection;
-        if (connection == null || !connection.isConnected()) {
-            return;
-        }
-        try {
-            connection.send(NetworkHandler.toServerboundPacket(new C2SModelSyncPayload(byteBuffer)));
-        } catch (Exception e2) {
-            e2.printStackTrace();
-        }
-    }
+    // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
 
     public static synchronized void startSync(Connection connection, ByteBuffer byteBuffer) {
-        if (PrivacyMode.isActive()) {
-            return;
-        }
-        if (connection == null) {
-            YesSteveModel.LOGGER.warn("[SM] Ignoring model sync packet without a connection");
-            return;
-        }
-        if (serverConnection != connection) {
-            if (serverConnection != null) {
-                YesSteveModel.LOGGER.info("[SM] Model sync connection changed; discarding the previous client sync session");
-                resetClientState();
-            }
-            serverConnection = connection;
-        }
-        processServerData(byteBuffer);
+        LegacyModelSyncClient.startSync(connection, byteBuffer);
     }
+
 
     public static void onSyncConnected() {
         if (Minecraft.getInstance().isLocalServer()) {
@@ -1499,7 +1390,7 @@ public class ClientModelManager {
         }
     }
 
-    private static void onSyncProgress(int totalModels) {
+    static void onSyncProgress(int totalModels) {
         if (totalModels == -1) {
             Minecraft.getInstance().execute(() -> {
                 syncState.setState(SyncState.PREPARING);
@@ -2061,7 +1952,7 @@ public class ClientModelManager {
     }
 
     private static void onSyncComplete() {
-        syncStep = 1;
+        LegacyModelSyncClient.syncStep = 1;
         cachedModelHashes.clear();
         lastSyncActivityMillis = 0L;
         syncManifestProcessed = false;
@@ -2603,14 +2494,14 @@ public class ClientModelManager {
     public static void exportAllCachedModels(@Nullable String extra, @Nullable Consumer<ExportResult> callback) {
         YSMThreadPool.submit(() -> {
             try {
-                if (clientKey == null) {
+                if (LegacyModelSyncClient.clientKey == null) {
                     if (callback != null) {
                         callback.accept(new ExportResult(false, Component.literal("未连接到服务器或尚未完成握手同步，无法获取客户端解密密钥。"), "", "", 0));
                     }
                     return;
                 }
 
-                String folder = currentCacheFolderName != null ? currentCacheFolderName : "default_cache";
+                String folder = LegacyModelSyncClient.currentCacheFolderName != null ? LegacyModelSyncClient.currentCacheFolderName : "default_cache";
                 File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(folder).toFile();
 
                 if (!cacheDir.exists() || !cacheDir.isDirectory()) {
@@ -2634,7 +2525,7 @@ public class ClientModelManager {
 
                     try {
                         byte[] fileBytes = Files.readAllBytes(file.toPath());
-                        byte[] clearText = YsmCrypt.readInPlace(fileBytes, clientKey);
+                        byte[] clearText = YsmCrypt.readInPlace(fileBytes, LegacyModelSyncClient.clientKey);
 
                         int coreDataLength;
                         String exportName = file.getName(); // Fallback name
