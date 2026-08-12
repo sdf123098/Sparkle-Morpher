@@ -2,7 +2,7 @@ package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
-import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.core.compat.api.CompatServices;
 import com.micaftic.morpher.network.message.S2CSyncVehicleModelPacket;
 import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import net.minecraft.server.level.ServerPlayer;
@@ -42,19 +42,19 @@ public final class MaidModelSync {
             return;
         }
         VehicleModelCapability.get(maid).filter(VehicleModelCapability::isInitialized)
-                .ifPresent(state -> NetworkHandler.sendToTrackingEntity(
+                .ifPresent(state -> CompatServices.maidNetworkService().sendToTrackingEntity(
                         new S2CSyncVehicleModelPacket(maid.getId(), state), maid));
     }
 
     public static void syncNow(Entity maid, VehicleModelCapability state) {
-        NetworkHandler.sendToTrackingEntity(new S2CSyncVehicleModelPacket(maid.getId(), state), maid);
+        CompatServices.maidNetworkService().sendToTrackingEntity(new S2CSyncVehicleModelPacket(maid.getId(), state), maid);
     }
 
     private static void syncNow(Entity maid, VehicleModelCapability state, Player player) {
         S2CSyncVehicleModelPacket packet = new S2CSyncVehicleModelPacket(maid.getId(), state);
-        NetworkHandler.sendToTrackingEntity(packet, maid);
-        if (player instanceof ServerPlayer serverPlayer && NetworkHandler.isPlayerConnected(serverPlayer)) {
-            NetworkHandler.sendToClientPlayer(packet, serverPlayer);
+        CompatServices.maidNetworkService().sendToTrackingEntity(packet, maid);
+        if (player instanceof ServerPlayer serverPlayer && CompatServices.maidNetworkService().isPlayerConnected(serverPlayer)) {
+            CompatServices.maidNetworkService().sendToClientPlayer(packet, serverPlayer);
         }
     }
 }
