@@ -19,6 +19,13 @@ public interface RenderBackend {
     /** 尝试用本后端渲染；false = 本后端未处理，协调层回退到下一候选。 */
     boolean tryRender(RenderRequest request);
 
+    /**
+     * R10.2：释放本后端持有的、属于指定模型的 GPU 资源（租约 revoke）。默认 no-op——
+     * 仅持有 GPU mesh 的后端（OpenGL）实现；Java/Native SIMD 无此类资源。
+     */
+    default void release(GeoModel model) {
+    }
+
     /** 渲染请求参数（renderMeshPass 入参封装，各后端按需解包）。 */
     record RenderRequest(
             VertexConsumer buffer,

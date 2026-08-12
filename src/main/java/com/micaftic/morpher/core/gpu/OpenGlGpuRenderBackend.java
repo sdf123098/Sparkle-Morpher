@@ -26,4 +26,10 @@ public final class OpenGlGpuRenderBackend implements RenderBackend {
                 request.red(), request.green(), request.blue(), request.alpha(),
                 request.textureLocation(), request.translucentTexture());
     }
+
+    @Override
+    public void release(GeoModel model) {
+        // R10.2：GPU mesh 租约 revoke——mesh ownership 与 model runtime 绑定。
+        GpuRenderPath.disposeOwner(model);
+    }
 }
