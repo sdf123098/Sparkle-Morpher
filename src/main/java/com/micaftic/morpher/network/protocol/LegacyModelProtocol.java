@@ -17,5 +17,7 @@ public final class LegacyModelProtocol {
     public static void register() {
         YSMChannel.register(1, S2CModelSyncPayload.class, S2CModelSyncPayload::encode, S2CModelSyncPayload::decode, S2CModelSyncPayload::handle, PacketDirection.PLAY_TO_CLIENT);
         YSMChannel.register(2, C2SModelSyncPayload.class, C2SModelSyncPayload::encode, C2SModelSyncPayload::decode, C2SModelSyncPayload::handle, PacketDirection.PLAY_TO_SERVER);
+        // MaidModelSync 自有链路：女仆换模 C2S（SPM server 端 applySelectedModel + auth）
+        YSMChannel.register(24, C2SSetMaidModelPacket.class, C2SSetMaidModelPacket::encode, C2SSetMaidModelPacket::decode, C2SSetMaidModelPacket::handle, PacketDirection.PLAY_TO_SERVER);
     }
 }
