@@ -5,8 +5,6 @@ import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
-import com.micaftic.morpher.audio.AudioStreamCache;
-import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.EntityRenderCache;
@@ -1670,20 +1668,6 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
        }
    }
 
-   private static void releaseAssemblyTextures(ModelAssembly assembly) {
-       for (AbstractTexture tex : assembly.getTextures()) {
-            if (tex == null) {
-                continue;
-            }
-           UploadManager.removeTexture(tex);
-            if (tex instanceof OuterFileTexture outerFileTexture) {
-                outerFileTexture.closeAndReleaseSource();
-            } else {
-                tex.close();
-            }
-        }
-    }
-
     private static void releaseModelAssembly(ModelAssembly assembly) {
         releaseModelAssembly(null, assembly);
     }
@@ -1702,41 +1686,11 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
             return;
         }
         deferredAssemblyReleases.remove(assembly);
-       AudioStreamCache.clearForModel(assembly);
-        releaseAssemblyTextures(assembly);
-        if (assembly.getProjectileModels() != null) {
-            for (Map.Entry<ResourceLocation, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-                releaseModelCache(entry.getValue().getModel());
-            }
-        }
-        if (assembly.getVehicleModels() != null) {
-            for (Map.Entry<ResourceLocation, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-                releaseModelCache(entry.getValue().getModel());
-            }
-        }
-        if (assembly.getAnimationBundle() != null) {
-            releaseModelCache(assembly.getAnimationBundle().getMainModel());
-            releaseModelCache(assembly.getAnimationBundle().getArmModel());
-        }
-       if (assembly.getExpressionCache() != null) {
-           for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) {
-               if (trackData != null) trackData.close();
-           }
-       }
-        assembly.unloadRuntime();
-       ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
+        ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
+        // R10.4：资源释放收拢到装配自身（纹理 + audio + GPU/native + runtime），
+        // GC Cleaner 仅作兜底，正常路径走确定性 close()。
+        assembly.close();
         ModelMemoryProfiler.log("assembly-released", modelId);
-        }
-    }
-
-    private static void releaseModelCache(GeoModel model) {
-        if (model == null) {
-            return;
-        }
-        if (RuntimeAccelerationLoader.isLoaded()) {
-            model.freeNativeCache();
-        } else {
-            model.freeGpuCache();
         }
     }
 
@@ -1834,22 +1788,8 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         }
         synchronized (assembly) {
         if (EntityRenderCache.isModelAssemblyInUse(assembly)) return;
-        AudioStreamCache.clearForModel(assembly);
-        if (assembly.getProjectileModels() != null) {
-            for (ProjectileModelBundle bundle : assembly.getProjectileModels().values()) releaseModelCache(bundle.getModel());
-        }
-        if (assembly.getVehicleModels() != null) {
-            for (VehicleModelBundle bundle : assembly.getVehicleModels().values()) releaseModelCache(bundle.getModel());
-        }
-        if (assembly.getAnimationBundle() != null) {
-            releaseModelCache(assembly.getAnimationBundle().getMainModel());
-            releaseModelCache(assembly.getAnimationBundle().getArmModel());
-        }
-       if (assembly.getExpressionCache() != null) {
-           for (AudioTrackData trackData : assembly.getExpressionCache().getSoundEffects().values()) if (trackData != null) trackData.close();
-       }
-        releaseAssemblyTextures(assembly);
-       assembly.unloadRuntime();
+        // R10.4：完整确定性释放收拢到装配自身（保留装配外壳供懒加载重建）。
+        assembly.close();
         gpuCacheTrimmedModels.remove(modelId);
         ModelMemoryProfiler.log("cpu-model-unloaded", modelId);
         }
@@ -1912,32 +1852,10 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
             Minecraft.getInstance().execute(() -> trimGpuCache(modelId, assembly));
             return;
         }
-        int releasedMeshes = 0;
-        if (assembly.getProjectileModels() != null) {
-            for (Map.Entry<ResourceLocation, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-                if (entry.getValue().getModel().freeGpuCache()) {
-                    releasedMeshes++;
-                }
-           }
-       }
-        if (assembly.getVehicleModels() != null) {
-            for (Map.Entry<ResourceLocation, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-                if (entry.getValue().getModel().freeGpuCache()) {
-                    releasedMeshes++;
-                }
-           }
-       }
-        if (assembly.getAnimationBundle() != null) {
-            if (assembly.getAnimationBundle().getMainModel().freeGpuCache()) {
-                releasedMeshes++;
-            }
-            if (assembly.getAnimationBundle().getArmModel().freeGpuCache()) {
-                releasedMeshes++;
-            }
-       }
-        if (releasedMeshes > 0) {
-            ModelMemoryProfiler.log("gpu-cache-trimmed meshes=" + releasedMeshes, modelId);
-        }
+        // R10.4：仅释放 GPU mesh（native 缓存保留，模型可立即重渲染），收拢到装配自身。
+        assembly.releaseGpuMeshes();
+        ModelMemoryProfiler.log("gpu-cache-trimmed liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
+                + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelId);
     }
 
     private static void touchModel(String modelId) {
