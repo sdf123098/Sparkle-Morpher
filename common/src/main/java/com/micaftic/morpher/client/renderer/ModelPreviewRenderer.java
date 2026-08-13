@@ -217,13 +217,9 @@ public final class ModelPreviewRenderer {
     }
 
     public static MultiBufferSource.BufferSource getLegacyBufferSourceOrNull() {
-        try {
-            Object renderBuffers = Minecraft.getInstance().renderBuffers();
-            Object bufferSource = renderBuffers.getClass().getMethod("bufferSource").invoke(renderBuffers);
-            return (MultiBufferSource.BufferSource) bufferSource;
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
-            return null;
-        }
+        // MC 26.2: Minecraft.renderBuffers() 已移除（绘制改走 SubmitNodeCollector 延迟提交），
+        // 旧版直取 BufferSource 的 GUI 预览路径恒不可用；调用方已做 null 判断跳过旧路径。
+        return null;
     }
 
     public static boolean renderQueuedGuiPreview(EntityRenderState renderState, PoseStack poseStack, SubmitNodeCollector collector, MultiBufferSource.BufferSource bufferSource) {

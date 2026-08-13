@@ -88,9 +88,10 @@ public final class TouhouLittleMaidClientCompatImpl {
         Minecraft minecraft = Minecraft.getInstance();
         if (!(minecraft.hitResult instanceof EntityHitResult hit)) return;
         MaidCapability.get(hit.getEntity()).ifPresent(cap -> {
-            if (minecraft.screen == null && cap.getModelAssembly() != null) {
+            // MC 26.2: 当前屏幕状态移到 Minecraft.gui（Gui.screen()）
+            if (minecraft.gui.screen() == null && cap.getModelAssembly() != null) {
                 InputUtil.setScreen(new UnifiedRouletteScreen(cap.getModelId(), cap.getModelAssembly(), cap));
-            } else if (minecraft.screen instanceof UnifiedRouletteScreen) {
+            } else if (minecraft.gui.screen() instanceof UnifiedRouletteScreen) {
                 InputUtil.setScreen(null);
             }
         });

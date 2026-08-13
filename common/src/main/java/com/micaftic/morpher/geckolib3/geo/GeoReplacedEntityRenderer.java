@@ -14,7 +14,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.util.Mth;
-import net.minecraft.client.renderer.entity.LivingEntityRenderState;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.player.PlayerModel;
@@ -234,7 +233,8 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
 
     public boolean shouldShowName(TEntity entity) {
         double d = entity.isDiscrete() ? 32.0d : 64.0d;
-        return Minecraft.getInstance().getEntityRenderDispatcher().distanceToSqr(entity) < d * d && entity == Minecraft.getInstance().getEntityRenderDispatcher().crosshairPickEntity && entity.hasCustomName() && Minecraft.renderNames();
+        // MC 26.2: Minecraft.renderNames() 已移除（名字渲染改由 EntityRenderState.nameTag 状态驱动）
+        return Minecraft.getInstance().getEntityRenderDispatcher().distanceToSqr(entity) < d * d && entity == Minecraft.getInstance().getEntityRenderDispatcher().crosshairPickEntity && entity.hasCustomName();
     }
 
     public final boolean addLayerRenderer(GeoLayerRenderer<T> layerRenderer) {
