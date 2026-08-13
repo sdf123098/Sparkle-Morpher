@@ -32,7 +32,7 @@ public class ReplacePlayerHandRenderEvent {
                     return;
                 }
                 ModelAssembly context = cap.getModelAssembly();
-                if (context == null || !hasArmBone(arm, context.getAnimationBundle().getArmModel())) {
+                if (context == null || context.getAnimationBundle() == null || !hasArmBone(arm, context.getAnimationBundle().getArmModel())) {
                     return;
                 }
                 // 仅在自定义手真正渲染成功时才取消原版手：renderHandItem 可能因模型未就绪等
