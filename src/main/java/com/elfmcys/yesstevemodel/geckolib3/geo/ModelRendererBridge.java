@@ -71,6 +71,7 @@ public class ModelRendererBridge {
                 if (RenderBackends.simd().tryRender(previewRequest)) {
                     return;
                 }
+                logPreviewSimdFallbackOnce();
             }
             renderModel(
                     buffer,
@@ -420,7 +421,10 @@ public class ModelRendererBridge {
             int textureIndex, int renderPartMask, int packedLight, int packedOverlay,
             float r, float g, float b, float a, boolean isPreview) {
 
-        if (!mesh.ensureNativeCache()) return false;
+        if (!mesh.ensureNativeCache()) {
+            logNativeCacheFailOnce();
+            return false;
+        }
 
         pose.pose().get(matrixTransferArray, 0);
         pose.normal().get(matrixTransferArray, 16);
@@ -439,6 +443,22 @@ public class ModelRendererBridge {
                 r, g, b, a
         );
         return true;
+    }
+
+    // ---- 一次性诊断日志（SIMD/预览路径） ----
+    private static final java.util.concurrent.atomic.AtomicBoolean SIMD_PREVIEW_FALLBACK_LOGGED = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static final java.util.concurrent.atomic.AtomicBoolean NATIVE_CACHE_FAIL_LOGGED = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    private static void logPreviewSimdFallbackOnce() {
+        if (SIMD_PREVIEW_FALLBACK_LOGGED.compareAndSet(false, true)) {
+            com.micaftic.morpher.YesSteveModel.LOGGER.info("[SM] Preview/overlay SIMD render failed (native cache not built?), falling back to Java renderModel");
+        }
+    }
+
+    private static void logNativeCacheFailOnce() {
+        if (NATIVE_CACHE_FAIL_LOGGED.compareAndSet(false, true)) {
+            com.micaftic.morpher.YesSteveModel.LOGGER.info("[SM] nativeRenderModel: ensureNativeCache failed (bakedBones empty or native build failed)");
+        }
     }
 
     private static final class RenderScratch {
