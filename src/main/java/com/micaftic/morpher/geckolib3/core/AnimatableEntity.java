@@ -2,6 +2,7 @@ package com.micaftic.morpher.geckolib3.core;
 
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.animation.debug.AnimationFrameProfiler;
+import com.micaftic.morpher.client.render.RiderRotationMath;
 import com.micaftic.morpher.audio.IAudioStreamFactory;
 import com.micaftic.morpher.client.event.ClientTickEvent;
 import com.micaftic.morpher.geckolib3.core.enums.AnimationState;
@@ -12,6 +13,7 @@ import com.micaftic.morpher.geckolib3.core.manager.AnimationData;
 import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
 import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.client.renderer.ExtraPlayerRenderProfiler;
 import com.micaftic.morpher.core.api.entity.EntityDataBridge;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
@@ -326,6 +328,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
             modelData.isChild = livingEntity != null && livingEntity.isBaby();
             lerpBodyRot = playerCapability.getRenderStateBodyRot();
             netHeadYaw = playerCapability.getRenderStateNetHeadYaw();
+            lerpHeadRot = RiderRotationMath.absoluteHeadYaw(lerpBodyRot, netHeadYaw);
         } else if (livingEntity != null) {
             modelData.isChild = livingEntity.isBaby();
             lerpBodyRot = Mth.rotLerp(partialTick, livingEntity.yBodyRotO, livingEntity.yBodyRot);
@@ -334,16 +337,11 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
         }
 
         if (shouldSit && (entity.getVehicle() instanceof LivingEntity vehicle)) {
-            lerpBodyRot = Mth.rotLerp(partialTick, vehicle.yBodyRotO, vehicle.yBodyRot);
-            netHeadYaw = lerpHeadRot - lerpBodyRot;
-            float clampedHeadYaw = Mth.clamp(Mth.wrapDegrees(lerpHeadRot - lerpBodyRot), -85.0f, 85.0f);
-
-            lerpBodyRot = lerpHeadRot - clampedHeadYaw;
-            if (clampedHeadYaw * clampedHeadYaw > 2500f) {
-                lerpBodyRot += clampedHeadYaw * 0.2f;
-            }
-
-            netHeadYaw = lerpHeadRot - lerpBodyRot;
+            float vehicleBodyRot = Mth.rotLerp(partialTick, vehicle.yBodyRotO, vehicle.yBodyRot);
+            RiderRotationMath.LivingVehicleRotation ridingRotation =
+                    RiderRotationMath.constrainToLivingVehicle(lerpHeadRot, vehicleBodyRot);
+            lerpBodyRot = ridingRotation.bodyYaw();
+            netHeadYaw = ridingRotation.relativeHeadYaw();
         }
         modelData.rawHeadPitch = playerCapability != null && playerCapability.hasRenderState()
                 ? playerCapability.getRenderStateHeadPitch()
@@ -414,6 +412,8 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                 if (canReuseEvaluation) {
                     AnimationFrameProfiler.logReusedEvaluation(this, event, this.seekTime);
                 } else {
+                    long extraPlayerEvaluationStart = extraPlayerMode && ExtraPlayerRenderProfiler.enabled()
+                            ? System.nanoTime() : 0L;
                     if (this.lastAnimationEvaluationFrameId == renderFrameId) {
                         AnimationFrameProfiler.logReuseMiss(this, event, getReuseMissReason(z, boneCount, controllerCount), this.seekTime, this.lastAnimationEvaluationSeekTime, z, this.lastAnimationEvaluationActive, boneCount, this.lastAnimationEvaluationBoneCount, controllerCount, this.lastAnimationEvaluationControllerCount);
                     }
@@ -436,6 +436,10 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                         this.lastAnimationEvaluationNetHeadYaw = event.getModelData().netHeadYaw;
                     } finally {
                         AnimationFrameProfiler.endEvaluation(profilerScope);
+                        if (extraPlayerEvaluationStart != 0L) {
+                            ExtraPlayerRenderProfiler.recordAnimationEvaluation(
+                                    System.nanoTime() - extraPlayerEvaluationStart);
+                        }
                     }
                 }
             }

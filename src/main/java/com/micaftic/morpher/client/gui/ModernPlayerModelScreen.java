@@ -917,6 +917,14 @@ public class ModernPlayerModelScreen extends Screen {
             fill(g, bx + (row.booleanValue() ? 15 : 2), y + 5, 9, 9, 0xFFEDE1CC);
             hit(x, y, w, 19, label, row.action());
         } else {
+            if (row.action() != null && row.decrement() == null && row.increment() == null) {
+                int actionX = x + w - 76;
+                fill(g, actionX, y + 2, 68, 15, 0x55303030);
+                border(g, actionX, y + 2, 68, 15, 0x33FFFFFF);
+                drawCentered(g, Component.literal(trim(row.valueText(), 62)), actionX + 34, y + 5, TEXT);
+                hit(x, y, w, 19, label, row.action());
+                return;
+            }
             renderIconButton(g, mouseX, mouseY, x + w - 50, y + 1, IconGlyph.MINUS, Component.translatable(row.labelKey()), row.decrement());
             renderIconButton(g, mouseX, mouseY, x + w - 24, y + 1, IconGlyph.PLUS, Component.translatable(row.labelKey()), row.increment());
             drawMuted(g, Component.literal(row.valueText()), x + w - 90, y + 6);
@@ -1634,7 +1642,9 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_other_model", GeneralConfig.DISABLE_OTHER_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_self_hands", GeneralConfig.DISABLE_SELF_HANDS));
         rows.add(privacyModeRow(ModelPanelState.SettingGroup.GENERAL));
-        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_player_render", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER));
+        rows.add(invertedBool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.classic_hud_rendering", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER));
+        rows.add(actionRow(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.classic_hud_layout", () -> minecraft.setScreen(new ClassicHudLayoutScreen(this))));
+        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.modern_hud_rendering", ExtraPlayerRenderConfig.ENABLE_MODERN_HUD_RENDER));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_projectile_model", GeneralConfig.DISABLE_PROJECTILE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));
@@ -1669,6 +1679,20 @@ public class ModernPlayerModelScreen extends Screen {
             value.set(!safeBool(value));
             value.save();
         }, null, null, null);
+    }
+
+    private SettingRow invertedBool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value) {
+        boolean current = !safeBool(value);
+        return new SettingRow(group, labelKey, current, "", () -> {
+            value.set(!safeBool(value));
+            value.save();
+        }, null, null, null);
+    }
+
+    private SettingRow actionRow(ModelPanelState.SettingGroup group, String labelKey, Runnable action) {
+        return new SettingRow(group, labelKey, null,
+                Component.translatable("gui.sparkle_morpher.model_panel.setting.configure").getString(),
+                action, null, null, null);
     }
 
     private SettingRow privacyModeRow(ModelPanelState.SettingGroup group) {

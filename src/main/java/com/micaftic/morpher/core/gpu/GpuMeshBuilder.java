@@ -28,7 +28,7 @@ public final class GpuMeshBuilder {
             int vao = GL30.glGenVertexArrays();
             int vbo = GlStateManager._glGenBuffers();
             int ibo = GlStateManager._glGenBuffers();
-            int ssbo = GlStateManager._glGenBuffers();
+            int[] boneSsbos = new int[GpuMesh.BONE_SSBO_RING_SIZE];
 
             GL30.glBindVertexArray(vao);
             GlStateManager._glBindBuffer(GL15.GL_ARRAY_BUFFER, vbo);
@@ -52,12 +52,15 @@ public final class GpuMeshBuilder {
             GlStateManager._glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
             GlStateManager._glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, 0);
 
-            GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, ssbo);
-            GL45.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, (long) meshData.boneCount * 144, GL15.GL_DYNAMIC_DRAW);
+            for (int i = 0; i < boneSsbos.length; i++) {
+                boneSsbos[i] = GlStateManager._glGenBuffers();
+                GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, boneSsbos[i]);
+                GL45.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, (long) meshData.boneCount * 144, GL15.GL_STREAM_DRAW);
+            }
             GlStateManager._glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
 
-            long estimatedBytes = meshData.estimatedBytes();
-            return new GpuMesh(0L, vao, vbo, ibo, ssbo, meshData.vertexCount, meshData.indexCount, meshData.boneCount,
+            long estimatedBytes = meshData.estimatedBytes(GpuMesh.BONE_SSBO_RING_SIZE);
+            return new GpuMesh(0L, vao, vbo, ibo, boneSsbos, meshData.vertexCount, meshData.indexCount, meshData.boneCount,
                     meshData.partMask1Start, meshData.partMask1Count,
                     meshData.partMask2Start, meshData.partMask2Count,
                     meshData.partMask3Start, meshData.partMask3Count,
@@ -194,8 +197,8 @@ public final class GpuMeshBuilder {
             this.indexBytes = indexBytes;
         }
 
-        long estimatedBytes() {
-            return (long) vertexBytes + indexBytes + ((long) boneCount * 144L);
+        long estimatedBytes(int boneBufferCount) {
+            return (long) vertexBytes + indexBytes + ((long) boneCount * 144L * boneBufferCount);
         }
 
         void release() {

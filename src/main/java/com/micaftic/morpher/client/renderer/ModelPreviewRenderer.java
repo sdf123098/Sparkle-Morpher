@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.renderer;
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
+import com.micaftic.morpher.core.compat.acceleratedrendering.AcceleratedRenderingCompat;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.client.animation.AnimationTracker;
@@ -14,6 +15,7 @@ import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
+import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.util.AnimatableCacheUtil;
 import com.mojang.blaze3d.platform.Lighting;
@@ -27,6 +29,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
@@ -42,6 +45,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.block.Blocks;
 import org.joml.Quaternionf;
+import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL14;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -123,7 +129,7 @@ public final class ModelPreviewRenderer {
     /** 兼容便捷方法：进入/退出额外玩家渲染阶段（内部走 RenderContext，替代 EXTRA_PLAYER_MODE ThreadLocal）。 */
     public static void setExtraPlayerMode(boolean extraPlayerMode) {
         if (extraPlayerMode) {
-            RenderContext.enter(RenderPass.GUI_PREVIEW);
+            RenderContext.enter(RenderPass.OLD_HUD);
         } else {
             // 兼容旧调用（无 previous 引用）：回退到世界阶段。渲染入口应优先用 enter/restore + finally。
             RenderContext.restore(RenderPass.WORLD);
@@ -132,7 +138,7 @@ public final class ModelPreviewRenderer {
 
     /** 是否处于额外玩家渲染阶段（GUI_PREVIEW pass）。 */
     public static boolean isExtraPlayer() {
-        return RenderContext.isGuiPreview();
+        return RenderContext.isOldHud();
     }
 
     public static void setFirstPersonMode(boolean firstPersonMode) {
@@ -473,75 +479,171 @@ public final class ModelPreviewRenderer {
         }
     }
 
-    // 纸娃娃（离屏缓存渲染，2026-08-13）：overlay 每帧完整渲染玩家模型开销大（提交/管线），
-    // 改为离屏缓存——每 4 帧渲染到 FBO（动画更新），其余帧只贴图（开销≈1 次 draw）。
+    // 额外玩家视图（离屏缓存渲染，2026-08-13）：overlay 每帧完整渲染玩家模型开销大（提交/管线），
+    // 改为离屏缓存——定期渲染到 FBO（动画更新），其余帧只贴图（开销≈1 次 draw）。
+    // 2 tick 约为 10 FPS：比原 4 tick / 5 FPS 顺滑，同时避免恢复每帧完整渲染的高开销。
+    private static final int EXTRA_PLAYER_FBO_REFRESH_TICKS = 2;
+    // GPU 路径不必追随数百/数千 FPS 的主画面重复评估同一段动画。60 Hz 已能保持连续观感，
+    // 同时让高刷或未限帧场景的额外玩家视图成本保持恒定。
+    private static final long EXTRA_PLAYER_GPU_REFRESH_NANOS = 1_000_000_000L / 60L;
+    private static final int EXTRA_PLAYER_FBO_PADDING = 2;
     private static RenderTarget extraPlayerFbo;
     private static int extraPlayerFboWidth = -1;
     private static int extraPlayerFboHeight = -1;
     private static int extraPlayerLastRenderTick = -1;
+    private static long extraPlayerLastRenderNanos = -1L;
+    private static boolean extraPlayerGpuFastPath;
 
     public static void renderPlayerOverlay(GuiGraphics guiGraphics, LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick) {
+        boolean profile = ExtraPlayerRenderProfiler.enabled();
+        long totalStart = profile ? System.nanoTime() : 0L;
         if (localPlayer == null || scale <= 0.0f) {
             return;
         }
         int width = Math.max(1, Math.round(scale));
         int height = Math.max(1, Math.round(scale * 2.0f));
-        int screenW = Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        int screenH = Minecraft.getInstance().getWindow().getGuiScaledHeight();
-        if (screenW <= 0 || screenH <= 0) {
+        int logicalFboWidth = width + EXTRA_PLAYER_FBO_PADDING * 2;
+        int logicalFboHeight = height + EXTRA_PLAYER_FBO_PADDING * 2;
+        Minecraft minecraft = Minecraft.getInstance();
+        RenderTarget mainRenderTarget = minecraft.getMainRenderTarget();
+        int screenW = minecraft.getWindow().getGuiScaledWidth();
+        int screenH = minecraft.getWindow().getGuiScaledHeight();
+        if (screenW <= 0 || screenH <= 0 || mainRenderTarget.viewWidth <= 0 || mainRenderTarget.viewHeight <= 0) {
             return;
         }
+        float pixelScaleX = mainRenderTarget.viewWidth / (float) screenW;
+        float pixelScaleY = mainRenderTarget.viewHeight / (float) screenH;
+        int fboWidth = Math.max(1, (int) Math.ceil(logicalFboWidth * pixelScaleX));
+        int fboHeight = Math.max(1, (int) Math.ceil(logicalFboHeight * pixelScaleY));
         int tick = com.micaftic.morpher.client.event.ClientTickEvent.getTickCount();
 
-        // FBO 缓存（屏幕尺寸；投影与 GUI 一致，坐标天然正确）
-        if (extraPlayerFbo == null || extraPlayerFboWidth != screenW || extraPlayerFboHeight != screenH) {
+        // 只为旧 HUD 模型矩形分配 FBO，但按主目标的物理像素密度栅格化；避免每帧清理整张屏幕大小的颜色/深度附件。
+        if (extraPlayerFbo == null || extraPlayerFboWidth != fboWidth || extraPlayerFboHeight != fboHeight) {
             if (extraPlayerFbo != null) {
                 extraPlayerFbo.destroyBuffers();
             }
-            extraPlayerFbo = new TextureTarget(screenW, screenH, false, false);
+            // 玩家模型是 3D 几何，FBO 需要深度附件保证正确遮挡。
+            extraPlayerFbo = new TextureTarget(fboWidth, fboHeight, true, false);
             extraPlayerFbo.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-            extraPlayerFboWidth = screenW;
-            extraPlayerFboHeight = screenH;
+            extraPlayerFboWidth = fboWidth;
+            extraPlayerFboHeight = fboHeight;
             extraPlayerLastRenderTick = -1;
+            extraPlayerLastRenderNanos = -1L;
+            extraPlayerGpuFastPath = false;
         }
 
-        // 每 4 帧重渲染到 FBO（动画更新；其余帧贴缓存图）。
+        // 定期重渲染到 FBO（动画更新；其余帧贴缓存图）。
         // 用独立 bufferSource（MultiBufferSource.immediate）确保提交到 FBO——guiGraphics 的
         // bufferSource 绑定主渲染目标，FBO 绑定后 flush 不会提交到 FBO（表现为透明）。
-        if (tick - extraPlayerLastRenderTick >= 4 || extraPlayerLastRenderTick < 0) {
-            extraPlayerFbo.bindWrite(true);
-            extraPlayerFbo.clear(false);
-            MultiBufferSource.BufferSource fboBuffer = MultiBufferSource.immediate(new ByteBufferBuilder(256));
-            renderOverlayModel(localPlayer, x, y, scale, yawOffset, zDepth, partialTick, fboBuffer);
-            fboBuffer.endBatch();
-            extraPlayerFbo.unbindWrite();
-            extraPlayerLastRenderTick = tick;
+        // GPU 持久网格最多以 60 Hz 更新；SIMD/Java 兜底仍限制为 2 tick（约 10 Hz）。
+        // 这样兼容模式不会再因为“刷新得更少”而反常地比 GPU 模式高出大量帧数。
+        boolean redrawn = false;
+        boolean fullyGpuThisRedraw = false;
+        int frameGpuPasses = 0;
+        int frameFallbackPasses = 0;
+        long renderNanos = System.nanoTime();
+        boolean initialRender = extraPlayerLastRenderTick < 0 || extraPlayerLastRenderNanos < 0L;
+        boolean refreshDue = initialRender
+                || (extraPlayerGpuFastPath
+                ? renderNanos - extraPlayerLastRenderNanos >= EXTRA_PLAYER_GPU_REFRESH_NANOS
+                : tick - extraPlayerLastRenderTick >= EXTRA_PLAYER_FBO_REFRESH_TICKS);
+        if (refreshDue) {
+            // Finish the outer HUD batch before changing framebuffer. ImmediatelyFast normally
+            // flushes at this boundary, but doing it explicitly also covers compatibility bridges.
+            guiGraphics.flush();
+            boolean isolatedAcceleratedRendering = AcceleratedRenderingCompat.enterVanillaPipeline();
+            boolean projectionBackedUp = false;
+            ModelRendererBridge.beginPreviewFrame();
+            try {
+                // RenderTarget.clear() 会自行 bindWrite，清屏后又 unbindWrite，因此必须在 clear 之后重新绑定。
+                long clearStart = profile ? System.nanoTime() : 0L;
+                // glClear obeys the current color/depth write masks. Compatibility RenderTypes may leave
+                // alpha writes disabled, which turns the nominal transparent clear into an opaque black quad.
+                RenderSystem.colorMask(true, true, true, true);
+                RenderSystem.depthMask(true);
+                extraPlayerFbo.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                extraPlayerFbo.clear(false);
+                extraPlayerFbo.bindWrite(true);
+                RenderSystem.backupProjectionMatrix();
+                projectionBackedUp = true;
+                RenderSystem.setProjectionMatrix(
+                        new Matrix4f().setOrtho(0.0f, logicalFboWidth, logicalFboHeight, 0.0f, 1000.0f, 21000.0f),
+                        VertexSorting.ORTHOGRAPHIC_Z);
+                if (profile) {
+                    ExtraPlayerRenderProfiler.recordClear(System.nanoTime() - clearStart);
+                }
+                MultiBufferSource.BufferSource fboBuffer = MultiBufferSource.immediate(new ByteBufferBuilder(256));
+                long modelStart = profile ? System.nanoTime() : 0L;
+                renderOverlayModel(localPlayer, EXTRA_PLAYER_FBO_PADDING, EXTRA_PLAYER_FBO_PADDING,
+                        scale, yawOffset, zDepth, partialTick, fboBuffer);
+                if (profile) {
+                    ExtraPlayerRenderProfiler.recordModel(System.nanoTime() - modelStart);
+                }
+                long batchStart = profile ? System.nanoTime() : 0L;
+                fboBuffer.endBatch();
+                // Accelerated Rendering + ImmediatelyFast may redirect even a private BufferSource
+                // to a shared provider. Flush all GUI work while the old HUD FBO is still bound.
+                guiGraphics.flush();
+                if (profile) {
+                    ExtraPlayerRenderProfiler.recordBatch(System.nanoTime() - batchStart);
+                }
+                extraPlayerLastRenderTick = tick;
+                extraPlayerLastRenderNanos = renderNanos;
+                redrawn = true;
+            } finally {
+                // 只有所有模型网格都由 GPU 后端完成，下一帧才继续无节流刷新。
+                fullyGpuThisRedraw = ModelRendererBridge.wasPreviewGpuRendered();
+                frameGpuPasses = ModelRendererBridge.getPreviewGpuPassCount();
+                frameFallbackPasses = ModelRendererBridge.getPreviewFallbackPassCount();
+                extraPlayerGpuFastPath = fullyGpuThisRedraw;
+                AcceleratedRenderingCompat.exitVanillaPipeline(isolatedAcceleratedRendering);
+                if (projectionBackedUp) {
+                    RenderSystem.restoreProjectionMatrix();
+                }
+                // unbindWrite() 只会绑定 framebuffer 0，不会恢复 Minecraft 的主目标和视口。
+                mainRenderTarget.bindWrite(true);
+            }
         }
 
-        // 每帧贴 FBO 的 overlay 区域（UV 裁剪）
+        // 每帧把局部 FBO 整张贴回对应 GUI 矩形。
+        long compositeStart = profile ? System.nanoTime() : 0L;
+        // Direct GPU/compatibility renderers can leave Minecraft's cached blend state out of sync
+        // with the actual GL state. Force a disable -> enable transition, then set the blend
+        // equation directly so transparent FBO pixels cannot overwrite the main target as black.
+        RenderSystem.disableBlend();
+        RenderSystem.enableBlend();
+        GL14.glBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+        RenderSystem.disableDepthTest();
+        RenderSystem.depthMask(false);
+        RenderSystem.colorMask(true, true, true, true);
+        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
         RenderSystem.setShaderTexture(0, extraPlayerFbo.getColorTextureId());
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
         Tesselator tesselator = Tesselator.getInstance();
         BufferBuilder buffer = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        float x0 = (float) x;
-        float y0 = (float) y;
-        float x1 = x0 + width;
-        float y1 = y0 + height;
-        float u0 = x0 / screenW;
-        float v0 = y0 / screenH;
-        float u1 = x1 / screenW;
-        float v1 = y1 / screenH;
+        float x0 = (float) x - EXTRA_PLAYER_FBO_PADDING;
+        float y0 = (float) y - EXTRA_PLAYER_FBO_PADDING;
+        float x1 = x0 + logicalFboWidth;
+        float y1 = y0 + logicalFboHeight;
         float z = (float) zDepth;
-        buffer.addVertex(x0, y1, z).setUv(u0, v0);
-        buffer.addVertex(x1, y1, z).setUv(u1, v0);
-        buffer.addVertex(x1, y0, z).setUv(u1, v1);
-        buffer.addVertex(x0, y0, z).setUv(u0, v1);
+        buffer.addVertex(x0, y1, z).setUv(0.0f, 0.0f);
+        buffer.addVertex(x1, y1, z).setUv(1.0f, 0.0f);
+        buffer.addVertex(x1, y0, z).setUv(1.0f, 1.0f);
+        buffer.addVertex(x0, y0, z).setUv(0.0f, 1.0f);
         BufferUploader.drawWithShader(buffer.buildOrThrow());
+        RenderSystem.depthMask(true);
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableBlend();
+        if (profile) {
+            ExtraPlayerRenderProfiler.recordComposite(System.nanoTime() - compositeStart);
+            ExtraPlayerRenderProfiler.finishFrame(System.nanoTime() - totalStart, redrawn,
+                    fullyGpuThisRedraw, frameGpuPasses, frameFallbackPasses);
+        }
     }
 
     /** 渲染玩家模型到当前渲染目标（FBO；独立 poseStack + bufferSource，由调用方绑定 FBO 并 endBatch）。 */
     private static void renderOverlayModel(LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick, MultiBufferSource bufferSource) {
-        RenderPass previousPass = RenderContext.enter(RenderPass.GUI_PREVIEW);
+        RenderPass previousPass = RenderContext.enter(RenderPass.OLD_HUD);
         float previewYaw = FRONT_FACING_YAW;
         PoseStack poseStack = new PoseStack();
         try {

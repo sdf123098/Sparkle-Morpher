@@ -3,6 +3,7 @@ package com.micaftic.morpher.geckolib3.core.molang.builtin.query;
 import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
 import com.micaftic.morpher.geckolib3.core.molang.funciton.ContextFunction;
 import com.micaftic.morpher.molang.runtime.ExecutionContext;
+import com.micaftic.morpher.client.render.RenderContext;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 
@@ -12,6 +13,9 @@ public class RotationToCamera extends ContextFunction<Object> {
         int args = arguments.getAsInt(context, 0);
         if (args < 0 || args > 1) {
             return null;
+        }
+        if (RenderContext.isOldHud()) {
+            return args == 0 ? 0.0f : 180.0f;
         }
         Camera mainCamera = Minecraft.getInstance().gameRenderer.getMainCamera();
         if (args == 0) {

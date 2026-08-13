@@ -21,7 +21,7 @@ public final class ClientSetupEvent {
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(PlayerModelToggleKey.KEY_MAPPING);
         event.register(AnimationRouletteKey.KEY_ROULETTE); event.register(AnimationRouletteKey.KEY_LOCK);
-        event.register(DebugAnimationKey.KEY_MAPPING); event.register(ExtraPlayerRenderKey.KEY_MAPPING);
+        event.register(DebugAnimationKey.KEY_MAPPING);
         for (KeyMapping m : ExtraAnimationKey.getKeyMappings()) event.register(m);
     }
     public static Object nativeClientInit() {

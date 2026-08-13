@@ -8,6 +8,7 @@ import com.micaftic.morpher.mixin.ConnectionAccessor;
 import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
 import com.micaftic.morpher.model.format.ServerModelData;
 import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.network.LegacySyncFlowControl;
 import com.micaftic.morpher.network.message.S2CModelSyncPayload;
 import com.micaftic.morpher.util.YSMThreadPool;
 import io.netty.buffer.Unpooled;
@@ -279,6 +280,7 @@ public final class LegacyModelSyncProtocol {
                         }
                         if (fileData == null) {
                             YesSteveModel.LOGGER.warn("[SM] Model cache missing or corrupt for {}; skipping transfer, client will re-request on next sync", fileName);
+                            sendTransferFailure(uuid, state, transfer, hash1, hash2, "server_cache_unavailable");
                             continue;
                         }
                     }
@@ -369,6 +371,22 @@ public final class LegacyModelSyncProtocol {
         return false;
     }
 
+    private static void sendTransferFailure(UUID uuid, PlayerSyncState state, PendingTransfer transfer,
+                                            long hash1, long hash2, String reason) throws Exception {
+        int garbageLen = 16 + ServerModelManager.theRandom.nextInt(48);
+        byte[] garbage = new byte[garbageLen];
+        ServerModelManager.theRandom.nextBytes(garbage);
+        try (YSMByteBuf outBuf = new YSMByteBuf(Unpooled.buffer())) {
+            outBuf.writeGarbageHeader(garbageLen, garbage);
+            outBuf.writeVarInt(6);
+            outBuf.writeVarLong(hash1);
+            outBuf.writeVarLong(hash2);
+            outBuf.writeString(reason);
+            YsmCrypt.EncryptedPacket result = YsmCrypt.encrypt(outBuf.toArray(), state.key1, false);
+            sendModelData(uuid, ByteBuffer.wrap(result.data()), transfer);
+        }
+    }
+
     private static Object createModelPacket(ByteBuffer byteBuffer) {
         return NetworkHandler.toClientboundPacket(new S2CModelSyncPayload(byteBuffer));
     }
@@ -384,11 +402,14 @@ public final class LegacyModelSyncProtocol {
     private static boolean sendPacketReliably(Connection connection, Object obj, PendingTransfer pendingTransfer) {
         if (!pendingTransfer.hasStarted) {
             pendingTransfer.hasStarted = true;
-            pendingTransfer.pendingBytes = ((ConnectionAccessor) connection).ysm$getChannel().unsafe().outboundBuffer().totalPendingWriteBytes() + 65536;
+            long pendingBytes = ((ConnectionAccessor) connection).ysm$getChannel().unsafe().outboundBuffer().totalPendingWriteBytes();
+            pendingTransfer.pendingBytes = LegacySyncFlowControl.addSaturated(
+                    pendingBytes, LegacySyncFlowControl.SERVER_BURST_BYTES);
         }
 
         while (connection.isConnected()) {
-            if (((ConnectionAccessor) connection).ysm$getChannel().unsafe().outboundBuffer().size() > pendingTransfer.pendingBytes) {
+            long pendingBytes = ((ConnectionAccessor) connection).ysm$getChannel().unsafe().outboundBuffer().totalPendingWriteBytes();
+            if (LegacySyncFlowControl.shouldWaitForDrain(pendingBytes, pendingTransfer.pendingBytes)) {
                 if (!YSMThreadPool.sleepMillis(10)) {
                     return false;
                 }

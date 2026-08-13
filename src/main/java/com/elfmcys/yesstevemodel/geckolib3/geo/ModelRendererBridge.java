@@ -39,6 +39,40 @@ public class ModelRendererBridge {
 
     private static final Matrix4f projectionModelViewMatrix = new Matrix4f();
     private static final ThreadLocal<RenderScratch> FALLBACK_SCRATCH = ThreadLocal.withInitial(RenderScratch::new);
+    // [0] = GPU mesh passes, [1] = SIMD/Java fallback mesh passes for the current preview frame.
+    private static final ThreadLocal<int[]> PREVIEW_BACKEND_COUNTS = ThreadLocal.withInitial(() -> new int[2]);
+
+    /** 在一次 GUI preview/FBO 重绘前重置后端探测状态。 */
+    public static void beginPreviewFrame() {
+        int[] counts = PREVIEW_BACKEND_COUNTS.get();
+        counts[0] = 0;
+        counts[1] = 0;
+    }
+
+    /** 本次 preview 的所有模型网格是否都由持久 GPU/VAO 后端完成。 */
+    public static boolean wasPreviewGpuRendered() {
+        int[] counts = PREVIEW_BACKEND_COUNTS.get();
+        return counts[0] > 0 && counts[1] == 0;
+    }
+
+    public static int getPreviewGpuPassCount() {
+        return PREVIEW_BACKEND_COUNTS.get()[0];
+    }
+
+    public static int getPreviewFallbackPassCount() {
+        return PREVIEW_BACKEND_COUNTS.get()[1];
+    }
+
+    private static boolean canUsePreviewGpu(BoneRenderPass boneRenderPass,
+                                             net.minecraft.resources.ResourceLocation textureLocation) {
+        return boneRenderPass == BoneRenderPass.ALL
+                && textureLocation != null
+                && AccelerationCapability.canBuildGpuMesh()
+                && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()
+                && GeneralConfig.USE_GPU_RENDERER.get()
+                && !OculusCompat.isShaderPackInUse()
+                && GpuCapability.isAvailable();
+    }
 
     public static void renderMesh(VertexConsumer buffer, PoseStack.Pose pose, GeoModel model, float[] boneParams, float[] stateBuffer, int textureIndex, int renderPartMask, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {
         renderMesh(buffer, pose, model, boneParams, stateBuffer, textureIndex, renderPartMask, packedLight, packedOverlay, red, green, blue, alpha, null);
@@ -58,13 +92,22 @@ public class ModelRendererBridge {
         boolean isPreview = ModelPreviewRenderer.isPreview() || com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
 
         if (isPreview) {
-            // 性能（2026-08-13）：preview/overlay（额外玩家等）优先 SIMD 加速（native 顶点计算），
-            // Java(renderModel) 兜底；GPU（VAO）不适用于 GUI buffer，跳过。
+            // 性能（2026-08-13）：GUI/FBO preview 优先用持久 GPU mesh + SSBO 骨骼矩阵。
+            // 该路径直接绘制到当前绑定的 FBO，不依赖 GUI VertexConsumer；
+            // 不可用时再退回 SIMD 顶点提交 / Java。
             RenderBackend.RenderRequest previewRequest = new RenderBackend.RenderRequest(
                     buffer, pose, projectionModelViewMatrix, model, boneParams, stateBuffer,
                     textureIndex, renderPartMask, FULL_BRIGHT_LIGHT, packedOverlay,
                     red, green, blue, alpha, textureLocation, model.isTranslucentTexture(textureIndex),
                     true, true, boneRenderPass);
+            if (canUsePreviewGpu(boneRenderPass, textureLocation)
+                    && RenderBackends.gpu().tryRender(previewRequest)) {
+                PREVIEW_BACKEND_COUNTS.get()[0]++;
+                return;
+            }
+            // Any mesh pass reaching SIMD/Java makes this a mixed/fallback frame. Do not promote it
+            // to unthrottled paper-doll refresh merely because another pass happened to use GPU.
+            PREVIEW_BACKEND_COUNTS.get()[1]++;
             if (boneRenderPass == BoneRenderPass.ALL
                     && AccelerationCapability.canRenderSimd()
                     && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()) {

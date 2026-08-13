@@ -38,8 +38,9 @@ public final class IrisRenderPath {
         boneBuf.position(0);
         boneBuf.limit(mesh.boneCount * 144);
 
-        GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, mesh.boneSsbo);
-        GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, boneBuf);
+        int boneSsbo = mesh.nextBoneSsbo();
+        GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, boneSsbo);
+        GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, boneBuf, GL15.GL_STREAM_DRAW);
 
         GlStateManager._glUseProgram(BoneXformCompute.program());
         if (BoneXformCompute.locColor() >= 0) GL20.glUniform4f(BoneXformCompute.locColor(), r, g, b, a);
@@ -52,7 +53,7 @@ public final class IrisRenderPath {
 
         GL43.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 0, mesh.vbo);
         GL43.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 1, mesh.xformVbo());
-        GL43.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 2, mesh.boneSsbo);
+        GL43.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 2, boneSsbo);
 
         GL43.glDispatchCompute(BoneXformCompute.dispatchGroupCount(mesh.vertexCount), 1, 1);
 

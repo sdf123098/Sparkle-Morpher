@@ -76,7 +76,11 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
             return;
         }
         this.currentTexture = renderTexture.location;
-        capability.beginRenderState(entityYaw, partialTick);
+        if (com.micaftic.morpher.client.render.RenderContext.isOldHud()) {
+            capability.beginOldHudRenderState(entityYaw, partialTick);
+        } else {
+            capability.beginRenderState(entityYaw, partialTick);
+        }
         try {
             renderEntityWithTexture(capability, renderTexture.location, entityYaw, partialTick, poseStack, bufferSource, packedLight);
         } finally {

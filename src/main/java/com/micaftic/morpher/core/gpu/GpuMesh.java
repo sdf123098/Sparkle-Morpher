@@ -11,11 +11,17 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public final class GpuMesh {
+    /**
+     * Dynamic bone data is written more than once per display frame (world, hand and paper-doll passes).
+     * Rotating across eight stores keeps the CPU from overwriting an SSBO that an earlier GPU draw still reads.
+     */
+    public static final int BONE_SSBO_RING_SIZE = 8;
+
     public final long pointer;
     public final int vao;
     public final int vbo;
     public final int ibo;
-    public final int boneSsbo;
+    private final int[] boneSsbos;
     public final int vertexCount;
     public final int indexCount;
     public final int boneCount;
@@ -27,14 +33,15 @@ public final class GpuMesh {
 
     private int xformVbo = 0;
     private int xformVao = 0;
+    private int boneSsboCursor = 0;
     private boolean disposed = false;
 
-    GpuMesh(long pointer, int vao, int vbo, int ibo, int boneSsbo, int vertexCount, int indexCount, int boneCount, int pm1s, int pm1c, int pm2s, int pm2c, int pm3s, int pm3c, long estimatedBytes) {
+    GpuMesh(long pointer, int vao, int vbo, int ibo, int[] boneSsbos, int vertexCount, int indexCount, int boneCount, int pm1s, int pm1c, int pm2s, int pm2c, int pm3s, int pm3c, long estimatedBytes) {
         this.pointer = pointer;
         this.vao = vao;
         this.vbo = vbo;
         this.ibo = ibo;
-        this.boneSsbo = boneSsbo;
+        this.boneSsbos = boneSsbos;
         this.vertexCount = vertexCount;
         this.indexCount = indexCount;
         this.boneCount = boneCount;
@@ -66,6 +73,13 @@ public final class GpuMesh {
         if (renderPartMask == 2) return partMask2Count;
         if (renderPartMask == 3) return partMask3Count;
         return 0;
+    }
+
+    /** Returns a different dynamic bone store for each draw submission. Render-thread only. */
+    public int nextBoneSsbo() {
+        int id = boneSsbos[boneSsboCursor];
+        boneSsboCursor = (boneSsboCursor + 1) % boneSsbos.length;
+        return id;
     }
 
     public int xformVbo() {
@@ -107,7 +121,11 @@ public final class GpuMesh {
         disposed = true;
         GlStateManager._glDeleteBuffers(vbo);
         GlStateManager._glDeleteBuffers(ibo);
-        GlStateManager._glDeleteBuffers(boneSsbo);
+        for (int boneSsbo : boneSsbos) {
+            if (boneSsbo != 0) {
+                GlStateManager._glDeleteBuffers(boneSsbo);
+            }
+        }
         GL45.glDeleteVertexArrays(vao);
         if (xformVbo != 0) GlStateManager._glDeleteBuffers(xformVbo);
         if (xformVao != 0) GL45.glDeleteVertexArrays(xformVao);
