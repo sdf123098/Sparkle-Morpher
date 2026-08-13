@@ -36,6 +36,12 @@ public final class RenderContext {
 
     /** 是否处于 GUI 内玩家预览（额外玩家 overlay）。 */
     public static boolean isGuiPreview() {
-        return CURRENT_PASS.get() == RenderPass.GUI_PREVIEW;
+        RenderPass pass = CURRENT_PASS.get();
+        return pass == RenderPass.GUI_PREVIEW || pass == RenderPass.OLD_HUD;
+    }
+
+    /** 是否正在绘制现有旧 HUD；该阶段不得继承世界摄像机的头部朝向。 */
+    public static boolean isOldHud() {
+        return CURRENT_PASS.get() == RenderPass.OLD_HUD;
     }
 }

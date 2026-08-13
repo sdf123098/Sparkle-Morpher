@@ -10,6 +10,8 @@ package com.micaftic.morpher.client.render;
 public enum RenderPass {
     /** 世界内实体渲染（默认）。 */
     WORLD,
-    /** GUI 内玩家预览：额外玩家 overlay / 小图。 */
-    GUI_PREVIEW
+    /** GUI 内通用模型预览，可保留预览界面的鼠标看向行为。 */
+    GUI_PREVIEW,
+    /** 现有的旧 HUD 渲染：固定展示朝向，与世界摄像机头部旋转隔离。 */
+    OLD_HUD
 }

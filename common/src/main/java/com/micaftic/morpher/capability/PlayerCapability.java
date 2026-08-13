@@ -99,6 +99,21 @@ public final class PlayerCapability extends CustomPlayerEntity {
         this.activeRenderState.set(createRenderState(entityYaw, partialTick));
     }
 
+    /**
+     * Old HUD keeps locomotion from the live player but owns a fixed presentation camera.
+     * World head yaw/pitch comes from mouse look and must not leak into this render state.
+     */
+    public void beginOldHudRenderState(float entityYaw, float partialTick) {
+        partialTick = sanitizePartialTick(partialTick);
+        this.activeRenderState.set(new RenderStateSnapshot(
+                this.entity.walkAnimation.speed(partialTick),
+                this.entity.walkAnimation.position(partialTick),
+                entityYaw,
+                0.0f,
+                0.0f
+        ));
+    }
+
     public void beginCapturedRenderState() {
         RenderStateSnapshot snapshot = this.capturedRenderState;
         if (snapshot == null) {

@@ -3,6 +3,8 @@ package com.micaftic.morpher.core.gpu;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.mixin.client.RenderSystemAccessor;
+import com.micaftic.morpher.client.render.RenderContext;
+import com.micaftic.morpher.client.renderer.ExtraPlayerRenderProfiler;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -82,8 +84,13 @@ public final class GpuRenderPath {
         ByteBuffer boneBuf = mesh.perFrameBoneBuffer;
         boneBuf.clear();
 
+        boolean profileExtraPlayer = ExtraPlayerRenderProfiler.enabled() && RenderContext.isGuiPreview();
+        long boneStart = profileExtraPlayer ? System.nanoTime() : 0L;
         if (!computeBoneMatrices(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
             return false;
+        }
+        if (profileExtraPlayer) {
+            ExtraPlayerRenderProfiler.recordBoneMatrices(System.nanoTime() - boneStart);
         }
         boneBuf.position(0);
         boneBuf.limit(mesh.boneCount * 144);
@@ -107,9 +114,17 @@ public final class GpuRenderPath {
         stateCache.activeTexture(GL13.GL_TEXTURE0);
         stateCache.bindTexture(modelTexId);
 
-        stateCache.bindSsbo(mesh.boneSsbo);
-        GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, boneBuf);
-        stateCache.bindSsboBase(BoneSkinShader.ssbo, mesh.boneSsbo);
+        int boneSsbo = mesh.nextBoneSsbo();
+        long uploadStart = profileExtraPlayer ? System.nanoTime() : 0L;
+        stateCache.bindSsbo(boneSsbo);
+        // Re-specifying STREAM_DRAW storage orphans any backing store still consumed by an
+        // earlier world/hand/paper-doll draw. Combined with the per-mesh ring this avoids the
+        // implicit CPU/GPU wait caused by overwriting one shared SSBO via glBufferSubData.
+        GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, boneBuf, GL15.GL_STREAM_DRAW);
+        stateCache.bindSsboBase(BoneSkinShader.ssbo, boneSsbo);
+        if (profileExtraPlayer) {
+            ExtraPlayerRenderProfiler.recordSsboUpload(System.nanoTime() - uploadStart);
+        }
 
         float fogStart = RenderSystem.getShaderFogStart();
         float fogEnd = RenderSystem.getShaderFogEnd();
@@ -135,6 +150,7 @@ public final class GpuRenderPath {
         if (BoneSkinShader.locLight1() >= 0)
             GL20.glUniform3f(BoneSkinShader.locLight1(), currentLights[1].x, currentLights[1].y, currentLights[1].z);
 
+        long drawStart = profileExtraPlayer ? System.nanoTime() : 0L;
         GlStateManager._glBindVertexArray(mesh.vao);
 
         int drawCount = mesh.indexDrawCount(renderPartMask);
@@ -149,6 +165,9 @@ public final class GpuRenderPath {
                 drawMeshParts(mesh, renderPartMask);
                 RenderSystem.disableBlend();
             }
+        }
+        if (profileExtraPlayer) {
+            ExtraPlayerRenderProfiler.recordDrawSubmission(System.nanoTime() - drawStart);
         }
 
         stateCache.bindSsboBase(BoneSkinShader.ssbo, 0);

@@ -7,6 +7,8 @@ public class ExtraPlayerRenderConfig {
 
     public static ForgeConfigSpec.BooleanValue DISABLE_PLAYER_RENDER;
 
+    public static ForgeConfigSpec.BooleanValue ENABLE_MODERN_HUD_RENDER;
+
     public static ForgeConfigSpec.IntValue PLAYER_POS_X;
 
     public static ForgeConfigSpec.IntValue PLAYER_POS_Y;
@@ -17,8 +19,10 @@ public class ExtraPlayerRenderConfig {
 
     public static void define(ForgeConfigSpec.Builder builder) {
         builder.push("extra_player_render");
-        builder.comment("Whether to display player");
+        builder.comment("Legacy inverse switch for classic HUD rendering");
         DISABLE_PLAYER_RENDER = builder.define("DisablePlayerRender", Platform.isModLoaded("figura"));
+        builder.comment("Whether to enable the independent modern HUD renderer");
+        ENABLE_MODERN_HUD_RENDER = builder.define("EnableModernHudRender", false);
         builder.comment("Player position x in screen");
         PLAYER_POS_X = builder.defineInRange("PlayerPosX", 10, 0, Integer.MAX_VALUE);
         builder.comment("Player position y in screen");

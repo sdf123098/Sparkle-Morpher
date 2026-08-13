@@ -754,7 +754,17 @@
   "gui.sparkle_morpher.model_panel.setting.disable_self_model": "Disable self model",
   "gui.sparkle_morpher.model_panel.setting.disable_other_model": "Disable other model",
   "gui.sparkle_morpher.model_panel.setting.disable_self_hands": "Disable self hands",
-  "gui.sparkle_morpher.model_panel.setting.disable_player_render": "Hide HUD player preview",
+  "gui.sparkle_morpher.model_panel.setting.classic_hud_rendering": "Classic HUD rendering",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_rendering": "Modern HUD rendering",
+  "gui.sparkle_morpher.model_panel.setting.classic_hud_layout": "Classic HUD layout",
+  "gui.sparkle_morpher.model_panel.setting.configure": "Configure",
+  "gui.sparkle_morpher.classic_hud_layout.title": "Classic HUD layout",
+  "gui.sparkle_morpher.classic_hud_layout.tips": "Left-drag: move · Blue handle/wheel: scale · Right-drag: rotate · Alt+R: reset",
+  "gui.sparkle_morpher.classic_hud_layout.values": "X: %s  Y: %s  Scale: %s  Yaw: %s°",
+  "gui.sparkle_morpher.model_panel.setting.classic_hud_x": "Classic HUD position X",
+  "gui.sparkle_morpher.model_panel.setting.classic_hud_y": "Classic HUD position Y",
+  "gui.sparkle_morpher.model_panel.setting.classic_hud_scale": "Classic HUD scale",
+  "gui.sparkle_morpher.model_panel.setting.classic_hud_yaw": "Classic HUD yaw",
   "gui.sparkle_morpher.model_panel.setting.disable_projectile_model": "Disable projectile model",
   "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model": "Disable vehicle model",
   "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim": "Disable external first-person animation",
@@ -804,5 +814,6 @@
   "gui.sparkle_morpher.model_panel.setting.loading_state_position": "Loading popup position",
   "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x": "Loading popup X offset",
   "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y": "Loading popup Y offset",
-  "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide": "Loading popup auto-hide"
+  "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide": "Loading popup auto-hide",
+  "gui.sparkle_morpher.model_panel.setting.animation_roulette_debug_log": "Animation roulette debug log"
 }

@@ -31,7 +31,6 @@ public class WorldRendererMixin {
     @Inject(method = {"renderLevel"}, at = @At("RETURN"))
     private void renderLevelPost(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
         if (YesSteveModel.isAvailable()) {
-            EntityRenderCache.clear();
             ModelPreviewRenderer.setFirstPersonMode(false);
             ModelPreviewRenderer.setWorldRenderMode(false);
         }

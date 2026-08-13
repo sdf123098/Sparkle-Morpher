@@ -65,7 +65,9 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
 
     public void render(PlayerCapability capability, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
         Player player = (Player) capability.entity;
-        capability.tickModel();
+        if (!com.micaftic.morpher.client.render.RenderContext.isGuiPreview() || !capability.isModelReady()) {
+            capability.tickModel();
+        }
         String modelId = capability.getModelId();
         ClientModelManager.markModelUsed(modelId);
         CachedRenderTexture renderTexture = getRenderTexture(player, capability, modelId);
@@ -74,7 +76,11 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
             return;
         }
         this.currentTexture = renderTexture.location;
-        capability.beginRenderState(entityYaw, partialTick);
+        if (com.micaftic.morpher.client.render.RenderContext.isOldHud()) {
+            capability.beginOldHudRenderState(entityYaw, partialTick);
+        } else {
+            capability.beginRenderState(entityYaw, partialTick);
+        }
         try {
             renderEntityWithTexture(capability, renderTexture.location, entityYaw, partialTick, poseStack, bufferSource, packedLight);
         } finally {
@@ -113,7 +119,6 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
             this.location = location;
         }
     }
-
 
     @Override
     public boolean shouldShowName(Player entity) {
