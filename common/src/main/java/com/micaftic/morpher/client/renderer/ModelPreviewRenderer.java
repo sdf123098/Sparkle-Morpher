@@ -206,67 +206,69 @@ public final class ModelPreviewRenderer {
         livingEntity.yHeadRot = previewYaw;
         livingEntity.yHeadRotO = previewYaw;
 
-        Lighting.setupForEntityInInventory();
         EntityRenderDispatcher entityRenderDispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
-        rotationX.conjugate();
-        entityRenderDispatcher.overrideCameraOrientation(rotationX);
-        entityRenderDispatcher.setRenderShadow(false);
         MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+        try {
+            Lighting.setupForEntityInInventory();
+            rotationX.conjugate();
+            entityRenderDispatcher.overrideCameraOrientation(rotationX);
+            entityRenderDispatcher.setRenderShadow(false);
 
-        RenderSystem.runAsFancy(() -> {
-            AnimationTracker animationTracker = ((IPreviewAnimatable) animatableEntity).getAnimationStateMachine();
-            if (animationTracker.isCurrentAnimation("sleep")) {
-                poseStack.mulPose(Axis.YP.rotationDegrees(yaw - 90.0f));
-                poseStack.translate(0.5d, 0.5625d, 0.0d);
-                livingEntity.setPose(Pose.SLEEPING);
-            }
-            if (animationTracker.isCurrentAnimation("swim") || animationTracker.isCurrentAnimation("swim_stand")) {
-                livingEntity.setPose(Pose.SWIMMING);
-            }
-            if (animationTracker.isCurrentAnimation("sneak") || animationTracker.isCurrentAnimation("sneaking")) {
-                livingEntity.setPose(Pose.CROUCHING);
-            }
-            if (animationTracker.isCurrentAnimation("sit")) {
-                poseStack.translate(0.0d, -0.5d, 0.0d);
-            }
-            if (animationTracker.isCurrentAnimation("ride")) {
-                poseStack.translate(0.0d, 0.85d, 0.0d);
-            }
-            if (animationTracker.isCurrentAnimation("ride_pig")) {
-                poseStack.translate(0.0d, 0.3125d, 0.0d);
-            }
-            if (animationTracker.isCurrentAnimation("boat")) {
-                poseStack.translate(0.0d, -0.45d, 0.0d);
-            }
-            try {
-                renderVehicleForAnimation(yaw, animatableEntity, partialTick, poseStack, entityRenderDispatcher, bufferSource);
+            RenderSystem.runAsFancy(() -> {
+                AnimationTracker animationTracker = ((IPreviewAnimatable) animatableEntity).getAnimationStateMachine();
                 if (animationTracker.isCurrentAnimation("sleep")) {
-                    renderBedPreview(x, y, scale, pitch, yaw, bufferSource);
+                    poseStack.mulPose(Axis.YP.rotationDegrees(yaw - 90.0f));
+                    poseStack.translate(0.5d, 0.5625d, 0.0d);
+                    livingEntity.setPose(Pose.SLEEPING);
                 }
-                if (renderGround) {
-                    renderGroundPreview(x, y, scale, pitch, yaw, bufferSource);
+                if (animationTracker.isCurrentAnimation("swim") || animationTracker.isCurrentAnimation("swim_stand")) {
+                    livingEntity.setPose(Pose.SWIMMING);
                 }
-                bufferSource.endBatch();
-                renderer.renderEntity((LivingAnimatable) animatableEntity, 0.0f, partialTick, poseStack, bufferSource, 15728880);
-            } catch (ExecutionException e) {
-                throw new RuntimeException(e);
-            }
-        });
+                if (animationTracker.isCurrentAnimation("sneak") || animationTracker.isCurrentAnimation("sneaking")) {
+                    livingEntity.setPose(Pose.CROUCHING);
+                }
+                if (animationTracker.isCurrentAnimation("sit")) {
+                    poseStack.translate(0.0d, -0.5d, 0.0d);
+                }
+                if (animationTracker.isCurrentAnimation("ride")) {
+                    poseStack.translate(0.0d, 0.85d, 0.0d);
+                }
+                if (animationTracker.isCurrentAnimation("ride_pig")) {
+                    poseStack.translate(0.0d, 0.3125d, 0.0d);
+                }
+                if (animationTracker.isCurrentAnimation("boat")) {
+                    poseStack.translate(0.0d, -0.45d, 0.0d);
+                }
+                try {
+                    renderVehicleForAnimation(yaw, animatableEntity, partialTick, poseStack, entityRenderDispatcher, bufferSource);
+                    if (animationTracker.isCurrentAnimation("sleep")) {
+                        renderBedPreview(x, y, scale, pitch, yaw, bufferSource);
+                    }
+                    if (renderGround) {
+                        renderGroundPreview(x, y, scale, pitch, yaw, bufferSource);
+                    }
+                    bufferSource.endBatch();
+                    renderer.renderEntity((LivingAnimatable) animatableEntity, 0.0f, partialTick, poseStack, bufferSource, 15728880);
+                } catch (ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
+            });
 
-        bufferSource.endBatch();
-        entityRenderDispatcher.setRenderShadow(true);
-        livingEntity.yBodyRot = oldBodyRot;
-        livingEntity.yBodyRotO = oldBodyRotO;
-        livingEntity.setYRot(oldYRot);
-        livingEntity.yRotO = oldYRotO;
-        livingEntity.setXRot(oldXRot);
-        livingEntity.xRotO = oldXRotO;
-        livingEntity.yHeadRotO = oldHeadRotO;
-        livingEntity.yHeadRot = oldHeadRot;
-        livingEntity.setPose(oldPose);
-
-        Lighting.setupFor3DItems();
-        setPreviewMode(false);
+            bufferSource.endBatch();
+        } finally {
+            entityRenderDispatcher.setRenderShadow(true);
+            livingEntity.yBodyRot = oldBodyRot;
+            livingEntity.yBodyRotO = oldBodyRotO;
+            livingEntity.setYRot(oldYRot);
+            livingEntity.yRotO = oldYRotO;
+            livingEntity.setXRot(oldXRot);
+            livingEntity.xRotO = oldXRotO;
+            livingEntity.yHeadRotO = oldHeadRotO;
+            livingEntity.yHeadRot = oldHeadRot;
+            livingEntity.setPose(oldPose);
+            Lighting.setupFor3DItems();
+            setPreviewMode(false);
+        }
     }
 
     private static void renderBedPreview(float x, float y, float scale, float pitch, float yaw, MultiBufferSource.BufferSource bufferSource) {
