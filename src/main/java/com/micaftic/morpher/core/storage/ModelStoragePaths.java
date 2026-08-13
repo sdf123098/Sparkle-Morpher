@@ -91,6 +91,44 @@ public final class ModelStoragePaths {
         return cache().resolve(".bbmodel_import_cache_identity");
     }
 
+    /** 缓存版本标记文件（mod 版本变化时据此清空缓存重建）。 */
+    public static Path cacheVersionFile() {
+        return cache().resolve("version.txt");
+    }
+
+    /**
+     * 版本升级时清空并重建缓存：缓存文件按 modVersion 派生的 identity 加密/校验，
+     * 升级后旧缓存验证失败路径可能产生模糊异常（如第一人称手部回退原版）。
+     * 以缓存身份标记为唯一标准：标记变化即整体清空重建（哈希校验仍保留为内容校验）。
+     */
+    public static void checkCacheVersionAndReset() {
+        Path cacheRoot = cache();
+        Path versionFile = cacheVersionFile();
+        try {
+            String expected = com.micaftic.morpher.core.security.YsmCrypt.getModelCacheIdentity();
+            boolean mismatch = !java.nio.file.Files.exists(versionFile)
+                    || !expected.equals(java.nio.file.Files.readString(versionFile));
+            if (!mismatch) {
+                return;
+            }
+            if (java.nio.file.Files.exists(cacheRoot)) {
+                try (java.util.stream.Stream<Path> walk = java.nio.file.Files.walk(cacheRoot)) {
+                    walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                        try {
+                            java.nio.file.Files.deleteIfExists(p);
+                        } catch (java.io.IOException ignored) {
+                        }
+                    });
+                }
+            }
+            java.nio.file.Files.createDirectories(cacheRoot);
+            java.nio.file.Files.writeString(versionFile, expected, java.nio.charset.StandardCharsets.UTF_8);
+            com.micaftic.morpher.YesSteveModel.LOGGER.info("[SM] Cache reset on mod version change: {}", expected);
+        } catch (java.io.IOException e) {
+            com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM] Failed to reset cache on version change", e);
+        }
+    }
+
     // ---- classpath 内置模型资源 ----
     public static String builtinResourceRoot() {
         return "/assets/" + com.micaftic.morpher.YesSteveModel.MOD_ID + "/builtin/";

@@ -165,6 +165,8 @@ public final class ServerModelManager {
     public static void reloadPacks() throws IOException {
         initialized = false;
         CATALOG.clear();
+        // 版本升级时清空缓存重建（缓存按 modVersion 派生的 identity 加密/校验，旧版本缓存不兼容）
+        ModelStoragePaths.checkCacheVersionAndReset();
 
         createFolder(FOLDER);
         createFolder(BUILT);
