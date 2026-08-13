@@ -58,6 +58,20 @@ public class ModelRendererBridge {
         boolean isPreview = ModelPreviewRenderer.isPreview() || com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
 
         if (isPreview) {
+            // 性能（2026-08-13）：preview/overlay（额外玩家等）优先 SIMD 加速（native 顶点计算），
+            // Java(renderModel) 兜底；GPU（VAO）不适用于 GUI buffer，跳过。
+            RenderBackend.RenderRequest previewRequest = new RenderBackend.RenderRequest(
+                    buffer, pose, projectionModelViewMatrix, model, boneParams, stateBuffer,
+                    textureIndex, renderPartMask, FULL_BRIGHT_LIGHT, packedOverlay,
+                    red, green, blue, alpha, textureLocation, model.isTranslucentTexture(textureIndex),
+                    true, true, boneRenderPass);
+            if (boneRenderPass == BoneRenderPass.ALL
+                    && AccelerationCapability.canRenderSimd()
+                    && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()) {
+                if (RenderBackends.simd().tryRender(previewRequest)) {
+                    return;
+                }
+            }
             renderModel(
                     buffer,
                     pose,
@@ -82,7 +96,9 @@ public class ModelRendererBridge {
         // VertexConsumer-backed SIMD/Java path while a pack is active.
         // BoneRenderPass splits (NON_GLOW/GLOW) bypass the GPU/SIMD fast paths because
         // those paths only serve BoneRenderPass.ALL.
-        boolean useGpuRenderer = boneRenderPass == BoneRenderPass.ALL
+        // isPreview（额外玩家 overlay 等）跳过 GPU：GUI buffer 不适用 VAO 直接绘制。
+        boolean useGpuRenderer = !isPreview
+                && boneRenderPass == BoneRenderPass.ALL
                 && textureLocation != null
                 && AccelerationCapability.canBuildGpuMesh()
                 && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()
