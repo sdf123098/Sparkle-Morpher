@@ -470,9 +470,6 @@ public final class ModelPreviewRenderer {
         // 节流渲染（每 4 帧，动画评估由 AnimatableEntity 同帧缓存复用）；阶段用
         // RenderContext.enter(GUI_PREVIEW) 显式进入并在 finally 恢复，替代 EXTRA_PLAYER_MODE
         // 布尔开关（旧实现异常路径会残留状态，污染后续世界渲染）。
-        if ((com.micaftic.morpher.client.event.ClientTickEvent.getTickCount() & 3) != 0) {
-            return;
-        }
         RenderPass previousPass = RenderContext.enter(RenderPass.GUI_PREVIEW);
 
         float oldBodyRot = localPlayer.yBodyRot;
