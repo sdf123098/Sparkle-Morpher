@@ -131,6 +131,25 @@ public final class ModelPreviewRenderer {
         return PREVIEW_MODE.get();
     }
 
+    /** 26.2 GUI 预览（InventoryScreen.extractEntityInInventoryFollowsMouse）当前渲染的实体。 */
+    private static Entity guiPreviewEntity;
+    private static float guiPreviewPartialTick;
+
+    public static void setGuiPreviewEntity(Entity entity, float partialTick) {
+        guiPreviewEntity = entity;
+        guiPreviewPartialTick = partialTick;
+    }
+
+    public static Entity getAndClearGuiPreviewEntity() {
+        Entity entity = guiPreviewEntity;
+        guiPreviewEntity = null;
+        return entity;
+    }
+
+    public static float getGuiPreviewPartialTick() {
+        return guiPreviewPartialTick;
+    }
+
     public static void setExtraPlayerMode(boolean extraPlayerMode) {
         EXTRA_PLAYER_MODE.set(extraPlayerMode);
     }
