@@ -31,7 +31,7 @@ public class ReplacePlayerHandRenderEvent {
                 return;
             }
             ModelAssembly context = cap.getModelAssembly();
-            if (context == null || !hasArmBone(arm, context.getAnimationBundle().getArmModel())) {
+            if (context == null || context.getAnimationBundle() == null || !hasArmBone(arm, context.getAnimationBundle().getArmModel())) {
                 return;
             }
             RendererManager.getHandRenderer().renderHandItem(localPlayer, context, cap, arm, poseStack, bufferSource, packedLight, Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false));
