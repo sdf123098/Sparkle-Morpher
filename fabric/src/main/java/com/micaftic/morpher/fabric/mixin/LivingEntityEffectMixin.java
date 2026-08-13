@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Collection;
 
-@Mixin(LivingEntity.class)
+@Mixin(targets = "net.minecraft.world.entity.LivingEntity")
 public abstract class LivingEntityEffectMixin {
 
     @Inject(method = "onEffectAdded", at = @At("TAIL"))
