@@ -22,6 +22,7 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
@@ -504,12 +505,15 @@ public final class ModelPreviewRenderer {
             extraPlayerLastRenderTick = -1;
         }
 
-        // 每 4 帧重渲染到 FBO（动画更新；其余帧贴缓存图）
+        // 每 4 帧重渲染到 FBO（动画更新；其余帧贴缓存图）。
+        // 用独立 bufferSource（MultiBufferSource.immediate）确保提交到 FBO——guiGraphics 的
+        // bufferSource 绑定主渲染目标，FBO 绑定后 flush 不会提交到 FBO（表现为透明）。
         if (tick - extraPlayerLastRenderTick >= 4 || extraPlayerLastRenderTick < 0) {
             extraPlayerFbo.bindWrite(true);
             RenderSystem.clear(256, false);
-            renderOverlayModel(guiGraphics, localPlayer, x, y, scale, yawOffset, zDepth, partialTick);
-            guiGraphics.flush();
+            MultiBufferSource.BufferSource fboBuffer = MultiBufferSource.immediate(new ByteBufferBuilder(256));
+            renderOverlayModel(localPlayer, x, y, scale, yawOffset, zDepth, partialTick, fboBuffer);
+            fboBuffer.endBatch();
             extraPlayerFbo.unbindWrite();
             extraPlayerLastRenderTick = tick;
         }
@@ -535,20 +539,20 @@ public final class ModelPreviewRenderer {
         BufferUploader.drawWithShader(buffer.buildOrThrow());
     }
 
-    /** 渲染玩家模型到当前渲染目标（GUI 投影一致；由调用方绑定 FBO）。 */
-    private static void renderOverlayModel(GuiGraphics guiGraphics, LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick) {
+    /** 渲染玩家模型到当前渲染目标（FBO；独立 poseStack + bufferSource，由调用方绑定 FBO 并 endBatch）。 */
+    private static void renderOverlayModel(LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick, MultiBufferSource bufferSource) {
         RenderPass previousPass = RenderContext.enter(RenderPass.GUI_PREVIEW);
         float previewYaw = FRONT_FACING_YAW;
+        PoseStack poseStack = new PoseStack();
         try {
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-            guiGraphics.pose().pushPose();
-            guiGraphics.pose().translate(x + (scale * 0.5d), y + (scale * 2.0d), zDepth);
-            guiGraphics.pose().scale(scale, scale, -scale);
+            poseStack.translate(x + (scale * 0.5d), y + (scale * 2.0d), zDepth);
+            poseStack.scale(scale, scale, -scale);
 
             Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.1f);
             Quaternionf rotationY = Axis.YP.rotationDegrees(yawOffset - FRONT_FACING_YAW + 180.0f);
             rotationZ.mul(rotationY);
-            guiGraphics.pose().mulPose(rotationZ);
+            poseStack.mulPose(rotationZ);
 
             Lighting.setupForEntityInInventory();
             EntityRenderDispatcher entityRenderDispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
@@ -560,19 +564,18 @@ public final class ModelPreviewRenderer {
                     .filter(PlayerCapability::isModelActive)
                     .map(cap -> {
                         RenderSystem.runAsFancy(() -> RendererManager.getPlayerRenderer()
-                                .render(localPlayer, previewYaw, partialTick, guiGraphics.pose(), guiGraphics.bufferSource(), 15728880));
+                                .render(localPlayer, previewYaw, partialTick, poseStack, bufferSource, 15728880));
                         return true;
                     })
                     .orElse(false);
             if (!renderedCustomModel) {
                 RenderSystem.runAsFancy(() -> {
-                    entityRenderDispatcher.render(localPlayer, 0.0d, 0.0d, 0.0d, previewYaw, partialTick, guiGraphics.pose(), guiGraphics.bufferSource(), 15728880);
+                    entityRenderDispatcher.render(localPlayer, 0.0d, 0.0d, 0.0d, previewYaw, partialTick, poseStack, bufferSource, 15728880);
                 });
             }
 
             entityRenderDispatcher.setRenderShadow(true);
         } finally {
-            guiGraphics.pose().popPose();
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
             Lighting.setupFor3DItems();
             RenderContext.restore(previousPass);
