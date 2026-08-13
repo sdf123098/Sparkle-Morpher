@@ -399,7 +399,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                 int boneCount = getEvaluationContext().getBoneCount();
                 int controllerCount = this.manager.getAnimationControllers().size();
                 boolean previewMode = ModelPreviewRenderer.isPreview();
-                boolean extraPlayerMode = ModelPreviewRenderer.isExtraPlayer();
+                boolean extraPlayerMode = com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
                 boolean canReuseEvaluation = (!previewMode || extraPlayerMode)
                         && this.lastAnimationEvaluationFrameId == renderFrameId
                         && Float.compare(this.lastAnimationEvaluationSeekTime, this.seekTime) == 0

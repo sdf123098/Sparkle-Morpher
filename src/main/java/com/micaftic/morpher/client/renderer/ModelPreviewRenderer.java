@@ -7,6 +7,8 @@ import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.client.animation.AnimationTracker;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.render.RenderContext;
+import com.micaftic.morpher.client.render.RenderPass;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
@@ -55,8 +57,6 @@ public final class ModelPreviewRenderer {
     private static final double MODEL_PREVIEW_Z = 50.0d;
 
     private static final ThreadLocal<Boolean> PREVIEW_MODE = ThreadLocal.withInitial(() -> false);
-
-    private static final ThreadLocal<Boolean> EXTRA_PLAYER_MODE = ThreadLocal.withInitial(() -> false);
 
     private static final ThreadLocal<Boolean> FIRST_PERSON_MODE = ThreadLocal.withInitial(() -> false);
 
@@ -111,12 +111,19 @@ public final class ModelPreviewRenderer {
         return PREVIEW_MODE.get();
     }
 
+    /** 兼容便捷方法：进入/退出额外玩家渲染阶段（内部走 RenderContext，替代 EXTRA_PLAYER_MODE ThreadLocal）。 */
     public static void setExtraPlayerMode(boolean extraPlayerMode) {
-        EXTRA_PLAYER_MODE.set(extraPlayerMode);
+        if (extraPlayerMode) {
+            RenderContext.enter(RenderPass.GUI_PREVIEW);
+        } else {
+            // 兼容旧调用（无 previous 引用）：回退到世界阶段。渲染入口应优先用 enter/restore + finally。
+            RenderContext.restore(RenderPass.WORLD);
+        }
     }
 
+    /** 是否处于额外玩家渲染阶段（GUI_PREVIEW pass）。 */
     public static boolean isExtraPlayer() {
-        return EXTRA_PLAYER_MODE.get();
+        return RenderContext.isGuiPreview();
     }
 
     public static void setFirstPersonMode(boolean firstPersonMode) {
@@ -459,25 +466,14 @@ public final class ModelPreviewRenderer {
 
     // 纸娃娃
     public static void renderPlayerOverlay(GuiGraphics guiGraphics, LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick) {
-        guiGraphics.flush();
-        setExtraPlayerMode(true);
-        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-
-        guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(x + (scale * 0.5d), y + (scale * 2.0d), zDepth);
-        guiGraphics.pose().scale(scale, scale, -scale);
-
-        float previewYaw = FRONT_FACING_YAW;
-        Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.1f);
-        Quaternionf rotationY = Axis.YP.rotationDegrees(yawOffset - FRONT_FACING_YAW + 180.0f);
-        rotationZ.mul(rotationY);
-        guiGraphics.pose().mulPose(rotationZ);
-
-        Lighting.setupForEntityInInventory();
-        EntityRenderDispatcher entityRenderDispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
-        rotationY.conjugate();
-        entityRenderDispatcher.overrideCameraOrientation(rotationY);
-        entityRenderDispatcher.setRenderShadow(false);
+        // 性能（2026-08-13 重构，§16 RenderContext 提前落地）：overlay 为屏幕角落装饰小图，
+        // 节流渲染（每 4 帧，动画评估由 AnimatableEntity 同帧缓存复用）；阶段用
+        // RenderContext.enter(GUI_PREVIEW) 显式进入并在 finally 恢复，替代 EXTRA_PLAYER_MODE
+        // 布尔开关（旧实现异常路径会残留状态，污染后续世界渲染）。
+        if ((com.micaftic.morpher.client.event.ClientTickEvent.getTickCount() & 3) != 0) {
+            return;
+        }
+        RenderPass previousPass = RenderContext.enter(RenderPass.GUI_PREVIEW);
 
         float oldBodyRot = localPlayer.yBodyRot;
         float oldBodyRotO = localPlayer.yBodyRotO;
@@ -489,6 +485,8 @@ public final class ModelPreviewRenderer {
         float oldHeadRotO = localPlayer.yHeadRotO;
         float headYawOffset = getExtraPlayerHeadYawOffset(localPlayer);
         float headYawOffsetO = getExtraPlayerHeadYawOffsetO(localPlayer);
+
+        float previewYaw = FRONT_FACING_YAW;
         localPlayer.yBodyRot = previewYaw;
         localPlayer.yBodyRotO = previewYaw;
         localPlayer.setYRot(previewYaw);
@@ -498,33 +496,54 @@ public final class ModelPreviewRenderer {
         localPlayer.setXRot(0.0f);
         localPlayer.xRotO = 0.0f;
 
-        boolean renderedCustomModel = PlayerCapability.get(localPlayer)
-                .filter(PlayerCapability::isModelActive)
-                .map(cap -> {
-                    RenderSystem.runAsFancy(() -> RendererManager.getPlayerRenderer()
-                            .render(localPlayer, previewYaw, partialTick, guiGraphics.pose(), guiGraphics.bufferSource(), 15728880));
-                    return true;
-                })
-                .orElse(false);
-        if (!renderedCustomModel) {
-            RenderSystem.runAsFancy(() -> {
-                entityRenderDispatcher.render(localPlayer, 0.0d, 0.0d, 0.0d, previewYaw, partialTick, guiGraphics.pose(), guiGraphics.bufferSource(), 15728880);
-            });
-        }
+        try {
+            guiGraphics.flush();
+            RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-        guiGraphics.flush();
-        entityRenderDispatcher.setRenderShadow(true);
-        localPlayer.yBodyRot = oldBodyRot;
-        localPlayer.yBodyRotO = oldBodyRotO;
-        localPlayer.setYRot(oldYRot);
-        localPlayer.yRotO = oldYRotO;
-        localPlayer.setXRot(oldXRot);
-        localPlayer.xRotO = oldXRotO;
-        localPlayer.yHeadRot = oldHeadRot;
-        localPlayer.yHeadRotO = oldHeadRotO;
-        guiGraphics.pose().popPose();
-        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-        Lighting.setupFor3DItems();
-        setExtraPlayerMode(false);
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(x + (scale * 0.5d), y + (scale * 2.0d), zDepth);
+            guiGraphics.pose().scale(scale, scale, -scale);
+
+            Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.1f);
+            Quaternionf rotationY = Axis.YP.rotationDegrees(yawOffset - FRONT_FACING_YAW + 180.0f);
+            rotationZ.mul(rotationY);
+            guiGraphics.pose().mulPose(rotationZ);
+
+            Lighting.setupForEntityInInventory();
+            EntityRenderDispatcher entityRenderDispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
+            rotationY.conjugate();
+            entityRenderDispatcher.overrideCameraOrientation(rotationY);
+            entityRenderDispatcher.setRenderShadow(false);
+
+            boolean renderedCustomModel = PlayerCapability.get(localPlayer)
+                    .filter(PlayerCapability::isModelActive)
+                    .map(cap -> {
+                        RenderSystem.runAsFancy(() -> RendererManager.getPlayerRenderer()
+                                .render(localPlayer, previewYaw, partialTick, guiGraphics.pose(), guiGraphics.bufferSource(), 15728880));
+                        return true;
+                    })
+                    .orElse(false);
+            if (!renderedCustomModel) {
+                RenderSystem.runAsFancy(() -> {
+                    entityRenderDispatcher.render(localPlayer, 0.0d, 0.0d, 0.0d, previewYaw, partialTick, guiGraphics.pose(), guiGraphics.bufferSource(), 15728880);
+                });
+            }
+
+            guiGraphics.flush();
+            entityRenderDispatcher.setRenderShadow(true);
+        } finally {
+            localPlayer.yBodyRot = oldBodyRot;
+            localPlayer.yBodyRotO = oldBodyRotO;
+            localPlayer.setYRot(oldYRot);
+            localPlayer.yRotO = oldYRotO;
+            localPlayer.setXRot(oldXRot);
+            localPlayer.xRotO = oldXRotO;
+            localPlayer.yHeadRot = oldHeadRot;
+            localPlayer.yHeadRotO = oldHeadRotO;
+            guiGraphics.pose().popPose();
+            RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+            Lighting.setupFor3DItems();
+            RenderContext.restore(previousPass);
+        }
     }
 }

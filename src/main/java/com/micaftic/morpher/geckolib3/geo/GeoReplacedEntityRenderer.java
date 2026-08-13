@@ -112,7 +112,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             } finally {
                 this.fallFlyingPitchHandledByAnimation = previousFallFlyingPitchState;
             }
-            if (t.getEntity().getVehicle() != null && !ModelPreviewRenderer.isExtraPlayer()) {
+            if (t.getEntity().getVehicle() != null && !com.micaftic.morpher.client.render.RenderContext.isGuiPreview()) {
                 VehicleCapability.get(t.getEntity().getVehicle()).ifPresent(cap -> {
                     Vector3f vector3f = cap.getExpressionOffset();
                     if (vector3f != null) {
@@ -159,7 +159,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
     public void setupRotations(TEntity tentity, PoseStack poseStack, float ageInTicks, float rotationYaw, float partialTicks) {
         int t = tentity.deathTime;
         boolean zIsAutoSpinAttack = tentity.isAutoSpinAttack();
-        boolean extraPlayer = ModelPreviewRenderer.isExtraPlayer();
+        boolean extraPlayer = com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
         if (t > 0) {
             tentity.deathTime = 0;
         }
