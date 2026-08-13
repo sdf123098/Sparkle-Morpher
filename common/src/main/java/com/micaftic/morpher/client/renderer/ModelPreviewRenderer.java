@@ -924,9 +924,6 @@ public final class ModelPreviewRenderer {
     }
 
     public static void renderPlayerOverlay(GuiGraphicsExtractor guiGraphics, LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick, boolean clipToFrame) {
-        if ((com.micaftic.morpher.client.event.ClientTickEvent.getTickCount() & 3) != 0) {
-            return;
-        }
         if (guiGraphics == null || localPlayer == null || scale <= 0.0f) {
             return;
         }
