@@ -10,7 +10,6 @@ import com.micaftic.morpher.client.event.PlayerSkinTextureManager;
 import com.micaftic.morpher.client.input.AnimationRouletteKey;
 import com.micaftic.morpher.client.input.DebugAnimationKey;
 import com.micaftic.morpher.client.input.ExtraAnimationKey;
-import com.micaftic.morpher.client.input.ExtraPlayerRenderKey;
 import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.input.PlayerModelToggleKey;
 import com.micaftic.morpher.client.renderer.RendererManager;
@@ -52,7 +51,6 @@ public final class YsmEventBootstrap {
             PlayerModelToggleKey.register();
             AnimationRouletteKey.register();
             DebugAnimationKey.register();
-            ExtraPlayerRenderKey.register();
             ExtraAnimationKey.register();
             InputStateKey.register();
         }

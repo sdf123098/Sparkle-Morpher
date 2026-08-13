@@ -5,7 +5,6 @@ import com.micaftic.morpher.client.animation.AnimationRegister;
 import com.micaftic.morpher.client.input.AnimationRouletteKey;
 import com.micaftic.morpher.client.input.DebugAnimationKey;
 import com.micaftic.morpher.client.input.ExtraAnimationKey;
-import com.micaftic.morpher.client.input.ExtraPlayerRenderKey;
 import com.micaftic.morpher.client.input.PlayerModelToggleKey;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
@@ -46,7 +45,6 @@ public final class ClientSetupEvent {
         KeyMappingRegistry.register(AnimationRouletteKey.KEY_ROULETTE);
         KeyMappingRegistry.register(AnimationRouletteKey.KEY_LOCK);
         KeyMappingRegistry.register(DebugAnimationKey.KEY_MAPPING);
-        KeyMappingRegistry.register(ExtraPlayerRenderKey.KEY_MAPPING);
         for (KeyMapping mapping : ExtraAnimationKey.getKeyMappings()) {
             KeyMappingRegistry.register(mapping);
         }

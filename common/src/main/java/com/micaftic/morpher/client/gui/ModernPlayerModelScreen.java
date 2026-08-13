@@ -1691,7 +1691,9 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_other_model", GeneralConfig.DISABLE_OTHER_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_self_hands", GeneralConfig.DISABLE_SELF_HANDS));
         rows.add(privacyModeRow(ModelPanelState.SettingGroup.GENERAL));
-        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_player_render", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER));
+        rows.add(invertedBool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.classic_hud_rendering", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER));
+        rows.add(actionRow(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.classic_hud_layout", () -> InputUtil.setScreen(new ClassicHudLayoutScreen(this))));
+        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.modern_hud_rendering", ExtraPlayerRenderConfig.ENABLE_MODERN_HUD_RENDER));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_projectile_model", GeneralConfig.DISABLE_PROJECTILE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));
@@ -1746,9 +1748,15 @@ public class ModernPlayerModelScreen extends Screen {
     private SettingRow invertedBool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value) {
         boolean current = !safeBool(value);
         return new SettingRow(group, labelKey, current, "", () -> {
-            value.set(current);
+            value.set(!safeBool(value));
             value.save();
         }, null, null, null);
+    }
+
+    private SettingRow actionRow(ModelPanelState.SettingGroup group, String labelKey, Runnable action) {
+        return new SettingRow(group, labelKey, null,
+                Component.translatable("gui.sparkle_morpher.model_panel.setting.configure").getString(),
+                action, null, null, null);
     }
 
     private SettingRow javaVectorRendererRow(ModelPanelState.SettingGroup group) {

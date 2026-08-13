@@ -10,8 +10,8 @@ import net.minecraft.client.multiplayer.ClientLevel;
 public class Minecraft {
     public static Minecraft getInstance() { return null; }
     public net.minecraft.client.DeltaTracker getDeltaTracker() { return null; }
-    public static void execute(Runnable r) { r.run(); }
-    public static void submit(Runnable r) { r.run(); }
+    public void execute(Runnable r) { r.run(); }
+    public void submit(Runnable r) { r.run(); }
     public int getFps() { return 60; }
     public Font font;
     public net.minecraft.client.gui.Gui gui;
@@ -24,7 +24,7 @@ public class Minecraft {
     public net.minecraft.client.gui.screens.Screen screen;
     public static boolean isRenderingShadowPass() { return false; }
     public void setScreen(net.minecraft.client.gui.screens.Screen s) {}
-    public static boolean isLocalServer() { return false; }
+    public boolean isLocalServer() { return false; }
     public net.minecraft.client.Window window;
     public com.mojang.blaze3d.platform.Window getWindow() { return null; }
     public net.minecraft.world.phys.HitResult hitResult;

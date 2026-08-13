@@ -97,6 +97,8 @@ import java.util.zip.ZipFile;
 public class ClientModelManager {
     static final AtomicInteger pendingModelsCount = new AtomicInteger(0);
     static final AtomicBoolean syncCompletionScheduled = new AtomicBoolean(false);
+    static final AtomicInteger failedSyncModelsCount = new AtomicInteger(0);
+    private static final AtomicBoolean syncFailureScheduled = new AtomicBoolean(false);
     static volatile boolean syncManifestProcessed = false;
 
     // ---- 同步超时看门狗 ----
@@ -230,6 +232,8 @@ public class ClientModelManager {
         public byte[] fileBuffer;
         public int totalSize;
         public int bytesReceived;
+        public boolean fileBufferReserved;
+        public boolean transferTerminal;
 
         public ServerModelContext(long hash1, long hash2, String modelId, boolean isAuth, int isCustomSkinModel, int version) {
             this.uuid = new UUID(hash1, hash2);
@@ -383,10 +387,12 @@ public class ClientModelManager {
         MODEL_PARSE_SLOTS.release(discardedModelTasks);
 
         pendingModelsCount.set(0);
+        failedSyncModelsCount.set(0);
         syncManifestProcessed = false;
         syncCompletionScheduled.set(false);
         LegacyModelCacheClient.clearCachedModelHashes();
 
+        LegacyModelCacheClient.releaseAllInFlightBuffers();
         serverModels.clear();
         cachedModelFiles.clear();
         cpuReloadInFlight.clear();
@@ -964,8 +970,8 @@ public class ClientModelManager {
 
     // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
 
-    public static synchronized void startSync(Connection connection, ByteBuffer byteBuffer) {
-        LegacyModelSyncClient.startSync(connection, byteBuffer);
+    public static void startSync(Connection connection, ByteBuffer byteBuffer) {
+        LegacyModelSyncClient.enqueueSync(connection, byteBuffer);
     }
 
 
@@ -1514,6 +1520,26 @@ public class ClientModelManager {
         scheduleSyncCompleteIfReady();
     }
 
+    static void finishPendingModelFailure() {
+        failedSyncModelsCount.incrementAndGet();
+        finishPendingModelLoad();
+    }
+
+    static void failSync(Component reason) {
+        if (!syncFailureScheduled.compareAndSet(false, true)) {
+            return;
+        }
+        Minecraft.getInstance().execute(() -> {
+            try {
+                resetClientState();
+                syncState.finishFailure(reason);
+                forEachGuiWidget(IGuiWidget::onSyncError);
+            } finally {
+                syncFailureScheduled.set(false);
+            }
+        });
+    }
+
     static void scheduleSyncCompleteIfReady() {
         if (!syncManifestProcessed || pendingModelsCount.get() != 0
                 || !syncCompletionScheduled.compareAndSet(false, true)) {
@@ -1543,17 +1569,18 @@ public class ClientModelManager {
         }
         if (System.currentTimeMillis() - last > SYNC_WATCHDOG_TIMEOUT_MILLIS) {
             lastSyncActivityMillis = 0L;
-            int dropped = pendingModelsCount.getAndSet(0);
+            int dropped = pendingModelsCount.get();
             YesSteveModel.LOGGER.warn(
-                    "[SM] 模型同步超时（{}ms 无进度），强制结束以避免加载弹窗卡死；有 {} 个模型分片未收齐。",
+                    "[SM] 模型同步超时（{}ms 无进度），中止本次同步；有 {} 个模型分片未收齐。",
                     SYNC_WATCHDOG_TIMEOUT_MILLIS, dropped);
-            onSyncComplete();
+            failSync(Component.literal("SPM model synchronization timed out"));
         }
     }
 
     private static void onSyncComplete() {
         NetworkOnlineDebugLog.info("onSyncComplete: selectedModelId={} selectedTextureId={} assemblyMapSize={}",
                 MODEL_SELECTION.selectedModelId(), MODEL_SELECTION.selectedTextureId(), modelAssemblyMap.size());
+        int failedModels = failedSyncModelsCount.getAndSet(0);
         LegacyModelSyncClient.syncStep = 1;
         LegacyModelCacheClient.clearCachedModelHashes();
         lastSyncActivityMillis = 0L;
@@ -1562,12 +1589,20 @@ public class ClientModelManager {
         ((Executor) Minecraft.getInstance()).execute(() -> {
             flushPendingModels();
             ClientRenderCompatibilityRegistry.flush();
-            syncState.finishSuccess();
+            if (failedModels == 0) {
+                syncState.finishSuccess();
+            } else {
+                syncState.finishFailure(Component.literal("SPM failed to transfer " + failedModels + " model(s)"));
+            }
             // 远端懒加载目录到此才完整，补做一次持久化选择恢复。
             restorePersistedModelSelection();
             NetworkOnlineDebugLog.info("onSyncComplete: calling resendSelectedServerModel");
             resendSelectedServerModel();
-            forEachGuiWidget(IGuiWidget::onSyncComplete);
+            if (failedModels == 0) {
+                forEachGuiWidget(IGuiWidget::onSyncComplete);
+            } else {
+                forEachGuiWidget(IGuiWidget::onSyncError);
+            }
         });
     }
 

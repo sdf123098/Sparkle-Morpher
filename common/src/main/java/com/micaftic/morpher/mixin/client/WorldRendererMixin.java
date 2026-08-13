@@ -31,7 +31,6 @@ public class WorldRendererMixin {
     private void renderLevelPost(GraphicsResourceAllocator allocator, DeltaTracker deltaTracker, boolean renderBlockOutline, CameraRenderState cameraState, Matrix4fc projectionMatrix, GpuBufferSlice fogBuffer, Vector4f fogColor, boolean renderSky, CallbackInfo ci) {
         WorldRenderState.end();
         if (YesSteveModel.isAvailable()) {
-            EntityRenderCache.clear();
             ModelPreviewRenderer.setWorldRenderMode(false);
         }
     }
