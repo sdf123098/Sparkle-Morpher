@@ -11,5 +11,7 @@ public enum RenderPass {
     /** 世界内实体渲染（默认）。 */
     WORLD,
     /** GUI 内玩家预览：额外玩家 overlay / 小图。 */
-    GUI_PREVIEW
+    GUI_PREVIEW,
+    /** Independently controlled classic HUD preview. */
+    OLD_HUD
 }

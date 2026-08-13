@@ -65,8 +65,8 @@ public class QueryBinding extends ContextBinding {
         entityVar("yaw_speed", QueryBinding::getYawSpeed);
         entityVar("cardinal_facing_2d", ctx -> ctx.entity().getDirection().get3DDataValue());
         entityVar("distance_from_camera", QueryBinding::getDistanceFromCamera);
-        entityVar("eye_target_x_rotation", ctx -> ctx.entity().getViewXRot(ctx.animationEvent().getPartialTick()));
-        entityVar("eye_target_y_rotation", ctx -> ctx.entity().getViewYRot(ctx.animationEvent().getPartialTick()));
+        entityVar("eye_target_x_rotation", ctx -> com.micaftic.morpher.client.render.RenderContext.isOldHud() ? 0.0f : ctx.entity().getViewXRot(ctx.animationEvent().getPartialTick()));
+        entityVar("eye_target_y_rotation", ctx -> com.micaftic.morpher.client.render.RenderContext.isOldHud() ? 0.0f : ctx.entity().getViewYRot(ctx.animationEvent().getPartialTick()));
         entityVar("ground_speed", ctx -> MovementQuery.getGroundSpeed(ctx.entity(), ctx.geoInstance().getPositionTracker(), ctx.animationEvent()));
         entityVar("modified_distance_moved", ctx -> ctx.entity().moveDist);
         entityVar("vertical_speed", QueryBinding::getVerticalSpeed);
@@ -83,8 +83,8 @@ public class QueryBinding extends ContextBinding {
         entityVar("is_sprinting", ctx -> ctx.entity().isSprinting());
         entityVar("is_swimming", ctx -> ctx.entity().isSwimming());
 
-        livingEntityVar("body_x_rotation", ctx -> Mth.lerp(ctx.animationEvent().getFrameTime(), ctx.entity().xRotO, ctx.entity().getXRot()));
-        livingEntityVar("body_y_rotation", ctx -> Mth.wrapDegrees(Mth.lerp(ctx.animationEvent().getPartialTick(), ctx.entity().yBodyRotO, ctx.entity().yBodyRot)));
+        livingEntityVar("body_x_rotation", ctx -> com.micaftic.morpher.client.render.RenderContext.isOldHud() ? 0.0f : Mth.lerp(ctx.animationEvent().getFrameTime(), ctx.entity().xRotO, ctx.entity().getXRot()));
+        livingEntityVar("body_y_rotation", ctx -> com.micaftic.morpher.client.render.RenderContext.isOldHud() ? 0.0f : Mth.wrapDegrees(Mth.lerp(ctx.animationEvent().getPartialTick(), ctx.entity().yBodyRotO, ctx.entity().yBodyRot)));
         livingEntityVar("health", QueryBinding::getHealth);
         livingEntityVar("max_health", QueryBinding::getMaxHealth);
         livingEntityVar("hurt_time", ctx -> ctx.entity().hurtTime);

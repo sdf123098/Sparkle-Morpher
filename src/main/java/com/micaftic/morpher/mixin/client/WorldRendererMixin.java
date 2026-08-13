@@ -39,7 +39,6 @@ public class WorldRendererMixin {
         }
         WorldRenderState.end();
         if (YesSteveModel.isAvailable()) {
-            EntityRenderCache.clear();
             ModelPreviewRenderer.setWorldRenderMode(false);
         }
     }

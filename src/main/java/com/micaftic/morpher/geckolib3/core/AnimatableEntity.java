@@ -2,6 +2,7 @@ package com.micaftic.morpher.geckolib3.core;
 
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.animation.debug.AnimationFrameProfiler;
+import com.micaftic.morpher.client.render.RiderRotationMath;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.audio.IAudioStreamFactory;
 import com.micaftic.morpher.client.event.ClientTickEvent;
@@ -326,6 +327,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
             modelData.isChild = livingEntity != null && livingEntity.isBaby();
             lerpBodyRot = playerCapability.getRenderStateBodyRot();
             netHeadYaw = playerCapability.getRenderStateNetHeadYaw();
+            lerpHeadRot = RiderRotationMath.absoluteHeadYaw(lerpBodyRot, netHeadYaw);
         } else if (livingEntity != null) {
             modelData.isChild = livingEntity.isBaby();
             lerpBodyRot = Mth.rotLerp(partialTick, livingEntity.yBodyRotO, livingEntity.yBodyRot);
@@ -334,16 +336,11 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
         }
 
         if (shouldSit && (entity.getVehicle() instanceof LivingEntity vehicle)) {
-            lerpBodyRot = Mth.rotLerp(partialTick, vehicle.yBodyRotO, vehicle.yBodyRot);
-            netHeadYaw = lerpHeadRot - lerpBodyRot;
-            float clampedHeadYaw = Mth.clamp(Mth.wrapDegrees(lerpHeadRot - lerpBodyRot), -85.0f, 85.0f);
-
-            lerpBodyRot = lerpHeadRot - clampedHeadYaw;
-            if (clampedHeadYaw * clampedHeadYaw > 2500f) {
-                lerpBodyRot += clampedHeadYaw * 0.2f;
-            }
-
-            netHeadYaw = lerpHeadRot - lerpBodyRot;
+            float vehicleBodyRot = Mth.rotLerp(partialTick, vehicle.yBodyRotO, vehicle.yBodyRot);
+            RiderRotationMath.LivingVehicleRotation ridingRotation =
+                    RiderRotationMath.constrainToLivingVehicle(lerpHeadRot, vehicleBodyRot);
+            lerpBodyRot = ridingRotation.bodyYaw();
+            netHeadYaw = ridingRotation.relativeHeadYaw();
         }
         modelData.rawHeadPitch = playerCapability != null && playerCapability.hasRenderState()
                 ? playerCapability.getRenderStateHeadPitch()

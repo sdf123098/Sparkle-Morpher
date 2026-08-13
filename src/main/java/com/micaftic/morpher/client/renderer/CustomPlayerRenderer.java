@@ -77,7 +77,9 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
     public void render(PlayerCapability capability, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, SubmitNodeCollector collector, int packedLight) {
         Player player = (Player) capability.entity;
         if (!ModelPreviewRenderer.isExtraPlayer() || !capability.isModelReady()) {
+        if (!com.micaftic.morpher.client.render.RenderContext.isGuiPreview() || !capability.isModelReady()) {
             capability.tickModel();
+        }
         }
         String modelId = capability.getModelId();
         ClientModelManager.markModelUsed(modelId);
