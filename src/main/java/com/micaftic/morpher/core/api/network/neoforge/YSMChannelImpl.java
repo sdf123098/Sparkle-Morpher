@@ -145,7 +145,12 @@ public final class YSMChannelImpl {
     }
 
     public static Packet<?> toClientboundPacket(Object packet) {
-        return null; // NeoForge: toClientboundPacket not directly supported
+        // Legacy 握手（LegacyModelSyncProtocol.sendModelData/sendPacket03/05）走 raw
+        // connection.send(Packet<?>) 以保留 netty channel 背压控制（sendPacketReliably）。
+        // 用 MC 通用自定义 payload 包包装 NeoForge payload：与 sendToClientPlayer 的
+        // PacketDistributor 路径等价，客户端经注册的 YSMPayload.TYPE 分发到 handleClientPayload。
+        // 修复前此处返回 null → connection.send(null) → Netty NPE → packet01 永不发 → 客户端卡"接收模型数据"。
+        return new net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket(new YSMPayload(encode(packet)));
     }
 
     public static Packet<?> toServerboundPacket(Object packet) {
