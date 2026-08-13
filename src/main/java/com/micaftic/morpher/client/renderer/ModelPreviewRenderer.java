@@ -472,26 +472,9 @@ public final class ModelPreviewRenderer {
         // 布尔开关（旧实现异常路径会残留状态，污染后续世界渲染）。
         RenderPass previousPass = RenderContext.enter(RenderPass.GUI_PREVIEW);
 
-        float oldBodyRot = localPlayer.yBodyRot;
-        float oldBodyRotO = localPlayer.yBodyRotO;
-        float oldYRot = localPlayer.getYRot();
-        float oldYRotO = localPlayer.yRotO;
-        float oldXRot = localPlayer.getXRot();
-        float oldXRotO = localPlayer.xRotO;
-        float oldHeadRot = localPlayer.yHeadRot;
-        float oldHeadRotO = localPlayer.yHeadRotO;
-        float headYawOffset = getExtraPlayerHeadYawOffset(localPlayer);
-        float headYawOffsetO = getExtraPlayerHeadYawOffsetO(localPlayer);
-
+        // 诊断（2026-08-13）：不再修改 localPlayer 旋转——动画评估复用世界渲染的
+        // AnimatableEntity 同帧缓存（避免第二份评估）；纸娃娃朝向由下方 poseStack 变换控制。
         float previewYaw = FRONT_FACING_YAW;
-        localPlayer.yBodyRot = previewYaw;
-        localPlayer.yBodyRotO = previewYaw;
-        localPlayer.setYRot(previewYaw);
-        localPlayer.yRotO = previewYaw;
-        localPlayer.yHeadRot = previewYaw + headYawOffset;
-        localPlayer.yHeadRotO = previewYaw + headYawOffsetO;
-        localPlayer.setXRot(0.0f);
-        localPlayer.xRotO = 0.0f;
 
         try {
             guiGraphics.flush();
@@ -529,14 +512,6 @@ public final class ModelPreviewRenderer {
             guiGraphics.flush();
             entityRenderDispatcher.setRenderShadow(true);
         } finally {
-            localPlayer.yBodyRot = oldBodyRot;
-            localPlayer.yBodyRotO = oldBodyRotO;
-            localPlayer.setYRot(oldYRot);
-            localPlayer.yRotO = oldYRotO;
-            localPlayer.setXRot(oldXRot);
-            localPlayer.xRotO = oldXRotO;
-            localPlayer.yHeadRot = oldHeadRot;
-            localPlayer.yHeadRotO = oldHeadRotO;
             guiGraphics.pose().popPose();
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
             Lighting.setupFor3DItems();
