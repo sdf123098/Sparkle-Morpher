@@ -115,7 +115,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             } finally {
                 this.fallFlyingPitchHandledByAnimation = previousFallFlyingPitchState;
             }
-            if (t.getEntity().getVehicle() != null && !ModelPreviewRenderer.isExtraPlayer()) {
+            if (t.getEntity().getVehicle() != null && !com.micaftic.morpher.client.render.RenderContext.isGuiPreview()) {
                 Entity vehicle = t.getEntity().getVehicle();
                 VehicleCapability.get(vehicle).ifPresent(cap -> {
                     if (cap.isModelReady()) {
@@ -173,7 +173,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         if (zIsAutoSpinAttack) {
             tentity.setLivingEntityFlag(4, false);
         }
-        if (tentity.onClimbable() && !ModelPreviewRenderer.isExtraPlayer()) {
+        if (tentity.onClimbable() && !com.micaftic.morpher.client.render.RenderContext.isGuiPreview()) {
             Optional<BlockPos> lastClimbablePos = tentity.getLastClimbablePos();
             if (lastClimbablePos.isPresent()) {
                 Optional<Direction> optionalValue = tentity.level().getBlockState(lastClimbablePos.get()).getOptionalValue(HorizontalDirectionalBlock.FACING);
@@ -190,7 +190,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             poseStack.mulPose(Axis.YP.rotationDegrees(270.0f));
         } else {
             poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
-            if (tentity.isFallFlying() && !ModelPreviewRenderer.isExtraPlayer()) {
+            if (tentity.isFallFlying() && !com.micaftic.morpher.client.render.RenderContext.isGuiPreview()) {
                 applyFallFlyingRotation(tentity, poseStack, partialTicks, zIsAutoSpinAttack, this.fallFlyingPitchHandledByAnimation);
             }
         }
