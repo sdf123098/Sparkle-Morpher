@@ -130,7 +130,7 @@ public class YSMBinding extends ContextBinding {
         entityVar("input_horizontal", MathInterpolation::getPitchInterpolation);
 
         entityVar("person_view", CameraUtil::getCameraType);
-        entityVar("rendering_in_paperdoll", ctx -> ModelPreviewRenderer.isExtraPlayer());
+        entityVar("rendering_in_paperdoll", ctx -> com.micaftic.morpher.client.render.RenderContext.isGuiPreview());
         entityVar("rendering_in_inventory", CameraUtil::isThirdPerson);
         entityVar("block_light", ctx -> ctx.level().getBrightness(LightLayer.BLOCK, ctx.entity().blockPosition()));
         entityVar("sky_light", ctx -> ctx.level().getBrightness(LightLayer.SKY, ctx.entity().blockPosition()));

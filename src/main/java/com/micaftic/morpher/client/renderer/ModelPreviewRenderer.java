@@ -6,6 +6,8 @@ import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.client.animation.AnimationTracker;
+import com.micaftic.morpher.client.render.RenderContext;
+import com.micaftic.morpher.client.render.RenderPass;
 import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
@@ -77,7 +79,6 @@ public final class ModelPreviewRenderer {
 
     private static final ThreadLocal<Boolean> PREVIEW_MODE = ThreadLocal.withInitial(() -> false);
 
-    private static final ThreadLocal<Boolean> EXTRA_PLAYER_MODE = ThreadLocal.withInitial(() -> false);
 
     private static final ThreadLocal<Boolean> FIRST_PERSON_MODE = ThreadLocal.withInitial(() -> false);
 
@@ -150,11 +151,11 @@ public final class ModelPreviewRenderer {
     }
 
     public static void setExtraPlayerMode(boolean extraPlayerMode) {
-        EXTRA_PLAYER_MODE.set(extraPlayerMode);
+        if (extraPlayerMode) { RenderContext.enter(RenderPass.GUI_PREVIEW); } else { RenderContext.restore(RenderPass.WORLD); }
     }
 
     public static boolean isExtraPlayer() {
-        return EXTRA_PLAYER_MODE.get();
+        return RenderContext.isGuiPreview();
     }
 
     public static void setFirstPersonMode(boolean firstPersonMode) {
@@ -840,6 +841,9 @@ public final class ModelPreviewRenderer {
     }
 
     public static void renderPlayerOverlay(GuiGraphicsExtractor guiGraphics, LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick, boolean clipToFrame) {
+        if ((com.micaftic.morpher.client.event.ClientTickEvent.getTickCount() & 3) != 0) {
+            return;
+        }
         if (guiGraphics == null || localPlayer == null || scale <= 0.0f) {
             return;
         }
