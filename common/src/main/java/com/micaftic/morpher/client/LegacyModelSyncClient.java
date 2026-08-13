@@ -13,6 +13,7 @@ import net.minecraft.network.chat.Component;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * 客户端 legacy 同步协议（R7 剩余：Legacy sync 从 ClientModelManager 抽出）——
@@ -27,6 +28,9 @@ import java.util.ArrayDeque;
 public final class LegacyModelSyncClient {
 
     private static final int MAX_QUEUED_SYNC_PACKETS = 256;
+    /** 队列瞬时打满时入队侧最多等待的预算（毫秒）：大模型库/高带宽突发时给 worker 排水时间，
+     *  避免一超限就中止整个同步。服务端全局带宽限流 + 出站缓冲排水会自然压低发送速率。 */
+    private static final long MAX_ENQUEUE_WAIT_MILLIS = 5000L;
     private static final Object PACKET_QUEUE_LOCK = new Object();
     private static final ArrayDeque<QueuedSyncPacket> PACKET_QUEUE = new ArrayDeque<>();
     private static boolean packetWorkerScheduled;
@@ -44,21 +48,25 @@ public final class LegacyModelSyncClient {
     }
 
     static void enqueueSync(Connection connection, ByteBuffer data) {
-        boolean rejected = false;
-        synchronized (PACKET_QUEUE_LOCK) {
-            if (PACKET_QUEUE.size() >= MAX_QUEUED_SYNC_PACKETS) {
-                rejected = true;
-            } else {
-                PACKET_QUEUE.addLast(new QueuedSyncPacket(connection, data, packetGeneration));
-                if (!packetWorkerScheduled) {
-                    packetWorkerScheduled = true;
-                    SmExecutors.submit(SmExecutors.Pool.SYNC_NETWORK, LegacyModelSyncClient::drainPacketQueue);
+        long deadline = System.nanoTime() + MAX_ENQUEUE_WAIT_MILLIS * 1_000_000L;
+        while (true) {
+            synchronized (PACKET_QUEUE_LOCK) {
+                if (PACKET_QUEUE.size() < MAX_QUEUED_SYNC_PACKETS) {
+                    PACKET_QUEUE.addLast(new QueuedSyncPacket(connection, data, packetGeneration));
+                    if (!packetWorkerScheduled) {
+                        packetWorkerScheduled = true;
+                        SmExecutors.submit(SmExecutors.Pool.SYNC_NETWORK, LegacyModelSyncClient::drainPacketQueue);
+                    }
+                    return;
                 }
             }
+            if (System.nanoTime() >= deadline) {
+                break;
+            }
+            // 有限背压：不持锁等待 worker 排水，超预算仍未排空才放弃本次同步
+            LockSupport.parkNanos(100_000L);
         }
-        if (rejected) {
-            ClientModelManager.failSync(Component.literal("SPM model packet queue overflow"));
-        }
+        ClientModelManager.failSync(Component.literal("SPM model packet queue overflow"));
     }
 
     private static void drainPacketQueue() {
