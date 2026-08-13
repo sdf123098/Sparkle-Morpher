@@ -17,11 +17,19 @@ import com.micaftic.morpher.geckolib3.util.RenderUtils;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.util.AnimatableCacheUtil;
 import com.mojang.blaze3d.platform.Lighting;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.texture.OverlayTexture;
@@ -464,22 +472,75 @@ public final class ModelPreviewRenderer {
         }
     }
 
-    // 纸娃娃
+    // 纸娃娃（离屏缓存渲染，2026-08-13）：overlay 每帧完整渲染玩家模型开销大（提交/管线），
+    // 改为离屏缓存——每 4 帧渲染到 FBO（动画更新），其余帧只贴图（开销≈1 次 draw）。
+    private static RenderTarget extraPlayerFbo;
+    private static int extraPlayerFboWidth = -1;
+    private static int extraPlayerFboHeight = -1;
+    private static int extraPlayerLastRenderTick = -1;
+
     public static void renderPlayerOverlay(GuiGraphics guiGraphics, LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick) {
-        // 性能（2026-08-13 重构，§16 RenderContext 提前落地）：overlay 为屏幕角落装饰小图，
-        // 节流渲染（每 4 帧，动画评估由 AnimatableEntity 同帧缓存复用）；阶段用
-        // RenderContext.enter(GUI_PREVIEW) 显式进入并在 finally 恢复，替代 EXTRA_PLAYER_MODE
-        // 布尔开关（旧实现异常路径会残留状态，污染后续世界渲染）。
-        RenderPass previousPass = RenderContext.enter(RenderPass.GUI_PREVIEW);
+        if (localPlayer == null || scale <= 0.0f) {
+            return;
+        }
+        int width = Math.max(1, Math.round(scale));
+        int height = Math.max(1, Math.round(scale * 2.0f));
+        int screenW = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        int screenH = Minecraft.getInstance().getWindow().getGuiScaledHeight();
+        if (screenW <= 0 || screenH <= 0) {
+            return;
+        }
+        int tick = com.micaftic.morpher.client.event.ClientTickEvent.getTickCount();
 
-        // 诊断（2026-08-13）：不再修改 localPlayer 旋转——动画评估复用世界渲染的
-        // AnimatableEntity 同帧缓存（避免第二份评估）；纸娃娃朝向由下方 poseStack 变换控制。
-        float previewYaw = FRONT_FACING_YAW;
+        // FBO 缓存（屏幕尺寸；投影与 GUI 一致，坐标天然正确）
+        if (extraPlayerFbo == null || extraPlayerFboWidth != screenW || extraPlayerFboHeight != screenH) {
+            if (extraPlayerFbo != null) {
+                extraPlayerFbo.destroyBuffers();
+            }
+            extraPlayerFbo = new TextureTarget(screenW, screenH, false, false);
+            extraPlayerFbo.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            extraPlayerFboWidth = screenW;
+            extraPlayerFboHeight = screenH;
+            extraPlayerLastRenderTick = -1;
+        }
 
-        try {
+        // 每 4 帧重渲染到 FBO（动画更新；其余帧贴缓存图）
+        if (tick - extraPlayerLastRenderTick >= 4 || extraPlayerLastRenderTick < 0) {
+            extraPlayerFbo.bindWrite(true);
+            RenderSystem.clear(256, false);
+            renderOverlayModel(guiGraphics, localPlayer, x, y, scale, yawOffset, zDepth, partialTick);
             guiGraphics.flush();
-            RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+            extraPlayerFbo.unbindWrite();
+            extraPlayerLastRenderTick = tick;
+        }
 
+        // 每帧贴 FBO 的 overlay 区域（UV 裁剪）
+        RenderSystem.setShaderTexture(0, extraPlayerFbo.getColorTextureId());
+        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+        Tesselator tesselator = Tesselator.getInstance();
+        BufferBuilder buffer = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
+        float x0 = (float) x;
+        float y0 = (float) y;
+        float x1 = x0 + width;
+        float y1 = y0 + height;
+        float u0 = x0 / screenW;
+        float v0 = y0 / screenH;
+        float u1 = x1 / screenW;
+        float v1 = y1 / screenH;
+        float z = (float) zDepth;
+        buffer.addVertex(x0, y1, z).setUv(u0, v0);
+        buffer.addVertex(x1, y1, z).setUv(u1, v0);
+        buffer.addVertex(x1, y0, z).setUv(u1, v1);
+        buffer.addVertex(x0, y0, z).setUv(u0, v1);
+        BufferUploader.drawWithShader(buffer.buildOrThrow());
+    }
+
+    /** 渲染玩家模型到当前渲染目标（GUI 投影一致；由调用方绑定 FBO）。 */
+    private static void renderOverlayModel(GuiGraphics guiGraphics, LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick) {
+        RenderPass previousPass = RenderContext.enter(RenderPass.GUI_PREVIEW);
+        float previewYaw = FRONT_FACING_YAW;
+        try {
+            RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
             guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(x + (scale * 0.5d), y + (scale * 2.0d), zDepth);
             guiGraphics.pose().scale(scale, scale, -scale);
@@ -509,7 +570,6 @@ public final class ModelPreviewRenderer {
                 });
             }
 
-            guiGraphics.flush();
             entityRenderDispatcher.setRenderShadow(true);
         } finally {
             guiGraphics.pose().popPose();
