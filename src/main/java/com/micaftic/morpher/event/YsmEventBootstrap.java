@@ -40,7 +40,6 @@ public final class YsmEventBootstrap {
             registerClient("com.micaftic.morpher.client.input.PlayerModelToggleKey");
             registerClient("com.micaftic.morpher.client.input.AnimationRouletteKey");
             registerClient("com.micaftic.morpher.client.input.DebugAnimationKey");
-            registerClient("com.micaftic.morpher.client.input.ExtraPlayerRenderKey");
             registerClient("com.micaftic.morpher.client.input.ExtraAnimationKey");
             registerClient("com.micaftic.morpher.client.input.InputStateKey");
         }

@@ -8,6 +8,7 @@ import com.micaftic.morpher.resource.YSMClientMapper;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.core.security.YSMClientCache;
 import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.network.LegacySyncFlowControl;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
 import io.netty.buffer.Unpooled;
 import net.minecraft.client.Minecraft;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 客户端 legacy 模型缓存协议（R7 剩余③：Legacy cache 从 ClientModelManager 抽出）——
@@ -40,6 +42,7 @@ import java.util.concurrent.Executor;
 public final class LegacyModelCacheClient {
 
     private static final List<ModelHash> cachedModelHashes = new ArrayList<>();
+    private static final AtomicLong inFlightBufferBytes = new AtomicLong();
 
     private LegacyModelCacheClient() {
     }
@@ -57,6 +60,15 @@ public final class LegacyModelCacheClient {
     /** 清空已登记的服务端缓存哈希清单（断线/换服时）。 */
     static void clearCachedModelHashes() {
         cachedModelHashes.clear();
+    }
+
+    static void releaseAllInFlightBuffers() {
+        for (ClientModelManager.ServerModelContext ctx : ClientModelManager.serverModels.values()) {
+            synchronized (ctx) {
+                releaseContextBuffer(ctx);
+                ctx.transferTerminal = true;
+            }
+        }
     }
 
     static void handlePacket03(YSMByteBuf buf) throws Exception {
@@ -83,6 +95,7 @@ public final class LegacyModelCacheClient {
         int unkSize = buf.readVarInt();
         ClientModelManager.onSyncProgress(unkSize);
         ClientModelManager.pendingModelsCount.set(0);
+        ClientModelManager.failedSyncModelsCount.set(0);
         ClientModelManager.syncManifestProcessed = false;
         ClientModelManager.syncCompletionScheduled.set(false);
 
@@ -308,7 +321,7 @@ public final class LegacyModelCacheClient {
     static void handlePacket05(YSMByteBuf buf) throws Exception {
         buf.skipGarbageHeader();
         int type = buf.readVarInt();
-        if (type != 5) return;
+        if (type != 5 && type != 6) return;
 
         long hash1 = buf.readVarLong();
         long hash2 = buf.readVarLong();
@@ -317,6 +330,18 @@ public final class LegacyModelCacheClient {
         ClientModelManager.ServerModelContext ctx = ClientModelManager.serverModels.get(uuid);
         if (ctx == null) {
             YesSteveModel.LOGGER.warn("[SM] Received unexpected file chunk for model: " + uuid);
+            return;
+        }
+
+        if (type == 6) {
+            String reason = buf.readString();
+            synchronized (ctx) {
+                if (ctx.transferTerminal) return;
+                ctx.transferTerminal = true;
+                releaseContextBuffer(ctx);
+            }
+            YesSteveModel.LOGGER.warn("[SM] Server could not transfer model {}: {}", ctx.modelKey, reason);
+            ClientModelManager.finishPendingModelFailure();
             return;
         }
 
@@ -331,27 +356,49 @@ public final class LegacyModelCacheClient {
         }
 
         // Initialize buffer on first reception
-        if (ctx.fileBuffer == null) {
-            ctx.fileBuffer = new byte[totalSize];
-            ctx.totalSize = totalSize;
-            ctx.bytesReceived = 0;
-        } else if (ctx.totalSize != totalSize) {
-            throw new IllegalArgumentException("Model chunk total size changed");
-        }
-        if (chunkOffset != ctx.bytesReceived) {
-            throw new IllegalArgumentException("Out-of-order model chunk: expected " + ctx.bytesReceived + ", got " + chunkOffset);
-        }
+        byte[] completedBuffer = null;
+        long completedReservation = 0L;
+        synchronized (ctx) {
+            if (ctx.transferTerminal) return;
+            if (ctx.fileBuffer == null) {
+                if (!LegacySyncFlowControl.tryReserve(inFlightBufferBytes, totalSize)) {
+                    throw new IllegalStateException("SPM aggregate model receive budget exceeded");
+                }
+                ctx.fileBufferReserved = true;
+                try {
+                    ctx.fileBuffer = new byte[totalSize];
+                } catch (OutOfMemoryError error) {
+                    releaseContextBuffer(ctx);
+                    throw error;
+                }
+                ctx.totalSize = totalSize;
+                ctx.bytesReceived = 0;
+            } else if (ctx.totalSize != totalSize) {
+                throw new IllegalArgumentException("Model chunk total size changed");
+            }
+            if (chunkOffset != ctx.bytesReceived) {
+                throw new IllegalArgumentException("Out-of-order model chunk: expected " + ctx.bytesReceived + ", got " + chunkOffset);
+            }
 
-        buf.getRawBuf().readBytes(ctx.fileBuffer, chunkOffset, chunkLength);
-        ctx.bytesReceived += chunkLength;
+            buf.getRawBuf().readBytes(ctx.fileBuffer, chunkOffset, chunkLength);
+            ctx.bytesReceived += chunkLength;
+            if (ctx.bytesReceived >= totalSize) {
+                completedBuffer = ctx.fileBuffer;
+                ctx.fileBuffer = null;
+                ctx.transferTerminal = true;
+                if (ctx.fileBufferReserved) {
+                    completedReservation = ctx.totalSize;
+                    ctx.fileBufferReserved = false;
+                }
+            }
+        }
         ClientModelManager.markSyncActivity();
 
-        if (ctx.bytesReceived >= totalSize) {
-            byte[] fileBuffer = ctx.fileBuffer;
-            ctx.fileBuffer = null;
+        if (completedBuffer != null) {
+            byte[] fileBuffer = completedBuffer;
 
-            ClientModelManager.submitModelTask(() -> {
-                try {
+            boolean succeeded = false;
+            try {
                     if (LegacyModelSyncClient.clientKey == null) return;
                     // 落盘前校验服务端原始缓存数据：服务端缓存文件损坏（旧版本非原子写）时，
                     // transcode 会把垃圾数据重新打包成带合法 trailer 的客户端缓存文件，
@@ -395,13 +442,28 @@ public final class LegacyModelCacheClient {
                         decompressed = null;
                         ModelMemoryProfiler.log("download-parsed", ctx.modelId);
                     }
-                } catch (Exception e) {
-                    YesSteveModel.LOGGER.error("[SM] Failed to save/parse downloaded model: " + ctx.modelId, e);
-                } finally {
+                    succeeded = true;
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[SM] Failed to save/parse downloaded model: " + ctx.modelId, e);
+            } finally {
+                LegacySyncFlowControl.release(inFlightBufferBytes, completedReservation);
+                if (succeeded) {
                     ClientModelManager.finishPendingModelLoad();
+                } else {
+                    ClientModelManager.finishPendingModelFailure();
                 }
-            });
+            }
         }
+    }
+
+    private static void releaseContextBuffer(ClientModelManager.ServerModelContext ctx) {
+        ctx.fileBuffer = null;
+        ctx.bytesReceived = 0;
+        if (ctx.fileBufferReserved) {
+            LegacySyncFlowControl.release(inFlightBufferBytes, ctx.totalSize);
+            ctx.fileBufferReserved = false;
+        }
+        ctx.totalSize = 0;
     }
 
 
