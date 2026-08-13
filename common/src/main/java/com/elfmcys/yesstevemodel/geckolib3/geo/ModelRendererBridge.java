@@ -55,7 +55,7 @@ public class ModelRendererBridge {
             net.minecraft.resources.ResourceLocation textureLocation, BoneRenderPass boneRenderPass) {
         OculusCompat.updatePBRState();
         RenderSystem.getProjectionMatrix().mul(RenderSystem.getModelViewMatrix(), projectionModelViewMatrix);
-        boolean isPreview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
+        boolean isPreview = ModelPreviewRenderer.isPreview() || com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
 
         if (isPreview) {
             renderModel(

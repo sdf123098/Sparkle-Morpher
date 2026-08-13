@@ -79,7 +79,7 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
             }
             return this.previewBones;
         }
-        if (ModelPreviewRenderer.isExtraPlayer()) {
+        if (com.micaftic.morpher.client.render.RenderContext.isGuiPreview()) {
             if (this.extraPlayerBones == null) {
                 this.extraPlayerBones = new PhysicsManager();
             }
@@ -313,7 +313,7 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
             }
             return null;
         }
-        boolean isGuiPreview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
+        boolean isGuiPreview = ModelPreviewRenderer.isPreview() || com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
         if (!isGuiPreview) {
             int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
             if (this.modelFuture != null && this.asyncSubmitFrameId != renderFrameId) {
