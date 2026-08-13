@@ -76,7 +76,9 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
 
     public void render(PlayerCapability capability, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, SubmitNodeCollector collector, int packedLight) {
         Player player = (Player) capability.entity;
-        capability.tickModel();
+        if (!com.micaftic.morpher.client.render.RenderContext.isGuiPreview() || !capability.isModelReady()) {
+            capability.tickModel();
+        }
         String modelId = capability.getModelId();
         ClientModelManager.markModelUsed(modelId);
         CachedRenderTexture renderTexture = getRenderTexture(player, capability, modelId);
@@ -179,7 +181,7 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
         }
         double dDistanceToSqr = Minecraft.getInstance().getEntityRenderDispatcher().distanceToSqr(player);
         poseStack.pushPose();
-        if (dDistanceToSqr < 100.0d && (displayObjective = (scoreboard = Minecraft.getInstance().getScoreboard()).getDisplayObjective(DisplaySlot.LIST)) != null) {
+        if (dDistanceToSqr < 100.0d && (displayObjective = (scoreboard = Minecraft.getInstance().level.getScoreboard()).getDisplayObjective(DisplaySlot.LIST)) != null) {
             // super.renderNameTag changed params in MC 1.26.1.2
             poseStack.translate(0.0d, 0.25875d, 0.0d);
         }

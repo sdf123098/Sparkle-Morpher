@@ -151,11 +151,11 @@ public final class ModelPreviewRenderer {
     }
 
     public static void setExtraPlayerMode(boolean extraPlayerMode) {
-        if (extraPlayerMode) { RenderContext.enter(RenderPass.GUI_PREVIEW); } else { RenderContext.restore(RenderPass.WORLD); }
+        if (extraPlayerMode) { RenderContext.enter(RenderPass.OLD_HUD); } else { RenderContext.restore(RenderPass.WORLD); }
     }
 
     public static boolean isExtraPlayer() {
-        return RenderContext.isGuiPreview();
+        return RenderContext.isOldHud();
     }
 
     public static void setFirstPersonMode(boolean firstPersonMode) {
@@ -328,8 +328,8 @@ public final class ModelPreviewRenderer {
         float oldXRotO = livingEntity.xRotO;
         float oldHeadRotO = livingEntity.yHeadRotO;
         float oldHeadRot = livingEntity.yHeadRot;
-        float headYawOffset = extraPlayer ? getExtraPlayerHeadYawOffset(livingEntity) : 0.0f;
-        float headYawOffsetO = extraPlayer ? getExtraPlayerHeadYawOffsetO(livingEntity) : 0.0f;
+        float headYawOffset = 0.0f;
+        float headYawOffsetO = 0.0f;
         if (hideEquipment && (livingEntity instanceof Player player)) {
             savedEquipment = new ItemStack[EquipmentSlot.values().length];
             int slotIndex = 0;
@@ -894,7 +894,9 @@ public final class ModelPreviewRenderer {
         if (capability == null || !capability.isModelActive()) {
             return false;
         }
-        capability.tickModel();
+        if (!capability.isModelReady()) {
+            capability.tickModel();
+        }
         if (!capability.isModelReady()) {
             return false;
         }

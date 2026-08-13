@@ -11,11 +11,12 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 public final class GpuMesh {
+    public static final int BONE_SSBO_RING_SIZE = 8;
     public final long pointer;
     public final int vao;
     public final int vbo;
     public final int ibo;
-    public final int boneSsbo;
+    private final int[] boneSsbos;
     public final int vertexCount;
     public final int indexCount;
     public final int boneCount;
@@ -27,14 +28,15 @@ public final class GpuMesh {
 
     private int xformVbo = 0;
     private int xformVao = 0;
+    private int boneSsboCursor = 0;
     private boolean disposed = false;
 
-    GpuMesh(long pointer, int vao, int vbo, int ibo, int boneSsbo, int vertexCount, int indexCount, int boneCount, int pm1s, int pm1c, int pm2s, int pm2c, int pm3s, int pm3c) {
+    GpuMesh(long pointer, int vao, int vbo, int ibo, int[] boneSsbos, int vertexCount, int indexCount, int boneCount, int pm1s, int pm1c, int pm2s, int pm2c, int pm3s, int pm3c) {
         this.pointer = pointer;
         this.vao = vao;
         this.vbo = vbo;
         this.ibo = ibo;
-        this.boneSsbo = boneSsbo;
+        this.boneSsbos = boneSsbos;
         this.vertexCount = vertexCount;
         this.indexCount = indexCount;
         this.boneCount = boneCount;
@@ -54,7 +56,7 @@ public final class GpuMesh {
     private static long estimateBytes(int vertexCount, int indexCount, int boneCount) {
         long vertexBytes = (long) vertexCount * 32L;
         long indexBytes = (long) indexCount * Integer.BYTES;
-        long ssboBytes = (long) boneCount * 144L;
+        long ssboBytes = (long) boneCount * 144L * BONE_SSBO_RING_SIZE;
         long perFrameBoneBytes = (long) boneCount * 144L;
         return vertexBytes + indexBytes + ssboBytes + perFrameBoneBytes;
     }
@@ -73,6 +75,13 @@ public final class GpuMesh {
         if (renderPartMask == 2) return partMask2Count;
         if (renderPartMask == 3) return partMask3Count;
         return 0;
+    }
+
+    /** Rotates dynamic bone storage so consecutive world/hand/HUD draws never overwrite in-flight GPU data. */
+    public int nextBoneSsbo() {
+        int id = this.boneSsbos[this.boneSsboCursor];
+        this.boneSsboCursor = (this.boneSsboCursor + 1) % this.boneSsbos.length;
+        return id;
     }
 
     public int xformVbo() {
@@ -114,7 +123,11 @@ public final class GpuMesh {
         disposed = true;
         GlStateManager._glDeleteBuffers(vbo);
         GlStateManager._glDeleteBuffers(ibo);
-        GlStateManager._glDeleteBuffers(boneSsbo);
+        for (int boneSsbo : this.boneSsbos) {
+            if (boneSsbo != 0) {
+                GlStateManager._glDeleteBuffers(boneSsbo);
+            }
+        }
         GL45.glDeleteVertexArrays(vao);
         if (xformVbo != 0) GlStateManager._glDeleteBuffers(xformVbo);
         if (xformVao != 0) GL45.glDeleteVertexArrays(xformVao);

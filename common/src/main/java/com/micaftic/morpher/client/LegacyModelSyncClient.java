@@ -5,11 +5,14 @@ import com.micaftic.morpher.core.security.YSMByteBuf;
 import com.micaftic.morpher.core.security.YsmCrypt;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SModelSyncPayload;
+import com.micaftic.morpher.util.SmExecutors;
 import io.netty.buffer.Unpooled;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.Connection;
+import net.minecraft.network.chat.Component;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
 
 /**
  * 客户端 legacy 同步协议（R7 剩余：Legacy sync 从 ClientModelManager 抽出）——
@@ -23,6 +26,12 @@ import java.nio.ByteBuffer;
  */
 public final class LegacyModelSyncClient {
 
+    private static final int MAX_QUEUED_SYNC_PACKETS = 256;
+    private static final Object PACKET_QUEUE_LOCK = new Object();
+    private static final ArrayDeque<QueuedSyncPacket> PACKET_QUEUE = new ArrayDeque<>();
+    private static boolean packetWorkerScheduled;
+    private static volatile int packetGeneration;
+
     static int syncStep = 1;
     static byte[] key1;
     static byte[] lastKey;
@@ -32,6 +41,40 @@ public final class LegacyModelSyncClient {
     static volatile Connection serverConnection;
 
     private LegacyModelSyncClient() {
+    }
+
+    static void enqueueSync(Connection connection, ByteBuffer data) {
+        boolean rejected = false;
+        synchronized (PACKET_QUEUE_LOCK) {
+            if (PACKET_QUEUE.size() >= MAX_QUEUED_SYNC_PACKETS) {
+                rejected = true;
+            } else {
+                PACKET_QUEUE.addLast(new QueuedSyncPacket(connection, data, packetGeneration));
+                if (!packetWorkerScheduled) {
+                    packetWorkerScheduled = true;
+                    SmExecutors.submit(SmExecutors.Pool.SYNC_NETWORK, LegacyModelSyncClient::drainPacketQueue);
+                }
+            }
+        }
+        if (rejected) {
+            ClientModelManager.failSync(Component.literal("SPM model packet queue overflow"));
+        }
+    }
+
+    private static void drainPacketQueue() {
+        while (true) {
+            QueuedSyncPacket queued;
+            synchronized (PACKET_QUEUE_LOCK) {
+                queued = PACKET_QUEUE.pollFirst();
+                if (queued == null) {
+                    packetWorkerScheduled = false;
+                    return;
+                }
+            }
+            if (queued.generation == packetGeneration) {
+                startSync(queued.connection, queued.data);
+            }
+        }
     }
 
     static void processServerData(ByteBuffer data) {
@@ -67,8 +110,12 @@ public final class LegacyModelSyncClient {
                     }
                 }
             }
+        } catch (OutOfMemoryError e) {
+            YesSteveModel.LOGGER.error("[SM] Model synchronization exceeded available client memory", e);
+            ClientModelManager.failSync(Component.literal("SPM model synchronization exceeded the client memory budget"));
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("[SM] Sync Error at step " + syncStep, e);
+            ClientModelManager.failSync(Component.literal("SPM model synchronization protocol error"));
         }
     }
 
@@ -140,6 +187,10 @@ public final class LegacyModelSyncClient {
 
     /** 复位 legacy 同步会话状态（断线/换服/进入隐私模式时调用）。 */
     static void resetSyncState() {
+        synchronized (PACKET_QUEUE_LOCK) {
+            packetGeneration++;
+            PACKET_QUEUE.clear();
+        }
         syncStep = 1;
         key1 = null;
         lastKey = null;
@@ -147,5 +198,8 @@ public final class LegacyModelSyncClient {
         clientKey = null;
         currentCacheFolderName = null;
         serverConnection = null;
+    }
+
+    private record QueuedSyncPacket(Connection connection, ByteBuffer data, int generation) {
     }
 }

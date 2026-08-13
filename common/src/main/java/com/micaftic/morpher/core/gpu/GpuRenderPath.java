@@ -179,9 +179,10 @@ public final class GpuRenderPath {
         bindTextureView(modelTexture);
         stateCache.bindSampler(0, modelSamplerId);
 
-        stateCache.bindSsbo(mesh.boneSsbo);
-        GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0L, boneBuf);
-        stateCache.bindSsboBase(BoneSkinShader.ssbo, mesh.boneSsbo);
+        int boneSsbo = mesh.nextBoneSsbo();
+        stateCache.bindSsbo(boneSsbo);
+        GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, boneBuf, GL15.GL_STREAM_DRAW);
+        stateCache.bindSsboBase(BoneSkinShader.ssbo, boneSsbo);
 
         float fogStart = 0f;
         float fogEnd = 1f;

@@ -13,6 +13,9 @@ public class RotationToCamera extends ContextFunction<Object> {
         if (args < 0 || args > 1) {
             return null;
         }
+        if (com.micaftic.morpher.client.render.RenderContext.isOldHud()) {
+            return 0.0f;
+        }
         Camera mainCamera = Minecraft.getInstance().gameRenderer.getMainCamera();
         if (args == 0) {
             return mainCamera.xRot();
