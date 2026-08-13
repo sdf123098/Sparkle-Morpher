@@ -510,7 +510,7 @@ public final class ModelPreviewRenderer {
         // bufferSource 绑定主渲染目标，FBO 绑定后 flush 不会提交到 FBO（表现为透明）。
         if (tick - extraPlayerLastRenderTick >= 4 || extraPlayerLastRenderTick < 0) {
             extraPlayerFbo.bindWrite(true);
-            RenderSystem.clear(256, false);
+            extraPlayerFbo.clear(false);
             MultiBufferSource.BufferSource fboBuffer = MultiBufferSource.immediate(new ByteBufferBuilder(256));
             renderOverlayModel(localPlayer, x, y, scale, yawOffset, zDepth, partialTick, fboBuffer);
             fboBuffer.endBatch();
@@ -546,7 +546,7 @@ public final class ModelPreviewRenderer {
         PoseStack poseStack = new PoseStack();
         try {
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-            poseStack.translate(x + (scale * 0.5d), y + (scale * 2.0d), zDepth);
+            poseStack.translate(x + (scale * 0.5d), y + (scale * 2.0d), 0.0d);
             poseStack.scale(scale, scale, -scale);
 
             Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.1f);
