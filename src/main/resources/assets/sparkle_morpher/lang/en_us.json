@@ -759,6 +759,8 @@
   "gui.sparkle_morpher.model_panel.setting.classic_hud_layout": "Classic HUD layout",
   "gui.sparkle_morpher.model_panel.setting.configure": "Configure",
   "gui.sparkle_morpher.classic_hud_layout.title": "Classic HUD layout",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_layout": "Modern HUD layout",
+  "gui.sparkle_morpher.modern_hud_layout.title": "Modern HUD layout",
   "gui.sparkle_morpher.classic_hud_layout.tips": "Left-drag: move · Blue handle/wheel: scale · Right-drag: rotate · Alt+R: reset",
   "gui.sparkle_morpher.classic_hud_layout.values": "X: %s  Y: %s  Scale: %s  Yaw: %s°",
   "gui.sparkle_morpher.model_panel.setting.classic_hud_x": "Classic HUD position X",

@@ -753,6 +753,8 @@
   "gui.sparkle_morpher.model_panel.setting.classic_hud_layout": "Tata letak HUD klasik",
   "gui.sparkle_morpher.model_panel.setting.configure": "Konfigurasi",
   "gui.sparkle_morpher.classic_hud_layout.title": "Tata letak HUD klasik",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_layout": "Tata letak HUD modern",
+  "gui.sparkle_morpher.modern_hud_layout.title": "Tata letak HUD modern",
   "gui.sparkle_morpher.classic_hud_layout.tips": "Seret kiri: pindah · Pegangan biru/roda: skala · Seret kanan: putar · Alt+R: reset",
   "gui.sparkle_morpher.classic_hud_layout.values": "X: %s  Y: %s  Skala: %s  Arah: %s°",
   "gui.sparkle_morpher.model_panel.setting.classic_hud_x": "Posisi X HUD klasik",

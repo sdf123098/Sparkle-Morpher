@@ -753,6 +753,8 @@
   "gui.sparkle_morpher.model_panel.setting.classic_hud_layout": "Макет классического HUD",
   "gui.sparkle_morpher.model_panel.setting.configure": "Настроить",
   "gui.sparkle_morpher.classic_hud_layout.title": "Макет классического HUD",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_layout": "Макет современного HUD",
+  "gui.sparkle_morpher.modern_hud_layout.title": "Макет современного HUD",
   "gui.sparkle_morpher.classic_hud_layout.tips": "Левая кнопка: перемещение · Синий маркер/колесо: масштаб · Правая: поворот · Alt+R: сброс",
   "gui.sparkle_morpher.classic_hud_layout.values": "X: %s  Y: %s  Масштаб: %s  Поворот: %s°",
   "gui.sparkle_morpher.model_panel.setting.classic_hud_x": "Позиция X классического HUD",

@@ -753,6 +753,8 @@
   "gui.sparkle_morpher.model_panel.setting.classic_hud_layout": "클래식 HUD 배치",
   "gui.sparkle_morpher.model_panel.setting.configure": "설정",
   "gui.sparkle_morpher.classic_hud_layout.title": "클래식 HUD 배치",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_layout": "모던 HUD 배치",
+  "gui.sparkle_morpher.modern_hud_layout.title": "모던 HUD 배치",
   "gui.sparkle_morpher.classic_hud_layout.tips": "왼쪽 드래그: 이동 · 파란 핸들/휠: 크기 · 오른쪽 드래그: 회전 · Alt+R: 초기화",
   "gui.sparkle_morpher.classic_hud_layout.values": "X: %s  Y: %s  크기: %s  방향: %s°",
   "gui.sparkle_morpher.model_panel.setting.classic_hud_x": "클래식 HUD X 위치",
