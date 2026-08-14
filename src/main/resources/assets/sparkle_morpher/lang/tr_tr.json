@@ -757,6 +757,8 @@
   "gui.sparkle_morpher.classic_hud_layout.tips": "Sol sürükle: taşı · Mavi tutamaç/tekerlek: ölçekle · Sağ sürükle: döndür · Alt+R: sıfırla",
   "gui.sparkle_morpher.classic_hud_layout.values": "X: %s  Y: %s  Ölçek: %s  Yön: %s°",
   "gui.sparkle_morpher.model_panel.setting.disable_projectile_model": "Disable projectile model",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_layout": "Modern HUD düzeni",
+  "gui.sparkle_morpher.modern_hud_layout.title": "Modern HUD düzeni",
   "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model": "Disable vehicle model",
   "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim": "Disable external first-person animation",
   "gui.sparkle_morpher.model_panel.setting.gpu_renderer": "GPU renderer",
