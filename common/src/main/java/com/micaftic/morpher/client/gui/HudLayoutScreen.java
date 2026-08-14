@@ -1,25 +1,32 @@
 package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
-import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
+import com.micaftic.morpher.client.renderer.modernhud.ModernHudRenderer;
+import com.micaftic.morpher.config.HudLayoutConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
 /**
- * Canvas editor for the classic HUD renderer. It deliberately has no key binding: the only
- * entry is the unified settings screen, while the classic HUD keeps free positioning and
- * continuous scale/yaw adjustment.
+ * 通用 HUD 布局画布编辑器：拖拽移动、右下角蓝色把手/滚轮无级缩放、右键拖动旋转、
+ * Alt+R 重置。经典 HUD 与现代 HUD 各持有一份 {@link HudLayoutConfig}，本屏通过
+ * {@link HudPreview} 回调预览对应渲染器，并把编辑结果写回自己的配置，互不干扰。
+ *
+ * <p>画布只有 2×scale 的方形 guide（经典 HUD framing），实际绘制以预览渲染器
+ * 输出为准（现代 HUD 按模型真实 AABB 自定尺寸）。
  */
-public final class ClassicHudLayoutScreen extends Screen {
+public final class HudLayoutScreen extends Screen {
     private static final float MIN_SCALE = 8.0f;
     private static final float MAX_SCALE = 360.0f;
     private static final int HANDLE_RADIUS = 7;
 
     private final Screen parent;
+    private final HudLayoutConfig config;
+    private final HudPreview preview;
     private int playerX;
     private int playerY;
     private float playerScale;
@@ -28,13 +35,35 @@ public final class ClassicHudLayoutScreen extends Screen {
     private double grabOffsetX;
     private double grabOffsetY;
 
-    public ClassicHudLayoutScreen(Screen parent) {
-        super(Component.translatable("gui.sparkle_morpher.classic_hud_layout.title"));
+    /** 预览回调：把编辑中的（未保存）布局值渲染到画布；返回是否成功绘制。 */
+    @FunctionalInterface
+    public interface HudPreview {
+        boolean render(GuiGraphics graphics, LocalPlayer player, float partialTick,
+                       int screenWidth, int screenHeight, float x, float y, float scale, float yaw);
+    }
+
+    public HudLayoutScreen(Screen parent, Component title, HudLayoutConfig config, HudPreview preview) {
+        super(title);
         this.parent = parent;
-        this.playerX = ExtraPlayerRenderConfig.PLAYER_POS_X.get();
-        this.playerY = ExtraPlayerRenderConfig.PLAYER_POS_Y.get();
-        this.playerScale = ExtraPlayerRenderConfig.PLAYER_SCALE.get().floatValue();
-        this.playerYaw = ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.get().floatValue();
+        this.config = config;
+        this.preview = preview;
+        this.playerX = config.getX();
+        this.playerY = config.getY();
+        this.playerScale = config.getScale();
+        this.playerYaw = config.getYaw();
+    }
+
+    /** 经典 HUD 预览：经经典路径绘制，直接落回画布坐标。 */
+    public static HudPreview classicPreview() {
+        return (graphics, player, partialTick, w, h, x, y, scale, yaw) -> {
+            ModelPreviewRenderer.renderPlayerOverlay(graphics, player, x, y, scale, yaw, -500, partialTick);
+            return true;
+        };
+    }
+
+    /** 现代 HUD 预览：经现代 HUD 独立管线（FBO + 合成）绘制。 */
+    public static HudPreview modernPreview() {
+        return ModernHudRenderer::renderAt;
     }
 
     @Override
@@ -61,6 +90,7 @@ public final class ClassicHudLayoutScreen extends Screen {
                 right + HANDLE_RADIUS, bottom + HANDLE_RADIUS, 0xFF4488FF);
 
         graphics.drawCenteredString(this.font, this.title, this.width / 2, 10, 0xFFFFFFFF);
+        // tips/values 文案与经典编辑器共用（两编辑器的操作说明与数值格式完全一致）
         graphics.drawString(this.font,
                 Component.translatable("gui.sparkle_morpher.classic_hud_layout.tips"),
                 12, 28, 0xFFE7E2D8, false);
@@ -71,8 +101,8 @@ public final class ClassicHudLayoutScreen extends Screen {
 
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
-            ModelPreviewRenderer.renderPlayerOverlay(graphics, minecraft.player, this.playerX, this.playerY,
-                    this.playerScale, this.playerYaw, -500, partialTick);
+            this.preview.render(graphics, minecraft.player, partialTick,
+                    this.width, this.height, this.playerX, this.playerY, this.playerScale, this.playerYaw);
         }
         super.render(graphics, mouseX, mouseY, partialTick);
     }
@@ -161,14 +191,8 @@ public final class ClassicHudLayoutScreen extends Screen {
 
     @Override
     public void onClose() {
-        ExtraPlayerRenderConfig.PLAYER_POS_X.set(this.playerX);
-        ExtraPlayerRenderConfig.PLAYER_POS_Y.set(this.playerY);
-        ExtraPlayerRenderConfig.PLAYER_SCALE.set((double) this.playerScale);
-        ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.set((double) this.playerYaw);
-        ExtraPlayerRenderConfig.PLAYER_POS_X.save();
-        ExtraPlayerRenderConfig.PLAYER_POS_Y.save();
-        ExtraPlayerRenderConfig.PLAYER_SCALE.save();
-        ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.save();
+        this.config.set(this.playerX, this.playerY, this.playerScale, this.playerYaw);
+        this.config.save();
         if (this.minecraft != null) {
             this.minecraft.setScreen(this.parent);
         }

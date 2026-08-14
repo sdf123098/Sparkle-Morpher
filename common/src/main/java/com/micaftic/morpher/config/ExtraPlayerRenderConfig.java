@@ -9,13 +9,11 @@ public class ExtraPlayerRenderConfig {
 
     public static ForgeConfigSpec.BooleanValue ENABLE_MODERN_HUD_RENDER;
 
-    public static ForgeConfigSpec.IntValue PLAYER_POS_X;
+    /** 经典 HUD 布局（键名保持 PlayerPosX/... 不变，兼容既有配置文件）。 */
+    public static HudLayoutConfig CLASSIC_HUD_LAYOUT;
 
-    public static ForgeConfigSpec.IntValue PLAYER_POS_Y;
-
-    public static ForgeConfigSpec.DoubleValue PLAYER_SCALE;
-
-    public static ForgeConfigSpec.DoubleValue PLAYER_YAW_OFFSET;
+    /** 现代 HUD 布局（独立键名 ModernPlayerPosX/...，与经典 HUD 互不干扰）。 */
+    public static HudLayoutConfig MODERN_HUD_LAYOUT;
 
     public static void define(ForgeConfigSpec.Builder builder) {
         builder.push("extra_player_render");
@@ -23,14 +21,10 @@ public class ExtraPlayerRenderConfig {
         DISABLE_PLAYER_RENDER = builder.define("DisablePlayerRender", Platform.isModLoaded("figura"));
         builder.comment("Whether to enable the independent modern HUD renderer");
         ENABLE_MODERN_HUD_RENDER = builder.define("EnableModernHudRender", false);
-        builder.comment("Player position x in screen");
-        PLAYER_POS_X = builder.defineInRange("PlayerPosX", 10, 0, Integer.MAX_VALUE);
-        builder.comment("Player position y in screen");
-        PLAYER_POS_Y = builder.defineInRange("PlayerPosY", 10, 0, Integer.MAX_VALUE);
-        builder.comment("Player scale in screen");
-        PLAYER_SCALE = builder.defineInRange("PlayerScale", 40.0d, 8.0d, 360.0d);
-        builder.comment("Player yaw offset in screen");
-        PLAYER_YAW_OFFSET = builder.defineInRange("PlayerYawOffset", 0.0d, -Double.MAX_VALUE, Double.MAX_VALUE);
+        builder.comment("Classic HUD layout: position, continuous scale and yaw");
+        CLASSIC_HUD_LAYOUT = HudLayoutConfig.define(builder, "", 10, 10, 40.0d, 0.0d);
+        builder.comment("Modern HUD layout: position, continuous scale and yaw (independent of classic HUD)");
+        MODERN_HUD_LAYOUT = HudLayoutConfig.define(builder, "Modern", 10, 10, 40.0d, 0.0d);
         builder.pop();
     }
 }
