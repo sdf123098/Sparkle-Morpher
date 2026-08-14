@@ -757,6 +757,8 @@
   "gui.sparkle_morpher.classic_hud_layout.tips": "Arrastrar izq.: mover · Asa azul/rueda: escalar · Arrastrar der.: girar · Alt+R: restablecer",
   "gui.sparkle_morpher.classic_hud_layout.values": "X: %s  Y: %s  Escala: %s  Giro: %s°",
   "gui.sparkle_morpher.model_panel.setting.disable_projectile_model": "Desactivar modelo de proyectil",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_layout": "Diseño del HUD moderno",
+  "gui.sparkle_morpher.modern_hud_layout.title": "Diseño del HUD moderno",
   "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model": "Desactivar modelo de vehiculo",
   "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim": "Desactivar animacion externa en primera persona",
   "gui.sparkle_morpher.model_panel.setting.gpu_renderer": "Renderizador GPU",

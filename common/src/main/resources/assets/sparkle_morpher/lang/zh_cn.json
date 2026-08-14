@@ -763,6 +763,8 @@
   "gui.sparkle_morpher.classic_hud_layout.tips": "左键拖动：移动 · 蓝色把手/滚轮：无级缩放 · 右键拖动：旋转 · Alt+R：重置",
   "gui.sparkle_morpher.classic_hud_layout.values": "X：%s  Y：%s  缩放：%s  朝向：%s°",
   "gui.sparkle_morpher.model_panel.setting.disable_projectile_model": "禁用投射物模型",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_layout": "现代 HUD 布局",
+  "gui.sparkle_morpher.modern_hud_layout.title": "现代 HUD 布局",
   "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model": "禁用载具模型",
   "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim": "禁用外部第一人称动画",
   "gui.sparkle_morpher.model_panel.setting.gpu_renderer": "GPU 渲染器",
