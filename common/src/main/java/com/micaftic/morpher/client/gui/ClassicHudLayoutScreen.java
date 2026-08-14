@@ -30,10 +30,10 @@ public final class ClassicHudLayoutScreen extends Screen {
     public ClassicHudLayoutScreen(Screen parent) {
         super(Component.translatable("gui.sparkle_morpher.classic_hud_layout.title"));
         this.parent = parent;
-        this.playerX = ExtraPlayerRenderConfig.PLAYER_POS_X.get();
-        this.playerY = ExtraPlayerRenderConfig.PLAYER_POS_Y.get();
-        this.playerScale = ExtraPlayerRenderConfig.PLAYER_SCALE.get().floatValue();
-        this.playerYaw = ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.get().floatValue();
+        this.playerX = ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.getX();
+        this.playerY = ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.getY();
+        this.playerScale = ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.getScale();
+        this.playerYaw = ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.getYaw();
     }
 
     @Override
@@ -162,14 +162,8 @@ public final class ClassicHudLayoutScreen extends Screen {
 
     @Override
     public void onClose() {
-        ExtraPlayerRenderConfig.PLAYER_POS_X.set(this.playerX);
-        ExtraPlayerRenderConfig.PLAYER_POS_Y.set(this.playerY);
-        ExtraPlayerRenderConfig.PLAYER_SCALE.set((double) this.playerScale);
-        ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.set((double) this.playerYaw);
-        ExtraPlayerRenderConfig.PLAYER_POS_X.save();
-        ExtraPlayerRenderConfig.PLAYER_POS_Y.save();
-        ExtraPlayerRenderConfig.PLAYER_SCALE.save();
-        ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.save();
+        ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.set(this.playerX, this.playerY, this.playerScale, this.playerYaw);
+        ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.save();
         InputUtil.setScreen(this.parent);
     }
 

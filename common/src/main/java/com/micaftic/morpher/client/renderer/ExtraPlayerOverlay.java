@@ -26,6 +26,6 @@ public class ExtraPlayerOverlay implements HudOverlay {
         if (ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER.get()) {
             return;
         }
-        ModelPreviewRenderer.renderPlayerOverlay(guiGraphics, localPlayer, ExtraPlayerRenderConfig.PLAYER_POS_X.get(), ExtraPlayerRenderConfig.PLAYER_POS_Y.get(), ExtraPlayerRenderConfig.PLAYER_SCALE.get().floatValue(), ExtraPlayerRenderConfig.PLAYER_YAW_OFFSET.get().floatValue(), -500, partialTick, false);
+        ModelPreviewRenderer.renderPlayerOverlay(guiGraphics, localPlayer, ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.getX(), ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.getY(), ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.getScale(), ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT.getYaw(), -500, partialTick, false);
     }
 }

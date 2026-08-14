@@ -757,6 +757,8 @@
   "gui.sparkle_morpher.classic_hud_layout.tips": "Kéo trái: di chuyển · Tay cầm xanh/con lăn: thu phóng · Kéo phải: xoay · Alt+R: đặt lại",
   "gui.sparkle_morpher.classic_hud_layout.values": "X: %s  Y: %s  Tỷ lệ: %s  Hướng: %s°",
   "gui.sparkle_morpher.model_panel.setting.disable_projectile_model": "Disable projectile model",
+  "gui.sparkle_morpher.model_panel.setting.modern_hud_layout": "Bố cục HUD hiện đại",
+  "gui.sparkle_morpher.modern_hud_layout.title": "Bố cục HUD hiện đại",
   "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model": "Disable vehicle model",
   "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim": "Disable external first-person animation",
   "gui.sparkle_morpher.model_panel.setting.gpu_renderer": "GPU renderer",
