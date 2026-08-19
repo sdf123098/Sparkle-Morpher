@@ -2,6 +2,8 @@ package com.micaftic.morpher.capability.fabric.client;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.ProjectileCapability;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.entity.projectile.Projectile;
 
 import java.util.Optional;
@@ -17,6 +19,10 @@ public final class ProjectileCapabilityClientStore {
     }
 
     public static Optional<ProjectileCapability> get(Projectile projectile) {
+        if (STORE.size() > 500) {
+            ClientLevel level = Minecraft.getInstance().level;
+            if(level != null) STORE.values().removeIf(cap -> cap.entity == null || level.getEntity(cap.entity.getId()) != cap.entity);
+        }
         return Optional.of(STORE.computeIfAbsent(projectile.getUUID(), uuid -> new ProjectileCapability(projectile)));
     }
 

@@ -2,6 +2,8 @@ package com.micaftic.morpher.capability.fabric.client;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.world.entity.player.Player;
 
@@ -20,6 +22,10 @@ public final class PlayerCapabilityClientStore {
     public static Optional<PlayerCapability> get(Player player) {
         if (!(player instanceof AbstractClientPlayer)) {
             return Optional.empty();
+        }
+        if (STORE.size() > 500) {
+            ClientLevel level = Minecraft.getInstance().level;
+            if(level != null) STORE.values().removeIf(cap -> cap.entity == null || level.getEntity(cap.entity.getId()) != cap.entity);
         }
         UUID uuid = player.getUUID();
         PlayerCapability existing = STORE.get(uuid);
