@@ -18,6 +18,11 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 
 public final class ClientResourceLifecycleEvent {
+    private static final Map<EntityRenderState, CapturedEntity> ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES =
+            Collections.synchronizedMap(new IdentityHashMap<>());
+
+    private static final int ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES_MAX = 8192;
+
     private ClientResourceLifecycleEvent() {
     }
 
@@ -34,6 +39,7 @@ public final class ClientResourceLifecycleEvent {
         PlayerCapabilityClientStore.clear(reason);
         ProjectileCapabilityClientStore.clear(reason);
         VehicleCapabilityClientStore.clear(reason);
+        ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES.clear();
     }
 
     private static void cleanupAfterWorldChange(String reason) {
@@ -42,15 +48,20 @@ public final class ClientResourceLifecycleEvent {
         VehicleCapabilityClientStore.clear(reason);
         ClientModelManager.restorePersistedModelSelection();
         ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES.clear();
-
     }
 
-    private static final Map<EntityRenderState, CapturedEntity> ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES = Collections.synchronizedMap(new IdentityHashMap<>());
-
-    public record CapturedEntity(Entity entity, float partialTick, int packedLight) {}
-
-    public static Map<EntityRenderState, CapturedEntity> getEntityRenderDispatcherCapturedEntities() {
-        return ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES;
+    public static void captureEntity(EntityRenderState state, Entity entity, float partialTick, int packedLight) {
+        // 异常保护：GUI 预览等路径可能只 extract 不 submit，防止映射无限增长。
+        if (ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES.size() > ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES_MAX) {
+            ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES.clear();
+        }
+        ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES.put(state, new CapturedEntity(entity, partialTick, packedLight));
     }
 
+    public static CapturedEntity consumeCapturedEntity(EntityRenderState state) {
+        return ENTITY_RENDER_DISPATCHER_CAPTURED_ENTITIES.remove(state);
+    }
+
+    public record CapturedEntity(Entity entity, float partialTick, int packedLight) {
+    }
 }

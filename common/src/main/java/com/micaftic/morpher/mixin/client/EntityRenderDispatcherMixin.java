@@ -27,10 +27,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Map;
-
 @Mixin({EntityRenderDispatcher.class})
 public class EntityRenderDispatcherMixin {
 
@@ -39,13 +35,13 @@ public class EntityRenderDispatcherMixin {
         EntityRenderState state = cir.getReturnValue();
         if (state != null) {
             int packedLight = ((EntityRenderDispatcher) (Object) this).getPackedLightCoords(entity, partialTick);
-            ClientResourceLifecycleEvent.getEntityRenderDispatcherCapturedEntities().put(state, new ClientResourceLifecycleEvent.CapturedEntity(entity, partialTick, packedLight));
+            ClientResourceLifecycleEvent.captureEntity(state, entity, partialTick, packedLight);
         }
     }
 
     @WrapWithCondition(method = {"submit"}, at = {@At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/EntityRenderer;submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V")})
     private boolean ysm$renderCustom(EntityRenderer<?, ?> renderer, EntityRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        ClientResourceLifecycleEvent.CapturedEntity captured = ClientResourceLifecycleEvent.getEntityRenderDispatcherCapturedEntities().remove(state);
+        ClientResourceLifecycleEvent.CapturedEntity captured = ClientResourceLifecycleEvent.consumeCapturedEntity(state);
         if (captured == null) {
             // 26.2 GUI 预览：InventoryScreen.extractEntityInInventoryFollowsMouse 用自建
             // extractRenderState（不经 EntityRenderDispatcher.extractEntity），CAPTURED 无 entry。
@@ -102,6 +98,4 @@ public class EntityRenderDispatcherMixin {
         }
         return true;
     }
-
-
 }
