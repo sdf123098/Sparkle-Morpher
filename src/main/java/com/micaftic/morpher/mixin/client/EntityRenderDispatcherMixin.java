@@ -1,6 +1,7 @@
 package com.micaftic.morpher.mixin.client;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.client.event.ClientResourceLifecycleEvent;
 import com.micaftic.morpher.client.renderer.CustomFishingHookRenderer;
 import com.micaftic.morpher.client.renderer.CustomVehicleRenderer;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
@@ -26,26 +27,21 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Map;
-
 @Mixin({EntityRenderDispatcher.class})
 public class EntityRenderDispatcherMixin {
-    private static final Map<EntityRenderState, CapturedEntity> CAPTURED_ENTITIES = Collections.synchronizedMap(new IdentityHashMap<>());
 
     @Inject(method = "extractEntity", at = @At("RETURN"))
     private <E extends Entity> void ysm$captureEntity(E entity, float partialTick, CallbackInfoReturnable<EntityRenderState> cir) {
         EntityRenderState state = cir.getReturnValue();
         if (state != null) {
             int packedLight = ((EntityRenderDispatcher) (Object) this).getPackedLightCoords(entity, partialTick);
-            CAPTURED_ENTITIES.put(state, new CapturedEntity(entity, partialTick, packedLight));
+            ClientResourceLifecycleEvent.captureEntity(state, entity, partialTick, packedLight);
         }
     }
 
     @WrapWithCondition(method = {"submit"}, at = {@At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/EntityRenderer;submit(Lnet/minecraft/client/renderer/entity/state/EntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V")})
     private boolean ysm$renderCustom(EntityRenderer<?, ?> renderer, EntityRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState) {
-        CapturedEntity captured = CAPTURED_ENTITIES.remove(state);
+        ClientResourceLifecycleEvent.CapturedEntity captured = ClientResourceLifecycleEvent.consumeCapturedEntity(state);
         if (captured == null) {
             // 26.2 GUI 预览：InventoryScreen.extractEntityInInventoryFollowsMouse 用自建
             // extractRenderState（不经 EntityRenderDispatcher.extractEntity），CAPTURED 无 entry。
@@ -101,8 +97,5 @@ public class EntityRenderDispatcherMixin {
             return shouldRenderVanilla;
         }
         return true;
-    }
-
-    private record CapturedEntity(Entity entity, float partialTick, int packedLight) {
     }
 }
