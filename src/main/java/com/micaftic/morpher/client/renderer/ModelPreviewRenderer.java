@@ -35,6 +35,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.NonNullList;
@@ -49,7 +50,9 @@ import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL14;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.SequencedMap;
 import java.util.concurrent.ExecutionException;
 import com.mojang.math.Axis;
 
@@ -572,7 +575,18 @@ public final class ModelPreviewRenderer {
                 if (profile) {
                     ExtraPlayerRenderProfiler.recordClear(System.nanoTime() - clearStart);
                 }
-                MultiBufferSource.BufferSource fboBuffer = MultiBufferSource.immediate(new ByteBufferBuilder(256));
+                // 给每个 RenderType 分配独立 ByteBufferBuilder：ItemRenderer 对附魔物品会同时拿到
+                // glint 和物品本体两个 consumer（VertexMultiConsumer$Double）。若共用一个 shared buffer，
+                // 第二次 getBuffer() 会先 endBatch() 掉前一个 builder，随后 Double 写入时触发
+                // BufferBuilder "Not building!"（Sodium 下经 modifyPutBulkData 路径复现；原版同样会崩）。
+                // immediateWithBuffers + 惰性 per-type 映射，等价于主 renderBuffers 的固定缓冲语义。
+                SequencedMap<RenderType, ByteBufferBuilder> fboTypeBuffers = new LinkedHashMap<>() {
+                    @Override
+                    public ByteBufferBuilder get(Object key) {
+                        return super.computeIfAbsent((RenderType) key, k -> new ByteBufferBuilder(256));
+                    }
+                };
+                MultiBufferSource.BufferSource fboBuffer = MultiBufferSource.immediateWithBuffers(fboTypeBuffers, new ByteBufferBuilder(256));
                 long modelStart = profile ? System.nanoTime() : 0L;
                 renderOverlayModel(localPlayer, EXTRA_PLAYER_FBO_PADDING, EXTRA_PLAYER_FBO_PADDING,
                         scale, yawOffset, zDepth, partialTick, fboBuffer);
