@@ -43,6 +43,9 @@ public class ModelSettingsScreen extends OptionScreen {
     private int closeX, closeY;
     private int contentLeft, contentTop, contentRight, contentBottom;
     private int groupLeft, groupTop, groupRight, groupBottom;
+    private static final int GROUP_CHIP_GAP = 5;
+    private ModelSettingsGroupLayout groupLayout = ModelSettingsGroupLayout.create(0, 0, 0, GROUP_CHIP_GAP);
+    private int groupScrollOffset;
     private int rowsLeft, rowsTop, rowsRight, rowsBottom;
     private int openDropdown = -1;
     private int dropdownScroll = 0;
@@ -129,6 +132,8 @@ public class ModelSettingsScreen extends OptionScreen {
         groupTop = contentTop + 10;
         groupRight = contentRight - 8;
         groupBottom = groupTop + 17;
+        groupLayout = ModelSettingsGroupLayout.create(groupLeft, groupRight, groups.size(), GROUP_CHIP_GAP);
+        groupScrollOffset = Mth.clamp(groupScrollOffset, 0, groupLayout.maxScroll());
         rowsLeft = contentLeft + 8;
         rowsTop = groupBottom + 11;
         rowsRight = renderPreview ? panelRight - previewWidth() - 12 : contentRight - 8;
@@ -240,17 +245,29 @@ public class ModelSettingsScreen extends OptionScreen {
 
     private void renderGroupChips(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         if (groups.isEmpty()) return;
-        int gap = 5;
-        int chipW = Math.max(54, (groupRight - groupLeft - gap * (groups.size() - 1)) / groups.size());
-        int x = groupLeft;
+        groupScrollOffset = Mth.clamp(groupScrollOffset, 0, groupLayout.maxScroll());
+        int contentMouseX = mouseX + groupScrollOffset;
+        g.enableScissor(groupLeft, groupTop, groupRight, groupBottom);
+        g.pose().pushMatrix();
+        g.pose().translate(-groupScrollOffset, 0);
         for (int i = 0; i < groups.size(); i++) {
             OptionGroup group = groups.get(i);
-            int w = i == groups.size() - 1 ? groupRight - x : chipW;
+            int x = groupLayout.chipLeft(i, 0);
+            int w = groupLayout.chipWidth(i);
             boolean selected = group == activeGroup;
-            boolean hover = RoulettePanelStyle.inside(mouseX, mouseY, x, groupTop, w, 15);
+            boolean hover = RoulettePanelStyle.inside(contentMouseX, mouseY, x, groupTop, w, 15);
             RoulettePanelStyle.fill(g, x, groupTop, w, 15, selected ? RoulettePanelStyle.RED_SOFT : hover ? RoulettePanelStyle.PANEL_HOVER : 0x55303030);
             RoulettePanelStyle.drawCentered(g, this.font, Component.literal(RoulettePanelStyle.trim(this.font, group.getTitle().getString(), w - 6)), x + w / 2, groupTop + 4, selected ? 0xFFFFFFFF : RoulettePanelStyle.MUTED);
-            x += w + gap;
+        }
+        g.pose().popMatrix();
+        g.disableScissor();
+        if (groupLayout.maxScroll() > 0) {
+            int trackLeft = groupLeft + 1;
+            int trackRight = groupRight - 1;
+            int trackW = trackRight - trackLeft;
+            int thumbW = Math.max(16, trackW * (groupRight - groupLeft) / Math.max(1, groupLayout.contentWidth()));
+            int thumbX = trackLeft + (int) ((trackW - thumbW) * groupScrollOffset / (double) groupLayout.maxScroll());
+            g.fill(thumbX, groupBottom - 1, thumbX + thumbW, groupBottom, 0xFFAAAAAA);
         }
     }
 
@@ -467,6 +484,12 @@ public class ModelSettingsScreen extends OptionScreen {
             zoom = Mth.clamp((float) (zoom * (1.0 + scrollY * 0.1)), 30.0f, 400.0f);
             return true;
         }
+        if (RoulettePanelStyle.inside(mouseX, mouseY, groupLeft, groupTop, groupRight - groupLeft, groupBottom - groupTop)
+                && groupLayout.maxScroll() > 0) {
+            groupScrollOffset = Mth.clamp((int) (groupScrollOffset - scrollY * 20), 0, groupLayout.maxScroll());
+            openDropdown = -1;
+            return true;
+        }
         if (RoulettePanelStyle.inside(mouseX, mouseY, rowsLeft, rowsTop, rowsRight - rowsLeft, rowsBottom - rowsTop) && maxRowScroll > 0) {
             rowScrollOffset = Mth.clamp((int) (rowScrollOffset - scrollY), 0, maxRowScroll);
             openDropdown = -1;
@@ -483,18 +506,16 @@ public class ModelSettingsScreen extends OptionScreen {
         if (groups.isEmpty() || !RoulettePanelStyle.inside(mouseX, mouseY, groupLeft, groupTop, groupRight - groupLeft, 15)) {
             return false;
         }
-        int gap = 5;
-        int chipW = Math.max(54, (groupRight - groupLeft - gap * (groups.size() - 1)) / groups.size());
-        int x = groupLeft;
+        int contentMouseX = (int) mouseX + groupScrollOffset;
         for (int i = 0; i < groups.size(); i++) {
-            int w = i == groups.size() - 1 ? groupRight - x : chipW;
-            if (RoulettePanelStyle.inside(mouseX, mouseY, x, groupTop, w, 15)) {
+            int x = groupLayout.chipLeft(i, 0);
+            int w = groupLayout.chipWidth(i);
+            if (RoulettePanelStyle.inside(contentMouseX, mouseY, x, groupTop, w, 15)) {
                 activeGroup = groups.get(i);
                 rowScrollOffset = 0;
                 openDropdown = -1;
                 return true;
             }
-            x += w + gap;
         }
         return true;
     }

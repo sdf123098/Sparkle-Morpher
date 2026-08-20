@@ -3,9 +3,11 @@ package com.micaftic.morpher;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.sun.jna.NativeLibrary;
 import com.micaftic.morpher.core.architectury.platform.Platform;
+import com.micaftic.morpher.core.native.NativeArtifactVerifier;
+import com.micaftic.morpher.core.native.NativeArtifactVerifier.NativeArtifact;
+import com.micaftic.morpher.core.storage.AtomicFileMover;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.StringUtil;
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
@@ -18,7 +20,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.List;
 
 public final class RuntimeAccelerationLoader {
     private static final int EXPECTED_NATIVE_ABI_VERSION = 3;
@@ -57,11 +59,17 @@ public final class RuntimeAccelerationLoader {
     }
 
     public static void init() throws IOException {
-        String path = System.getenv("YSM_CORE_LIB");
-        if (StringUtil.isNullOrEmpty(path)) {
-            path = extractAndGetLibPath();
+        // 开发 override（§11.2）：跳过 manifest 信任链，但保留 ABI 校验。
+        String override = System.getenv("YSM_CORE_LIB");
+        if (!StringUtil.isNullOrEmpty(override)) {
+            if (loadNativeLib(override)) {
+                loaded = true;
+            }
+            available = true;
+            return;
         }
 
+        String path = extractAndGetLibPath();
         if (path != null && loadNativeLib(path)) {
             loaded = true;
         }
@@ -83,65 +91,117 @@ public final class RuntimeAccelerationLoader {
             storageDir = Path.of(androidRuntime);
         }
 
+        // §11 信任链：manifest 缺失 / 无当前平台条目 → 明确错误 + 回退 Java 路径。
+        NativeArtifact artifact = loadManifestArtifact(platform.resDir);
+        if (artifact == null) {
+            return null;
+        }
+
         Path targetFile = ensureDirectory(storageDir).resolve(platform.fileName).toAbsolutePath().normalize();
-        String finalPath = targetFile.toString();
+
+        // 已安装且 digest 匹配 → 直接复用（不重写、不联网）。
+        if (Files.isRegularFile(targetFile) && NativeArtifactVerifier.verify(targetFile, artifact)) {
+            return targetFile.toString();
+        }
 
         byte[] data = readResource(platform.getResourcePath());
         if (data == null) {
-            if (Files.exists(targetFile)) {
-                return finalPath;
-            }
-
-            String version = "1.0.0";
-            try {
-                // Try Architectury first
-                Class<?> platformClass = Class.forName("dev.architectury.platform.Platform");
-                Object mod = platformClass.getMethod("getMod", String.class).invoke(null, "sparkle_morpher");
-                if (mod != null) {
-                    version = (String) mod.getClass().getMethod("getVersion").invoke(mod);
-                }
-            } catch (Throwable t) {
-                try {
-                    // Try NeoForge ModList
-                    Class<?> modListClass = Class.forName("net.neoforged.fml.ModList");
-                    Object modList = modListClass.getMethod("get").invoke(null);
-                    Object optContainer = modListClass.getMethod("getModContainerById", String.class).invoke(modList, "sparkle_morpher");
-                    if (optContainer instanceof java.util.Optional<?> opt && opt.isPresent()) {
-                        Object container = opt.get();
-                        Object modInfo = container.getClass().getMethod("getModInfo").invoke(container);
-                        Object modVersion = modInfo.getClass().getMethod("getVersion").invoke(modInfo);
-                        version = modVersion.toString();
-                    }
-                } catch (Throwable ignored) {}
-            }
-
-            if (version.contains("-")) {
-                version = version.substring(0, version.indexOf('-'));
-            }
-
-            String ext = platform.fileName.substring(platform.fileName.lastIndexOf('.') + 1);
-            String remoteFileName = "ysm-core-" + platform.resDir + "." + ext;
-            String githubPath = "sdf123098/Sparkle-Morpher/releases/download/v" + version + "/" + remoteFileName;
-            String downloadUrl = "https://github.com/" + githubPath;
-            String mirrorUrl = "https://mirror.ghproxy.com/https://github.com/" + githubPath;
-
-            YesSteveModel.LOGGER.info("Native library resource not found in jar, attempting download from mirror: {}", mirrorUrl);
-            data = downloadLibrary(mirrorUrl);
-            if (data == null) {
-                YesSteveModel.LOGGER.info("Mirror download failed, falling back to direct GitHub URL: {}", downloadUrl);
-                data = downloadLibrary(downloadUrl);
-            }
+            data = downloadFromReleases(platform);
             if (data == null) {
                 setUnsatisfiedBuildError();
                 return null;
             }
         }
 
+        // §11.2：digest mismatch 禁止加载。
+        if (!NativeArtifactVerifier.verify(data, artifact)) {
+            String msg = "native digest mismatch for " + platform.resDir + "/" + platform.fileName
+                    + ": expected " + artifact.sha256() + ", got " + NativeArtifactVerifier.sha256(data);
+            YesSteveModel.LOGGER.error("Failed native trust chain: {}", msg);
+            setUnsatisfiedRuntimeError(msg);
+            return null;
+        }
 
-        writeIfChanged(finalPath, data);
-        return finalPath;
+        // 原子安装（§11.2）：临时文件 + 原子替换，杜绝半截文件。
+        installAtomically(storageDir, targetFile, data);
+        return targetFile.toString();
     }
 
+    /**
+     * 解析打包的 native-manifest.json 并取当前平台信任记录。
+     * 失败（缺失/解析错误/无条目）→ 记录明确错误，返回 null（回退 Java 路径）。
+     */
+    private static @Nullable NativeArtifact loadManifestArtifact(String platformKey) {
+        try (InputStream in = YesSteveModel.class.getResourceAsStream("/native-manifest.json")) {
+            if (in == null) {
+                setUnsatisfiedBuildError("native-manifest.json not found in jar");
+                return null;
+            }
+            List<NativeArtifact> artifacts = NativeArtifactVerifier.parseManifest(in);
+            NativeArtifact artifact = NativeArtifactVerifier.findArtifact(artifacts, platformKey).orElse(null);
+            if (artifact == null) {
+                setUnsatisfiedBuildError("native-manifest.json has no entry for platform: " + platformKey);
+            }
+            return artifact;
+        } catch (IOException | RuntimeException e) {
+            YesSteveModel.LOGGER.error("Failed to parse native-manifest.json", e);
+            setUnsatisfiedBuildError("native-manifest.json unreadable: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static void installAtomically(Path storageDir, Path targetFile, byte[] data) throws IOException {
+        Path tmp = Files.createTempFile(storageDir, targetFile.getFileName().toString(), ".tmp");
+        try {
+            Files.write(tmp, data);
+            AtomicFileMover.moveWithRetry(tmp, targetFile);
+        } catch (IOException e) {
+            Files.deleteIfExists(tmp);
+            throw e;
+        }
+    }
+
+    /** 资源缺失时从 GitHub Releases 下载（URL 与 mod 版本绑定，保持历史行为）。 */
+    private static @Nullable byte[] downloadFromReleases(TargetPlatform platform) throws IOException {
+        String version = "1.0.0";
+        try {
+            Class<?> platformClass = Class.forName("dev.architectury.platform.Platform");
+            Object mod = platformClass.getMethod("getMod", String.class).invoke(null, "sparkle_morpher");
+            if (mod != null) {
+                version = (String) mod.getClass().getMethod("getVersion").invoke(mod);
+            }
+        } catch (Throwable t) {
+            try {
+                Class<?> modListClass = Class.forName("net.neoforged.fml.ModList");
+                Object modList = modListClass.getMethod("get").invoke(null);
+                Object optContainer = modListClass.getMethod("getModContainerById", String.class).invoke(modList, "sparkle_morpher");
+                if (optContainer instanceof java.util.Optional<?> opt && opt.isPresent()) {
+                    Object container = opt.get();
+                    Object modInfo = container.getClass().getMethod("getModInfo").invoke(container);
+                    Object modVersion = modInfo.getClass().getMethod("getVersion").invoke(modInfo);
+                    version = modVersion.toString();
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        if (version.contains("-")) {
+            version = version.substring(0, version.indexOf('-'));
+        }
+
+        String ext = platform.fileName.substring(platform.fileName.lastIndexOf('.') + 1);
+        String remoteFileName = "ysm-core-" + platform.resDir + "." + ext;
+        String githubPath = "sdf123098/Sparkle-Morpher/releases/download/v" + version + "/" + remoteFileName;
+        String downloadUrl = "https://github.com/" + githubPath;
+        String mirrorUrl = "https://mirror.ghproxy.com/https://github.com/" + githubPath;
+
+        YesSteveModel.LOGGER.info("Native library resource not found in jar, attempting download from mirror: {}", mirrorUrl);
+        byte[] data = downloadLibrary(mirrorUrl);
+        if (data == null) {
+            YesSteveModel.LOGGER.info("Mirror download failed, falling back to direct GitHub URL: {}", downloadUrl);
+            data = downloadLibrary(downloadUrl);
+        }
+        return data;
+    }
 
     private static @Nullable TargetPlatform resolvePlatform() {
         boolean isX86_64 = SystemUtils.OS_ARCH.equals("amd64") || SystemUtils.OS_ARCH.equals("x86_64");
@@ -194,15 +254,6 @@ public final class RuntimeAccelerationLoader {
         }
     }
 
-    private static void writeIfChanged(String path, byte[] data) throws IOException {
-        File file = new File(path);
-        if (file.exists() && file.length() == data.length) {
-            byte[] existing = FileUtils.readFileToByteArray(file);
-            if (Arrays.equals(data, existing)) return;
-        }
-        FileUtils.writeByteArrayToFile(file, data, false);
-    }
-
     private static byte[] readResource(String path) throws IOException {
         URL url = YesSteveModel.class.getResource(path);
         if (url == null) return null;
@@ -252,6 +303,10 @@ public final class RuntimeAccelerationLoader {
     private static void setUnsatisfiedBuildError() {
         String info = SystemUtils.OS_NAME + " " + SystemUtils.OS_ARCH;
         lastError = new ErrorState(Component.translatable("error.sparkle_morpher.unsatisfied_build", info), "error.sparkle_morpher.unsatisfied_build_ext", new Object[]{info}, "[SM] No build for platform: " + info);
+    }
+
+    private static void setUnsatisfiedBuildError(@NotNull String detail) {
+        lastError = new ErrorState(Component.translatable("error.sparkle_morpher.unsatisfied_build", detail), "error.sparkle_morpher.unsatisfied_build_ext", new Object[]{detail}, "[SM] Build error: " + detail);
     }
 
     private static void setUnsupportedLauncherError() {

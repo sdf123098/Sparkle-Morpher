@@ -8,7 +8,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 
-final class Blaze3DBoneMatrices {
+public final class Blaze3DBoneMatrices {
     private static final int FULL_BRIGHT_LIGHT = 0xF000F0;
     private static final float[] matrix4Scratch = new float[16];
     private static final float[] matrix3Scratch = new float[9];
@@ -24,7 +24,8 @@ final class Blaze3DBoneMatrices {
     private Blaze3DBoneMatrices() {
     }
 
-    static boolean write(
+    /** 供现代 HUD（client.renderer.modernhud 包）复用：CPU 计算骨骼矩阵到 144B/bone 布局。 */
+    public static boolean write(
             GeoModel model,
             Matrix4f rootPose,
             Matrix3f rootNormal,

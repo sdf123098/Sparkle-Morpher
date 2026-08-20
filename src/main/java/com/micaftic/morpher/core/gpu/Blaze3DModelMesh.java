@@ -17,7 +17,8 @@ import java.nio.ByteOrder;
 public final class Blaze3DModelMesh implements AutoCloseable {
     static final int BONE_MATRIX_BYTES = 144;
     static final int BONE_MATRIX_TEXELS = 9;
-    static final int VERTEX_STRIDE = 27;
+    /** Vulkan 要求顶点步长 4 字节对齐：Position(12)+UV0(8)+Normal(4)+BoneId(4)+Cullable(4)=32。 */
+    static final int VERTEX_STRIDE = 32;
 
     public final GpuBuffer vertexBuffer;
     public final GpuBuffer indexBuffer;

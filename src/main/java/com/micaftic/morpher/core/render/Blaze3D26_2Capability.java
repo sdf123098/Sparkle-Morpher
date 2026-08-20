@@ -6,11 +6,17 @@ import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
 
 public final class Blaze3D26_2Capability {
+    private static volatile Report cachedReport;
+
     private Blaze3D26_2Capability() {
     }
 
     public static Report report() {
-        return new Report(
+        Report cached = cachedReport;
+        if (cached != null) {
+            return cached;
+        }
+        return cachedReport = new Report(
                 true,
                 hasMethod(GpuDevice.class, "createBuffer"),
                 hasMethod(GpuDevice.class, "precompilePipeline"),
@@ -23,6 +29,11 @@ public final class Blaze3D26_2Capability {
                 hasRenderPipelineBuilderMethod("withFragmentShader"),
                 hasRenderPipelineBuilderMethod("withComputeShader")
         );
+    }
+
+    /** 测试辅助：清缓存（API 存在性在运行期不变，正常无需调用）。 */
+    public static void resetForTests() {
+        cachedReport = null;
     }
 
     private static boolean hasClass(String className) {

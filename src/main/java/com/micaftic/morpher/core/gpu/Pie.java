@@ -2,6 +2,7 @@ package com.micaftic.morpher.core.gpu;
 
 import com.mojang.blaze3d.opengl.GlStateManager;
 
+import com.mojang.blaze3d.vertex.BufferUploader;
 import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix3x2fc;
@@ -38,6 +39,12 @@ public final class Pie {
     }
 
     public static void draw(GuiGraphicsExtractor graphics, float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float endAngle, int rgba, float feather) {
+        // 1.2.2 轮盘阶段 1：可移植路径优先（experimental）。CPU 预三角化 + CommandEncoder
+        // 提交，OpenGL/Vulkan 同一路径；能力探测失败或未启用时回退旧路径。
+        if (PiePortableRenderPath.tryDraw(graphics, centerX, centerY, innerRadius, outerRadius, startAngle, endAngle, rgba, feather)) {
+            return;
+        }
+
         if (!SmGraphicsBackendDetector.isRawOpenGlAllowed() || !PieShader.ensureCompiled()) {
             drawFallback(graphics, centerX, centerY, innerRadius, outerRadius, startAngle, endAngle, rgba);
             return;
@@ -94,7 +101,8 @@ public final class Pie {
         GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 6);
 
         GlStateManager._glUseProgram(0);
-                GlStateManager._glBindVertexArray(0);
+        BufferUploader.invalidate();
+        GlStateManager._glBindVertexArray(0);
 
         GlStateManager._disableBlend(0);
     }
@@ -192,8 +200,6 @@ public final class Pie {
         }
         return size == runs.length ? runs : java.util.Arrays.copyOf(runs, size);
     }
-
-
 
     private static boolean isIdentity2D(Matrix3x2fc pose) {
         return pose.m00() == 1.0f && pose.m01() == 0.0f && pose.m10() == 0.0f
