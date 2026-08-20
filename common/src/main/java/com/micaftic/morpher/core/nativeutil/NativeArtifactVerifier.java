@@ -1,4 +1,4 @@
-package com.micaftic.morpher.core.native;
+package com.micaftic.morpher.core.nativeutil;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -129,3 +129,5 @@ public final class NativeArtifactVerifier {
         return o.get(field).getAsString();
     }
 }
+
+
