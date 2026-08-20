@@ -2,6 +2,7 @@ package com.micaftic.morpher.util;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 
 public class InputUtil {
@@ -19,6 +20,13 @@ public class InputUtil {
 
     public static boolean isMousePressed(int button, int modifiers, KeyMapping keyMapping) {
         return KeyMappingFactory.isMouseActiveAndMatches(keyMapping, button, modifiers);
+    }
+
+    public static void setScreen(Screen screen) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft != null) {
+            minecraft.setScreen(screen);
+        }
     }
 
     public static boolean isPlayerReady() {

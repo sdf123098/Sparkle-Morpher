@@ -11,6 +11,7 @@ import com.micaftic.morpher.client.renderer.layer.CustomPlayerArmorLayer;
 import com.micaftic.morpher.client.renderer.layer.CustomPlayerElytraLayer;
 import com.micaftic.morpher.client.renderer.layer.CustomPlayerItemInHandLayer;
 import com.micaftic.morpher.client.renderer.layer.CustomPlayerParrotLayer;
+import com.micaftic.morpher.client.renderer.modernhud.ModernHudPoseStore;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -76,10 +77,8 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
 
     public void render(PlayerCapability capability, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, SubmitNodeCollector collector, int packedLight) {
         Player player = (Player) capability.entity;
-        if (!ModelPreviewRenderer.isExtraPlayer() || !capability.isModelReady()) {
         if (!com.micaftic.morpher.client.render.RenderContext.isGuiPreview() || !capability.isModelReady()) {
             capability.tickModel();
-        }
         }
         String modelId = capability.getModelId();
         ClientModelManager.markModelUsed(modelId);
@@ -92,6 +91,9 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
         SubmitRenderContext.set(collector);
         try {
             renderEntityWithTexture(capability, renderTexture.location, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+            // 现代 HUD 阶段 1：世界帧动画评估完成点发布共享姿态快照
+            // （仅本地玩家 + WORLD 上下文，由 store 内部判定；发布不触发二次评估）
+            ModernHudPoseStore.publishFromWorld(capability, partialTick, renderTexture.location);
         } finally {
             SubmitRenderContext.set(null);
             this.currentTexture = null;
@@ -183,7 +185,7 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
         }
         double dDistanceToSqr = Minecraft.getInstance().getEntityRenderDispatcher().distanceToSqr(player);
         poseStack.pushPose();
-        if (dDistanceToSqr < 100.0d && Minecraft.getInstance().level != null && (displayObjective = (scoreboard = Minecraft.getInstance().level.getScoreboard()).getDisplayObjective(DisplaySlot.LIST)) != null) {
+        if (dDistanceToSqr < 100.0d && (displayObjective = (scoreboard = Minecraft.getInstance().level.getScoreboard()).getDisplayObjective(DisplaySlot.LIST)) != null) {
             // super.renderNameTag changed params in MC 1.26.1.2
             poseStack.translate(0.0d, 0.25875d, 0.0d);
         }
