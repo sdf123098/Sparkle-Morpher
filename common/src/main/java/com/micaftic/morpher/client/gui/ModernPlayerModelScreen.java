@@ -15,6 +15,7 @@ import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
+import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
@@ -1676,8 +1677,13 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.disable_self_hands", GeneralConfig.DISABLE_SELF_HANDS));
         rows.add(privacyModeRow(ModelPanelState.SettingGroup.GENERAL));
         rows.add(invertedBool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.classic_hud_rendering", ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER));
-        rows.add(actionRow(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.classic_hud_layout", () -> Minecraft.getInstance().setScreen(new ClassicHudLayoutScreen(this))));
+        rows.add(actionRow(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.classic_hud_layout", () -> InputUtil.setScreen(new HudLayoutScreen(this,
+                Component.translatable("gui.sparkle_morpher.classic_hud_layout.title"),
+                ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT, HudLayoutScreen.classicPreview()))));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.modern_hud_rendering", ExtraPlayerRenderConfig.ENABLE_MODERN_HUD_RENDER));
+        rows.add(actionRow(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.modern_hud_layout", () -> InputUtil.setScreen(new HudLayoutScreen(this,
+                Component.translatable("gui.sparkle_morpher.modern_hud_layout.title"),
+                ExtraPlayerRenderConfig.MODERN_HUD_LAYOUT, HudLayoutScreen.modernPreview()))));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_projectile_model", GeneralConfig.DISABLE_PROJECTILE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));

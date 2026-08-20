@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.renderer;
 
-import com.micaftic.morpher.client.gui.ClassicHudLayoutScreen;
+import com.micaftic.morpher.client.gui.HudLayoutScreen;
 import com.micaftic.morpher.client.renderer.modernhud.ModernHudRenderer;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import net.minecraft.client.Minecraft;
@@ -15,7 +15,7 @@ public class ExtraPlayerOverlay implements HudOverlay {
         Minecraft minecraft;
         LocalPlayer localPlayer;
         if ((localPlayer = (minecraft = Minecraft.getInstance()).player) == null
-                || minecraft.screen instanceof ClassicHudLayoutScreen) {
+                || minecraft.screen instanceof HudLayoutScreen) {
             return;
         }
         if (ExtraPlayerRenderConfig.ENABLE_MODERN_HUD_RENDER.get()
