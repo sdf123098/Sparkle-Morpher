@@ -11,7 +11,6 @@ import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
@@ -49,7 +48,10 @@ public class EntityRenderDispatcherMixin {
             Entity guiEntity = ModelPreviewRenderer.getAndClearGuiPreviewEntity();
             if (guiEntity != null && TouhouMaidCompat.isMaidEntity(guiEntity)) {
                 float guiYaw = state instanceof LivingEntityRenderState lrs ? lrs.yRot : guiEntity.getYRot();
-                MultiBufferSource.BufferSource guiBuffer = Minecraft.getInstance().renderBuffers().bufferSource();
+                MultiBufferSource.BufferSource guiBuffer = ModelPreviewRenderer.getLegacyBufferSourceOrNull();
+                if (guiBuffer == null) {
+                    return true;
+                }
                 boolean maidVanilla = MaidEntityRenderer.tryRender(guiEntity, guiYaw,
                         ModelPreviewRenderer.getGuiPreviewPartialTick(), poseStack, guiBuffer, 0xF000F0);
                 if (!maidVanilla) {
@@ -66,7 +68,10 @@ public class EntityRenderDispatcherMixin {
         float partialTick = captured.partialTick();
         float entityYaw = entity.getYRot();
         int packedLight = captured.packedLight();
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+        MultiBufferSource.BufferSource bufferSource = ModelPreviewRenderer.getLegacyBufferSourceOrNull();
+        if (bufferSource == null) {
+            return true;
+        }
         if (entity instanceof Projectile projectile) {
             if (!GeneralConfig.DISABLE_PROJECTILE_MODEL.get()) {
                 if (projectile instanceof FishingHook fishingHook) {
