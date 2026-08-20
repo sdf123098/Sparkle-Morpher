@@ -1,6 +1,6 @@
-package com.micaftic.morpher.core.native;
+package com.micaftic.morpher.core.nativeutil;
 
-import com.micaftic.morpher.core.native.NativeArtifactVerifier.NativeArtifact;
+import com.micaftic.morpher.core.nativeutil.NativeArtifactVerifier.NativeArtifact;
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
@@ -82,3 +82,4 @@ class NativeArtifactVerifierTest {
         }
     }
 }
+
