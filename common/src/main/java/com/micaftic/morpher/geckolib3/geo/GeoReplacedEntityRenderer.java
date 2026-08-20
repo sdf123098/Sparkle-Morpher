@@ -1,6 +1,7 @@
 package com.micaftic.morpher.geckolib3.geo;
 
 import com.micaftic.morpher.capability.VehicleCapability;
+import com.micaftic.morpher.client.animation.debug.AnimationFrameProfiler;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
@@ -89,6 +90,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
 
     public void renderEntityWithTexture(T t, @Nullable Identifier textureLocation, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource multiBufferSource, int packedLight) {
         Direction bedOrientation;
+        AnimationFrameProfiler.beginRenderFrame(partialTick);
         if (RenderLivingBridge.firePre(t.getEntity(), this, partialTick, poseStack, multiBufferSource, packedLight)) {
             return;
         }

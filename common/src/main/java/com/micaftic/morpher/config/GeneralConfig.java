@@ -51,6 +51,8 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue ENABLE_BLAZE3D_VULKAN_GPU_RENDERER;
 
+    public static ModConfigSpec.BooleanValue ENABLE_BLAZE3D_ROULETTE_RENDERER;
+
     public static ModConfigSpec.BooleanValue MODEL_MEMORY_PROFILER;
 
     public static ModConfigSpec.BooleanValue MODEL_IMPORT_PERFORMANCE_LOG;
@@ -181,6 +183,8 @@ public class GeneralConfig {
                 .define("EnableOpenGlGuiBlur", false);
         ENABLE_BLAZE3D_VULKAN_GPU_RENDERER = builder.comment("Experimental 26.2 Blaze3D model GPU renderer for Minecraft's non-OpenGL backends such as Vulkan. Disabled by default while the shader draw path is being validated.")
                 .define("EnableBlaze3DVulkanGpuRenderer", false);
+        ENABLE_BLAZE3D_ROULETTE_RENDERER = builder.comment("Experimental 1.2.2 Blaze3D portable roulette (pie) renderer: CPU-triangulated ring segments submitted via 26.2 CommandEncoder, unified across OpenGL/Vulkan (replaces per-scanline graphics.fill on non-OpenGL). Disabled by default while the GUI pass timing is being validated.")
+                .define("EnableBlaze3DRouletteRenderer", false);
         builder.comment("Native SIMD renderer policy. AGGRESSIVE prefers the OpenYSM native renderer whenever the native runtime is loaded and the compatibility renderer is disabled (intended default). SAFE keeps the conservative 26.x gates. OFF always uses the Java fallback. SAFE and OFF are retained as kill switches.");
         NATIVE_SIMD_POLICY = builder.defineEnum("NativeSimdPolicy", NativeSimdPolicy.AGGRESSIVE);
         builder.comment("Compare Java and native model state to hunt mismatches without changing the rendered path. OFF disables. LOG_MISMATCH logs a compact summary. STRICT_FALLBACK disables Native SIMD for the session on mismatch. CRASH_TEST throws on mismatch (development only).");

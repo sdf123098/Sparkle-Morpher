@@ -116,8 +116,9 @@ public final class Blaze3DModelMeshBuilder {
                         vertices.put(packSnorm8(quad.normalY));
                         vertices.put(packSnorm8(quad.normalZ));
                         vertices.put((byte) 0);
-                        vertices.putShort((short) (boneIdx & 0xFFFF));
-                        vertices.put((byte) (cube.cullable ? 1 : 0));
+                        // Vulkan 对齐：BoneId/Cullable 用 4 字节 R32_UINT（步长 32 = 4 的倍数）
+                        vertices.putInt(boneIdx);
+                        vertices.putInt(cube.cullable ? 1 : 0);
                     }
                     quads.add(new QuadRecord(vertexOffset, bone.partMask));
                 }

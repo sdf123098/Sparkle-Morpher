@@ -39,6 +39,12 @@ public final class Pie {
     }
 
     public static void draw(GuiGraphicsExtractor graphics, float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float endAngle, int rgba, float feather) {
+        // 1.2.2 轮盘阶段 1：可移植路径优先（experimental）。CPU 预三角化 + CommandEncoder
+        // 提交，OpenGL/Vulkan 同一路径；能力探测失败或未启用时回退旧路径。
+        if (PiePortableRenderPath.tryDraw(graphics, centerX, centerY, innerRadius, outerRadius, startAngle, endAngle, rgba, feather)) {
+            return;
+        }
+
         if (!SmGraphicsBackendDetector.isRawOpenGlAllowed() || !PieShader.ensureCompiled()) {
             drawFallback(graphics, centerX, centerY, innerRadius, outerRadius, startAngle, endAngle, rgba);
             return;
