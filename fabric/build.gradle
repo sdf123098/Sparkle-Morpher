@@ -31,6 +31,9 @@ configurations {
 }
 
 dependencies {
+    // Loom 1.14 + JDK21 源码重映射（Mercury）需要 javax.annotation；缺失会导致
+    // cardinal-components 等依赖的 sources 重映射报 Pb(347) 并在配置阶段失败。
+    implementation 'com.google.code.findbugs:jsr305:3.0.2'
     // Optional at runtime. Used only to compile the TaCZ: Refabricated compatibility bridge.
     modCompileOnly "maven.modrinth:1j76DVHU:sqMweCpe"
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
