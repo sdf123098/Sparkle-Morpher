@@ -28,6 +28,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     private Struct serverVars;
     private String rouletteAnimation = "";
     private boolean officialYsmStateApplied;
+    private boolean syncedModelStateApplied;
 
     private MaidCapability(LivingEntity entity) {
         super(entity, true);
@@ -43,6 +44,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
 
     public void applySyncedState(VehicleModelCapability state, Int2FloatOpenHashMap values) {
         this.officialYsmStateApplied = false;
+        this.syncedModelStateApplied = state.isInitialized();
         if (!state.isInitialized()) {
             this.rouletteAnimation = "";
             this.serverVars = null;
@@ -55,6 +57,9 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     }
 
     public void syncOfficialYsmState() {
+        if (this.syncedModelStateApplied) {
+            return;
+        }
         if (!TouhouLittleMaidAccess.isYsmModel(this.entity)) {
             if (this.officialYsmStateApplied) {
                 this.officialYsmStateApplied = false;
