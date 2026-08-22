@@ -39,7 +39,7 @@ public final class TouhouLittleMaidCompat {
     }
 
     public static boolean isMaidSitting(LivingEntity livingEntity) {
-        return TouhouLittleMaidAccess.hasFishingHook(livingEntity);
+        return TouhouLittleMaidAccess.isSitting(livingEntity);
     }
 
     public static boolean isMaidOwnedBy(Entity entity, Player player) {
