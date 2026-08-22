@@ -118,8 +118,16 @@ public final class MovementQuery {
             }
         }
 
+        /*
+        因为在地面上时, 直接使用entity.getDeltaMovement()获取到的Y动量不一定为0 (实际为-0.07...)
+        两个方案:
+        1. Vec3 deltaMovement = sanitize(entity.getDeltaMovement());  ->  Vec3 deltaMovement = sanitize(entity.position().subtract(entity.oldPosition()));
+        2. if (Math.abs(deltaMovement.y) > EPSILON)  ->  if (Math.abs(deltaMovement.y) > 0.1)
+        当前用的方案2
+         */
+
         Vec3 deltaMovement = sanitize(entity.getDeltaMovement());
-        if (Math.abs(deltaMovement.y) > EPSILON) {
+        if (Math.abs(deltaMovement.y) > 0.1) {
             float velocitySpeed = 20.0f * (float) deltaMovement.y;
             if (Float.isFinite(velocitySpeed)) {
                 return velocitySpeed;
