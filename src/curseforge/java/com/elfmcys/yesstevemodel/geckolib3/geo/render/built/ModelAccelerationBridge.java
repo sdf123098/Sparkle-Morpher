@@ -41,6 +41,9 @@ final class ModelAccelerationBridge {
     static void nComputeBoneMatrices(long pointer, float[] rootPose, float[] rootNormal, float[] anim, int packedLight, ByteBuffer outBoneBuffer) {
     }
 
+    static void nComputeBoneMatricesVulkan(long pointer, float[] rootPose, float[] rootNormal, float[] anim, int packedLight, ByteBuffer outBoneBuffer) {
+    }
+
     static void nComputeBoneMatricesLocal(long handle, float[] animArray, int packedLight, ByteBuffer outBoneBuffer) {
     }
 }
