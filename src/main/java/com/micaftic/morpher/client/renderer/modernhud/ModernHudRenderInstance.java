@@ -52,8 +52,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@code Blaze3DBoneSkinPipeline} + DynamicTransforms。只接受 {@link PlayerPoseSnapshot}，
  * 零二次动画评估。
  *
- * <p>26.2 首版限制：Blaze3DBoneSkinPipeline 无 blend（ColorTargetState.DEFAULT），
- * translucent 纹理第二遍暂不绘制（fragment 丢弃 alpha<0.99，与 Blaze3DRenderPath 一致）。
+ * <p>透明纹理沿用世界实体渲染的双 pass 语义：不透明 pass 使用 cutout 片元，
+ * 半透明 pass 使用 {@code BlendFunction.TRANSLUCENT}。
  */
 public final class ModernHudRenderInstance {
 
@@ -287,6 +287,34 @@ public final class ModernHudRenderInstance {
                     int drawCount = mesh.indexDrawCount(0);
                     if (drawCount > 0) {
                         pass.drawIndexed(drawCount, 1, mesh.indexOffsetBytes(0) / Integer.BYTES, 0, 0);
+                    }
+                }
+                if (geoModel.isTranslucentTexture(0)) {
+                    // 与世界实体渲染保持一致：透明模型先完成 cutout/opaque pass，再用
+                    // entity-translucent blend pass 绘制半透明像素。第二个 pass 不清理 FBO，
+                    // 并保留第一遍写入的深度，避免透明几何覆盖主体。
+                    try (RenderPass translucentPass = encoder.createRenderPass(
+                            () -> "sparkle_morpher_modern_hud_translucent",
+                            fbo.getColorTextureView(),
+                            Optional.empty(),
+                            fbo.getDepthTextureView(),
+                            OptionalDouble.empty(),
+                            new RenderPass.RenderArea(0, 0, fboWidth, fboHeight)
+                    )) {
+                        translucentPass.setPipeline(Blaze3DBoneSkinPipeline.TRANSLUCENT_PIPELINE);
+                        RenderSystem.bindDefaultUniforms(translucentPass);
+                        translucentPass.setUniform("DynamicTransforms", dynamicTransforms);
+                        translucentPass.setUniform("BoneMatrices", boneSlices[boneSlice]);
+                        translucentPass.bindTexture("Sampler0", modelTexture.getTextureView(), modelTexture.getSampler());
+                        translucentPass.bindTexture("Sampler1", overlayTextureView, clampSampler);
+                        translucentPass.bindTexture("Sampler2", lightmapTextureView, clampSampler);
+                        translucentPass.setVertexBuffer(0, mesh.vertexSlice());
+                        translucentPass.setIndexBuffer(mesh.indexBuffer, IndexType.INT);
+                        int translucentDrawCount = mesh.indexDrawCount(0);
+                        if (translucentDrawCount > 0) {
+                            translucentPass.drawIndexed(translucentDrawCount, 1,
+                                    mesh.indexOffsetBytes(0) / Integer.BYTES, 0, 0);
+                        }
                     }
                 }
                 return true;

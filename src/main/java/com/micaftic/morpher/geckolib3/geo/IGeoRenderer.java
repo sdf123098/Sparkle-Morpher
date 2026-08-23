@@ -61,13 +61,13 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
                     ? ModelRendererBridge.BoneRenderPass.NON_GLOW
                     : ModelRendererBridge.BoneRenderPass.ALL;
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
-                    renderSubmittedGeometry(buffer, pose, model, matrixData, absPivotData, i, i2, i3,
+                    renderSubmittedGeometry(collector, buffer, pose, model, matrixData, absPivotData, i, i2, i3,
                             f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode,
                             worldRenderMode, allowDirectGpuRenderer, basePass));
             if (splitEmissiveBones) {
                 RenderType emissiveType = RenderTypes.entityTranslucentEmissive(textureLocation);
                 collector.submitCustomGeometry(poseStack, emissiveType, (pose, buffer) ->
-                        renderSubmittedGeometry(buffer, pose, model, matrixData, absPivotData, i, i2, i3,
+                        renderSubmittedGeometry(collector, buffer, pose, model, matrixData, absPivotData, i, i2, i3,
                                 f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode,
                                 worldRenderMode, false, ModelRendererBridge.BoneRenderPass.GLOW));
             }
@@ -96,12 +96,14 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
         setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
     }
 
-    private static void renderSubmittedGeometry(VertexConsumer buffer, PoseStack.Pose pose,
+    private static void renderSubmittedGeometry(SubmitNodeCollector collector, VertexConsumer buffer, PoseStack.Pose pose,
             AnimatedGeoModel model, float[] matrixData, float[] absPivotData, int textureIndex,
             int packedLight, int packedOverlay, float red, float green, float blue, float alpha,
             Identifier textureLocation, boolean previewMode, boolean extraPlayerMode,
             boolean worldRenderMode, boolean allowDirectGpuRenderer,
             ModelRendererBridge.BoneRenderPass boneRenderPass) {
+        SubmitNodeCollector previousSubmitContext = SubmitRenderContext.get();
+        SubmitRenderContext.set(collector);
         boolean previousPreviewMode = ModelPreviewRenderer.isPreview();
         boolean previousExtraPlayerMode = ModelPreviewRenderer.isExtraPlayer();
         boolean previousWorldRenderMode = ModelPreviewRenderer.isWorldRender();
@@ -116,6 +118,7 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             ModelPreviewRenderer.setWorldRenderMode(previousWorldRenderMode);
             ModelPreviewRenderer.setExtraPlayerMode(previousExtraPlayerMode);
             ModelPreviewRenderer.setPreviewMode(previousPreviewMode);
+            SubmitRenderContext.set(previousSubmitContext);
         }
     }
 
