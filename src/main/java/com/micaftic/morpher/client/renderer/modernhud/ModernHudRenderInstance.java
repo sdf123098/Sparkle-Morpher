@@ -78,7 +78,6 @@ public final class ModernHudRenderInstance {
         float minX = Float.POSITIVE_INFINITY, minY = Float.POSITIVE_INFINITY;
         float maxX = Float.NEGATIVE_INFINITY, maxY = Float.NEGATIVE_INFINITY;
         for (GeoModel.BakedBone bone : geoModel.bakedBones) {
-            if (bone.glow) continue;
             for (GeoModel.BakedCube cube : bone.cubes) {
                 for (GeoModel.BakedQuad quad : cube.quads) {
                     for (int v = 0; v < 4; v++) {

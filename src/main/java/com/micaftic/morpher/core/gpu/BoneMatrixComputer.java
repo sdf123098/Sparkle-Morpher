@@ -94,7 +94,9 @@ public final class BoneMatrixComputer {
         boolean isVisible = true;
         if (bone.parentIdx != -1) {
             parentMatrix = boneLocalScratch[bone.parentIdx];
-            if (!boneVisibleScratch[bone.parentIdx]) isVisible = false;
+            int parentOffset = bone.parentIdx * 12;
+            if (!boneVisibleScratch[bone.parentIdx]
+                    || boneParams[parentOffset + 10] == 1.0f) isVisible = false;
         }
         Matrix4f localMat = boneLocalScratch[idx];
         if (localMat == null) {
@@ -106,7 +108,8 @@ public final class BoneMatrixComputer {
         float rx = boneParams[p], ry = boneParams[p + 1], rz = boneParams[p + 2];
         float tx = boneParams[p + 3], ty = boneParams[p + 4], tz = boneParams[p + 5];
         float sx = boneParams[p + 6], sy = boneParams[p + 7], sz = boneParams[p + 8];
-        if (sx == 0.0f || sy == 0.0f || sz == 0.0f) isVisible = false;
+        float hidden = boneParams[p + 9];
+        if (sx == 0.0f || sy == 0.0f || sz == 0.0f || hidden == 1.0f) isVisible = false;
         localMat.translate((bone.pivotX - tx) * 0.0625f,
                 (bone.pivotY + ty) * 0.0625f,
                 (bone.pivotZ + tz) * 0.0625f);
@@ -132,7 +135,9 @@ public final class BoneMatrixComputer {
         boolean isVisible = true;
         if (bone.parentIdx != -1) {
             parentMatrix = computeBoneLocalTransform(bone.parentIdx, bones, boneParams, stateBuffer);
-            if (!boneVisibleScratch[bone.parentIdx]) isVisible = false;
+            int parentOffset = bone.parentIdx * 12;
+            if (!boneVisibleScratch[bone.parentIdx]
+                    || boneParams[parentOffset + 10] == 1.0f) isVisible = false;
         }
         Matrix4f localMat = boneLocalScratch[idx];
         if (localMat == null) {
@@ -144,7 +149,8 @@ public final class BoneMatrixComputer {
         float rx = boneParams[p], ry = boneParams[p + 1], rz = boneParams[p + 2];
         float tx = boneParams[p + 3], ty = boneParams[p + 4], tz = boneParams[p + 5];
         float sx = boneParams[p + 6], sy = boneParams[p + 7], sz = boneParams[p + 8];
-        if (sx == 0.0f || sy == 0.0f || sz == 0.0f) isVisible = false;
+        float hidden = boneParams[p + 9];
+        if (sx == 0.0f || sy == 0.0f || sz == 0.0f || hidden == 1.0f) isVisible = false;
         localMat.translate((bone.pivotX - tx) * 0.0625f,
                 (bone.pivotY + ty) * 0.0625f,
                 (bone.pivotZ + tz) * 0.0625f);
@@ -184,5 +190,4 @@ public final class BoneMatrixComputer {
         out.putFloat(0.0f).putFloat(0.0f).putFloat(0.0f).putFloat(1.0f);
     }
 }
-
 
