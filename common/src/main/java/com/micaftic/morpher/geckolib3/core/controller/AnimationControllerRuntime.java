@@ -3,6 +3,7 @@ package com.micaftic.morpher.geckolib3.core.controller;
 import com.micaftic.morpher.geckolib3.core.keyframe.TransitionPoint;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationState;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
+import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.audio.PlaybackFlags;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
@@ -75,6 +76,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
     private int depth = 1;
 
     private final PlaybackFlags playbackFlags = new PlaybackFlags(true);
+
+    private final SoundTransitionGate soundTransitionGate = new SoundTransitionGate();
 
     public AnimationControllerRuntime(T animatable, String name, float transitionLengthTicks) {
         this.animatable = animatable;
@@ -231,13 +234,39 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
             this.playbackFlags.setStopped(true);
         }
         for (IntReferenceImmutablePair<IValue> transition : this.currentEntry.getTransitions()) {
-            if (transition.right().evalAsBoolean(evaluator)) {
-                AnimationState nextState2 = this.animationEntries.getStates().get(transition.leftInt());
-                if (nextState2 == null || !this.visitedEntries.add(nextState2.getHashId())) {
-                    return false;
+            AnimationState nextState2 = this.animationEntries.getStates().get(transition.leftInt());
+            if (nextState2 == null) {
+                continue;
+            }
+            boolean condition = transition.right().evalAsBoolean(evaluator);
+            boolean soundTransition = hasSoundTrigger(nextState2);
+            if (!condition) {
+                if (soundTransition) {
+                    this.soundTransitionGate.allow(this.currentEntry.getHashId(), nextState2.getHashId(), false);
                 }
-                updateDisplayName(nextState2.getName());
-                transitionToEntry(nextState2, evaluator);
+                continue;
+            }
+            if (soundTransition && !this.soundTransitionGate.allow(
+                    this.currentEntry.getHashId(), nextState2.getHashId(), true)) {
+                continue;
+            }
+            if (!this.visitedEntries.add(nextState2.getHashId())) {
+                return false;
+            }
+            updateDisplayName(nextState2.getName());
+            transitionToEntry(nextState2, evaluator);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean hasSoundTrigger(AnimationState state) {
+        if (!state.getSoundEffects().isEmpty()) {
+            return true;
+        }
+        for (Pair<String, IValue> animation : state.getAnimations()) {
+            Animation targetAnimation = this.animatable.getAnimation(animation.getLeft());
+            if (targetAnimation != null && !targetAnimation.soundKeyFrames.isEmpty()) {
                 return true;
             }
         }
@@ -334,6 +363,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
         }
         this.animationSlots.clear();
         this.playbackFlags.getAudioPlayerManager().stopAll();
+        this.soundTransitionGate.clear();
     }
 
     private static class AnimationSlot {
