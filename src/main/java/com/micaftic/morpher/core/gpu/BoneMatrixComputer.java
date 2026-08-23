@@ -116,7 +116,9 @@ public final class BoneMatrixComputer {
 
         if (bone.parentIdx != -1) {
             parentMatrix = boneLocalScratch[bone.parentIdx];
-            if (!boneVisibleScratch[bone.parentIdx]) {
+            int parentOffset = bone.parentIdx * 12;
+            if (!boneVisibleScratch[bone.parentIdx]
+                    || boneParams[parentOffset + 10] == 1.0f) {
                 isVisible = false;
             }
         }
@@ -138,9 +140,10 @@ public final class BoneMatrixComputer {
         float animSx = boneParams[pOffset + 6];
         float animSy = boneParams[pOffset + 7];
         float animSz = boneParams[pOffset + 8];
+        float hidden = boneParams[pOffset + 9];
         float unk3 = boneParams[pOffset + 11];
 
-        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f) {
+        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f || hidden == 1.0f) {
             isVisible = false;
         }
 
@@ -181,7 +184,9 @@ public final class BoneMatrixComputer {
 
         if (bone.parentIdx != -1) {
             parentMatrix = computeBoneLocalTransform(bone.parentIdx, bones, boneParams, stateBuffer);
-            if (!boneVisibleScratch[bone.parentIdx]) {
+            int parentOffset = bone.parentIdx * 12;
+            if (!boneVisibleScratch[bone.parentIdx]
+                    || boneParams[parentOffset + 10] == 1.0f) {
                 isVisible = false;
             }
         }
@@ -203,9 +208,10 @@ public final class BoneMatrixComputer {
         float animSx = boneParams[pOffset + 6];
         float animSy = boneParams[pOffset + 7];
         float animSz = boneParams[pOffset + 8];
+        float hidden = boneParams[pOffset + 9];
         float unk3 = boneParams[pOffset + 11];
 
-        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f) {
+        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f || hidden == 1.0f) {
             isVisible = false;
         }
 
