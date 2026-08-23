@@ -259,7 +259,9 @@ public final class ModernHudRenderInstance {
             // 骨骼参数；26.x fallback 评估不烘焙 → 缺失时看到背部（26.2 实测）。
             PoseStack poseStack = new PoseStack();
             poseStack.translate(x + boundMaxX * scale, y + boundMaxY * scale, GUI_CAMERA_Z);
-            poseStack.scale(scale, scale, -scale);
+            // GUI front-view coordinates need an X handedness correction. Keep the
+            // negative Z used by the GUI camera, but do not leave the model left-right mirrored.
+            poseStack.scale(-scale, scale, -scale);
             poseStack.mulPose(Axis.ZP.rotationDegrees(FRONT_FACING_YAW + 0.1f));
             // 26.1.2 的 fallback 评估已把 bodyRot=180 烘进骨骼参数（与 1.21.1 同，26.2 不烘焙），
             // 这里若再加 180 会 360°=背对，故只加 yawOffset。
@@ -404,6 +406,16 @@ public final class ModernHudRenderInstance {
 
     public int fboLogicalHeight() {
         return fboLogicalHeight;
+    }
+
+    /** Screen-space model origin used by the modern HUD attachment pass. */
+    public float modelOriginX(float hudX, float scale) {
+        return hudX + scale * 0.5f;
+    }
+
+    /** Screen-space model origin used by the modern HUD attachment pass. */
+    public float modelOriginY(float hudY, float scale) {
+        return hudY + scale * 2.0f - 2.0f;
     }
 
     /** 人物锚点（模型原点）在 FBO 逻辑空间中的 X；合成阶段用它对齐用户配置的锚点。 */

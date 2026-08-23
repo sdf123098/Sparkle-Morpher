@@ -42,6 +42,7 @@ public class ModelRendererBridge {
     }
 
     private static final Matrix4f projectionModelViewMatrix = new Matrix4f();
+    private static final ThreadLocal<int[]> NATIVE_SUBMITTED_VERTICES = ThreadLocal.withInitial(() -> new int[1]);
     private static final ThreadLocal<RenderScratch> FALLBACK_SCRATCH = ThreadLocal.withInitial(RenderScratch::new);
 
     public static void renderMesh(VertexConsumer buffer, PoseStack.Pose pose, GeoModel model, float[] boneParams, float[] stateBuffer, int textureIndex, int renderPartMask, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {
@@ -460,6 +461,11 @@ public class ModelRendererBridge {
     private static final float[] matrixTransferArray = new float[48];
     @SuppressWarnings("unused") // TODO: native writes vertices directly to VertexConsumer buffer
     public static void submitVertices(Object v, int vertexCount, ByteBuffer fBuf, ByteBuffer iBuf) {
+        if (v == null || vertexCount <= 0 || fBuf == null || iBuf == null
+                || fBuf.capacity() < vertexCount * 12 * Float.BYTES
+                || iBuf.capacity() < vertexCount * 2 * Integer.BYTES) {
+            return;
+        }
         FloatBuffer f = fBuf.order(ByteOrder.nativeOrder()).asFloatBuffer();
         IntBuffer in = iBuf.order(ByteOrder.nativeOrder()).asIntBuffer();
         VertexConsumer vc = (VertexConsumer) v;
@@ -476,6 +482,7 @@ public class ModelRendererBridge {
             fIdx += 12;
             iIdx += 2;
         }
+        NATIVE_SUBMITTED_VERTICES.get()[0] += vertexCount;
     }
 
 
@@ -498,16 +505,23 @@ public class ModelRendererBridge {
         pose.normal().get(matrixTransferArray, 16);
         projectionModelViewMatrix.identity().get(matrixTransferArray, 32);
 
-        GeoModel.nComputeModelVertices(
-                mesh.nativeModelHandle,
-                vertexConsumer,
-                matrixTransferArray,
-                boneVertex,
-                renderPartMask,
-                packedLight, packedOverlay,
-                r, g, b, a
-        );
-        return true;
+        int[] submitted = NATIVE_SUBMITTED_VERTICES.get();
+        submitted[0] = 0;
+        try {
+            GeoModel.nComputeModelVertices(
+                    mesh.nativeModelHandle,
+                    vertexConsumer,
+                    matrixTransferArray,
+                    boneVertex,
+                    renderPartMask,
+                    packedLight, packedOverlay,
+                    r, g, b, a
+            );
+        } catch (Throwable t) {
+            GpuDebugLog.error("native SIMD vertex computation failed; using Java fallback", t);
+            return false;
+        }
+        return submitted[0] > 0;
     }
 
     private static final class RenderScratch {
