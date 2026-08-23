@@ -12,10 +12,13 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
@@ -77,7 +80,7 @@ public final class ModernHudRenderer {
     public static boolean renderAt(GuiGraphics graphics, LocalPlayer player, float partialTick,
                                    int screenWidth, int screenHeight,
                                    float x, float y, float scale, float yawOffset) {
-        PlayerPoseSnapshot snapshot = null; // ModernHudPoseStore.consume();
+        PlayerPoseSnapshot snapshot = ModernHudPoseStore.consume();
         if (snapshot == null) {
             // 本地玩家不可见/第一人称：世界不发布快照 → 现代 HUD 自评估一次
             // （与经典 HUD 同款 OLD_HUD 上下文；第一人称时世界未评估，此为首次评估）
@@ -157,7 +160,20 @@ public final class ModernHudRenderer {
         }
         Vector3f point = ModernHudHandItemLayout.locate(model, profile, arm,
                 originX, originY, scale, yawOffset);
-        graphics.renderItem(player, stack, Math.round(point.x - 8.0f), Math.round(point.y - 8.0f), 0);
+        ItemDisplayContext displayContext = arm == HumanoidArm.LEFT
+                ? ItemDisplayContext.THIRD_PERSON_LEFT_HAND
+                : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
+        ItemInHandRenderer itemRenderer = Minecraft.getInstance().getEntityRenderDispatcher().getItemInHandRenderer();
+        graphics.pose().pushPose();
+        try {
+            graphics.pose().translate(point.x, point.y, Z_DEPTH + 1.0f);
+            graphics.pose().scale(16.0f, 16.0f, 16.0f);
+            itemRenderer.renderItem(player, stack, displayContext, arm == HumanoidArm.LEFT,
+                    graphics.pose(), graphics.bufferSource(), 15728880);
+        } finally {
+            graphics.pose().popPose();
+            graphics.flush();
+        }
     }
 
     /** 把独立 HUD FBO 透明合成到 GUI 对应矩形（与经典 HUD 的 blit 等价，含 alpha 合成）。 */
