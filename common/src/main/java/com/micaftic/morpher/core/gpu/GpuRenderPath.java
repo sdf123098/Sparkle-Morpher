@@ -1,6 +1,8 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.mixin.client.RenderSystemAccessor;
 import com.micaftic.morpher.client.render.RenderContext;
@@ -75,7 +77,21 @@ public final class GpuRenderPath {
 
         boolean profileExtraPlayer = ExtraPlayerRenderProfiler.enabled() && RenderContext.isGuiPreview();
         long boneStart = profileExtraPlayer ? System.nanoTime() : 0L;
-        if (!BoneMatrixComputer.compute(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
+        boolean nativeComputed = false;
+        if (GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE) != GeneralConfig.NativeSimdPolicy.OFF
+                && AccelerationCapability.isLoaded() && mesh.pointer != 0
+                && boneParams != null && boneParams.length >= mesh.boneCount * 12) {
+            NativeSimdGpuCompute.markUnwritten(boneBuf, mesh.boneCount);
+            try {
+                rootPose.get(rootPoseScratch);
+                rootNormal.get(rootNormalScratch);
+                GeoModel.nComputeBoneMatrices(mesh.pointer, rootPoseScratch, rootNormalScratch, boneParams, packedLight, boneBuf);
+                nativeComputed = NativeSimdGpuCompute.hasCompleteWrite(boneBuf, mesh.boneCount);
+            } catch (Throwable t) {
+                GpuDebugLog.error("native SIMD GPU bone computation failed; using Java fallback", t);
+            }
+        }
+        if (!nativeComputed && !BoneMatrixComputer.compute(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
             return false;
         }
         if (profileExtraPlayer) {

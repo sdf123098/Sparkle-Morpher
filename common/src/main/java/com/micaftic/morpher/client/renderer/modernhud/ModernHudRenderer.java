@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.HudLayoutConfig;
+import com.micaftic.morpher.client.model.HandLocatorProfile;
 import com.micaftic.morpher.core.compat.acceleratedrendering.AcceleratedRenderingCompat;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
@@ -14,6 +15,9 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.ItemStack;
+import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL14;
 
@@ -113,6 +117,7 @@ public final class ModernHudRenderer {
                 return false;
             }
             composite(graphics, instance, x, y);
+            renderHandItems(graphics, player, snapshot, instance, x, y, scale, yawOffset);
             long count = submittedCount.incrementAndGet();
             // 低频诊断：确认现代 HUD 在稳定提交（避免每次刷屏）
             if (count % 600 == 1) {
@@ -123,6 +128,36 @@ public final class ModernHudRenderer {
         } finally {
             AcceleratedRenderingCompat.exitVanillaPipeline(isolated);
         }
+    }
+
+    /** Submit hand items to the modern GUI stream, alongside the body composite. */
+    private static void renderHandItems(GuiGraphics graphics, LocalPlayer player,
+                                        PlayerPoseSnapshot snapshot, ModernHudRenderInstance instance,
+                                        float posX, float posY, float scale, float yawOffset) {
+        PlayerCapability capability = PlayerCapability.get(player).orElse(null);
+        if (capability == null || capability.getModelAssembly() == null) {
+            return;
+        }
+        HandLocatorProfile profile = capability.getModelAssembly().getAnimationBundle().getHandLocatorProfile();
+        float originX = instance.modelOriginX(posX, scale);
+        float originY = instance.modelOriginY(posY, scale);
+        HumanoidArm mainArm = player.getMainArm();
+        renderHandItem(graphics, player, snapshot.model(), profile, mainArm,
+                player.getMainHandItem(), originX, originY, scale, yawOffset);
+        renderHandItem(graphics, player, snapshot.model(), profile, mainArm.getOpposite(),
+                player.getOffhandItem(), originX, originY, scale, yawOffset);
+    }
+
+    private static void renderHandItem(GuiGraphics graphics, LocalPlayer player,
+                                       com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel model,
+                                       HandLocatorProfile profile, HumanoidArm arm, ItemStack stack,
+                                       float originX, float originY, float scale, float yawOffset) {
+        if (stack.isEmpty()) {
+            return;
+        }
+        Vector3f point = ModernHudHandItemLayout.locate(model, profile, arm,
+                originX, originY, scale, yawOffset);
+        graphics.renderItem(player, stack, Math.round(point.x - 8.0f), Math.round(point.y - 8.0f), 0);
     }
 
     /** 把独立 HUD FBO 透明合成到 GUI 对应矩形（与经典 HUD 的 blit 等价，含 alpha 合成）。 */

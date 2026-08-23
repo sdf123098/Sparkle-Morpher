@@ -18,7 +18,6 @@ jobs:
   build:
     name: ${{ matrix.branch }}
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
     strategy:
       fail-fast: false
       matrix:
@@ -56,12 +55,14 @@ jobs:
 
     steps:
       - name: Checkout
+        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'push' && github.ref_name || matrix.branch }}
           fetch-depth: 1
 
       - name: Set up JDK
+        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -69,14 +70,17 @@ jobs:
           cache: gradle
 
       - name: Grant gradlew executable bit
+        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         run: chmod +x gradlew
 
       - name: Build (${{ matrix.gradle_task }}) — common tests + compile + build
+        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         run: ./gradlew ${{ matrix.gradle_task }} --no-daemon --console=plain
         env:
           CI: 'true'
 
       - name: Artifact smoke — jar exists and contains expected entries
+        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         shell: bash
         run: |
           set -eu
@@ -94,7 +98,7 @@ jobs:
           echo "smoke OK"
 
       - name: Upload build artifacts
-        if: always()
+        if: ${{ always() && (github.event_name != 'push' || matrix.branch == github.ref_name) }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.branch }}-jars

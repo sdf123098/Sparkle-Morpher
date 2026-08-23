@@ -437,8 +437,14 @@ public class ModelRendererBridge {
     }
 
     private static final float[] matrixTransferArray = new float[48];
+    private static final ThreadLocal<int[]> NATIVE_SUBMITTED_VERTICES = ThreadLocal.withInitial(() -> new int[1]);
     @SuppressWarnings("unused") // TODO: native中直接往VertexConsumer中的buffer写入顶点
     public static void submitVertices(Object v, int vertexCount, ByteBuffer fBuf, ByteBuffer iBuf) {
+        if (v == null || vertexCount <= 0 || fBuf == null || iBuf == null
+                || fBuf.capacity() < vertexCount * 12 * Float.BYTES
+                || iBuf.capacity() < vertexCount * 2 * Integer.BYTES) {
+            return;
+        }
         FloatBuffer f = fBuf.order(ByteOrder.nativeOrder()).asFloatBuffer();
         IntBuffer in = iBuf.order(ByteOrder.nativeOrder()).asIntBuffer();
         VertexConsumer vc = (VertexConsumer) v;
@@ -455,6 +461,7 @@ public class ModelRendererBridge {
             fIdx += 12;
             iIdx += 2;
         }
+        NATIVE_SUBMITTED_VERTICES.get()[0] += vertexCount;
     }
 
 
@@ -476,16 +483,23 @@ public class ModelRendererBridge {
         // at specific rotations on the 1.21.1 macOS path.
         projectionModelViewMatrix.identity().get(matrixTransferArray, 32);
 
-        GeoModel.nComputeModelVertices(
-                mesh.nativeModelHandle,
-                vertexConsumer,
-                matrixTransferArray,
-                boneVertex,
-                renderPartMask,
-                packedLight, packedOverlay,
-                r, g, b, a
-        );
-        return true;
+        int[] submitted = NATIVE_SUBMITTED_VERTICES.get();
+        submitted[0] = 0;
+        try {
+            GeoModel.nComputeModelVertices(
+                    mesh.nativeModelHandle,
+                    vertexConsumer,
+                    matrixTransferArray,
+                    boneVertex,
+                    renderPartMask,
+                    packedLight, packedOverlay,
+                    r, g, b, a
+            );
+        } catch (Throwable t) {
+            com.micaftic.morpher.YesSteveModel.LOGGER.error("native SIMD vertex computation failed; using Java fallback", t);
+            return false;
+        }
+        return submitted[0] > 0;
     }
 
     // ---- 一次性诊断日志（SIMD/预览路径） ----
