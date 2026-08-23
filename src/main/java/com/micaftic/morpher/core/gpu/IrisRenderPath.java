@@ -29,12 +29,21 @@ public final class IrisRenderPath {
         GpuMesh mesh = GpuRenderPath.getOrBuildMesh(model);
         if (mesh == null) return false;
         if (mesh.pointer == 0) return false;
+        if (boneParams == null || boneParams.length < mesh.boneCount * 12) return false;
         mesh.ensureXformBuffers();
 
 
         ByteBuffer boneBuf = mesh.perFrameBoneBuffer;
         boneBuf.clear();
-        GeoModel.nComputeBoneMatricesLocal(mesh.pointer, boneParams, packedLight, boneBuf);
+        NativeSimdGpuCompute.markUnwritten(boneBuf, mesh.boneCount);
+        try {
+            GeoModel.nComputeBoneMatricesLocal(mesh.pointer, boneParams, packedLight, boneBuf);
+        } catch (Throwable t) {
+            return false;
+        }
+        if (!NativeSimdGpuCompute.hasCompleteWrite(boneBuf, mesh.boneCount)) {
+            return false;
+        }
         boneBuf.position(0);
         boneBuf.limit(mesh.boneCount * 144);
 

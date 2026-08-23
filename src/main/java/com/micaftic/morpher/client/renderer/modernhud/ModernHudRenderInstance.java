@@ -208,7 +208,9 @@ public final class ModernHudRenderInstance {
             // framing 用模型真实静息 AABB：maxX/maxY 边对齐逻辑坐标 (x, y)（Rz180 镜像后
             // logical = translate - model*scale）；vanilla 2 块高模型下与旧常量等价。
             poseStack.translate(x + boundMaxX * scale, y + boundMaxY * scale, GUI_CAMERA_Z);
-            poseStack.scale(scale, scale, -scale);
+            // GUI front-view coordinates need an X handedness correction. Keep the
+            // negative Z used by the GUI camera, but do not leave the model left-right mirrored.
+            poseStack.scale(-scale, scale, -scale);
             poseStack.mulPose(Axis.ZP.rotationDegrees(FRONT_FACING_YAW + 0.1f));
             poseStack.mulPose(Axis.YP.rotationDegrees(yawOffset));
             PoseStack.Pose pose = poseStack.last();
@@ -352,6 +354,16 @@ public final class ModernHudRenderInstance {
 
     public int fboLogicalHeight() {
         return fboLogicalHeight;
+    }
+
+    /** Screen-space model origin used by the modern HUD attachment pass. */
+    public float modelOriginX(float hudX, float scale) {
+        return hudX + boundMaxX * scale;
+    }
+
+    /** Screen-space model origin used by the modern HUD attachment pass. */
+    public float modelOriginY(float hudY, float scale) {
+        return hudY + boundMaxY * scale;
     }
 
     private static void diag(String reason) {
