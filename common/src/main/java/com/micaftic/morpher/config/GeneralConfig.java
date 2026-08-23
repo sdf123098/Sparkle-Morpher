@@ -32,6 +32,8 @@ public class GeneralConfig {
 
     public static ForgeConfigSpec.BooleanValue USE_GPU_RENDERER;
 
+    public static ForgeConfigSpec.EnumValue<NativeSimdPolicy> NATIVE_SIMD_POLICY;
+
     public static ForgeConfigSpec.BooleanValue DISABLE_MODEL_GLOW_IN_SHADERPACK;
 
     public static ForgeConfigSpec.BooleanValue ANIMATION_DISTANCE_LOD;
@@ -73,7 +75,24 @@ public class GeneralConfig {
         CUSTOM
     }
 
+    public enum NativeSimdPolicy {
+        OFF,
+        SAFE,
+        AGGRESSIVE
+    }
+
     public static boolean safeGet(ForgeConfigSpec.BooleanValue value, boolean defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return value.get();
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    public static <T extends Enum<T>> T safeGet(ForgeConfigSpec.EnumValue<T> value, T defaultValue) {
         if (value == null) {
             return defaultValue;
         }
@@ -125,6 +144,8 @@ public class GeneralConfig {
         USE_COMPATIBILITY_RENDERER = builder.define("UseCompatibilityRenderer", false);
         builder.comment("Test renderer.");
         USE_GPU_RENDERER = builder.define("UseGpuRenderer", true);
+        builder.comment("Native SIMD renderer policy. OFF disables the native path; SAFE and AGGRESSIVE are retained as compatibility modes.");
+        NATIVE_SIMD_POLICY = builder.defineEnum("NativeSimdPolicy", NativeSimdPolicy.AGGRESSIVE);
         builder.comment("Render ysmGlow bones with normal entity lighting while a shader pack is active.");
         DISABLE_MODEL_GLOW_IN_SHADERPACK = builder.define("DisableModelGlowInShaderpack", true);
         ROULETTE_CONTENT_MODE = builder.defineEnum("RouletteContentMode", RouletteContentMode.ORIGINAL);
