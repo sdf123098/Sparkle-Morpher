@@ -177,12 +177,12 @@ public class GeneralConfig {
                 .defineEnum("GraphicsBackendMode", SmRenderBackendMode.AUTO);
         DISABLE_RAW_OPENGL_ON_NON_OPENGL = builder.comment("Prevent raw OpenGL probes/renderers when Minecraft is not using an OpenGL backend.")
                 .define("DisableRawOpenGlOnNonOpenGl", true);
-        ENABLE_OPENGL_LEGACY_GPU_RENDERER = builder.comment("Allow the legacy raw OpenGL model renderer when the detected backend is OpenGL and UseGpuRenderer is also enabled.")
-                .define("EnableOpenGlLegacyGpuRenderer", false);
+        ENABLE_OPENGL_LEGACY_GPU_RENDERER = builder.comment("Use the raw OpenGL model renderer when the detected backend is OpenGL and UseGpuRenderer is enabled. Native SIMD computes the per-frame GPU bone buffer; Java remains the failure fallback.")
+                .define("EnableOpenGlLegacyGpuRenderer", true);
         ENABLE_OPENGL_GUI_BLUR = builder.comment("Allow raw OpenGL GUI blur/shader effects on OpenGL. Disabled by default for Vulkan compatibility.")
                 .define("EnableOpenGlGuiBlur", false);
-        ENABLE_BLAZE3D_VULKAN_GPU_RENDERER = builder.comment("Experimental 26.2 Blaze3D model GPU renderer for Minecraft's non-OpenGL backends such as Vulkan. Disabled by default while the shader draw path is being validated.")
-                .define("EnableBlaze3DVulkanGpuRenderer", false);
+        ENABLE_BLAZE3D_VULKAN_GPU_RENDERER = builder.comment("26.2 Blaze3D model GPU renderer for Vulkan. Enabled by default; the route is gated to a detected Vulkan backend and falls back safely when unavailable.")
+                .define("EnableBlaze3DVulkanGpuRenderer", true);
         ENABLE_BLAZE3D_ROULETTE_RENDERER = builder.comment("Experimental 1.2.2 Blaze3D portable roulette (pie) renderer: CPU-triangulated ring segments submitted via 26.2 CommandEncoder, unified across OpenGL/Vulkan (replaces per-scanline graphics.fill on non-OpenGL). Disabled by default while the GUI pass timing is being validated.")
                 .define("EnableBlaze3DRouletteRenderer", false);
         builder.comment("Native SIMD renderer policy. AGGRESSIVE prefers the OpenYSM native renderer whenever the native runtime is loaded and the compatibility renderer is disabled (intended default). SAFE keeps the conservative 26.x gates. OFF always uses the Java fallback. SAFE and OFF are retained as kill switches.");

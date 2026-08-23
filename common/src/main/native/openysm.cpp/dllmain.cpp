@@ -168,6 +168,16 @@ struct BoneDataOut {
 
 static_assert(sizeof(BoneDataOut) == 144, "BoneDataOut mismatch");
 
+struct BoneDataOutVulkan {
+    float transform[16];
+    float normal[16];
+    float packedLight;
+    float isHidden;
+    float pad[2];
+};
+
+static_assert(sizeof(BoneDataOutVulkan) == 144, "BoneDataOutVulkan mismatch");
+
 struct NativeGpuMesh {
     std::vector<NativeBone> bones;
     std::vector<int> evalOrder;
@@ -356,6 +366,11 @@ JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built
 
     jfloat *matricesData = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(matrixArray, nullptr));
     jfloat *animData = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(animArray, nullptr));
+    if (!matricesData || !animData) {
+        if (matricesData) env->ReleasePrimitiveArrayCritical(matrixArray, matricesData, JNI_ABORT);
+        if (animData) env->ReleasePrimitiveArrayCritical(animArray, animData, JNI_ABORT);
+        return;
+    }
 
     Mat4 rootPoseMat(matricesData);
     float *rootNormalArr = matricesData + 16;
@@ -829,11 +844,18 @@ JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built
     if (!mesh) return;
 
     auto *outRaw = static_cast<BoneDataOut *>(env->GetDirectBufferAddress(outBoneBuffer));
-    if (!outRaw) return;
+    jlong outCapacity = env->GetDirectBufferCapacity(outBoneBuffer);
+    if (!outRaw || outCapacity < static_cast<jlong>(mesh->bones.size() * sizeof(BoneDataOut))) return;
 
     jfloat *rootPose = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(rootPoseArr, nullptr));
     jfloat *rootNormal = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(rootNormalArr, nullptr));
     jfloat *anim = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(animArray, nullptr));
+    if (!rootPose || !rootNormal || !anim) {
+        if (rootPose) env->ReleasePrimitiveArrayCritical(rootPoseArr, rootPose, JNI_ABORT);
+        if (rootNormal) env->ReleasePrimitiveArrayCritical(rootNormalArr, rootNormal, JNI_ABORT);
+        if (anim) env->ReleasePrimitiveArrayCritical(animArray, anim, JNI_ABORT);
+        return;
+    }
 
     Mat4 rootPoseMat(rootPose);
     Mat4 rootNormalMat(UNINITIALIZED);
@@ -925,15 +947,45 @@ JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built
     env->ReleasePrimitiveArrayCritical(animArray, anim, JNI_ABORT);
 }
 
+JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built_GeoModel_nComputeBoneMatricesVulkan(
+    JNIEnv *env, jclass clazz, jlong handle,
+    jfloatArray rootPoseArr, jfloatArray rootNormalArr, jfloatArray animArray,
+    jint packedLight, jobject outBoneBuffer) {
+    // Reuse the validated Native SIMD transform computation, then convert only
+    // the metadata fields to the float ABI consumed by Vulkan's RGBA32_FLOAT
+    // texel buffer. Transform and normal matrices remain byte-identical.
+    Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built_GeoModel_nComputeBoneMatrices(
+        env, clazz, handle, rootPoseArr, rootNormalArr, animArray, packedLight, outBoneBuffer);
+
+    auto *mesh = reinterpret_cast<NativeGpuMesh *>(handle);
+    auto *outRaw = static_cast<BoneDataOut *>(env->GetDirectBufferAddress(outBoneBuffer));
+    jlong outCapacity = env->GetDirectBufferCapacity(outBoneBuffer);
+    if (!mesh || !outRaw || outCapacity < static_cast<jlong>(mesh->bones.size() * sizeof(BoneDataOutVulkan))) return;
+
+    auto *vulkanRaw = reinterpret_cast<BoneDataOutVulkan *>(outRaw);
+    for (size_t i = 0; i < mesh->bones.size(); ++i) {
+        int32_t packed = 0;
+        int32_t hidden = 0;
+        std::memcpy(&packed, &outRaw[i].packedLight, sizeof(packed));
+        std::memcpy(&hidden, &outRaw[i].isHidden, sizeof(hidden));
+        vulkanRaw[i].packedLight = static_cast<float>(packed);
+        vulkanRaw[i].isHidden = static_cast<float>(hidden);
+        vulkanRaw[i].pad[0] = 0.0f;
+        vulkanRaw[i].pad[1] = 0.0f;
+    }
+}
+
 JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built_GeoModel_nComputeBoneMatricesLocal(
     JNIEnv *env, jclass clazz, jlong handle, jfloatArray animArray, jint packedLight, jobject outBoneBuffer) {
     auto *mesh = reinterpret_cast<NativeGpuMesh *>(handle);
     if (!mesh) return;
 
     auto *outRaw = static_cast<BoneDataOut *>(env->GetDirectBufferAddress(outBoneBuffer));
-    if (!outRaw) return;
+    jlong outCapacity = env->GetDirectBufferCapacity(outBoneBuffer);
+    if (!outRaw || outCapacity < static_cast<jlong>(mesh->bones.size() * sizeof(BoneDataOut))) return;
 
     jfloat *anim = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(animArray, nullptr));
+    if (!anim) return;
 
     const int glowLight = (15 << 4) | (15 << 20);
     std::fill(mesh->hiddenInherited.begin(), mesh->hiddenInherited.end(), 0);
@@ -1055,6 +1107,11 @@ static const JNINativeMethod gMethods[] = {
             Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built_GeoModel_nComputeBoneMatrices)
     },
     {
+        (char *) "nComputeBoneMatricesVulkan", (char *) "(J[F[F[FILjava/nio/ByteBuffer;)V",
+        reinterpret_cast<void *>(
+            Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built_GeoModel_nComputeBoneMatricesVulkan)
+    },
+    {
         (char *) "nComputeBoneMatricesLocal", (char *) "(J[FILjava/nio/ByteBuffer;)V",
         reinterpret_cast<void *>(
             Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built_GeoModel_nComputeBoneMatricesLocal)
@@ -1104,10 +1161,14 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     }
 
     jclass clazzRenderer = env->FindClass("com/elfmcys/yesstevemodel/geckolib3/geo/ModelRendererBridge");
-    if (clazzRenderer != nullptr) {
-        g_NativeModelRendererClass = (jclass) env->NewGlobalRef(clazzRenderer);
-        g_submitVerticesID = env->GetStaticMethodID(g_NativeModelRendererClass, "submitVertices",
-                                                    "(Ljava/lang/Object;ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)V");
+    if (clazzRenderer == nullptr) return JNI_ERR;
+    g_NativeModelRendererClass = (jclass) env->NewGlobalRef(clazzRenderer);
+    g_submitVerticesID = env->GetStaticMethodID(g_NativeModelRendererClass, "submitVertices",
+                                                "(Ljava/lang/Object;ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)V");
+    if (g_submitVerticesID == nullptr) {
+        env->DeleteGlobalRef(g_NativeModelRendererClass);
+        g_NativeModelRendererClass = nullptr;
+        return JNI_ERR;
     }
 
     return JNI_VERSION_1_6;

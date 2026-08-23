@@ -294,6 +294,9 @@ public class GeoModel {
 
     public long gpuMeshHandle = 0;
 
+    /** Native SIMD bone rig retained by the 26.2 Vulkan/Blaze3D path. */
+    public long vulkanNativeGpuMeshHandle = 0;
+
     public static int nGetAbiVersion() {
         return ModelAccelerationBridge.nGetAbiVersion();
     }
@@ -338,6 +341,10 @@ public class GeoModel {
         ModelAccelerationBridge.nComputeBoneMatrices(pointer, rootPose, rootNormal, anim, packedLight, outBoneBuffer);
     }
 
+    public static void nComputeBoneMatricesVulkan(long pointer, float[] rootPose, float[] rootNormal, float[] anim, int packedLight, ByteBuffer outBoneBuffer) {
+        ModelAccelerationBridge.nComputeBoneMatricesVulkan(pointer, rootPose, rootNormal, anim, packedLight, outBoneBuffer);
+    }
+
     public static void nComputeBoneMatricesLocal(long handle, float[] animArray, int packedLight, ByteBuffer outBoneBuffer) {
         ModelAccelerationBridge.nComputeBoneMatricesLocal(handle, animArray, packedLight, outBoneBuffer);
     }
@@ -352,13 +359,49 @@ public class GeoModel {
         }
     }
 
+    public synchronized boolean ensureVulkanNativeGpuMesh() {
+        if (vulkanNativeGpuMeshHandle != 0) {
+            return true;
+        }
+        if (bakedBones == null || bakedBones.isEmpty()) {
+            return false;
+        }
+        ByteBuffer buffer = null;
+        try {
+            buffer = buildNativeModelBuffer();
+            vulkanNativeGpuMeshHandle = nBuildGpuMesh(buffer, new int[9]);
+            if (vulkanNativeGpuMeshHandle != 0) {
+                // Blaze3D owns the Vulkan vertex/index buffers; retain only the
+                // native rig and evaluation state for per-frame SIMD writes.
+                nReleaseGpuMeshScratch(vulkanNativeGpuMeshHandle);
+            }
+            return vulkanNativeGpuMeshHandle != 0;
+        } catch (Throwable ignored) {
+            if (vulkanNativeGpuMeshHandle != 0) {
+                nFreeGpuMesh(vulkanNativeGpuMeshHandle);
+                vulkanNativeGpuMeshHandle = 0;
+            }
+            return false;
+        } finally {
+            freeNativeModelBuffer(buffer);
+        }
+    }
+
     public synchronized void buildNativeCache() {
         if (nativeModelHandle != 0 || bakedBones == null || bakedBones.isEmpty()) return;
+        ByteBuffer buffer = null;
+        try {
+            buffer = buildNativeModelBuffer();
+            this.nativeModelHandle = nInitModelCache(buffer);
+        } finally {
+            freeNativeModelBuffer(buffer);
+        }
+    }
 
+    private ByteBuffer buildNativeModelBuffer() {
         int totalBones = bakedBones.size();
         int totalCubes = 0;
         int totalQuads = 0;
-
         for (BakedBone bone : bakedBones) {
             totalCubes += bone.cubes.size();
             for (BakedCube cube : bone.cubes) {
@@ -366,45 +409,43 @@ public class GeoModel {
             }
         }
 
-        int initBufferSize = 4 + (totalBones * 25) + (totalCubes * 5) + (totalQuads * 92);
-        ByteBuffer buffer = MemoryUtil.memAlloc(initBufferSize).order(ByteOrder.nativeOrder());
-        ResourceLifecycleStats.onDirectBufferAllocated(null, initBufferSize);
+        int size = 4 + totalBones * 25 + totalCubes * 5 + totalQuads * 92;
+        ByteBuffer buffer = MemoryUtil.memAlloc(size).order(ByteOrder.nativeOrder());
+        ResourceLifecycleStats.onDirectBufferAllocated(null, size);
         try {
-            buffer.putInt(bakedBones.size());
+            buffer.putInt(totalBones);
             for (BakedBone bone : bakedBones) {
                 buffer.putInt(bone.parentIdx);
                 buffer.putInt(bone.partMask);
                 buffer.put((byte) (bone.glow ? 1 : 0));
-                buffer.putFloat(bone.pivotX);
-                buffer.putFloat(bone.pivotY);
-                buffer.putFloat(bone.pivotZ);
-
+                buffer.putFloat(bone.pivotX).putFloat(bone.pivotY).putFloat(bone.pivotZ);
                 buffer.putInt(bone.cubes.size());
                 for (BakedCube cube : bone.cubes) {
                     buffer.put((byte) (cube.cullable ? 1 : 0));
                     buffer.putInt(cube.quads.size());
                     for (BakedQuad quad : cube.quads) {
                         for (int v = 0; v < 4; v++) {
-                            buffer.putFloat(quad.x(v));
-                            buffer.putFloat(quad.y(v));
-                            buffer.putFloat(quad.z(v));
+                            buffer.putFloat(quad.x(v)).putFloat(quad.y(v)).putFloat(quad.z(v));
                         }
                         for (int v = 0; v < 4; v++) {
-                            buffer.putFloat(quad.u(v));
-                            buffer.putFloat(quad.v(v));
+                            buffer.putFloat(quad.u(v)).putFloat(quad.v(v));
                         }
-                        // 3 floats *4=12
-                        buffer.putFloat(quad.normalX);
-                        buffer.putFloat(quad.normalY);
-                        buffer.putFloat(quad.normalZ);
+                        buffer.putFloat(quad.normalX).putFloat(quad.normalY).putFloat(quad.normalZ);
                     }
                 }
             }
+            buffer.flip();
+            return buffer;
+        } catch (RuntimeException | Error failure) {
+            ResourceLifecycleStats.onDirectBufferFreed(null, size);
+            MemoryUtil.memFree(buffer);
+            throw failure;
+        }
+    }
 
-            buffer.position(0);
-            this.nativeModelHandle = nInitModelCache(buffer);
-        } finally {
-            ResourceLifecycleStats.onDirectBufferFreed(null, initBufferSize);
+    private static void freeNativeModelBuffer(ByteBuffer buffer) {
+        if (buffer != null) {
+            ResourceLifecycleStats.onDirectBufferFreed(null, buffer.capacity());
             MemoryUtil.memFree(buffer);
         }
     }
@@ -413,6 +454,10 @@ public class GeoModel {
         if (nativeModelHandle != 0) {
             nDestroyModelCache(nativeModelHandle);
             nativeModelHandle = 0;
+        }
+        if (vulkanNativeGpuMeshHandle != 0) {
+            nFreeGpuMesh(vulkanNativeGpuMeshHandle);
+            vulkanNativeGpuMeshHandle = 0;
         }
         freeGpuCache();
     }

@@ -2,6 +2,7 @@ package com.micaftic.morpher.core.gpu;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
 import com.mojang.blaze3d.IndexType;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -38,6 +39,8 @@ public final class Blaze3DRenderPath {
     private static final Map<GeoModel, Blaze3DModelMesh> meshCache = Collections.synchronizedMap(new WeakHashMap<>());
     private static final Matrix4f IDENTITY_MATRIX = new Matrix4f();
     private static final Vector3f overlayScratch = new Vector3f();
+    private static final float[] rootPoseScratch = new float[16];
+    private static final float[] rootNormalScratch = new float[9];
 
     private Blaze3DRenderPath() {
     }
@@ -101,7 +104,8 @@ public final class Blaze3DRenderPath {
             }
 
             ByteBuffer boneBuf = mesh.perFrameBoneBuffer;
-            if (!Blaze3DBoneMatrices.write(model, pose.pose(), pose.normal(), boneParams, stateBuffer, packedLight, boneBuf)) {
+            if (!computeBoneMatricesNativeVulkan(model, pose, boneParams, packedLight, boneBuf)
+                    && !Blaze3DBoneMatrices.write(model, pose.pose(), pose.normal(), boneParams, stateBuffer, packedLight, boneBuf)) {
                 GpuDebugLog.warn("Blaze3D render path fallback: bone matrix update failed bones={} boneParamsLen={}",
                         model.bakedBones.size(), boneParams == null ? -1 : boneParams.length);
                 return false;
@@ -175,6 +179,49 @@ public final class Blaze3DRenderPath {
             meshCache.put(model, mesh);
         }
         return mesh;
+    }
+
+    private static boolean computeBoneMatricesNativeVulkan(
+            GeoModel model,
+            PoseStack.Pose pose,
+            float[] boneParams,
+            int packedLight,
+            ByteBuffer out
+    ) {
+        int boneCount = model.bakedBones == null ? 0 : model.bakedBones.size();
+        if (boneCount <= 0 || boneParams == null || boneParams.length < boneCount * 12
+                || GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE)
+                == GeneralConfig.NativeSimdPolicy.OFF
+                || !AccelerationCapability.canRenderSimd()
+                || !model.ensureVulkanNativeGpuMesh()) {
+            return false;
+        }
+
+        pose.pose().get(rootPoseScratch);
+        pose.normal().get(rootNormalScratch);
+        out.clear();
+        NativeSimdGpuCompute.markVulkanUnwritten(out, boneCount);
+        try {
+            GeoModel.nComputeBoneMatricesVulkan(
+                    model.vulkanNativeGpuMeshHandle,
+                    rootPoseScratch,
+                    rootNormalScratch,
+                    boneParams,
+                    packedLight,
+                    out
+            );
+            if (!NativeSimdGpuCompute.hasCompleteVulkanWrite(out, boneCount)) {
+                GpuDebugLog.warn("Blaze3D native Vulkan bone buffer incomplete bones={} handle={}",
+                        boneCount, model.vulkanNativeGpuMeshHandle);
+                return false;
+            }
+            out.position(0);
+            out.limit(boneCount * NativeSimdGpuCompute.BONE_STRIDE_BYTES);
+            return true;
+        } catch (Throwable t) {
+            GpuDebugLog.warn("Blaze3D native Vulkan bone computation failed: {}", t.toString());
+            return false;
+        }
     }
 
     private static void drawMeshParts(RenderPass pass, Blaze3DModelMesh mesh, int renderPartMask) {
