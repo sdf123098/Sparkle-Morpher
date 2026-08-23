@@ -23,9 +23,9 @@ class ModernHudHandItemRenderContractTest {
         assertTrue(source.contains("getOffhandItem()"));
         assertTrue(source.contains("ModernHudHandItemLayout.locate"));
         assertFalse(source.contains("graphics.renderItem("));
-        assertFalse(source.contains("graphics.item("));
-        assertTrue(source.contains("graphics.entity("));
-        assertTrue(source.contains("new ItemEntityRenderState"));
+        assertTrue(source.contains("graphics.item(player, stack"));
+        assertFalse(source.contains("graphics.entity("));
+        assertFalse(source.contains("ItemEntityRenderState"));
 
         Path overlay = findRepoFile(
                 Path.of("common", "src", "main", "java", "com", "micaftic", "morpher", "client",
