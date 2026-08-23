@@ -18,9 +18,9 @@ public class ExtraPlayerRenderConfig {
     public static void define(ForgeConfigSpec.Builder builder) {
         builder.push("extra_player_render");
         builder.comment("Legacy inverse switch for classic HUD rendering");
-        DISABLE_PLAYER_RENDER = builder.define("DisablePlayerRender", Platform.isModLoaded("figura"));
+        DISABLE_PLAYER_RENDER = builder.define("DisablePlayerRender", false);
         builder.comment("Whether to enable the independent modern HUD renderer");
-        ENABLE_MODERN_HUD_RENDER = builder.define("EnableModernHudRender", true);
+        ENABLE_MODERN_HUD_RENDER = builder.define("EnableModernHudRender", false);
         builder.comment("Classic HUD layout: position, continuous scale and yaw");
         CLASSIC_HUD_LAYOUT = HudLayoutConfig.define(builder, "", 10, 10, 40.0d, 0.0d);
         builder.comment("Modern HUD layout: position, continuous scale and yaw (independent of classic HUD)");

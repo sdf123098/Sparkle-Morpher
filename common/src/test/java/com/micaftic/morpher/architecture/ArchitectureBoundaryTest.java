@@ -45,9 +45,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ArchitectureBoundaryTest {
 
     private static final Pattern GL_REF = Pattern.compile("org/lwjgl/opengl/GL[A-Za-z0-9_$]*");
-    private static final Pattern FABRIC_REF = Pattern.compile("net/fabricmc/fabric/[A-Za-z0-9_$]+");
-    private static final Pattern NEO_REF = Pattern.compile("net/neoforged/neoforge/[A-Za-z0-9_$]+");
-    private static final Pattern FORGE_REF = Pattern.compile("net/minecraftforge/[A-Za-z0-9_$]+");
+    private static final Pattern FABRIC_REF = Pattern.compile("net/fabricmc/fabric/[A-Za-z0-9_$]+(?:/[A-Za-z0-9_$]+)*");
+    private static final Pattern NEO_REF = Pattern.compile("net/neoforged/neoforge/[A-Za-z0-9_$]+(?:/[A-Za-z0-9_$]+)*");
+    private static final Pattern FORGE_REF = Pattern.compile("net/minecraftforge/[A-Za-z0-9_$]+(?:/[A-Za-z0-9_$]+)*");
 
     /** 配置库类型：可在任意包引用（forge-config-api-port 提供）。 */
     private static final String NEO_MOD_CONFIG_SPEC = "net/neoforged/neoforge/common/ModConfigSpec";
@@ -65,7 +65,7 @@ class ArchitectureBoundaryTest {
     private static final String[] GL_BOUNDARY_PACKAGES = { "com/micaftic/morpher/core/gpu", "com/micaftic/morpher/client/renderer", "com/micaftic/morpher/client/event" };
 
     /** 平台适配边界包（仅 CHECK_PLATFORM_API=true 时生效）。 */
-    private static final String[] PLATFORM_ADAPTER_PACKAGES = { "com/micaftic/morpher/core/architectury", "com/micaftic/morpher/config", "com/micaftic/morpher/client/event" };
+    private static final String[] PLATFORM_ADAPTER_PACKAGES = { "com/micaftic/morpher/core/architectury", "com/micaftic/morpher/core/api/config/fabric", "com/micaftic/morpher/config", "com/micaftic/morpher/client/event" };
 
     @Test
     void rawOpenGlOnlyInsideGlBoundary() throws Exception {
@@ -95,28 +95,32 @@ class ArchitectureBoundaryTest {
             boolean entryClass = cf.className.equals(ENTRY_YES_STEVE_MODEL)
                     || cf.className.equals(ENTRY_CONFIG_REGISTRATION);
             for (String ref : cf.references(FABRIC_REF)) {
-                violations.add(new Violation(cf.className, "net.fabricmc.fabric." + ref,
+                violations.add(new Violation(cf.className, displayReference(ref),
                         "fabric-api 只允许在平台适配边界（core.architectury/client.event/config）"));
             }
             for (String ref : cf.references(NEO_REF)) {
-                if (ref.startsWith("neoforge/common/ModConfigSpec")) {
+                if (ref.equals(NEO_MOD_CONFIG_SPEC) || ref.startsWith(NEO_MOD_CONFIG_SPEC + "$")) {
                     continue; // 配置库类型白名单
                 }
-                violations.add(new Violation(cf.className, "net.neoforged.neoforge." + ref,
+                violations.add(new Violation(cf.className, displayReference(ref),
                         "NeoForge API 只允许在平台适配边界或 ModConfigSpec 白名单"));
             }
             for (String ref : cf.references(FORGE_REF)) {
-                if (ref.startsWith("common/ForgeConfigSpec")) {
+                if (ref.equals(FORGE_CONFIG_SPEC) || ref.startsWith(FORGE_CONFIG_SPEC + "$")) {
                     continue; // 配置库类型白名单
                 }
-                if (entryClass && ref.startsWith("fml/")) {
+                if (entryClass && ref.startsWith("net/minecraftforge/fml/")) {
                     continue; // loader 入口白名单
                 }
-                violations.add(new Violation(cf.className, "net.minecraftforge." + ref,
+                violations.add(new Violation(cf.className, displayReference(ref),
                         "Forge API 只允许在平台适配边界、ForgeConfigSpec 白名单或 loader 入口"));
             }
         }
         assertTrue(violations.isEmpty(), describe("平台 API 边界", violations));
+    }
+
+    private static String displayReference(String reference) {
+        return reference.replace('/', '.');
     }
 
     private static boolean isGlBoundary(String className) {
