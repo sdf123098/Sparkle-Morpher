@@ -22,7 +22,10 @@ class ModernHudHandItemRenderContractTest {
         assertTrue(source.contains("getMainHandItem()"));
         assertTrue(source.contains("getOffhandItem()"));
         assertTrue(source.contains("ModernHudHandItemLayout.locate"));
-        assertTrue(source.contains("graphics.item(") || source.contains("graphics.renderItem("));
+        assertFalse(source.contains("graphics.item("));
+        assertFalse(source.contains("graphics.renderItem("));
+        assertTrue(source.contains("ItemDisplayContext.THIRD_PERSON_"));
+        assertTrue(source.contains("itemRenderer.renderItem") || source.contains("graphics.entity("));
 
         Path overlay = findRepoFile(
                 Path.of("common", "src", "main", "java", "com", "micaftic", "morpher", "client",
@@ -32,6 +35,18 @@ class ModernHudHandItemRenderContractTest {
         String overlaySource = Files.readString(overlay);
         assertTrue(overlaySource.contains("ModernHudRenderer.render"));
         assertFalse(overlaySource.contains("!hasHandItem && ModernHudRenderer.render"));
+    }
+
+    @Test
+    void modernHudConsumesWorldPoseBeforeUsingFallback() throws IOException {
+        Path renderer = findRepoFile(
+                Path.of("common", "src", "main", "java", "com", "micaftic", "morpher", "client",
+                        "renderer", "modernhud", "ModernHudRenderer.java"),
+                Path.of("src", "main", "java", "com", "micaftic", "morpher", "client",
+                        "renderer", "modernhud", "ModernHudRenderer.java"));
+        String source = Files.readString(renderer);
+
+        assertTrue(source.contains("PlayerPoseSnapshot snapshot = ModernHudPoseStore.consume();"));
     }
 
     private static Path findRepoFile(Path... relativePaths) throws IOException {
