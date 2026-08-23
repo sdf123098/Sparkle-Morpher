@@ -1,11 +1,12 @@
 package com.micaftic.morpher.config;
 
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public class ExtraPlayerRenderConfig {
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue DISABLE_PLAYER_RENDER;
+    public static ModConfigSpec.BooleanValue DISABLE_PLAYER_RENDER;
 
-    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue ENABLE_MODERN_HUD_RENDER;
+    public static ModConfigSpec.BooleanValue ENABLE_MODERN_HUD_RENDER;
 
     /** 经典 HUD 布局（键名保持 PlayerPosX/... 不变，兼容既有配置文件）。 */
     public static HudLayoutConfig CLASSIC_HUD_LAYOUT;
@@ -13,12 +14,12 @@ public class ExtraPlayerRenderConfig {
     /** 现代 HUD 布局（独立键名 ModernPlayerPosX/...，与经典 HUD 互不干扰）。 */
     public static HudLayoutConfig MODERN_HUD_LAYOUT;
 
-    public static void define(net.neoforged.neoforge.common.ModConfigSpec.Builder builder) {
+    public static void define(ModConfigSpec.Builder builder) {
         builder.push("extra_player_render");
         builder.comment("Legacy inverse switch for classic HUD rendering");
         DISABLE_PLAYER_RENDER = builder.define("DisablePlayerRender", false);
         builder.comment("Whether to enable the independent modern HUD renderer");
-        ENABLE_MODERN_HUD_RENDER = builder.define("EnableModernHudRender", false);
+        ENABLE_MODERN_HUD_RENDER = builder.define("EnableModernHudRender", true);
         builder.comment("Classic HUD layout: position, continuous scale and yaw");
         CLASSIC_HUD_LAYOUT = HudLayoutConfig.define(builder, "", 10, 10, 40.0d, 0.0d);
         builder.comment("Modern HUD layout: position, continuous scale and yaw (independent of classic HUD)");

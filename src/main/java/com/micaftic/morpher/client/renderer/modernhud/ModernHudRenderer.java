@@ -77,7 +77,7 @@ public final class ModernHudRenderer {
     public static boolean renderAt(GuiGraphics graphics, LocalPlayer player, float partialTick,
                                    int screenWidth, int screenHeight,
                                    float x, float y, float scale, float yawOffset) {
-        PlayerPoseSnapshot snapshot = ModernHudPoseStore.consume();
+        PlayerPoseSnapshot snapshot = null; // ModernHudPoseStore.consume();
         if (snapshot == null) {
             // 本地玩家不可见/第一人称：世界不发布快照 → 现代 HUD 自评估一次
             // （与经典 HUD 同款 OLD_HUD 上下文；第一人称时世界未评估，此为首次评估）
