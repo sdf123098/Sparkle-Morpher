@@ -41,8 +41,10 @@ public final class SmGraphicsBackendDetector {
             return true;
         }
 
-        boolean disableOnNonOpenGl = GeneralConfig.safeGet(GeneralConfig.DISABLE_RAW_OPENGL_ON_NON_OPENGL, true);
-        return !disableOnNonOpenGl && mode == SmRenderBackendMode.OPENGL_LEGACY_COMPAT;
+        // The active graphics backend belongs to Minecraft. A mod config may
+        // disable acceleration, but it must not make raw OpenGL run on a
+        // Vulkan/D3D device selected by Minecraft.
+        return false;
     }
 
     public static boolean isOpenGlLegacyGpuRendererEnabled() {
@@ -62,19 +64,6 @@ public final class SmGraphicsBackendDetector {
 
     private static synchronized void detect() {
         if (cachedBackend != null) {
-            return;
-        }
-
-        String override = firstNonBlank(
-                System.getProperty("sparkle_morpher.graphicsBackend"),
-                System.getProperty("ysm.graphicsBackend"),
-                System.getenv("SPARKLE_MORPHER_GRAPHICS_BACKEND"),
-                System.getenv("YSM_GRAPHICS_BACKEND")
-        );
-        SmGraphicsBackend overridden = parseBackend(override);
-        if (overridden != null) {
-            cachedBackend = overridden;
-            cachedReason = "forced by property/env: " + override;
             return;
         }
 
@@ -110,29 +99,4 @@ public final class SmGraphicsBackendDetector {
         }
     }
 
-    private static SmGraphicsBackend parseBackend(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        String normalized = value.trim().toLowerCase(Locale.ROOT);
-        if (normalized.equals("opengl") || normalized.equals("gl")) {
-            return SmGraphicsBackend.OPENGL;
-        }
-        if (normalized.equals("vulkan") || normalized.equals("vk")) {
-            return SmGraphicsBackend.VULKAN;
-        }
-        if (normalized.equals("unknown")) {
-            return SmGraphicsBackend.UNKNOWN;
-        }
-        return null;
-    }
-
-    private static String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
-    }
 }

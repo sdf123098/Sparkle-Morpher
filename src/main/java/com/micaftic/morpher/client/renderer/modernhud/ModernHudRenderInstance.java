@@ -207,7 +207,9 @@ public final class ModernHudRenderInstance {
             // 骨骼参数；26.2 fallback 评估不烘焙 → 缺失时看到背部（2026-08-15 实测）。
             PoseStack poseStack = new PoseStack();
             poseStack.translate(x + boundMaxX * scale, y + boundMaxY * scale, GUI_CAMERA_Z);
-            poseStack.scale(scale, scale, -scale);
+            // GUI front-view coordinates need an X handedness correction. Keep the
+            // negative Z used by the GUI camera, but do not leave the model left-right mirrored.
+            poseStack.scale(-scale, scale, -scale);
             poseStack.mulPose(Axis.ZP.rotationDegrees(FRONT_FACING_YAW + 0.1f));
             poseStack.mulPose(Axis.YP.rotationDegrees(FRONT_FACING_YAW + yawOffset));
             PoseStack.Pose pose = poseStack.last();
@@ -310,6 +312,16 @@ public final class ModernHudRenderInstance {
 
     public int fboLogicalHeight() {
         return fboLogicalHeight;
+    }
+
+    /** Screen-space model origin used by the modern HUD attachment pass. */
+    public float modelOriginX(float hudX, float scale) {
+        return hudX + boundMaxX * scale;
+    }
+
+    /** Screen-space model origin used by the modern HUD attachment pass. */
+    public float modelOriginY(float hudY, float scale) {
+        return hudY + boundMaxY * scale;
     }
 
     private static void diag(String reason) {

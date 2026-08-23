@@ -49,7 +49,7 @@ public final class RenderBackendDecision {
         if (backendMode == SmRenderBackendMode.DISABLED_GPU_ACCELERATION) {
             return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "raw OpenGL GPU acceleration disabled by backend mode");
         }
-        if (!SmGraphicsBackendDetector.isRawOpenGlAllowed() && Blaze3DRenderPath.isExperimentalEnabled()) {
+        if (isVulkanBlaze3DBackend(graphicsBackend) && Blaze3DRenderPath.isExperimentalEnabled()) {
             if (!allowDirectGpuRenderer) {
                 return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled by caller");
             }
@@ -134,6 +134,10 @@ public final class RenderBackendDecision {
             return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, false, disableGlow, "gpu unavailable: " + GpuCapability.getReason());
         }
         return new RenderBackendDecision(Backend.GPU, OculusCompat.isShaderPackInUse() ? "gpu iris path" : "gpu direct path");
+    }
+
+    static boolean isVulkanBlaze3DBackend(SmGraphicsBackend graphicsBackend) {
+        return graphicsBackend == SmGraphicsBackend.VULKAN;
     }
 
     private static RenderBackendDecision nativeOrJava(

@@ -131,6 +131,7 @@ public final class GpuRenderPath {
         boneBuf.clear();
 
         if (GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE) != GeneralConfig.NativeSimdPolicy.OFF && AccelerationCapability.isLoaded()) {
+            NativeSimdGpuCompute.markUnwritten(boneBuf, mesh.boneCount);
             if (!computeBoneMatricesNative(model, mesh, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
                 GpuDebugLog.warn("frame={} native bone matrices failed; using Java fallback bones={} meshPointer={} boneParamsLen={}",
                         frameId, model.bakedBones.size(), mesh.pointer, boneParams == null ? -1 : boneParams.length);
@@ -138,6 +139,13 @@ public final class GpuRenderPath {
                 if (!computeBoneMatrices(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
                     GpuDebugLog.warn("frame={} fallback: Java bone matrices failed bones={} boneParamsLen={}",
                             frameId, model.bakedBones.size(), boneParams == null ? -1 : boneParams.length);
+                    return false;
+                }
+            } else if (!NativeSimdGpuCompute.hasCompleteWrite(boneBuf, mesh.boneCount)) {
+                GpuDebugLog.warn("frame={} native bone matrices produced incomplete GPU buffer; using Java fallback bones={} meshPointer={}",
+                        frameId, model.bakedBones.size(), mesh.pointer);
+                boneBuf.clear();
+                if (!computeBoneMatrices(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
                     return false;
                 }
             }

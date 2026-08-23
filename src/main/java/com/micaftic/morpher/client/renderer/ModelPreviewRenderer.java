@@ -411,12 +411,12 @@ public final class ModelPreviewRenderer {
 
         livingEntity.yBodyRot = previewYaw;
         livingEntity.yBodyRotO = previewYaw;
-        livingEntity.setYRot(previewYaw);
-        livingEntity.yRotO = previewYaw;
+        // Keep yRot/yRotO unchanged: YSM's input_vertical reads getViewYRot(),
+        // which must remain the player's real movement-facing yaw during the preview.
         livingEntity.setXRot(0.0f);
         livingEntity.xRotO = 0.0f;
-        livingEntity.yHeadRot = livingEntity.getYRot() + headYawOffset;
-        livingEntity.yHeadRotO = livingEntity.getYRot() + headYawOffsetO;
+        livingEntity.yHeadRot = previewYaw + headYawOffset;
+        livingEntity.yHeadRotO = previewYaw + headYawOffsetO;
 
         Entity vehicle = livingEntity.getVehicle();
         if (vehicle instanceof LivingEntity && !extraPlayer) {
