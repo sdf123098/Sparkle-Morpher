@@ -12,12 +12,9 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.entity.state.ItemEntityRenderState;
 import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix3x2f;
-import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.Objects;
@@ -161,20 +158,14 @@ public final class ModernHudRenderer {
         }
         float localX = inverse.m00() * point.x + inverse.m01() * point.y + inverse.m20();
         float localY = inverse.m10() * point.x + inverse.m11() * point.y + inverse.m21();
-        ItemEntityRenderState itemState = new ItemEntityRenderState();
-        ItemDisplayContext displayContext = arm == HumanoidArm.LEFT
-                ? ItemDisplayContext.THIRD_PERSON_LEFT_HAND
-                : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
-        Minecraft.getInstance().getItemModelResolver().updateForLiving(
-                itemState.item, stack, displayContext, player);
-        itemState.count = 1;
-        itemState.shouldSpread = false;
-        itemState.shouldBob = false;
-        itemState.lightCoords = 15728880;
-        int halfSize = 12;
-        graphics.entity(itemState, 16.0f, new Vector3f(), new Quaternionf(), null,
-                Math.round(localX - halfSize), Math.round(localY - halfSize),
-                Math.round(localX + halfSize), Math.round(localY + halfSize));
+        // 26.x GUI rendering is deferred. Submit the item through the GUI item
+        // path; graphics.entity would route this stack as a synthetic entity
+        // state to EntityRenderDispatcher, which has no renderer for it.
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(localX, localY);
+        graphics.pose().scale(1.5f, 1.5f);
+        graphics.item(player, stack, -8, -8, 0);
+        graphics.pose().popMatrix();
     }
 
     /**
