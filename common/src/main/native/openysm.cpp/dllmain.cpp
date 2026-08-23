@@ -356,6 +356,11 @@ JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built
 
     jfloat *matricesData = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(matrixArray, nullptr));
     jfloat *animData = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(animArray, nullptr));
+    if (!matricesData || !animData) {
+        if (matricesData) env->ReleasePrimitiveArrayCritical(matrixArray, matricesData, JNI_ABORT);
+        if (animData) env->ReleasePrimitiveArrayCritical(animArray, animData, JNI_ABORT);
+        return;
+    }
 
     Mat4 rootPoseMat(matricesData);
     float *rootNormalArr = matricesData + 16;
@@ -829,11 +834,18 @@ JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built
     if (!mesh) return;
 
     auto *outRaw = static_cast<BoneDataOut *>(env->GetDirectBufferAddress(outBoneBuffer));
-    if (!outRaw) return;
+    jlong outCapacity = env->GetDirectBufferCapacity(outBoneBuffer);
+    if (!outRaw || outCapacity < static_cast<jlong>(mesh->bones.size() * sizeof(BoneDataOut))) return;
 
     jfloat *rootPose = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(rootPoseArr, nullptr));
     jfloat *rootNormal = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(rootNormalArr, nullptr));
     jfloat *anim = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(animArray, nullptr));
+    if (!rootPose || !rootNormal || !anim) {
+        if (rootPose) env->ReleasePrimitiveArrayCritical(rootPoseArr, rootPose, JNI_ABORT);
+        if (rootNormal) env->ReleasePrimitiveArrayCritical(rootNormalArr, rootNormal, JNI_ABORT);
+        if (anim) env->ReleasePrimitiveArrayCritical(animArray, anim, JNI_ABORT);
+        return;
+    }
 
     Mat4 rootPoseMat(rootPose);
     Mat4 rootNormalMat(UNINITIALIZED);
@@ -931,9 +943,11 @@ JNIEXPORT void JNICALL Java_com_elfmcys_yesstevemodel_geckolib3_geo_render_built
     if (!mesh) return;
 
     auto *outRaw = static_cast<BoneDataOut *>(env->GetDirectBufferAddress(outBoneBuffer));
-    if (!outRaw) return;
+    jlong outCapacity = env->GetDirectBufferCapacity(outBoneBuffer);
+    if (!outRaw || outCapacity < static_cast<jlong>(mesh->bones.size() * sizeof(BoneDataOut))) return;
 
     jfloat *anim = static_cast<jfloat *>(env->GetPrimitiveArrayCritical(animArray, nullptr));
+    if (!anim) return;
 
     const int glowLight = (15 << 4) | (15 << 20);
     std::fill(mesh->hiddenInherited.begin(), mesh->hiddenInherited.end(), 0);
@@ -1104,10 +1118,14 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     }
 
     jclass clazzRenderer = env->FindClass("com/elfmcys/yesstevemodel/geckolib3/geo/ModelRendererBridge");
-    if (clazzRenderer != nullptr) {
-        g_NativeModelRendererClass = (jclass) env->NewGlobalRef(clazzRenderer);
-        g_submitVerticesID = env->GetStaticMethodID(g_NativeModelRendererClass, "submitVertices",
-                                                    "(Ljava/lang/Object;ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)V");
+    if (clazzRenderer == nullptr) return JNI_ERR;
+    g_NativeModelRendererClass = (jclass) env->NewGlobalRef(clazzRenderer);
+    g_submitVerticesID = env->GetStaticMethodID(g_NativeModelRendererClass, "submitVertices",
+                                                "(Ljava/lang/Object;ILjava/nio/ByteBuffer;Ljava/nio/ByteBuffer;)V");
+    if (g_submitVerticesID == nullptr) {
+        env->DeleteGlobalRef(g_NativeModelRendererClass);
+        g_NativeModelRendererClass = nullptr;
+        return JNI_ERR;
     }
 
     return JNI_VERSION_1_6;

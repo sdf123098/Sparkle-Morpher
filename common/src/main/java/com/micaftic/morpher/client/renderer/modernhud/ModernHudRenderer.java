@@ -4,12 +4,17 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.HudLayoutConfig;
+import com.micaftic.morpher.client.model.HandLocatorProfile;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.ItemStack;
+import org.joml.Matrix3x2f;
+import org.joml.Vector3f;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -104,12 +109,51 @@ public final class ModernHudRenderer {
             return false;
         }
         composite(graphics, instance, x, y, scale);
+        renderHandItems(graphics, player, snapshot, instance, x, y, scale, yawOffset);
         long count = submittedCount.incrementAndGet();
         if (count % 600 == 1) {
             YesSteveModel.LOGGER.info("[MODERN-HUD] submitted {} times (world eval={}, hud consume={})",
                     count, ModernHudPoseStore.worldEvalCount(), ModernHudPoseStore.hudConsumeCount());
         }
         return true;
+    }
+
+    /** Submit hand items to the modern retained GUI stream, alongside the body composite. */
+    private static void renderHandItems(GuiGraphicsExtractor graphics, LocalPlayer player,
+                                        PlayerPoseSnapshot snapshot, ModernHudRenderInstance instance,
+                                        float posX, float posY, float scale, float yawOffset) {
+        PlayerCapability capability = PlayerCapability.get(player).orElse(null);
+        if (capability == null || capability.getModelAssembly() == null) {
+            return;
+        }
+        HandLocatorProfile profile = capability.getModelAssembly().getAnimationBundle().getHandLocatorProfile();
+        float originX = instance.modelOriginX(posX, scale);
+        float originY = instance.modelOriginY(posY, scale);
+        HumanoidArm mainArm = player.getMainArm();
+        renderHandItem(graphics, player, snapshot.model(), profile, mainArm,
+                player.getMainHandItem(), originX, originY, scale, yawOffset);
+        renderHandItem(graphics, player, snapshot.model(), profile, mainArm.getOpposite(),
+                player.getOffhandItem(), originX, originY, scale, yawOffset);
+    }
+
+    private static void renderHandItem(GuiGraphicsExtractor graphics, LocalPlayer player,
+                                       com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel model,
+                                       HandLocatorProfile profile, HumanoidArm arm, ItemStack stack,
+                                       float originX, float originY, float scale, float yawOffset) {
+        if (stack.isEmpty()) {
+            return;
+        }
+        Vector3f point = ModernHudHandItemLayout.locate(model, profile, arm,
+                originX, originY, scale, yawOffset);
+        Matrix3x2f inverse = new Matrix3x2f(graphics.pose());
+        if (Math.abs(inverse.determinant()) <= 1.0e-6f) {
+            inverse.identity();
+        } else {
+            inverse.invert();
+        }
+        float localX = inverse.m00() * point.x + inverse.m01() * point.y + inverse.m20();
+        float localY = inverse.m10() * point.x + inverse.m11() * point.y + inverse.m21();
+        graphics.item(player, stack, Math.round(localX - 8.0f), Math.round(localY - 8.0f), 0);
     }
 
     /**
