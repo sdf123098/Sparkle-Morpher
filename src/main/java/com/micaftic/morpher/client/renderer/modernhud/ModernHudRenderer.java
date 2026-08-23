@@ -9,11 +9,15 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.entity.state.ItemEntityRenderState;
 import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import org.joml.Matrix3x2f;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.Objects;
@@ -75,7 +79,7 @@ public final class ModernHudRenderer {
     public static boolean renderAt(GuiGraphicsExtractor graphics, LocalPlayer player, float partialTick,
                                    int screenWidth, int screenHeight,
                                    float x, float y, float scale, float yawOffset) {
-        PlayerPoseSnapshot snapshot = null; // ModernHudPoseStore.consume();
+        PlayerPoseSnapshot snapshot = ModernHudPoseStore.consume();
         if (snapshot == null) {
             // 本地玩家不可见/第一人称：世界不发布快照 → 现代 HUD 自评估一次
             // （与经典 HUD 同款 OLD_HUD 上下文；第一人称时世界未评估，此为首次评估）
@@ -153,7 +157,20 @@ public final class ModernHudRenderer {
         }
         float localX = inverse.m00() * point.x + inverse.m01() * point.y + inverse.m20();
         float localY = inverse.m10() * point.x + inverse.m11() * point.y + inverse.m21();
-        graphics.item(player, stack, Math.round(localX - 8.0f), Math.round(localY - 8.0f), 0);
+        ItemEntityRenderState itemState = new ItemEntityRenderState();
+        ItemDisplayContext displayContext = arm == HumanoidArm.LEFT
+                ? ItemDisplayContext.THIRD_PERSON_LEFT_HAND
+                : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
+        Minecraft.getInstance().getItemModelResolver().updateForLiving(
+                itemState.item, stack, displayContext, player);
+        itemState.count = 1;
+        itemState.shouldSpread = false;
+        itemState.shouldBob = false;
+        itemState.lightCoords = 15728880;
+        int halfSize = 12;
+        graphics.entity(itemState, 16.0f, new Vector3f(), new Quaternionf(), null,
+                Math.round(localX - halfSize), Math.round(localY - halfSize),
+                Math.round(localX + halfSize), Math.round(localY + halfSize));
     }
 
     /**
