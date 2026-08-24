@@ -1,4 +1,4 @@
-# SparkleMorpher 1.2.2 §10 CI / Regression Gate
+# SparkleMorpher 1.2.x §10 CI / Regression Gate
 # 同一份模板同步到六分支（作为 §4.6 同步清单的一部分维护）。
 # 每分支独立 job：common tests（含依赖方向边界测试）→ compile → build → artifact smoke。
 name: CI
@@ -55,14 +55,12 @@ jobs:
 
     steps:
       - name: Checkout
-        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'push' && github.ref_name || matrix.branch }}
+          ref: ${{ matrix.branch }}
           fetch-depth: 1
 
       - name: Set up JDK
-        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -70,17 +68,14 @@ jobs:
           cache: gradle
 
       - name: Grant gradlew executable bit
-        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         run: chmod +x gradlew
 
       - name: Build (${{ matrix.gradle_task }}) — common tests + compile + build
-        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         run: ./gradlew ${{ matrix.gradle_task }} --no-daemon --console=plain
         env:
           CI: 'true'
 
       - name: Artifact smoke — jar exists and contains expected entries
-        if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
         shell: bash
         run: |
           set -eu
@@ -97,8 +92,18 @@ jobs:
             || { echo "::error::missing native-manifest.json in $JAR"; exit 1; }
           echo "smoke OK"
 
+      - name: Modrinth alias contract — uses native distribution
+        shell: bash
+        run: |
+          set -eu
+          ./gradlew -Pdist=modrinth printDistribution --no-daemon --console=plain | tee modrinth-distribution.txt
+          grep -q '^distribution=native$' modrinth-distribution.txt
+
+      - name: CurseForge variant build
+        run: ./gradlew ${{ matrix.gradle_task }} -Pdist=curseforge --no-daemon --console=plain
+
       - name: Upload build artifacts
-        if: ${{ always() && (github.event_name != 'push' || matrix.branch == github.ref_name) }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.branch }}-jars

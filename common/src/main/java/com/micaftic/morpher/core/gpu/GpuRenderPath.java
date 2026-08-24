@@ -2,7 +2,6 @@ package com.micaftic.morpher.core.gpu;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.client.renderer.WorldRenderState;
-import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
@@ -131,7 +130,7 @@ public final class GpuRenderPath {
         ByteBuffer boneBuf = mesh.perFrameBoneBuffer;
         boneBuf.clear();
 
-        if (ConfigPolicies.graphics().nativeSimdPolicy() != GeneralConfig.NativeSimdPolicy.OFF && AccelerationCapability.isLoaded()) {
+        if (ConfigPolicies.graphics().nativeSimdPolicy() != com.micaftic.morpher.core.render.NativeSimdPolicy.OFF && AccelerationCapability.isLoaded()) {
             NativeSimdGpuCompute.markUnwritten(boneBuf, mesh.boneCount);
             if (!computeBoneMatricesNative(model, mesh, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
                 GpuDebugLog.warn("frame={} native bone matrices failed; using Java fallback bones={} meshPointer={} boneParamsLen={}",

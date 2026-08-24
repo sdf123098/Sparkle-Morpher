@@ -2,7 +2,6 @@ package com.micaftic.morpher.core.render;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 
@@ -46,7 +45,7 @@ public final class NativeSimdValidator {
         SESSION_FORCE_JAVA.set(false);
     }
 
-    public static GeneralConfig.NativeSimdValidationMode mode() {
+    public static NativeSimdValidationMode mode() {
         return ConfigPolicies.graphics().nativeSimdValidationMode();
     }
 
@@ -55,8 +54,8 @@ public final class NativeSimdValidator {
      * validation per the configured mode and records the result.
      */
     public static void onNativeSimdRender(GeoModel model, float[] boneParams, int renderPartMask, Object textureLocation) {
-        GeneralConfig.NativeSimdValidationMode m = mode();
-        if (m == GeneralConfig.NativeSimdValidationMode.OFF) return;
+        NativeSimdValidationMode m = mode();
+        if (m == NativeSimdValidationMode.OFF) return;
         if (model == null || model.bakedBones == null || model.bakedBones.isEmpty()) return;
 
         int boneCount = model.bakedBones.size();
@@ -104,10 +103,10 @@ public final class NativeSimdValidator {
         }
 
         if (mismatch) {
-            if (m == GeneralConfig.NativeSimdValidationMode.STRICT_FALLBACK) {
+            if (m == NativeSimdValidationMode.STRICT_FALLBACK) {
                 forceJavaForSession();
                 YesSteveModel.LOGGER.warn("[SM-VALIDATE] STRICT_FALLBACK: forcing Java for session (shortParamsBone={} badParentBone={})", firstShortParamsBone, firstBadParentBone);
-            } else if (m == GeneralConfig.NativeSimdValidationMode.CRASH_TEST) {
+            } else if (m == NativeSimdValidationMode.CRASH_TEST) {
                 throw new IllegalStateException("[SM-VALIDATE] CRASH_TEST: malformed bone params (shortParamsBone=" + firstShortParamsBone + " badParentBone=" + firstBadParentBone + ")");
             }
         }

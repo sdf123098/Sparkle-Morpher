@@ -3,7 +3,6 @@ package com.micaftic.morpher.core.render;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
-import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.api.version.VersionAdapters;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
@@ -31,7 +30,7 @@ public final class RenderBackendDecision {
             boolean translucentTexture,
             boolean disableGlow,
             Object textureLocation,
-            GeneralConfig.NativeSimdPolicy nativePolicy
+            NativeSimdPolicy nativePolicy
     ) {
         boolean isPreview = ModelPreviewRenderer.isPreview();
         boolean firstPerson = ModelPreviewRenderer.isFirstPerson();
@@ -98,7 +97,7 @@ public final class RenderBackendDecision {
     }
 
     private static RenderBackendDecision nativeOrJava(
-            GeneralConfig.NativeSimdPolicy nativePolicy,
+            NativeSimdPolicy nativePolicy,
             boolean conservativeRenderOnly,
             boolean isPreview,
             boolean firstPerson,
@@ -108,14 +107,14 @@ public final class RenderBackendDecision {
             String gpuReason
     ) {
         // OFF: kill switch - always Java when the GPU path is not used.
-        if (nativePolicy == GeneralConfig.NativeSimdPolicy.OFF) {
+        if (nativePolicy == NativeSimdPolicy.OFF) {
             return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD policy OFF");
         }
 
         // AGGRESSIVE: prefer Native SIMD whenever the native runtime is loaded and
         // the compatibility renderer is disabled, except documented unsafe cases
         // kept on Java until validated (NATIVE_SIMD_26X_AGGRESSIVE_ROLLOUT_PLAN Phase 4).
-        if (nativePolicy == GeneralConfig.NativeSimdPolicy.AGGRESSIVE) {
+        if (nativePolicy == NativeSimdPolicy.AGGRESSIVE) {
             if (compatibilityRenderer) {
                 return new RenderBackendDecision(Backend.JAVA, "java fallback: compatibility renderer enabled");
             }
