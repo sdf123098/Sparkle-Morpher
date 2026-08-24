@@ -4,7 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.RendererManager;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -19,7 +19,7 @@ public class ReplacePlayerHandRenderEvent {
     }
 
     public static boolean onRenderArm(Player player, HumanoidArm arm, PoseStack poseStack, SubmitNodeCollector collector, int packedLight) {
-        if (!YesSteveModel.isAvailable() || GeneralConfig.safeGet(GeneralConfig.DISABLE_SELF_MODEL) || GeneralConfig.safeGet(GeneralConfig.DISABLE_SELF_HANDS)) {
+        if (!YesSteveModel.isAvailable() || ConfigPolicies.render().disableSelfModel() || ConfigPolicies.render().disableSelfHands()) {
             return false;
         }
         if (!(player instanceof LocalPlayer localPlayer)) {

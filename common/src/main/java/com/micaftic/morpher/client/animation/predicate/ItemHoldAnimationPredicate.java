@@ -6,7 +6,7 @@ import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.animation.condition.InnerClassify;
 import com.micaftic.morpher.client.input.InputStateKey;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.ironsspellbooks.SpellbooksCompat;
 import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
@@ -122,7 +122,7 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
     }
 
     private static void debugSwingEntry(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
-        if (!GeneralConfig.safeGet(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)
+        if (!ConfigPolicies.diagnostics().inputStateDebugLog()
                 || InputStateKey.getLocalSwingPulseTicks() <= 0
                 || swingEntryDebugLogs++ >= 80) {
             return;
@@ -157,7 +157,7 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
     }
 
     private static void debugSwingSelection(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand, String animation, String source) {
-        if (!GeneralConfig.safeGet(GeneralConfig.INPUT_STATE_DEBUG_LOG, false) || swingDebugLogs++ >= 120) {
+        if (!ConfigPolicies.diagnostics().inputStateDebugLog() || swingDebugLogs++ >= 120) {
             return;
         }
         YesSteveModel.LOGGER.info("[SM-INPUT] swing-predicate source={} animation={} hand={} entityId={} model={} item={} vanillaSwinging={} swingTime={} attackAnim={} localPulse={} hasAnimation={}",

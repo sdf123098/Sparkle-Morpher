@@ -1,7 +1,7 @@
 package com.micaftic.morpher.util;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 
 public final class NetworkOnlineDebugLog {
 
@@ -9,7 +9,7 @@ public final class NetworkOnlineDebugLog {
     }
 
     public static boolean enabled() {
-        return GeneralConfig.safeGet(GeneralConfig.NETWORK_ONLINE_DEBUG_LOG, false);
+        return ConfigPolicies.diagnostics().networkOnlineDebugLog();
     }
 
     public static void info(String message, Object... args) {

@@ -7,7 +7,7 @@ import com.micaftic.morpher.client.renderer.CustomVehicleRenderer;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.CustomProjectileRenderer;
 import com.micaftic.morpher.client.renderer.MaidEntityRenderer;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -68,7 +68,7 @@ public class EntityRenderDispatcherMixin {
         int packedLight = captured.packedLight();
         MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
         if (entity instanceof Projectile projectile) {
-            if (!GeneralConfig.DISABLE_PROJECTILE_MODEL.get()) {
+            if (!ConfigPolicies.render().disableProjectileModel()) {
                 if (projectile instanceof FishingHook fishingHook) {
                     boolean shouldRenderVanilla = CustomFishingHookRenderer.tryRenderCustomHook(fishingHook, entityYaw, partialTick, poseStack, bufferSource, packedLight);
                     if (!shouldRenderVanilla) {
@@ -88,7 +88,7 @@ public class EntityRenderDispatcherMixin {
             bufferSource.endBatch();
             return false;
         }
-        if (!GeneralConfig.DISABLE_VEHICLE_MODEL.get().booleanValue()) {
+        if (!ConfigPolicies.render().disableVehicleModel()) {
             ModelPreviewRenderer.renderVehicleModel(entity, poseStack, partialTick);
             boolean shouldRenderVanilla = CustomVehicleRenderer.renderVehicle(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
             if (!shouldRenderVanilla) {

@@ -1,6 +1,6 @@
 package com.micaftic.morpher.audio;
 
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import net.minecraft.client.Minecraft;
 import java.util.concurrent.Executor;
 import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
@@ -25,7 +25,7 @@ public class YSMTickableSoundInstance extends AbstractTickableSoundInstance impl
     }
 
     public void tick() {
-        this.volume = (this.targetVolume * GeneralConfig.SOUND_VOLUME.get().floatValue()) / 100.0f;
+        this.volume = (this.targetVolume * (float) ConfigPolicies.audio().soundVolumePercent()) / 100.0f;
         if (this.entity.isRemoved()) {
             stop();
             return;

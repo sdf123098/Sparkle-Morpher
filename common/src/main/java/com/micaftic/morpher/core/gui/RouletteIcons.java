@@ -25,6 +25,6 @@ public final class RouletteIcons {
     public static final Identifier EDIT = id("texture/roulette/edit.png");
 
     private static Identifier id(String path) {
-        return Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, path);
+        return com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, path);
     }
 }

@@ -7,7 +7,7 @@ import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.CustomPlayerRenderer;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
 import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -38,10 +38,10 @@ public class RenderFirstPlayerBackground {
         if (!YesSteveModel.isAvailable()) {
             return;
         }
-        if (GeneralConfig.safeGet(GeneralConfig.DISABLE_SELF_MODEL)) {
+        if (ConfigPolicies.render().disableSelfModel()) {
             return;
         }
-        if (GeneralConfig.safeGet(GeneralConfig.DISABLE_SELF_HANDS)) {
+        if (ConfigPolicies.render().disableSelfHands()) {
             return;
         }
         LocalPlayer player = Minecraft.getInstance().player;

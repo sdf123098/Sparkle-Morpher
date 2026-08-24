@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.gui.resource;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.architectury.platform.Platform;
 
 import java.io.IOException;
@@ -117,7 +117,7 @@ public final class ResourceStationConfig {
     }
 
     public static boolean monitorLogEnabled() {
-        return GeneralConfig.safeGet(GeneralConfig.RESOURCE_STATION_MONITOR_LOG, false);
+        return ConfigPolicies.diagnostics().resourceStationMonitorLog();
     }
 
     public record State(List<String> urls, String selectedUrl, int timeoutMs, int maxDownloadBytes,

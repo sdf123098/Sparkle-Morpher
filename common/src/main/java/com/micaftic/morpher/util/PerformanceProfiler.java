@@ -1,14 +1,14 @@
 package com.micaftic.morpher.util;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 
 public final class PerformanceProfiler {
     private PerformanceProfiler() {
     }
 
     public static boolean enabled() {
-        return GeneralConfig.safeGet(GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG, false);
+        return ConfigPolicies.diagnostics().modelImportPerformanceLog();
     }
 
     public static long start() {

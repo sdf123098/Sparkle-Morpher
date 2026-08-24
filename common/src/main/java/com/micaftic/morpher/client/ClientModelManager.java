@@ -28,7 +28,7 @@ import com.micaftic.morpher.client.model.VehicleModelBundle;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.model.catalog.LocalModelCatalog;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
@@ -67,7 +67,6 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
-import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
@@ -1702,7 +1701,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         }
         lastModelTrimMillis = checkNow;
         trimUnusedCpuModels();
-        int maxCachedGpuModels = safeInt(GeneralConfig.MAX_CACHED_GPU_MODELS, 0);
+        int maxCachedGpuModels = ConfigPolicies.memory().maxCachedGpuModels();
         if (maxCachedGpuModels <= 0) {
             return;
         }
@@ -1715,7 +1714,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
             return;
         }
         long now = System.currentTimeMillis();
-        long ttlMillis = safeInt(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300) * 1000L;
+        long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
         modelAssemblyMap.entrySet().stream()
                 .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
@@ -1730,7 +1729,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         Minecraft minecraft = Minecraft.getInstance();
         if (modelAssemblyMap.isEmpty()) return;
         long now = System.currentTimeMillis();
-        long ttlMillis = safeInt(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300) * 1000L;
+        long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
         List<Map.Entry<String, ModelAssembly>> residents = modelAssemblyMap.entrySet().stream()
                 .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
@@ -1740,7 +1739,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                 .filter(entry -> !protectedModels.contains(entry.getKey()))
                 .filter(entry -> now - modelLastUsedAt.getOrDefault(entry.getKey(), now) >= ttlMillis)
                 .count();
-        long overLimit = Math.max(0, residents.size() - safeInt(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 64));
+        long overLimit = Math.max(0, residents.size() - ConfigPolicies.memory().maxResidentCpuModels());
         long trimCount = Math.max(idleCount, overLimit);
         if (trimCount <= 0) return;
         List<Map.Entry<String, ModelAssembly>> victims = residents.stream()
@@ -1886,7 +1885,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
     }
 
     static boolean isLazyModelLoading() {
-        return GeneralConfig.safeGet(GeneralConfig.LAZY_MODEL_LOADING, true);
+        return ConfigPolicies.memory().lazyModelLoading();
     }
 
     public static void updateModelLoadingMode() {
@@ -1923,14 +1922,6 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                 touchModel(entry.getKey());
                 return;
             }
-        }
-    }
-
-    private static int safeInt(ModConfigSpec.IntValue value, int fallback) {
-        try {
-            return value == null ? fallback : value.get();
-        } catch (IllegalStateException e) {
-            return fallback;
         }
     }
 

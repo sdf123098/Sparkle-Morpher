@@ -52,7 +52,7 @@ public class Ride extends LivingEntityFunction {
         String strSubstring = id.substring(1);
         EntityType<?> entityType = firstPassenger.getType();
         if (id.startsWith(PREFIX_ITEM_ID)) {
-            Identifier expected = Identifier.tryParse(strSubstring);
+            Identifier expected = com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(strSubstring);
             if (expected == null) {
                 return 0;
             }
@@ -60,7 +60,7 @@ public class Ride extends LivingEntityFunction {
             return expected.equals(key) ? 1 : 0;
         }
         if (id.startsWith(PREFIX_ITEM_TAG)) {
-            Identifier tagId = Identifier.tryParse(strSubstring);
+            Identifier tagId = com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(strSubstring);
             if (tagId == null) {
                 return 0;
             }

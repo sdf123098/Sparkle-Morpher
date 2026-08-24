@@ -45,14 +45,7 @@ if (rootProject.ext.isCurseForgeDist) {
         source = files(
                 fileTree('src/main/java'),
                 fileTree(rootProject.file('common/src/main/java')) {
-                    exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'
-                    exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'
-                    exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'
-                    exclude 'com/micaftic/morpher/util/ClientUiUtil.java'
-                    exclude 'com/micaftic/morpher/util/PlatformUtil.java'
-                    exclude 'com/ysm/parser/YSMParser.java'
-                    exclude 'com/ysm/parser/YSMNative.java'
-                    exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java'
+                    rootProject.ext.distributionSourceExcludes(delegate)
                 },
                 fileTree(rootProject.file('common/src/curseforge/java'))
         )
@@ -99,12 +92,7 @@ processResources {
     }
 
     if (rootProject.ext.isCurseForgeDist) {
-        exclude 'natives/**'
-        exclude '**/*.dll'
-        exclude '**/*.so'
-        exclude '**/*.dylib'
-        exclude '**/*.jnilib'
-        exclude '**/*.exe'
+        rootProject.ext.distributionResourceExcludes(delegate)
     }
 }
 
@@ -117,9 +105,7 @@ shadowJar {
 
 remapJar {
     input.set shadowJar.archiveFile
-    archiveFileName = rootProject.ext.isCurseForgeDist
-            ? "${releaseArchiveName}-curseforge.jar"
-            : "${releaseArchiveName}.jar"
+    archiveFileName = rootProject.ext.distributionArchiveName(releaseArchiveName)
 }
 
 tasks.named('remapSourcesJar') {

@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.client.animation.AnimationTracker;
@@ -887,7 +887,7 @@ public final class ModelPreviewRenderer {
     }
 
     public static boolean renderCustomLocalPlayerPreview(GuiGraphicsExtractor guiGraphics, LocalPlayer localPlayer, int left, int top, int right, int bottom, float originX, float originY, float scale, float yaw, float partialTick, boolean extraPlayer, int mouseX, int mouseY) {
-        if (guiGraphics == null || localPlayer == null || right <= left || bottom <= top || scale <= 0.0f || GeneralConfig.safeGet(GeneralConfig.DISABLE_SELF_MODEL)) {
+        if (guiGraphics == null || localPlayer == null || right <= left || bottom <= top || scale <= 0.0f || ConfigPolicies.render().disableSelfModel()) {
             return false;
         }
         PlayerCapability capability = PlayerCapability.get(localPlayer).orElse(null);

@@ -5,6 +5,7 @@ package com.elfmcys.yesstevemodel.geckolib3.geo;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.util.log.ChatLogger;
 
@@ -73,7 +74,7 @@ public class ModelRendererBridge {
         // Submit-based world renders must keep the normal geometry path so the
         // entity still reaches the feature/shadow pipeline.
         boolean translucentTexture = model.isTranslucentTexture(textureIndex);
-        GeneralConfig.NativeSimdPolicy nativePolicy = GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE);
+        GeneralConfig.NativeSimdPolicy nativePolicy = ConfigPolicies.graphics().nativeSimdPolicy();
         // Shader packs own the active entity program and uniforms (including entityId).
         // Direct VAO draws can reuse stale per-entity state, so keep them on the
         // VertexConsumer-backed SIMD/Java path while a pack is active.
@@ -82,8 +83,8 @@ public class ModelRendererBridge {
         GpuDebugLog.verbose("entry texture={} allowGpu={} backend={} reason={} translucent={} disableGlow={} shaderPack={} preview={} firstPerson={} submitContext={} worldRender={} compat={} gpuCfg={} nativeSimdPolicy={} validationMode={} nativeLoaded={} nativeReason={} negFaces={} optStats={} consvOnly={}",
                 textureLocation, allowDirectGpu, backend.backend, backend.reason, translucentTexture, disableGlow, shaderPackInUse,
                 isPreview, ModelPreviewRenderer.isFirstPerson(), SubmitRenderContext.get() != null, ModelPreviewRenderer.isWorldRender(),
-                GeneralConfig.USE_COMPATIBILITY_RENDERER.get(), GeneralConfig.USE_GPU_RENDERER.get(), nativePolicy,
-                GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF),
+                ConfigPolicies.render().useCompatibilityRenderer(), ConfigPolicies.render().useGpuRenderer(), nativePolicy,
+                ConfigPolicies.graphics().nativeSimdValidationMode(),
                 AccelerationCapability.isLoaded(), AccelerationCapability.getReason(),
                 model.optimizationStats == null ? -1 : model.optimizationStats.negativeSizedFaces,
                 model.optimizationStats != null,
@@ -110,7 +111,7 @@ public class ModelRendererBridge {
     }
 
     private static boolean shouldDisableModelGlow(boolean shaderPackInUse) {
-        return shaderPackInUse && GeneralConfig.safeGet(GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK, true);
+        return shaderPackInUse && ConfigPolicies.render().disableModelGlowInShaderpack();
     }
 
     public static boolean shouldUseEmissiveBoneMaterial(GeoModel model) {
@@ -212,7 +213,7 @@ public class ModelRendererBridge {
         Matrix4f[] boneLocalTransforms = scratch.boneLocalTransforms;
         boolean[] boneVisible = scratch.boneVisible;
         boolean[] boneComputed = scratch.boneComputed;
-        boolean javaVectorRequested = GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false);
+        boolean javaVectorRequested = ConfigPolicies.graphics().experimentalJavaVectorRenderer();
         VectorApiCapability.warnIfRequested(javaVectorRequested);
         boolean useJavaVector = javaVectorRequested && VectorApiCapability.isAvailable();
         int[] boneOrder = mesh.bakedBoneOrder;

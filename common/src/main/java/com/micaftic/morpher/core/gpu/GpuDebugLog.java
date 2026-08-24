@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import org.lwjgl.opengl.GL11;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -15,11 +15,11 @@ public final class GpuDebugLog {
     }
 
     public static boolean enabled() {
-        return ENABLED || GeneralConfig.safeGet(GeneralConfig.GPU_DEBUG_LOG, false);
+        return ENABLED || ConfigPolicies.graphics().gpuDebugLog();
     }
 
     public static boolean verbose() {
-        return enabled() && (VERBOSE || GeneralConfig.safeGet(GeneralConfig.GPU_DEBUG_VERBOSE_LOG, false));
+        return enabled() && (VERBOSE || ConfigPolicies.graphics().gpuDebugVerboseLog());
     }
 
     public static long nextFrame() {

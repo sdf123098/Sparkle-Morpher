@@ -1,14 +1,14 @@
 package com.micaftic.morpher.util;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 
 public final class ModelMemoryProfiler {
     private ModelMemoryProfiler() {
     }
 
     public static boolean enabled() {
-        return GeneralConfig.safeGet(GeneralConfig.MODEL_MEMORY_PROFILER, false);
+        return ConfigPolicies.diagnostics().modelMemoryProfiler();
     }
 
     public static void log(String stage, String modelId) {
