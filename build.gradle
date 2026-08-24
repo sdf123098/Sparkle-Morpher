@@ -8,19 +8,15 @@ apply from: rootProject.file('gradle/verify-native-abi.gradle')
 group = mod_group_id
 version = mod_version
 
-def isCurseForgeDist = providers.gradleProperty("dist")
-        .map { it.equalsIgnoreCase("curseforge") }
-        .orElse(false)
-        .get()
+apply from: rootProject.file('gradle/distribution.gradle')
+def isCurseForgeDist = rootProject.ext.isCurseForgeDist
 
 base {
     archivesName = "sparkle-morpher-${project.version}-neo26.1.x"
 }
 
 tasks.named("jar") {
-    archiveFileName = isCurseForgeDist
-            ? "sparkle-morpher-${project.version}-neo26.1.x-curseforge.jar"
-            : "sparkle-morpher-${project.version}-neo26.1.x.jar"
+    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo26.1.x")
 }
 
 repositories {
@@ -97,19 +93,19 @@ neoForge {
 sourceSets.main.resources {
     srcDir "src/generated/resources"
 }
+sourceSets.main.java {
+    srcDir "common/src/main/java"
+    srcDir "src/neoforge/java"
+}
 
 if (isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
-                fileTree('src/main/java') {
-                    exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'
-                    exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'
-                    exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'
-                    exclude 'com/micaftic/morpher/util/ClientUiUtil.java'
-                    exclude 'com/micaftic/morpher/util/PlatformUtil.java'
-                    exclude 'com/ysm/parser/YSMParser.java'
-                    exclude 'com/ysm/parser/YSMNative.java'
-                    exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java'
+                fileTree('common/src/main/java') {
+                    rootProject.ext.distributionSourceExcludes(delegate)
+                },
+                fileTree('src/neoforge/java') {
+                    rootProject.ext.distributionSourceExcludes(delegate)
                 },
                 fileTree('src/curseforge/java')
         )
@@ -154,12 +150,7 @@ processResources {
     }
 
     if (isCurseForgeDist) {
-        exclude 'natives/**'
-        exclude '**/*.dll'
-        exclude '**/*.so'
-        exclude '**/*.dylib'
-        exclude '**/*.jnilib'
-        exclude '**/*.exe'
+        rootProject.ext.distributionResourceExcludes(delegate)
     }
 }
 

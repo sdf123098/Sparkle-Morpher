@@ -13,9 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ModernHudMaterialRenderContractTest {
     @Test
     void modernHudUsesTheProvenOpenGlBonePath() throws IOException {
-        Path instance = findRepoFile(Path.of("src", "main", "java", "com", "micaftic",
+        Path instance = findRepoFile(Path.of("common", "src", "main", "java", "com", "micaftic",
                 "morpher", "client", "renderer", "modernhud", "ModernHudRenderInstance.java"));
-        Path matrixComputer = findRepoFile(Path.of("src", "main", "java", "com", "micaftic",
+        Path matrixComputer = findRepoFile(Path.of("common", "src", "main", "java", "com", "micaftic",
                 "morpher", "core", "gpu", "BoneMatrixComputer.java"));
         Path shader = findRepoFile(Path.of("src", "main", "resources", "bone_skin.vsh"));
 
@@ -34,7 +34,7 @@ class ModernHudMaterialRenderContractTest {
         assertFalse(instanceSource.contains("Blaze3DBoneSkinPipeline"));
         assertFalse(instanceSource.contains("GpuBuffer.USAGE_UNIFORM"));
         assertFalse(instanceSource.contains("VertexFormatElement.register"));
-        assertFalse(Files.exists(Path.of("src", "main", "java", "com", "micaftic",
+        assertFalse(Files.exists(Path.of("common", "src", "main", "java", "com", "micaftic",
                 "morpher", "core", "gpu", "Blaze3DBoneSkinPipeline.java")));
     }
 
@@ -48,5 +48,4 @@ class ModernHudMaterialRenderContractTest {
         throw new IOException("Cannot locate modern HUD source: " + relative);
     }
 }
-
 
