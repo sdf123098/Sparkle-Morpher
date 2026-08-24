@@ -107,7 +107,7 @@ public class AudioStreamCache {
         }
 
         void cancelAudioData(AudioTrackData trackData) {
-            this.pendingTracks.remove(trackData);
+            this.pendingTracks.release(trackData);
         }
 
         @Override
