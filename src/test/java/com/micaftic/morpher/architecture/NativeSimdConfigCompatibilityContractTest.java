@@ -12,14 +12,14 @@ class NativeSimdConfigCompatibilityContractTest {
     @Test
     void onePointTwoOneOneNativeSimdDependenciesArePresent() throws IOException {
         String config = Files.readString(find(Path.of(
-                "src", "main", "java", "com", "micaftic", "morpher",
+                "src", "neoforge", "java", "com", "micaftic", "morpher",
                 "config", "GeneralConfig.java")));
         assertTrue(config.contains("enum NativeSimdPolicy"));
         assertTrue(config.contains("NATIVE_SIMD_POLICY"));
         assertTrue(config.contains("safeGet(net.neoforged.neoforge.common.ModConfigSpec.EnumValue"));
 
         String log = Files.readString(find(Path.of(
-                "src", "main", "java", "com", "micaftic", "morpher",
+                "common", "src", "main", "java", "com", "micaftic", "morpher",
                 "core", "gpu", "GpuDebugLog.java")));
         assertTrue(log.contains("static void error"));
     }

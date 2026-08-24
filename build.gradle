@@ -8,10 +8,8 @@ apply from: rootProject.file('gradle/verify-native-abi.gradle')
 version = mod_version
 group = maven_group
 
-def isCurseForgeDist = providers.gradleProperty("dist")
-        .map { it.equalsIgnoreCase("curseforge") }
-        .orElse(false)
-        .get()
+apply from: rootProject.file('gradle/distribution.gradle')
+def isCurseForgeDist = rootProject.ext.isCurseForgeDist
 
 repositories {
     mavenLocal()
@@ -37,9 +35,7 @@ base {
 }
 
 tasks.named("jar") {
-    archiveFileName = isCurseForgeDist
-            ? "sparkle-morpher-${project.version}-neo1.21.1-curseforge.jar"
-            : "sparkle-morpher-${project.version}-neo1.21.1.jar"
+    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo1.21.1")
 }
 
 neoForge {
@@ -65,18 +61,20 @@ neoForge {
     }
 }
 
+sourceSets.main.java {
+    srcDir 'common/src/main/java'
+    srcDir 'src/neoforge/java'
+}
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 if (isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
-                fileTree('src/main/java') {
-                    exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'
-                    exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'
-                    exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'
-                    exclude 'com/ysm/parser/YSMParser.java'
-                    exclude 'com/ysm/parser/YSMNative.java'
-                    exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java'
+                fileTree('common/src/main/java') {
+                    rootProject.ext.distributionSourceExcludes(delegate)
+                },
+                fileTree('src/neoforge/java') {
+                    rootProject.ext.distributionSourceExcludes(delegate)
                 },
                 fileTree('src/curseforge/java')
         )
@@ -141,11 +139,6 @@ processResources {
     }
 
     if (isCurseForgeDist) {
-        exclude 'natives/**'
-        exclude '**/*.dll'
-        exclude '**/*.so'
-        exclude '**/*.dylib'
-        exclude '**/*.jnilib'
-        exclude '**/*.exe'
+        rootProject.ext.distributionResourceExcludes(delegate)
     }
 }
