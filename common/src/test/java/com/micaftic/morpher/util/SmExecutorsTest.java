@@ -3,9 +3,12 @@ package com.micaftic.morpher.util;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -35,6 +38,37 @@ class SmExecutorsTest {
         CountDownLatch latch = new CountDownLatch(1);
         SmExecutors.submit(SmExecutors.Pool.BACKGROUND, latch::countDown);
         assertTrue(latch.await(5, TimeUnit.SECONDS), "任务应在限时内执行");
+    }
+
+    @Test
+    void downloadPool_saturationNeverRunsTaskOnCallerThread() throws Exception {
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) SmExecutors.pool(SmExecutors.Pool.DOWNLOAD_IO);
+        CountDownLatch blockerStarted = new CountDownLatch(1);
+        CountDownLatch releaseBlocker = new CountDownLatch(1);
+        executor.execute(() -> {
+            blockerStarted.countDown();
+            try {
+                releaseBlocker.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        assertTrue(blockerStarted.await(5, TimeUnit.SECONDS), "网络池阻塞任务应启动");
+
+        int queued = executor.getQueue().remainingCapacity();
+        for (int i = 0; i < queued; i++) {
+            executor.execute(() -> {
+            });
+        }
+
+        AtomicBoolean ranOnCaller = new AtomicBoolean(false);
+        try {
+            assertThrows(RejectedExecutionException.class,
+                    () -> CompletableFuture.runAsync(() -> ranOnCaller.set(true), executor));
+            assertTrue(!ranOnCaller.get(), "网络任务不得在 Minecraft 调用线程执行");
+        } finally {
+            releaseBlocker.countDown();
+        }
     }
 
     @Test

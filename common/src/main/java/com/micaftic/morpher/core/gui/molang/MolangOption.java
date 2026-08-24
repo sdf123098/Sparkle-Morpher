@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.gui.molang;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.molang.parser.ParseException;
@@ -64,7 +64,7 @@ public final class MolangOption {
     private static void execute(AnimatableEntity<?> animatable, String expr) {
         try {
             animatable.executeExpression(GeckoLibCache.parseSimpleExpression(expr), true, false, null);
-            if (!GeckoLibCache.isRoamingVariableAssignment(expr) && NetworkHandler.isClientConnected() && !ServerConfig.LOW_BANDWIDTH_USAGE.get()) {
+            if (!GeckoLibCache.isRoamingVariableAssignment(expr) && NetworkHandler.isClientConnected() && !ConfigPolicies.network().lowBandwidthUsage()) {
                 NetworkHandler.sendToServer(new C2SRequestExecuteMolangPacket(expr, animatable.getEntity().getId()));
             }
         } catch (ParseException e) {

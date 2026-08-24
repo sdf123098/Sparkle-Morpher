@@ -10,6 +10,10 @@ loom {
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
+if (!rootProject.ext.isCurseForgeDist) {
+    sourceSets.main.java.srcDir rootProject.ext.distributionNativeJavaSourceDir
+}
+
 test {
     useJUnitPlatform()
 }
@@ -17,9 +21,7 @@ test {
 if (rootProject.ext.isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
-                fileTree('src/main/java') {
-                    rootProject.ext.distributionSourceExcludes(delegate)
-                },
+                fileTree('src/main/java'),
                 fileTree('src/curseforge/java')
         )
     }

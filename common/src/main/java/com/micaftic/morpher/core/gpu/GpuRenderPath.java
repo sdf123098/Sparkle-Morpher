@@ -78,7 +78,7 @@ public final class GpuRenderPath {
         boolean profileExtraPlayer = ExtraPlayerRenderProfiler.enabled() && RenderContext.isGuiPreview();
         long boneStart = profileExtraPlayer ? System.nanoTime() : 0L;
         boolean nativeComputed = false;
-        if (ConfigPolicies.graphics().nativeSimdPolicy() != com.micaftic.morpher.config.GeneralConfig.NativeSimdPolicy.OFF
+        if (ConfigPolicies.graphics().nativeSimdPolicy() != com.micaftic.morpher.core.render.NativeSimdPolicy.OFF
                 && AccelerationCapability.isLoaded() && mesh.pointer != 0
                 && boneParams != null && boneParams.length >= mesh.boneCount * 12) {
             NativeSimdGpuCompute.markUnwritten(boneBuf, mesh.boneCount);

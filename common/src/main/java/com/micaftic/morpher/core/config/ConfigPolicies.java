@@ -2,6 +2,7 @@ package com.micaftic.morpher.core.config;
 
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.render.NativeSimdPolicy;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 import java.util.List;
@@ -76,8 +77,12 @@ public final class ConfigPolicies {
 
     public static GraphicsPolicy graphics() {
         return new GraphicsPolicy(
-                value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE),
+                nativeSimdPolicy(value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE)),
                 bool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false));
+    }
+
+    private static NativeSimdPolicy nativeSimdPolicy(GeneralConfig.NativeSimdPolicy value) {
+        return value == null ? NativeSimdPolicy.AGGRESSIVE : NativeSimdPolicy.valueOf(value.name());
     }
 
     public static AudioPolicy audio() {
@@ -148,7 +153,7 @@ public final class ConfigPolicies {
                                 boolean lowBandwidthUsage, int acceptSoundFx) {
     }
 
-    public record GraphicsPolicy(GeneralConfig.NativeSimdPolicy nativeSimdPolicy,
+    public record GraphicsPolicy(NativeSimdPolicy nativeSimdPolicy,
                                  boolean experimentalJavaVectorRenderer) {
     }
 
