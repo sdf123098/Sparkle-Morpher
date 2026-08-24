@@ -108,6 +108,14 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    dependsOn tasks.named('createMinecraftArtifacts')
+    doFirst {
+        // The generated merged jar is created during the build; attach it at execution
+        // time so a clean Linux CI checkout includes client-only Minecraft classes.
+        classpath += files(fileTree("build/moddev/artifacts") {
+            include "neoforge-*-merged.jar"
+        })
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {
