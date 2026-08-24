@@ -98,6 +98,9 @@ dependencies {
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
     testImplementation "net.neoforged:neoforge:$neoforge_version"
     testImplementation "net.neoforged:minecraft-dependencies:$minecraft_version"
+    // ModDev generates the merged client/server classes during the build; include them
+    // explicitly so clean CI test runs can resolve client-only Minecraft classes.
+    testRuntimeOnly files("build/moddev/artifacts/neoforge-${neoforge_version}-merged.jar")
     testRuntimeOnly files(fileTree("build/moddev/artifacts") {
         include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
     })

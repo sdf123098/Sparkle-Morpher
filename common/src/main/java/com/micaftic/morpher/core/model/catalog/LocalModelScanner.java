@@ -9,6 +9,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.function.Predicate;
 
@@ -62,6 +65,7 @@ public final class LocalModelScanner {
         if (baseDir == null || !Files.isDirectory(baseDir)) {
             return;
         }
+        List<Hit> hits = new ArrayList<>();
         Files.walkFileTree(baseDir, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
@@ -71,7 +75,7 @@ public final class LocalModelScanner {
                 if (modelFolderDetector.test(dir)) {
                     String modelId = normalizeModelId(baseDir.relativize(dir).toString().replace('\\', '/'));
                     if (modelId != null) {
-                        sink.accept(new Hit(modelId, dir, Kind.FOLDER));
+                        hits.add(new Hit(modelId, dir, Kind.FOLDER));
                     }
                     return FileVisitResult.SKIP_SUBTREE;
                 }
@@ -87,11 +91,17 @@ public final class LocalModelScanner {
                 }
                 String modelId = normalizeModelId(baseDir.relativize(file).toString().replace('\\', '/'));
                 if (modelId != null) {
-                    sink.accept(new Hit(modelId, file, kind));
+                    hits.add(new Hit(modelId, file, kind));
                 }
                 return FileVisitResult.CONTINUE;
             }
         });
+        // FileTreeIterator order is provider/platform dependent; make discovery deterministic
+        // so catalog precedence and callers observe the same order on Windows and Linux.
+        hits.sort(Comparator.comparing(hit -> baseDir.relativize(hit.source()).toString().replace('\\', '/')));
+        for (Hit hit : hits) {
+            sink.accept(hit);
+        }
     }
 
     /** 按文件扩展名识别导入类型（大小写不敏感）；未知/null 返回 UNKNOWN。 */
