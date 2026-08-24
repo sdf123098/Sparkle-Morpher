@@ -61,7 +61,7 @@ public final class FileTypeUtil {
     }
 
     public static ResourceLocation getPackIconLocation(String str) {
-        return ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "model_pack_icon/" + str.hashCode());
+        return com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "model_pack_icon/" + str.hashCode());
     }
 
     /**
@@ -76,7 +76,7 @@ public final class FileTypeUtil {
         HashSet<ResourceLocation> hashSet = new HashSet<>();
         for (String str : strArr) {
             if (str.startsWith("#")) {
-                ResourceLocation resourceLocation = ResourceLocation.tryParse(str.substring(1));
+                ResourceLocation resourceLocation = com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(str.substring(1));
                 if (resourceLocation != null) {
                     TagKey<EntityType<?>> tagKey = TagKey.create(Registries.ENTITY_TYPE, resourceLocation);
                     BuiltInRegistries.ENTITY_TYPE.getTag(tagKey).ifPresent(holderSet ->
@@ -84,7 +84,7 @@ public final class FileTypeUtil {
                     );
                 }
             } else {
-                ResourceLocation resourceLocation = ResourceLocation.tryParse(str);
+                ResourceLocation resourceLocation = com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(str);
                 if (resourceLocation != null) {
                     hashSet.add(resourceLocation);
                 }

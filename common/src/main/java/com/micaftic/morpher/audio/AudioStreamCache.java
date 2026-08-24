@@ -1,7 +1,7 @@
 package com.micaftic.morpher.audio;
 
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
@@ -193,7 +193,7 @@ public class AudioStreamCache {
         }
 
         private static int maxCacheBytes() {
-            return GeneralConfig.safeInt(GeneralConfig.AUDIO_CACHE_MAX_BYTES, 64 * 1024 * 1024);
+            return ConfigPolicies.memory().audioCacheMaxBytes();
         }
 
         private static final class CachedAudioEntry {

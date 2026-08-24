@@ -165,7 +165,7 @@ public class UploadManager {
             ResourceLocation pbrLocation = texture instanceof OuterFileTexture outer
                     ? ClientRenderCompatibilityRegistry.resolveTextureLocation(outer) : null;
             this.resourceLocation = pbrLocation != null ? pbrLocation
-                    : ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "textures/" + ++textureCounter);
+                    : com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "textures/" + ++textureCounter);
             this.resolution = resolution;
             this.registered = false;
         }

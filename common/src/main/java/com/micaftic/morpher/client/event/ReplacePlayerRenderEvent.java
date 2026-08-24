@@ -4,7 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.util.CameraUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -25,10 +25,10 @@ public class ReplacePlayerRenderEvent {
             return false;
         }
         LocalPlayer localPlayer = Minecraft.getInstance().player;
-        if (entity.equals(localPlayer) && GeneralConfig.DISABLE_SELF_MODEL.get().booleanValue()) {
+        if (entity.equals(localPlayer) && ConfigPolicies.render().disableSelfModel()) {
             return false;
         }
-        if ((!entity.equals(localPlayer) && GeneralConfig.DISABLE_OTHER_MODEL.get().booleanValue()) || entity.isSpectator()) {
+        if ((!entity.equals(localPlayer) && ConfigPolicies.render().disableOtherModel()) || entity.isSpectator()) {
             return false;
         }
         PlayerCapability cap = PlayerCapability.get(entity).orElse(null);
@@ -36,7 +36,7 @@ public class ReplacePlayerRenderEvent {
             if (!CameraUtil.isFirstPerson(cap)
                     || FirstPersonCompat.isFirstPersonActive()
                     || RealCameraCompat.isActive()
-                    || GeneralConfig.DISABLE_EXTERNAL_FP_ANIM.get().booleanValue()
+                    || ConfigPolicies.render().disableExternalFirstPersonAnimation()
                     || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
                 float previewYaw = ModelPreviewRenderer.isInventoryPreviewFrontFacing() ? ModelPreviewRenderer.FRONT_FACING_YAW : entityYaw;
                 // Reuse the capability resolved for the render-pre check.

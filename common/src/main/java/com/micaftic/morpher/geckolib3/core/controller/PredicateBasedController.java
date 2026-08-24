@@ -5,7 +5,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.entity.GeoEntity;
 import com.micaftic.morpher.client.input.InputStateKey;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.keyframe.ConstantPoint;
 import com.micaftic.morpher.geckolib3.core.keyframe.TransitionPoint;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
@@ -110,7 +110,7 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
 
     private void debugSwingProcess(AnimationEvent<T> event, boolean isMoving, boolean forceSwingPredicate) {
         if (!PLAYER_SWING_CONTROLLER.equals(this.name)
-                || !GeneralConfig.safeGet(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)
+                || !ConfigPolicies.diagnostics().inputStateDebugLog()
                 || InputStateKey.getLocalSwingPulseTicks() <= 0
                 || swingProcessDebugLogs++ >= 80) {
             return;

@@ -18,12 +18,7 @@ if (rootProject.ext.isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
                 fileTree('src/main/java') {
-                    exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'
-                    exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'
-                    exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'
-                    exclude 'com/ysm/parser/YSMParser.java'
-                    exclude 'com/ysm/parser/YSMNative.java'
-                    exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java'
+                    rootProject.ext.distributionSourceExcludes(delegate)
                 },
                 fileTree('src/curseforge/java')
         )
@@ -46,6 +41,7 @@ dependencies {
     // Forge Config API Port — 让 common 在编译期看到 net.minecraftforge.common.ForgeConfigSpec 等类。
     // 运行时不绑定：Forge 平台由 Forge 自身提供这些类，Fabric 平台由 fabric 子项目的 modImplementation 引入 port。
     modCompileOnly "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
+    testRuntimeOnly "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
 
     // ImageStream — 用于 avif/webp/jpeg 解码。运行时由 forge 子项目通过 jar-in-jar 内嵌。
     compileOnly "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"

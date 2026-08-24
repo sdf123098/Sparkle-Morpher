@@ -83,12 +83,7 @@ processResources {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
     if (rootProject.ext.isCurseForgeDist) {
-        exclude 'natives/**'
-        exclude '**/*.dll'
-        exclude '**/*.so'
-        exclude '**/*.dylib'
-        exclude '**/*.jnilib'
-        exclude '**/*.exe'
+        rootProject.ext.distributionResourceExcludes(delegate)
     }
 }
 
@@ -99,9 +94,7 @@ shadowJar {
 
 remapJar {
     input.set shadowJar.archiveFile
-    archiveFileName = rootProject.ext.isCurseForgeDist
-            ? "sparkle-morpher-${project.version}-fa1.21.1-curseforge.jar"
-            : "sparkle-morpher-${project.version}-fa1.21.1.jar"
+    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-fa1.21.1")
 }
 
 

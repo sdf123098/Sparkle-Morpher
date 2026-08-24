@@ -17,7 +17,7 @@ import java.util.function.Consumer;
 @Environment(EnvType.CLIENT)
 public class ConfigCheckBox extends StateSwitchingButton implements ISpecialWidget {
 
-    private static final ResourceLocation location = ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/roulette.png");
+    private static final ResourceLocation location = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/roulette.png");
 
     private final Consumer<Boolean> consumer2;
 

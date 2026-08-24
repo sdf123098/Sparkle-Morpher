@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.animation.debug;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.entity.GeoEntity;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
@@ -19,13 +19,13 @@ public final class AnimationFrameProfiler {
     }
 
     public static boolean isEnabled() {
-        return GeneralConfig.safeGet(GeneralConfig.ANIMATION_FRAME_PROFILER, false);
+        return ConfigPolicies.diagnostics().animationFrameProfiler();
     }
 
     public static void beginRenderFrame(float partialTick) {
         renderFrameId++;
         EVALUATIONS_THIS_FRAME.clear();
-        if (isEnabled() && GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+        if (isEnabled() && ConfigPolicies.diagnostics().animationDebugLog()) {
             YesSteveModel.LOGGER.info("[SM-ANIM] frame={} partialTick={}", renderFrameId, partialTick);
         }
     }
@@ -35,7 +35,7 @@ public final class AnimationFrameProfiler {
     }
 
     public static void logReusedEvaluation(AnimatableEntity<?> animatable, AnimationEvent<?> event, float seekTime) {
-        if (!isEnabled() || !GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+        if (!isEnabled() || !ConfigPolicies.diagnostics().animationDebugLog()) {
             return;
         }
         YesSteveModel.LOGGER.info("[SM-ANIM] reuse frame={} entity={} model={} tick={} partial={} frameTime={} seekTime={}",
@@ -49,7 +49,7 @@ public final class AnimationFrameProfiler {
     }
 
     public static void logReuseMiss(AnimatableEntity<?> animatable, AnimationEvent<?> event, String reason, float seekTime, float previousSeekTime, boolean animationActive, boolean previousAnimationActive, int boneCount, int previousBoneCount, int controllerCount, int previousControllerCount) {
-        if (!isEnabled() || !GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+        if (!isEnabled() || !ConfigPolicies.diagnostics().animationDebugLog()) {
             return;
         }
         YesSteveModel.LOGGER.info("[SM-ANIM] reeval frame={} entity={} model={} reason={} tick={} partial={} frameTime={} seekTime={} prevSeekTime={} active={} prevActive={} bones={} prevBones={} controllers={} prevControllers={}",
@@ -102,11 +102,11 @@ public final class AnimationFrameProfiler {
         }
         long costNanos = System.nanoTime() - scope.startNanos;
         boolean repeated = scope.evaluationCount > 1;
-        if (repeated && GeneralConfig.safeGet(GeneralConfig.WARN_REPEATED_ANIMATION_EVALUATION, true)) {
+        if (repeated && ConfigPolicies.diagnostics().warnRepeatedAnimationEvaluation()) {
             YesSteveModel.LOGGER.warn("[SM-ANIM] repeated evaluation frame={} entity={} model={} count={} costMs={}",
                     scope.renderFrameId, scope.entityId, scope.modelId, scope.evaluationCount, toMillis(costNanos));
         }
-        if (GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+        if (ConfigPolicies.diagnostics().animationDebugLog()) {
             YesSteveModel.LOGGER.info("[SM-ANIM] eval frame={} entity={} model={} tick={} partial={} frameTime={} renderTick={} seekTime={} active={} firstPerson={} repeated={} evalCount={} bones={} controllers={} costMs={}",
                     scope.renderFrameId,
                     scope.entityId,

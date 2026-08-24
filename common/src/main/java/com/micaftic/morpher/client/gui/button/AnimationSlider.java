@@ -18,7 +18,7 @@ import java.text.DecimalFormat;
 
 public class AnimationSlider extends RangedSliderWidget implements ISpecialWidget {
 
-    private static final ResourceLocation ROULETTE_TEXTURE = ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/roulette.png");
+    private static final ResourceLocation ROULETTE_TEXTURE = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/roulette.png");
 
     private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#.##");
 

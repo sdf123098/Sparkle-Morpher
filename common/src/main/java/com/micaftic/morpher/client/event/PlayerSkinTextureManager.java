@@ -14,9 +14,9 @@ import java.util.Map;
 
 public class PlayerSkinTextureManager {
 
-    private static final ResourceLocation STEVE_SKIN = ResourceLocation.withDefaultNamespace("textures/entity/player/wide/steve.png");
+    private static final ResourceLocation STEVE_SKIN = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "textures/entity/player/wide/steve.png");
 
-    private static final ResourceLocation ALEX_SKIN = ResourceLocation.withDefaultNamespace("textures/entity/player/slim/alex.png");
+    private static final ResourceLocation ALEX_SKIN = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "textures/entity/player/slim/alex.png");
 
     private static final String STEVE_TEXTURE_ID = "misc/2_steve";
 

@@ -30,7 +30,7 @@ import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SModelSyncPayload;
@@ -1739,7 +1739,7 @@ public class ClientModelManager {
         }
         lastModelTrimMillis = checkNow;
         trimUnusedCpuModels();
-       int maxCachedGpuModels = GeneralConfig.safeInt(GeneralConfig.MAX_CACHED_GPU_MODELS, 0);
+       int maxCachedGpuModels = ConfigPolicies.memory().maxCachedGpuModels();
         if (maxCachedGpuModels <= 0) {
            return;
        }
@@ -1753,7 +1753,7 @@ public class ClientModelManager {
        }
 
         long now = System.currentTimeMillis();
-        long ttlMillis = GeneralConfig.safeInt(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300) * 1000L;
+        long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
         ModelMemoryProfiler.log("lru-check", null);
        modelAssemblyMap.entrySet().stream()
@@ -1769,7 +1769,7 @@ public class ClientModelManager {
         Minecraft minecraft = Minecraft.getInstance();
         if (modelAssemblyMap.isEmpty()) return;
         long now = System.currentTimeMillis();
-        long ttlMillis = GeneralConfig.safeInt(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300) * 1000L;
+        long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
         List<Map.Entry<String, ModelAssembly>> residents = modelAssemblyMap.entrySet().stream()
                 .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
@@ -1779,7 +1779,7 @@ public class ClientModelManager {
                 .filter(entry -> !protectedModels.contains(entry.getKey()))
                 .filter(entry -> now - modelLastUsedAt.getOrDefault(entry.getKey(), now) >= ttlMillis)
                 .count();
-        long overLimit = Math.max(0, residents.size() - GeneralConfig.safeInt(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 64));
+        long overLimit = Math.max(0, residents.size() - ConfigPolicies.memory().maxResidentCpuModels());
         long trimCount = Math.max(idleCount, overLimit);
         if (trimCount <= 0) return;
         List<Map.Entry<String, ModelAssembly>> victims = residents.stream()
@@ -1901,7 +1901,7 @@ public class ClientModelManager {
     }
 
     static boolean isLazyModelLoading() {
-        return GeneralConfig.safeGet(GeneralConfig.LAZY_MODEL_LOADING, true);
+        return ConfigPolicies.memory().lazyModelLoading();
     }
 
     public static void updateModelLoadingMode() {

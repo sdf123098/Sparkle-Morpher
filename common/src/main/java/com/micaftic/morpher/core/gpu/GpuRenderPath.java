@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.mixin.client.RenderSystemAccessor;
@@ -78,7 +78,7 @@ public final class GpuRenderPath {
         boolean profileExtraPlayer = ExtraPlayerRenderProfiler.enabled() && RenderContext.isGuiPreview();
         long boneStart = profileExtraPlayer ? System.nanoTime() : 0L;
         boolean nativeComputed = false;
-        if (GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE) != GeneralConfig.NativeSimdPolicy.OFF
+        if (ConfigPolicies.graphics().nativeSimdPolicy() != com.micaftic.morpher.config.GeneralConfig.NativeSimdPolicy.OFF
                 && AccelerationCapability.isLoaded() && mesh.pointer != 0
                 && boneParams != null && boneParams.length >= mesh.boneCount * 12) {
             NativeSimdGpuCompute.markUnwritten(boneBuf, mesh.boneCount);

@@ -30,7 +30,7 @@ public final class CommandRegistry {
     private CommandRegistry() {
     }
 
-    public static final SuggestionProvider<CommandSourceStack> MODEL_IDS = SuggestionProviders.register(ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "models"), (commandContext, suggestionsBuilder) -> {
+    public static final SuggestionProvider<CommandSourceStack> MODEL_IDS = SuggestionProviders.register(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "models"), (commandContext, suggestionsBuilder) -> {
         if (commandContext.getSource() instanceof SharedSuggestionProvider) {
             if (PlatformAPI.isServer()) {
                 return SharedSuggestionProvider.suggest(ServerModelManager.getServerModelInfo().keySet().stream().map(CommandRegistry::escapeIfRequired).toList(), suggestionsBuilder);
@@ -40,7 +40,7 @@ public final class CommandRegistry {
         return Suggestions.empty();
     });
 
-    public static final SuggestionProvider<CommandSourceStack> ANIMATION_NAMES = SuggestionProviders.register(ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "animations"), (commandContext, suggestionsBuilder) -> {
+    public static final SuggestionProvider<CommandSourceStack> ANIMATION_NAMES = SuggestionProviders.register(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "animations"), (commandContext, suggestionsBuilder) -> {
         if (commandContext.getSource() instanceof SharedSuggestionProvider) {
             if (PlatformAPI.isServer()) {
                 return Suggestions.empty();
@@ -54,7 +54,7 @@ public final class CommandRegistry {
         return Suggestions.empty();
     });
 
-    public static final SuggestionProvider<CommandSourceStack> TEXTURE_IDS = SuggestionProviders.register(ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "textures"), (commandContext, suggestionsBuilder) -> {
+    public static final SuggestionProvider<CommandSourceStack> TEXTURE_IDS = SuggestionProviders.register(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "textures"), (commandContext, suggestionsBuilder) -> {
         if (commandContext.getSource() instanceof SharedSuggestionProvider) {
             String str = commandContext.getArgument("model_id", String.class);
             if (PlatformAPI.isServer()) {

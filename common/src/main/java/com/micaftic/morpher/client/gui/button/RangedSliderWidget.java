@@ -12,7 +12,7 @@ import org.lwjgl.glfw.GLFW;
 import java.text.DecimalFormat;
 
 public class RangedSliderWidget extends AbstractSliderButton {
-    protected static final ResourceLocation SLIDER_LOCATION = ResourceLocation.fromNamespaceAndPath("minecraft", "textures/gui/slider.png");
+    protected static final ResourceLocation SLIDER_LOCATION = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "textures/gui/slider.png");
 
     protected Component prefix;
     protected Component suffix;

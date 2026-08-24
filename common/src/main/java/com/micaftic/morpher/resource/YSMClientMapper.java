@@ -14,7 +14,7 @@ import com.micaftic.morpher.client.gui.custom.configs.RangeConfig;
 import com.micaftic.morpher.client.model.MainModelData;
 import com.micaftic.morpher.client.model.SpecialHandLocatorProfile;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationState;
@@ -811,7 +811,7 @@ public class YSMClientMapper {
     }
 
     private static void logModelOptimizationStats(ModelOptimizationStats stats) {
-        if (GeneralConfig.safeGet(GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG, false)) {
+        if (ConfigPolicies.diagnostics().modelImportPerformanceLog()) {
             YesSteveModel.LOGGER.info("[SM][Perf] model optimization {}", stats.toLogString());
         }
     }
@@ -888,7 +888,7 @@ public class YSMClientMapper {
             case RawYsmModel.RawKeyframe.INTERPOLATION_CATMULLROM:
                 return EasingType.CATMULLROM;
             case RawYsmModel.RawKeyframe.INTERPOLATION_BEZIER:
-                if (GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+                if (ConfigPolicies.diagnostics().animationDebugLog()) {
                     YesSteveModel.LOGGER.warn("[SM-ANIM] Bezier keyframe at {}s was downgraded to linear because runtime Bezier evaluation is not available yet", keyframe.timestamp);
                 }
                 return EasingType.LINEAR;

@@ -23,7 +23,7 @@ public class AudioPlayerManager {
     public boolean playSound(AnimatableEntity<?> entity, int soundId, String soundName, boolean forceReplace, @Nullable Consumer<YSMTickableSoundInstance> callback) {
         YSMTickableSoundInstance soundInstance;
         if (soundName.contains(":")) {
-            ResourceLocation resourceLocationTryParse = ResourceLocation.tryParse(soundName);
+            ResourceLocation resourceLocationTryParse = com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(soundName);
             if (resourceLocationTryParse != null) {
                 soundInstance = new YSMTickableSoundInstance(SoundEvent.createVariableRangeEvent(resourceLocationTryParse), entity.getEntity());
             } else {

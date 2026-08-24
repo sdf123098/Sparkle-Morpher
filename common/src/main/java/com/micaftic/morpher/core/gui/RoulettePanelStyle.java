@@ -8,7 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 public final class RoulettePanelStyle {
-    public static final ResourceLocation MODEL_PANEL_ICONS = ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
+    public static final ResourceLocation MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
 
     public static final int BG = 0x90171A1D;
     public static final int PANEL = 0x4A34424A;

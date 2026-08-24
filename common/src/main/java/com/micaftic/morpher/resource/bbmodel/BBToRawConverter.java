@@ -1,7 +1,7 @@
 package com.micaftic.morpher.resource.bbmodel;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.util.Interpolations;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 
@@ -1195,7 +1195,7 @@ public class BBToRawConverter {
     }
 
     private static void logBezierRuntimeFallback(BBAnimation.BBKeyframe keyframe, String reason) {
-        if (GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+        if (ConfigPolicies.diagnostics().animationDebugLog()) {
             YesSteveModel.LOGGER.warn("[SM-ANIM] BBModel Bezier keyframe {} at {}s could not be baked and will use runtime fallback: {}",
                     keyframe.uuid, keyframe.time, reason);
         }
@@ -1235,7 +1235,7 @@ public class BBToRawConverter {
                 String script = keyframeToTimelineScript(keyframe, type.isEmpty() ? channel : type);
                 addTimelineEvent(rawAnim, keyframe.time, script);
                 if (("particle".equals(type) || "particle".equals(channel))
-                        && GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+                        && ConfigPolicies.diagnostics().animationDebugLog()) {
                     YesSteveModel.LOGGER.warn("[SM-ANIM] BBModel particle keyframe {} at {}s was preserved as a timeline event",
                             keyframe.uuid, keyframe.time);
                 }
@@ -1309,7 +1309,7 @@ public class BBToRawConverter {
                 rawKf.bezierRightValue = copyOrNull(bbKf.bezier_right_value);
                 rawKf.bezierLeftTime = copyOrNull(bbKf.bezier_left_time);
                 rawKf.bezierRightTime = copyOrNull(bbKf.bezier_right_time);
-                if (GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+                if (ConfigPolicies.diagnostics().animationDebugLog()) {
                     YesSteveModel.LOGGER.warn("[SM-ANIM] BBModel Bezier keyframe {} at {}s is preserved in RawYSM and will be baked to linear samples when possible", bbKf.uuid, bbKf.time);
                 }
                 break;

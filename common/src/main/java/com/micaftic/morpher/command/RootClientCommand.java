@@ -37,7 +37,7 @@ public class RootClientCommand {
 
     private static final String ROOT_NAME = "ysmclient";
 
-    public static final SuggestionProvider<CommandSourceStack> VARS_SUGGESTION_PROVIDER = SuggestionProviders.register(ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "vars"), (context, builder) -> {
+    public static final SuggestionProvider<CommandSourceStack> VARS_SUGGESTION_PROVIDER = SuggestionProviders.register(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "vars"), (context, builder) -> {
         if (context.getSource() instanceof SharedSuggestionProvider && !PlatformAPI.isServer()) {
             return getActiveGeoModel().map(geo -> {
                 HashSet<String> set = Sets.newHashSet();
@@ -68,7 +68,7 @@ public class RootClientCommand {
         return Suggestions.empty();
     });
 
-    public static final SuggestionProvider<CommandSourceStack> CONTROLLERS_SUGGESTION_PROVIDER = SuggestionProviders.register(ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "controllers"), (commandContext, suggestionsBuilder) -> {
+    public static final SuggestionProvider<CommandSourceStack> CONTROLLERS_SUGGESTION_PROVIDER = SuggestionProviders.register(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "controllers"), (commandContext, suggestionsBuilder) -> {
         if (commandContext.getSource() instanceof SharedSuggestionProvider && !PlatformAPI.isServer()) {
             return getActiveGeoModel().map(geo -> SharedSuggestionProvider.suggest(geo.getAnimationData().getAnimationControllers().stream().map(IAnimationController::getName).collect(Collectors.toSet()), suggestionsBuilder)).orElseGet(Suggestions::empty);
         }

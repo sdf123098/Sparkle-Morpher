@@ -25,6 +25,6 @@ public final class RouletteIcons {
     public static final ResourceLocation EDIT = id("texture/roulette/edit.png");
 
     private static ResourceLocation id(String path) {
-        return ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, path);
+        return com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, path);
     }
 }

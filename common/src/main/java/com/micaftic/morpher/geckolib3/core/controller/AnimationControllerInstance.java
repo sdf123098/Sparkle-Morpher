@@ -2,7 +2,7 @@ package com.micaftic.morpher.geckolib3.core.controller;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.keyframe.*;
 import com.micaftic.morpher.geckolib3.core.event.SoundKeyFrameExecutor;
 import com.micaftic.morpher.geckolib3.core.event.InstructionKeyFrameExecutor;
@@ -353,7 +353,7 @@ public class  AnimationControllerInstance {
                 reportMissingAnimationTarget(this.currentAnimation, animation);
             }
         }
-        if (missingTargets > 0 && GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+        if (missingTargets > 0 && ConfigPolicies.diagnostics().animationDebugLog()) {
             YesSteveModel.LOGGER.warn("[SM-ANIM] animation={} source={} boundChannels={} missingChannels={}",
                     this.currentAnimation.animationName,
                     this.currentAnimation.sourceKey,
@@ -366,7 +366,7 @@ public class  AnimationControllerInstance {
     }
 
     private void reportMissingAnimationTarget(Animation animation, BoneAnimation boneAnimation) {
-        if (!GeneralConfig.safeGet(GeneralConfig.ANIMATION_DEBUG_LOG, false)) {
+        if (!ConfigPolicies.diagnostics().animationDebugLog()) {
             return;
         }
         String key = animation.sourceKey + "|" + animation.animationName + "|" + boneAnimation.boneName;

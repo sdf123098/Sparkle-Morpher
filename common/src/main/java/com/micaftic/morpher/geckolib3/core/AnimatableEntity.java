@@ -26,7 +26,7 @@ import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext;
 import com.micaftic.morpher.geckolib3.core.util.RateLimiter;
 import com.micaftic.morpher.geckolib3.util.MovementQuery;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.util.log.ILogger;
 import com.google.common.collect.Maps;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
@@ -233,7 +233,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
     }
 
     public int getRefreshRate() {
-        if (!GeneralConfig.safeGet(GeneralConfig.ANIMATION_DISTANCE_LOD, false)) {
+        if (!ConfigPolicies.render().animationDistanceLod()) {
             return ClientTickEvent.getRefreshRate();
         }
         TEntity tentity = (TEntity) Minecraft.getInstance().player;

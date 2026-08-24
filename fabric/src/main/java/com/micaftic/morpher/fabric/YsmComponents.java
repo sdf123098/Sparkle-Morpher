@@ -18,27 +18,27 @@ import net.minecraft.world.entity.projectile.Projectile;
 public final class YsmComponents implements EntityComponentInitializer {
 
     public static final ComponentKey<StarModelsComponent> STAR_MODELS = ComponentRegistryV3.INSTANCE.getOrCreate(
-            ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "star_models"),
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "star_models"),
             StarModelsComponent.class
     );
 
     public static final ComponentKey<AuthModelsComponent> AUTH_MODELS = ComponentRegistryV3.INSTANCE.getOrCreate(
-            ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "auth_models"),
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "auth_models"),
             AuthModelsComponent.class
     );
 
     public static final ComponentKey<ModelInfoComponent> MODEL_INFO = ComponentRegistryV3.INSTANCE.getOrCreate(
-            ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "model_info"),
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "model_info"),
             ModelInfoComponent.class
     );
 
     public static final ComponentKey<ProjectileModelComponent> PROJECTILE_MODEL = ComponentRegistryV3.INSTANCE.getOrCreate(
-            ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "projectile_model"),
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "projectile_model"),
             ProjectileModelComponent.class
     );
 
     public static final ComponentKey<VehicleModelComponent> VEHICLE_MODEL = ComponentRegistryV3.INSTANCE.getOrCreate(
-            ResourceLocation.fromNamespaceAndPath(YesSteveModel.MOD_ID, "vehicle_model"),
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "vehicle_model"),
             VehicleModelComponent.class
     );
 

@@ -96,14 +96,14 @@ public interface Function {
                 if (stringExpression.getResourceLocation() != null) {
                     return stringExpression.getResourceLocation();
                 }
-                ResourceLocation resourceLocationTryParse = ResourceLocation.tryParse(stringExpression.getName());
+                ResourceLocation resourceLocationTryParse = com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(stringExpression.getName());
                 if (resourceLocationTryParse != null) {
                     stringExpression.setResourceLocation(resourceLocationTryParse);
                     return resourceLocationTryParse;
                 }
                 obj = stringExpression.getName();
             } else if (obj2 instanceof String str) {
-                ResourceLocation resourceLocationTryParse2 = ResourceLocation.tryParse(str);
+                ResourceLocation resourceLocationTryParse2 = com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(str);
                 if (resourceLocationTryParse2 != null) {
                     return resourceLocationTryParse2;
                 }

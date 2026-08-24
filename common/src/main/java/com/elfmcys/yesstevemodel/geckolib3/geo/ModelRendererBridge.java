@@ -4,6 +4,7 @@ package com.elfmcys.yesstevemodel.geckolib3.geo;
 
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.util.log.ChatLogger;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -68,8 +69,8 @@ public class ModelRendererBridge {
         return boneRenderPass == BoneRenderPass.ALL
                 && textureLocation != null
                 && AccelerationCapability.canBuildGpuMesh()
-                && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()
-                && GeneralConfig.USE_GPU_RENDERER.get()
+                && !ConfigPolicies.render().useCompatibilityRenderer()
+                && ConfigPolicies.render().useGpuRenderer()
                 && !OculusCompat.isShaderPackInUse()
                 && GpuCapability.isAvailable();
     }
@@ -110,7 +111,7 @@ public class ModelRendererBridge {
             PREVIEW_BACKEND_COUNTS.get()[1]++;
             if (boneRenderPass == BoneRenderPass.ALL
                     && AccelerationCapability.canRenderSimd()
-                    && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()) {
+                    && !ConfigPolicies.render().useCompatibilityRenderer()) {
                 if (RenderBackends.simd().tryRender(previewRequest)) {
                     return;
                 }
@@ -145,8 +146,8 @@ public class ModelRendererBridge {
                 && boneRenderPass == BoneRenderPass.ALL
                 && textureLocation != null
                 && AccelerationCapability.canBuildGpuMesh()
-                && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()
-                && GeneralConfig.USE_GPU_RENDERER.get()
+                && !ConfigPolicies.render().useCompatibilityRenderer()
+                && ConfigPolicies.render().useGpuRenderer()
                 && !OculusCompat.isShaderPackInUse();
 
         // R10.1：后端通过 RenderBackend 接口隔离（决策保留内联，动作经 RenderBackends）
@@ -166,7 +167,7 @@ public class ModelRendererBridge {
             }
         }
         if (boneRenderPass == BoneRenderPass.ALL
-                && AccelerationCapability.canRenderSimd() && !GeneralConfig.USE_COMPATIBILITY_RENDERER.get()) { // WIP: SIMD MODEL RENDER
+                && AccelerationCapability.canRenderSimd() && !ConfigPolicies.render().useCompatibilityRenderer()) { // WIP: SIMD MODEL RENDER
             if (RenderBackends.simd().tryRender(request)) {
                 return;
             }
@@ -223,7 +224,7 @@ public class ModelRendererBridge {
         Matrix4f[] boneLocalTransforms = scratch.boneLocalTransforms;
         boolean[] boneVisible = scratch.boneVisible;
         boolean[] boneComputed = scratch.boneComputed;
-        boolean javaVectorRequested = GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false);
+        boolean javaVectorRequested = ConfigPolicies.graphics().experimentalJavaVectorRenderer();
         VectorApiCapability.warnIfRequested(javaVectorRequested);
         boolean useJavaVector = javaVectorRequested && VectorApiCapability.isAvailable();
         int[] boneOrder = mesh.bakedBoneOrder;

@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 
 /**
  * Low-overhead aggregate timings for the experimental paper-doll renderer.
@@ -34,7 +34,7 @@ public final class ExtraPlayerRenderProfiler {
 
     public static boolean enabled() {
         return Boolean.getBoolean("sparklemorpher.profileExtraPlayer")
-                || GeneralConfig.safeGet(GeneralConfig.ANIMATION_FRAME_PROFILER, false);
+                || ConfigPolicies.diagnostics().animationFrameProfiler();
     }
 
     public static void recordClear(long nanos) {

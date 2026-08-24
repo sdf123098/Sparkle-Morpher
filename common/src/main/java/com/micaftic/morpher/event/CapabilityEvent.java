@@ -6,7 +6,7 @@ import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.ProjectileModelCapability;
 import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
-import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.core.api.network.YSMChannel;
 import com.micaftic.morpher.network.NetworkHandler;
@@ -174,7 +174,7 @@ public final class CapabilityEvent {
             return;
         }
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
-        Boolean bool = ServerConfig.LOW_BANDWIDTH_USAGE.get();
+        boolean bool = ConfigPolicies.network().lowBandwidthUsage();
         for (ServerPlayer serverPlayer : players) {
             getModelInfoCap(serverPlayer).ifPresent(cap -> {
                 if (!NetworkHandler.isPlayerConnected(serverPlayer) && !cap.isMandatory()) {

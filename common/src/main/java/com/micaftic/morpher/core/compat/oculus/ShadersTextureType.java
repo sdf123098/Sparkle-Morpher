@@ -15,6 +15,6 @@ public enum ShadersTextureType {
     }
 
     public ResourceLocation appendSuffix(ResourceLocation resourceLocation) {
-        return ResourceLocation.fromNamespaceAndPath(resourceLocation.getNamespace(), resourceLocation.getPath() + this.suffix);
+        return com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(resourceLocation.getNamespace(), resourceLocation.getPath() + this.suffix);
     }
 }

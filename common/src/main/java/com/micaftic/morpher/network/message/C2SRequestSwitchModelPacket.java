@@ -3,7 +3,7 @@ package com.micaftic.morpher.network.message;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.micaftic.morpher.capability.ModelInfoCapability;
-import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.util.PlayerDataSaveBridge;
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
 import net.minecraft.network.FriendlyByteBuf;
@@ -35,7 +35,7 @@ public class C2SRequestSwitchModelPacket {
         if (ctx.isServerSide()) {
             ctx.enqueueWork(() -> {
                 ServerPlayer sender = ctx.getSender();
-                if (sender != null && ServerConfig.CAN_SWITCH_MODEL.get()) {
+                if (sender != null && ConfigPolicies.network().canSwitchModel()) {
                     handleCapability(message, sender);
                 }
             });

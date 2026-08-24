@@ -4,7 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.client.ExportResult;
-import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.model.ModelUploadSession;
 import com.micaftic.morpher.core.model.catalog.LocalModelScanner;
 import com.micaftic.morpher.core.storage.ModelStoragePaths;
@@ -127,14 +127,14 @@ public final class ServerModelManager {
 
     static void initRateLimit() {
         try {
-            boolean enabled = ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT.get();
-            int mbps = Math.max(1, ServerConfig.BANDWIDTH_LIMIT.get());
+            boolean enabled = ConfigPolicies.network().globalBandwidthLimit();
+            int mbps = Math.max(1, ConfigPolicies.network().bandwidthLimitMbps());
             if (!limitsInitialized || enabled != bandwidthLimitEnabled || mbps != bandwidthLimitMbps) {
                 bandwidthLimitEnabled = enabled;
                 bandwidthLimitMbps = mbps;
                 bandwidthLimiter = enabled ? RateLimiter.create(Math.max(1.0, mbps * 131072.0)) : null;
             }
-            int threads = ServerConfig.THREAD_COUNT.get();
+            int threads = ConfigPolicies.network().threadCount();
             if (threads <= 0) {
                 threads = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
             }
@@ -832,7 +832,7 @@ public final class ServerModelManager {
 
     public static boolean isModelUploadAllowed() {
         try {
-            return ServerConfig.ALLOW_MODEL_UPLOAD.get();
+            return ConfigPolicies.network().allowModelUpload();
         } catch (IllegalStateException e) {
             return true;
         }
@@ -840,7 +840,7 @@ public final class ServerModelManager {
 
     public static int getModelUploadMaxBytes() {
         try {
-            return Math.max(1, ServerConfig.MODEL_UPLOAD_MAX_MB.get()) * 1024 * 1024;
+            return Math.max(1, ConfigPolicies.network().modelUploadMaxMiB()) * 1024 * 1024;
         } catch (IllegalStateException e) {
             return 128 * 1024 * 1024;
         }
@@ -848,7 +848,7 @@ public final class ServerModelManager {
 
     public static int getModelUploadChunksPerTick() {
         try {
-            return Math.max(1, ServerConfig.MODEL_UPLOAD_CHUNKS_PER_TICK.get());
+            return Math.max(1, ConfigPolicies.network().modelUploadChunksPerTick());
         } catch (IllegalStateException e) {
             return 4;
         }
@@ -1167,8 +1167,8 @@ public final class ServerModelManager {
 
 
     public static Pair<String, String> getDefaultModelConfig() {
-        String defaultModelId = ServerConfig.DEFAULT_MODEL_ID.get();
-        String defaultTexture = normalizeTextureId(ServerConfig.DEFAULT_MODEL_TEXTURE.get());
+        String defaultModelId = ConfigPolicies.network().defaultModelId();
+        String defaultTexture = normalizeTextureId(ConfigPolicies.network().defaultModelTexture());
         if (!initialized) {
             return Pair.of(defaultModelId, defaultTexture);
         }

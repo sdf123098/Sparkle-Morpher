@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import it.unimi.dsi.fastutil.objects.ObjectListIterator;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 import net.minecraft.client.Minecraft;
@@ -37,10 +37,10 @@ public class EntityRenderCache {
                 Entity entity = geoEntity.getEntity();
                 if (entity instanceof AbstractClientPlayer) {
                     if (entity instanceof LocalPlayer) {
-                        if (!GeneralConfig.DISABLE_SELF_MODEL.get()) {
+                        if (!ConfigPolicies.render().disableSelfModel()) {
                             capturePlayerState(geoEntity, (AbstractClientPlayer) entity, partialTick);
                         }
-                    } else if (!GeneralConfig.DISABLE_OTHER_MODEL.get()) {
+                    } else if (!ConfigPolicies.render().disableOtherModel()) {
                         capturePlayerState(geoEntity, (AbstractClientPlayer) entity, partialTick);
                     }
                 }

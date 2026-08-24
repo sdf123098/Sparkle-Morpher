@@ -23,7 +23,7 @@ import com.mojang.math.Axis;
 
 public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity> {
 
-    private static final ResourceLocation WINGS_LOCATION = ResourceLocation.withDefaultNamespace("textures/entity/elytra.png");
+    private static final ResourceLocation WINGS_LOCATION = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "textures/entity/elytra.png");
 
     private final ElytraModel<LivingEntity> elytraModel;
 
