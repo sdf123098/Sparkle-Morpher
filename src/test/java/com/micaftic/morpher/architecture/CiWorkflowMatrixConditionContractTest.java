@@ -11,12 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CiWorkflowMatrixConditionContractTest {
     @Test
-    void matrixBranchFilterIsStepScopedBecauseJobIfCannotUseMatrixContext() throws IOException {
+    void matrixRunsEveryBranchOnPush() throws IOException {
         String source = readRepoFile(Path.of(".github", "workflows", "ci.yml"));
         String condition = "github.event_name != 'push' || matrix.branch == github.ref_name";
 
         assertFalse(source.lines().anyMatch(line -> line.equals("    if: ${{ " + condition + " }}")));
-        assertTrue(source.lines().anyMatch(line -> line.equals("        if: ${{ " + condition + " }}")));
+        assertFalse(source.lines().anyMatch(line -> line.equals("        if: ${{ " + condition + " }}")));
+        assertTrue(source.lines().anyMatch(line -> line.equals("          ref: ${{ matrix.branch }}")));
     }
 
     private static String readRepoFile(Path relativePath) throws IOException {

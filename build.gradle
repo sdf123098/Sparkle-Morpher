@@ -96,17 +96,16 @@ sourceSets.main.resources {
 sourceSets.main.java {
     srcDir "common/src/main/java"
     srcDir "src/neoforge/java"
+    if (!isCurseForgeDist) {
+        srcDir rootProject.ext.distributionNativeJavaSourceDir
+    }
 }
 
 if (isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
-                fileTree('common/src/main/java') {
-                    rootProject.ext.distributionSourceExcludes(delegate)
-                },
-                fileTree('src/neoforge/java') {
-                    rootProject.ext.distributionSourceExcludes(delegate)
-                },
+                fileTree('common/src/main/java'),
+                fileTree('src/neoforge/java'),
                 fileTree('src/curseforge/java')
         )
     }

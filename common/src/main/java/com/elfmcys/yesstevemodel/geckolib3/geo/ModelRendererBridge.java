@@ -4,7 +4,6 @@ package com.elfmcys.yesstevemodel.geckolib3.geo;
 
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
-import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.util.log.ChatLogger;
@@ -75,7 +74,7 @@ public class ModelRendererBridge {
         // Submit-based world renders must keep the normal geometry path so the
         // entity still reaches the feature/shadow pipeline.
         boolean translucentTexture = model.isTranslucentTexture(textureIndex);
-        GeneralConfig.NativeSimdPolicy nativePolicy = ConfigPolicies.graphics().nativeSimdPolicy();
+        com.micaftic.morpher.core.render.NativeSimdPolicy nativePolicy = ConfigPolicies.graphics().nativeSimdPolicy();
         // Shader packs own the active entity program and uniforms (including entityId).
         // Direct VAO draws can reuse stale per-entity state, so keep them on the
         // VertexConsumer-backed SIMD/Java path while a pack is active.
