@@ -1,7 +1,5 @@
 package com.micaftic.morpher.client.render;
 
-import net.minecraft.util.Mth;
-
 /**
  * Pure rotation math shared by player render-state handling and living-vehicle constraints.
  */
@@ -20,7 +18,7 @@ public final class RiderRotationMath {
 
     /** Applies the vanilla living-vehicle yaw clamp to an absolute head yaw. */
     public static LivingVehicleRotation constrainToLivingVehicle(float absoluteHeadYaw, float vehicleBodyYaw) {
-        float clampedHeadDelta = Mth.clamp(Mth.wrapDegrees(absoluteHeadYaw - vehicleBodyYaw), -85.0f, 85.0f);
+        float clampedHeadDelta = clamp(wrapDegrees(absoluteHeadYaw - vehicleBodyYaw), -85.0f, 85.0f);
         float bodyYaw = absoluteHeadYaw - clampedHeadDelta;
         if (clampedHeadDelta * clampedHeadDelta > 2500.0f) {
             bodyYaw += clampedHeadDelta * 0.2f;
@@ -29,5 +27,20 @@ public final class RiderRotationMath {
     }
 
     public record LivingVehicleRotation(float bodyYaw, float relativeHeadYaw) {
+    }
+
+    private static float wrapDegrees(float degrees) {
+        float wrapped = degrees % 360.0f;
+        if (wrapped >= 180.0f) {
+            wrapped -= 360.0f;
+        }
+        if (wrapped < -180.0f) {
+            wrapped += 360.0f;
+        }
+        return wrapped;
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 }
