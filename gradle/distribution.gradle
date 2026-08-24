@@ -1,12 +1,17 @@
-/** Central distribution provider for native, Modrinth and CurseForge artifacts. */
-def selected = providers.gradleProperty("dist").map { it.trim().toLowerCase(Locale.ROOT) }.orElse("native").get()
+/** Central distribution provider for the original and CurseForge artifacts. */
+def requested = providers.gradleProperty("dist").map { it.trim().toLowerCase(Locale.ROOT) }.orElse("native").get()
 def supported = ["native", "modrinth", "curseforge"]
-if (!supported.contains(selected)) throw new GradleException("Unsupported dist='${selected}'. Expected native, modrinth or curseforge.")
+if (!supported.contains(requested)) throw new GradleException("Unsupported dist='${requested}'. Expected native, modrinth or curseforge.")
+// Modrinth publishes the same original jar as GitHub. Keep -Pdist=modrinth as a compatibility alias.
+def selected = requested == "modrinth" ? "native" : requested
 ext.distributionVariant = selected
+ext.distributionRequestedVariant = requested
 ext.isNativeDist = selected == "native"
-ext.isModrinthDist = selected == "modrinth"
+ext.isModrinthDist = requested == "modrinth"
 ext.isCurseForgeDist = selected == "curseforge"
 ext.distributionArchiveName = { String baseName -> selected == "native" ? "${baseName}.jar" : "${baseName}-${selected}.jar" }
 ext.distributionResourceExcludes = { spec -> spec.exclude 'natives/**'; spec.exclude '**/*.dll'; spec.exclude '**/*.so'; spec.exclude '**/*.dylib'; spec.exclude '**/*.jnilib'; spec.exclude '**/*.exe' }
-ext.distributionSourceExcludes = { spec -> spec.exclude 'com/micaftic/morpher/RuntimeAccelerationLoader.java'; spec.exclude 'com/micaftic/morpher/client/gui/resource/ResourceStationConfig.java'; spec.exclude 'com/elfmcys/yesstevemodel/geckolib3/geo/render/built/ModelAccelerationBridge.java'; spec.exclude 'com/ysm/parser/YSMParser.java'; spec.exclude 'com/ysm/parser/YSMNative.java'; spec.exclude 'com/micaftic/morpher/core/algorithms/YsmAlgorithmBridge.java' }
+// Native-only Java sources live under a dedicated source root. CurseForge builds
+// intentionally omit that root and use the matching src/curseforge/java variants.
+ext.distributionNativeJavaSourceDir = rootProject.file('common/src/native/java')
 tasks.register('printDistribution') { doLast { println "distribution=${rootProject.ext.distributionVariant}" } }

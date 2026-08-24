@@ -2,6 +2,7 @@ package com.micaftic.morpher.core.config;
 
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.render.NativeSimdPolicy;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.List;
@@ -15,9 +16,10 @@ public final class ConfigPolicies {
     public static DiagnosticsPolicy diagnostics() { return new DiagnosticsPolicy(bool(GeneralConfig.ANIMATION_FRAME_PROFILER, false), bool(GeneralConfig.ANIMATION_DEBUG_LOG, false), bool(GeneralConfig.WARN_REPEATED_ANIMATION_EVALUATION, true), bool(GeneralConfig.RESOURCE_STATION_MONITOR_LOG, false), bool(GeneralConfig.NETWORK_ONLINE_DEBUG_LOG, false), bool(GeneralConfig.MODEL_MEMORY_PROFILER, false), bool(GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG, false), bool(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)); }
     public static PrivacyPolicy privacy() { return new PrivacyPolicy(bool(GeneralConfig.PRIVACY_MODE, false)); }
     public static NetworkPolicy network() { return new NetworkPolicy(value(ServerConfig.DEFAULT_MODEL_ID, "default"), value(ServerConfig.DEFAULT_MODEL_TEXTURE, "default"), bool(ServerConfig.CAN_SWITCH_MODEL, true), bool(ServerConfig.ALLOW_MODEL_UPLOAD, true), integer(ServerConfig.MODEL_UPLOAD_MAX_MB, 128), integer(ServerConfig.MODEL_UPLOAD_CHUNKS_PER_TICK, 4), List.copyOf(value(ServerConfig.CLIENT_NOT_DISPLAY_MODELS, List.of())), integer(ServerConfig.THREAD_COUNT, 0), bool(ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT, false), integer(ServerConfig.BANDWIDTH_LIMIT, 5), integer(ServerConfig.PLAYER_SYNC_TIMEOUT, 0), bool(ServerConfig.LOW_BANDWIDTH_USAGE, false), integer(ServerConfig.ACCEPT_SOUND_FX, 0)); }
-    public static GraphicsPolicy graphics() { return new GraphicsPolicy(value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE), bool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false)); }
+    public static GraphicsPolicy graphics() { return new GraphicsPolicy(nativeSimdPolicy(value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE)), bool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false)); }
     public static AudioPolicy audio() { return new AudioPolicy(decimal(GeneralConfig.SOUND_VOLUME, 100.0)); }
     public static FeaturePolicy features() { return new FeaturePolicy(false, false, false, true, bool(GeneralConfig.ANIMATION_ROULETTE_DEBUG_LOG, false)); }
+    private static NativeSimdPolicy nativeSimdPolicy(GeneralConfig.NativeSimdPolicy value) { return value == null ? NativeSimdPolicy.AGGRESSIVE : NativeSimdPolicy.valueOf(value.name()); }
     private static boolean bool(ModConfigSpec.BooleanValue value, boolean fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
     private static int integer(ModConfigSpec.IntValue value, int fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
     private static double decimal(ModConfigSpec.DoubleValue value, double fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
@@ -28,7 +30,7 @@ public final class ConfigPolicies {
     public record DiagnosticsPolicy(boolean animationFrameProfiler, boolean animationDebugLog, boolean warnRepeatedAnimationEvaluation, boolean resourceStationMonitorLog, boolean networkOnlineDebugLog, boolean modelMemoryProfiler, boolean modelImportPerformanceLog, boolean inputStateDebugLog) { }
     public record PrivacyPolicy(boolean enabled) { }
     public record NetworkPolicy(String defaultModelId, String defaultModelTexture, boolean canSwitchModel, boolean allowModelUpload, int modelUploadMaxMiB, int modelUploadChunksPerTick, List<String> clientNotDisplayModels, int threadCount, boolean globalBandwidthLimit, int bandwidthLimitMbps, int playerSyncTimeoutSeconds, boolean lowBandwidthUsage, int acceptSoundFx) { }
-    public record GraphicsPolicy(GeneralConfig.NativeSimdPolicy nativeSimdPolicy, boolean experimentalJavaVectorRenderer) { }
+    public record GraphicsPolicy(NativeSimdPolicy nativeSimdPolicy, boolean experimentalJavaVectorRenderer) { }
     public record AudioPolicy(double soundVolumePercent) { }
     public record FeaturePolicy(boolean experimentalFallbackElytraWithoutLocator, boolean experimentalEnableElytraForDefaultAndMiscModels, boolean vulkanExperimentalCapabilityProbe, boolean worldRendererHook, boolean animationRouletteDebugLog) { }
 }

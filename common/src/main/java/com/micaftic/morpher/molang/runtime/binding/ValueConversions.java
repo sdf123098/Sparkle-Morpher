@@ -25,7 +25,7 @@ public final class ValueConversions {
         }
         if (obj instanceof Number) {
             float f = ((Number)obj).floatValue();
-            if (!Float.isNaN(f)) {
+            if (Float.isFinite(f)) {
                 return f;
             }
             return 0.0f;
@@ -55,10 +55,10 @@ public final class ValueConversions {
         }
         if (obj instanceof Number) {
             double d = ((Number) obj).doubleValue();
-            if (!Double.isNaN(d)) {
+            if (Double.isFinite(d)) {
                 return d;
             }
-            return ((Number) obj).doubleValue();
+            return 0.0d;
         }
         if (obj instanceof Boolean) {
             return ((Boolean) obj) ? 1 : 0;

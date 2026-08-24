@@ -16,25 +16,23 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.TimeUnit;
 
 public final class ResourceDownloadManager {
     private static final int HISTORY_LIMIT = 128;
     private static final long SERVER_UPLOAD_START_TIMEOUT_MS = 15_000L;
     private static final long SERVER_UPLOAD_STALL_TIMEOUT_MS = 30_000L;
     private static final long SERVER_UPLOAD_VERIFY_TIMEOUT_MS = 90_000L;
-    private static final ExecutorService DOWNLOAD_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.NETWORK_IO);
+    private static final ExecutorService DOWNLOAD_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.DOWNLOAD_IO);
     private static final Object LOCK = new Object();
     private static final ArrayDeque<DownloadTask> QUEUE = new ArrayDeque<>();
     private static final List<DownloadTask> HISTORY = new ArrayList<>();
@@ -123,56 +121,36 @@ public final class ResourceDownloadManager {
         notifyListeners();
     }
 
-    public static boolean cancelCurrent() {
-        TaskSnapshot current = snapshot().currentTask();
-        return current != null && cancel(current.id());
-    }
-
-    public static boolean cancel(String taskId) {
-        if (taskId == null || taskId.isBlank()) {
-            return false;
-        }
-        DownloadTask cancelledTask = null;
-        CompletableFuture<byte[]> downloadFuture = null;
-        boolean cancelUpload = false;
+    public static void cancelCurrent() {
+        DownloadTask cancelledTask;
+        boolean cancelUpload;
+        boolean waitForDownloader;
         synchronized (LOCK) {
-            if (currentTask != null && Objects.equals(currentTask.id(), taskId)) {
-                cancelledTask = currentTask;
-                cancelUpload = cancelledTask.state == TaskState.UPLOADING;
-                downloadFuture = cancelledTask.downloadFuture;
+            if (currentTask == null) {
+                return;
+            }
+            cancelledTask = currentTask;
+            cancelUpload = cancelledTask.state == TaskState.UPLOADING;
+            waitForDownloader = cancelledTask.state == TaskState.DOWNLOADING;
+            cancelledTask.cancelRequested = true;
+            currentTask.state = TaskState.CANCELLED;
+            currentTask.message = Component.translatable("gui.sparkle_morpher.resource_station.cancelled");
+            status = currentTask.message;
+            statusColor = ChatFormatting.GRAY;
+            if (!waitForDownloader) {
+                HISTORY.add(currentTask);
+                trimHistoryLocked();
                 currentTask = null;
                 downloadLoading = false;
-            } else {
-                Iterator<DownloadTask> iterator = QUEUE.iterator();
-                while (iterator.hasNext()) {
-                    DownloadTask task = iterator.next();
-                    if (Objects.equals(task.id(), taskId)) {
-                        cancelledTask = task;
-                        iterator.remove();
-                        break;
-                    }
-                }
             }
-            if (cancelledTask == null) {
-                return false;
-            }
-            cancelledTask.cancelled = true;
-            cancelledTask.state = TaskState.CANCELLED;
-            cancelledTask.message = cancelMessage();
-            status = cancelledTask.message;
-            statusColor = ChatFormatting.GRAY;
-            HISTORY.add(cancelledTask);
-            trimHistoryLocked();
-        }
-        if (downloadFuture != null) {
-            downloadFuture.cancel(true);
         }
         if (cancelUpload) {
-            ModelUploadSession.failCurrent(cancelMessage());
+            ModelUploadSession.failCurrent(Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
         }
         notifyListeners();
-        processNextDownload();
-        return true;
+        if (!waitForDownloader) {
+            processNextDownload();
+        }
     }
 
     private static boolean enqueueLocked(ModelRepoEntry entry, ResourceStationConfig.State config) {
@@ -191,6 +169,12 @@ public final class ResourceDownloadManager {
             return true;
         }
         return QUEUE.stream().anyMatch(task -> Objects.equals(task.entry.url(), entry.url()));
+    }
+
+    private static void trimHistoryLocked() {
+        while (HISTORY.size() > HISTORY_LIMIT) {
+            HISTORY.remove(0);
+        }
     }
 
     private static void processNextDownload() {
@@ -217,17 +201,10 @@ public final class ResourceDownloadManager {
             statusColor = ChatFormatting.YELLOW;
         }
         notifyListeners();
-        CompletableFuture<byte[]> downloadFuture = CompletableFuture.supplyAsync(() -> {
+        CompletableFuture.supplyAsync(() -> {
             try {
                 return ModelRepoClient.download(task.entry, task.config, new ModelRepoClient.ProgressListener() {
                     private String host = "";
-
-                    @Override
-                    public boolean isCancelled() {
-                        synchronized (LOCK) {
-                            return task.cancelled || currentTask != task;
-                        }
-                    }
 
                     @Override
                     public void onProgress(int downloaded, int total) {
@@ -235,10 +212,18 @@ public final class ResourceDownloadManager {
                     }
 
                     @Override
+                    public boolean isCancelled() {
+                        synchronized (LOCK) {
+                            return task.cancelRequested || currentTask != task || task.state == TaskState.CANCELLED;
+                        }
+                    }
+
+                    @Override
                     public void onProgress(int downloaded, int total, long bytesPerSecond) {
+                        ensureNotCancelled(task);
                         int progressTotal = progressTotal(total, task.entry.size());
                         synchronized (LOCK) {
-                            if (task.cancelled || currentTask != task) {
+                            if (currentTask != task || task.state != TaskState.DOWNLOADING) {
                                 return;
                             }
                             task.progress = progressTotal > 0 ? Math.min(1f, (float) downloaded / progressTotal) : task.progress;
@@ -254,9 +239,10 @@ public final class ResourceDownloadManager {
 
                     @Override
                     public void onCandidate(String url, int index, int total) {
+                        ensureNotCancelled(task);
                         this.host = ModelRepoClient.hostName(url);
                         synchronized (LOCK) {
-                            if (task.cancelled || currentTask != task) {
+                            if (currentTask != task || task.state != TaskState.DOWNLOADING) {
                                 return;
                             }
                             task.message = Component.translatable("gui.sparkle_morpher.resource_station.try_source", index, total, this.host);
@@ -269,35 +255,31 @@ public final class ResourceDownloadManager {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-        }, DOWNLOAD_EXECUTOR).orTimeout(taskTimeoutMs(task.config), TimeUnit.MILLISECONDS);
-        synchronized (LOCK) {
-            if (currentTask == task && !task.cancelled) {
-                task.downloadFuture = downloadFuture;
-            } else {
-                downloadFuture.cancel(true);
-            }
-        }
-        downloadFuture.whenComplete((data, error) ->
+        }, DOWNLOAD_EXECUTOR).whenComplete((data, error) ->
                 ((Executor) Minecraft.getInstance()).execute(() -> onDownloadFinished(task, data, error)));
     }
 
     private static void onDownloadFinished(DownloadTask task, byte[] data, Throwable error) {
         synchronized (LOCK) {
-            if (currentTask != task || task.cancelled) {
+            if (currentTask != task) {
                 return;
             }
             downloadLoading = false;
         }
-        if (error instanceof CancellationException) {
-            finishTask(task, TaskState.CANCELLED, cancelMessage());
-            return;
-        }
         if (error != null) {
+            if (isCancellation(error)) {
+                finishTask(task, TaskState.CANCELLED, Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
+                return;
+            }
             finishTask(task, TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.error", rootMessage(error)));
             return;
         }
         String modelId = stripKnownImportExtension(ModelRepoClient.safeModelId(task.entry));
         synchronized (LOCK) {
+            if (task.cancelRequested || task.state == TaskState.CANCELLED) {
+                finishTask(task, TaskState.CANCELLED, Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
+                return;
+            }
             if (currentTask != task) {
                 return;
             }
@@ -321,7 +303,7 @@ public final class ResourceDownloadManager {
 
     private static void onLocalSaveFinished(DownloadTask task, String modelId, byte[] data, Throwable saveError) {
         synchronized (LOCK) {
-            if (currentTask != task || task.cancelled) {
+            if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
                 return;
             }
         }
@@ -334,7 +316,7 @@ public final class ResourceDownloadManager {
 
     private static void onLocalImportFinished(DownloadTask task, String modelId, byte[] data, Component localError) {
         synchronized (LOCK) {
-            if (currentTask != task || task.cancelled) {
+            if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
                 return;
             }
         }
@@ -347,7 +329,7 @@ public final class ResourceDownloadManager {
             return;
         }
         synchronized (LOCK) {
-            if (currentTask != task || task.cancelled) {
+            if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
                 return;
             }
             task.state = TaskState.UPLOADING;
@@ -527,11 +509,7 @@ public final class ResourceDownloadManager {
             task.message = message;
             task.progress = state == TaskState.DONE ? 1f : task.progress;
             status = message;
-            statusColor = switch (state) {
-                case DONE -> ChatFormatting.GREEN;
-                case CANCELLED -> ChatFormatting.GRAY;
-                default -> ChatFormatting.RED;
-            };
+            statusColor = state == TaskState.DONE ? ChatFormatting.GREEN : state == TaskState.CANCELLED ? ChatFormatting.GRAY : ChatFormatting.RED;
             HISTORY.add(task);
             trimHistoryLocked();
             currentTask = null;
@@ -541,28 +519,14 @@ public final class ResourceDownloadManager {
         processNextDownload();
     }
 
-    private static void trimHistoryLocked() {
-        while (HISTORY.size() > HISTORY_LIMIT) {
-            HISTORY.remove(0);
-        }
-    }
-
     private static TaskSnapshot snapshot(DownloadTask task) {
-        return new TaskSnapshot(task.id(), task.entry.name(), task.entry.fileName(), task.state, task.progress, task.message);
-    }
-
-    private static Component cancelMessage() {
-        return Component.translatable("gui.sparkle_morpher.resource_station.cancelled");
+        return new TaskSnapshot(task.entry.name(), task.entry.fileName(), task.state, task.progress, task.message);
     }
 
     private static void notifyListeners() {
         for (Runnable listener : LISTENERS) {
             listener.run();
         }
-    }
-
-    private static long taskTimeoutMs(ResourceStationConfig.State config) {
-        return Math.max(15_000L, config.timeoutMs() * 4L);
     }
 
     private static int progressTotal(int contentLength, long entrySize) {
@@ -573,6 +537,25 @@ public final class ResourceDownloadManager {
             return (int) entrySize;
         }
         return 0;
+    }
+
+    private static void ensureNotCancelled(DownloadTask task) {
+        synchronized (LOCK) {
+            if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
+                throw new CancellationException("cancelled");
+            }
+        }
+    }
+
+    private static boolean isCancellation(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof CancellationException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static String rootMessage(Throwable throwable) {
@@ -589,20 +572,15 @@ public final class ResourceDownloadManager {
         private TaskState state = TaskState.QUEUED;
         private float progress;
         private Component message = Component.empty();
+        private boolean cancelRequested;
         private long uploadStartedAtMs;
         private long lastUploadProgressAtMs;
         private long uploadFinishingAtMs;
         private int lastUploadSentBytes;
-        private boolean cancelled;
-        private CompletableFuture<byte[]> downloadFuture;
 
         private DownloadTask(ModelRepoEntry entry, ResourceStationConfig.State config) {
             this.entry = entry;
             this.config = config;
-        }
-
-        private String id() {
-            return this.entry.url();
         }
     }
 
@@ -616,7 +594,7 @@ public final class ResourceDownloadManager {
         CANCELLED
     }
 
-    public record TaskSnapshot(String id, String name, String fileName, TaskState state, float progress, Component message) {
+    public record TaskSnapshot(String name, String fileName, TaskState state, float progress, Component message) {
     }
 
     public record Snapshot(TaskSnapshot currentTask, List<TaskSnapshot> unfinishedTasks, List<TaskSnapshot> finishedTasks,
