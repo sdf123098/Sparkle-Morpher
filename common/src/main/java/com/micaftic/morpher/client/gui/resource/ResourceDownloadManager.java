@@ -32,7 +32,7 @@ public final class ResourceDownloadManager {
     private static final long SERVER_UPLOAD_START_TIMEOUT_MS = 15_000L;
     private static final long SERVER_UPLOAD_STALL_TIMEOUT_MS = 30_000L;
     private static final long SERVER_UPLOAD_VERIFY_TIMEOUT_MS = 90_000L;
-    private static final ExecutorService DOWNLOAD_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.NETWORK_IO);
+    private static final ExecutorService DOWNLOAD_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.DOWNLOAD_IO);
     private static final Object LOCK = new Object();
     private static final ArrayDeque<DownloadTask> QUEUE = new ArrayDeque<>();
     private static final List<DownloadTask> HISTORY = new ArrayList<>();

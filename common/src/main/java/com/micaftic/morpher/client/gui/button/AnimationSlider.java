@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.gui.button;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.ISpecialWidget;
-import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.molang.parser.ParseException;
@@ -37,7 +37,7 @@ public class AnimationSlider extends RangedSliderWidget implements ISpecialWidge
         try {
             String str = this.controllerName + "=" + getValue();
             this.model.executeExpression(GeckoLibCache.parseSimpleExpression(str), true, false, null);
-            if (!GeckoLibCache.isRoamingVariableAssignment(str) && NetworkHandler.isClientConnected() && !ServerConfig.LOW_BANDWIDTH_USAGE.get().booleanValue()) {
+            if (!GeckoLibCache.isRoamingVariableAssignment(str) && NetworkHandler.isClientConnected() && !ConfigPolicies.network().lowBandwidthUsage()) {
                 NetworkHandler.sendToServer(new C2SRequestExecuteMolangPacket(str, this.model.getEntity().getId()));
             }
         } catch (ParseException e) {

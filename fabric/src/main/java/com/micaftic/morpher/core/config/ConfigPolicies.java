@@ -2,6 +2,8 @@ package com.micaftic.morpher.core.config;
 
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.ServerConfig;
+import com.micaftic.morpher.core.render.NativeSimdPolicy;
+import com.micaftic.morpher.core.render.NativeSimdValidationMode;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import com.micaftic.morpher.core.render.SmRenderBackendMode;
 
@@ -56,8 +58,8 @@ public final class ConfigPolicies {
                 bool(GeneralConfig.ENABLE_OPENGL_LEGACY_GPU_RENDERER, false),
                 bool(GeneralConfig.DISABLE_RAW_OPENGL_ON_NON_OPENGL, true),
                 bool(GeneralConfig.ENABLE_OPENGL_GUI_BLUR, false),
-                value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE),
-                value(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF),
+                nativeSimdPolicy(value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE)),
+                nativeSimdValidationMode(value(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF)),
                 bool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false),
                 bool(GeneralConfig.NATIVE_SIMD_COMPATIBILITY_LOG, false),
                 bool(GeneralConfig.GPU_DEBUG_LOG, false),
@@ -75,6 +77,14 @@ public final class ConfigPolicies {
                 false, true, false);
     }
 
+    private static NativeSimdPolicy nativeSimdPolicy(GeneralConfig.NativeSimdPolicy value) {
+        return value == null ? NativeSimdPolicy.AGGRESSIVE : NativeSimdPolicy.valueOf(value.name());
+    }
+
+    private static NativeSimdValidationMode nativeSimdValidationMode(GeneralConfig.NativeSimdValidationMode value) {
+        return value == null ? NativeSimdValidationMode.OFF : NativeSimdValidationMode.valueOf(value.name());
+    }
+
     private static boolean bool(ModConfigSpec.BooleanValue value, boolean fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
     private static int integer(ModConfigSpec.IntValue value, int fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
     private static double decimal(ModConfigSpec.DoubleValue value, double fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
@@ -87,7 +97,7 @@ public final class ConfigPolicies {
     public record PrivacyPolicy(boolean enabled) { }
     public record NetworkPolicy(String defaultModelId, String defaultModelTexture, boolean canSwitchModel, boolean allowModelUpload, int modelUploadMaxMiB, int modelUploadChunksPerTick, List<String> clientNotDisplayModels, int threadCount, boolean globalBandwidthLimit, int bandwidthLimitMbps, int playerSyncTimeoutSeconds, boolean lowBandwidthUsage, int acceptSoundFx) { }
     public record GraphicsPolicy(SmRenderBackendMode backendMode, boolean openGlLegacyGpuRenderer, boolean disableRawOpenGlOnNonOpenGl, boolean openGlGuiBlur,
-                                 GeneralConfig.NativeSimdPolicy nativeSimdPolicy, GeneralConfig.NativeSimdValidationMode nativeSimdValidationMode,
+                                 NativeSimdPolicy nativeSimdPolicy, NativeSimdValidationMode nativeSimdValidationMode,
                                  boolean experimentalJavaVectorRenderer, boolean nativeSimdCompatibilityLog,
                                  boolean gpuDebugLog, boolean gpuDebugVerboseLog) { }
     public record AudioPolicy(double soundVolumePercent) { }
