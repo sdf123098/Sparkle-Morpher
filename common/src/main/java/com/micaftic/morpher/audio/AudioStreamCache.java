@@ -5,7 +5,6 @@ import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
-import org.lwjgl.system.MemoryUtil;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.UnsupportedAudioFileException;
@@ -56,7 +55,7 @@ public class AudioStreamCache {
         synchronized (LOCK) {
             CachedAudioStreamProvider provider = providerCache.remove(renderContext);
             if (provider != null) {
-                provider.clear("model released");
+                provider.clear("model evicted");
             }
         }
     }
@@ -74,7 +73,7 @@ public class AudioStreamCache {
 
         private final ConcurrentHashMap<AudioTrackData, CachedAudioEntry> cachedEntries = new ConcurrentHashMap<>();
 
-        private final ConcurrentHashMap<AudioTrackData, Object> pendingTracks = new ConcurrentHashMap<>();
+        private final PendingTrackClaims<AudioTrackData> pendingTracks = new PendingTrackClaims<>();
 
         private final AtomicLong cachedBytes = new AtomicLong();
 
@@ -83,24 +82,20 @@ public class AudioStreamCache {
 
         public void cacheAudioData(AudioTrackData trackData, ByteBuffer byteBuffer, IntArrayList intArrayList) {
             int byteSize = retainedBytes(byteBuffer, intArrayList);
-            int budget = maxCacheBytes();
+            long budget = maxCacheBytes();
             if (budget <= 0) {
                 clearAll("audio cache disabled");
-                this.pendingTracks.remove(trackData);
+                this.pendingTracks.release(trackData);
                 return;
             }
             if (byteSize <= 0 || byteSize > budget) {
-                if (byteBuffer != null) {
-                    MemoryUtil.memFree(byteBuffer);
-                }
-                this.pendingTracks.remove(trackData);
+                this.pendingTracks.release(trackData);
                 return;
             }
             synchronized (LOCK) {
-                CachedAudioEntry previous = this.cachedEntries.put(trackData, new CachedAudioEntry(byteBuffer, new AudioFormat(trackData.getSampleRate(), 16, 1, true, false), intArrayList, byteSize));
+                CachedAudioEntry previous = this.cachedEntries.put(trackData, new CachedAudioEntry(byteBuffer, new AudioFormat(trackData.getSampleRate(), 16, 1, true, false), intArrayList, byteSize, System.currentTimeMillis()));
                 if (previous != null) {
                     this.cachedBytes.addAndGet(-previous.byteSize);
-                    previous.release();
                     releaseBytes(previous.byteSize);
                 }
                 this.cachedBytes.addAndGet(byteSize);
@@ -108,7 +103,11 @@ public class AudioStreamCache {
                 ResourceLifecycleStats.onAudioTrackCached(null, byteSize);
                 trimToBudget();
             }
-            this.pendingTracks.remove(trackData);
+            this.pendingTracks.release(trackData);
+        }
+
+        void cancelAudioData(AudioTrackData trackData) {
+            this.pendingTracks.release(trackData);
         }
 
         @Override
@@ -116,24 +115,36 @@ public class AudioStreamCache {
             AudioCacheBuilder cacheBuilder;
             CachedAudioEntry audioEntry = this.cachedEntries.get(trackData);
             if (audioEntry != null) {
-                audioEntry.touch();
+                audioEntry.lastUsedAt = System.currentTimeMillis();
                 return new SeekableAudioStream(audioEntry.audioData.duplicate(), audioEntry.seekPositions, audioEntry.audioFormat);
-            }
-            if (trackData.getData() == null) {
-                throw new UnsupportedAudioFileException();
             }
             // S0.2 修复：contains(Object) 是 value 查询（value 恒为 LOCK sentinel），去重永远失效；
             // 改用 putIfAbsent 原子占位，同一音轨的 cache builder 至多创建一次。
-            if (trackData.getDuration() / trackData.getSampleRate() <= 4 && this.pendingTracks.putIfAbsent(trackData, AudioStreamCache.LOCK) == null) {
+            if (trackData.getDuration() / trackData.getSampleRate() <= 4 && this.pendingTracks.tryClaim(trackData)) {
                 cacheBuilder = new AudioCacheBuilder(this, trackData);
             } else {
                 cacheBuilder = null;
             }
-            return switch (trackData.getCodec()) {
-                case VORBIS -> new OggVorbisAudioStream(trackData.getData(), cacheBuilder);
-                case OPUS -> new OggOpusAudioStream(trackData.getData(), cacheBuilder);
-                default -> throw new UnsupportedAudioFileException();
-            };
+            try {
+                return switch (trackData.getCodec()) {
+                    case VORBIS -> new OggVorbisAudioStream(trackData.getData(), cacheBuilder);
+                    case OPUS -> new OggOpusAudioStream(trackData.getData(), cacheBuilder);
+                    default -> throw new UnsupportedAudioFileException();
+                };
+            } catch (UnsupportedAudioFileException | IOException | RuntimeException e) {
+                if (cacheBuilder != null) {
+                    cacheBuilder.discard();
+                }
+                throw e;
+            }
+        }
+
+        public void clear(String reason) {
+            synchronized (LOCK) {
+                this.cachedEntries.clear();
+                this.pendingTracks.clear();
+                releaseBytes(this.cachedBytes.getAndSet(0L));
+            }
         }
 
         private void trimToBudget() {
@@ -163,21 +174,9 @@ public class AudioStreamCache {
                     CachedAudioEntry entry = provider.cachedEntries.get(key);
                     if (entry != null && provider.cachedEntries.remove(key, entry)) {
                         provider.cachedBytes.addAndGet(-entry.byteSize);
-                        entry.release();
                         releaseBytes(entry.byteSize);
                     }
                 }
-            }
-        }
-
-        public void clear(String reason) {
-            synchronized (LOCK) {
-                for (CachedAudioEntry entry : cachedEntries.values()) {
-                    entry.release();
-                }
-                cachedEntries.clear();
-                pendingTracks.clear();
-                releaseBytes(cachedBytes.getAndSet(0L));
             }
         }
 
@@ -193,7 +192,11 @@ public class AudioStreamCache {
         }
 
         private static int maxCacheBytes() {
-            return ConfigPolicies.memory().audioCacheMaxBytes();
+            try {
+                return ConfigPolicies.memory().audioCacheMaxBytes();
+            } catch (IllegalStateException e) {
+                return 64 * 1024 * 1024;
+            }
         }
 
         private static final class CachedAudioEntry {
@@ -203,20 +206,12 @@ public class AudioStreamCache {
             final int byteSize;
             volatile long lastUsedAt;
 
-            CachedAudioEntry(ByteBuffer audioData, AudioFormat audioFormat, IntArrayList seekPositions, int byteSize) {
+            CachedAudioEntry(ByteBuffer audioData, AudioFormat audioFormat, IntArrayList seekPositions, int byteSize, long lastUsedAt) {
                 this.audioData = audioData;
                 this.audioFormat = audioFormat;
                 this.seekPositions = seekPositions;
                 this.byteSize = byteSize;
-                touch();
-            }
-
-            void touch() {
-                this.lastUsedAt = System.currentTimeMillis();
-            }
-
-            void release() {
-                MemoryUtil.memFree(audioData);
+                this.lastUsedAt = lastUsedAt;
             }
         }
     }

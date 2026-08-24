@@ -67,4 +67,11 @@ public class AudioCacheBuilder implements AutoCloseable {
             this.audioBuffer.release();
         }
     }
+
+    public void discard() {
+        if (!this.isClosed) {
+            close();
+            this.cacheProvider.cancelAudioData(this.trackData);
+        }
+    }
 }
