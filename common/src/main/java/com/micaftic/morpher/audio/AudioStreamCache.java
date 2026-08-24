@@ -73,7 +73,7 @@ public class AudioStreamCache {
 
         private final ConcurrentHashMap<AudioTrackData, CachedAudioEntry> cachedEntries = new ConcurrentHashMap<>();
 
-        private final ConcurrentHashMap<AudioTrackData, Object> pendingTracks = new ConcurrentHashMap<>();
+        private final PendingTrackClaims<AudioTrackData> pendingTracks = new PendingTrackClaims<>();
 
         private final AtomicLong cachedBytes = new AtomicLong();
 
@@ -85,11 +85,11 @@ public class AudioStreamCache {
             long budget = maxCacheBytes();
             if (budget <= 0) {
                 clearAll("audio cache disabled");
-                this.pendingTracks.remove(trackData);
+                this.pendingTracks.release(trackData);
                 return;
             }
             if (byteSize <= 0 || byteSize > budget) {
-                this.pendingTracks.remove(trackData);
+                this.pendingTracks.release(trackData);
                 return;
             }
             synchronized (LOCK) {
@@ -103,11 +103,11 @@ public class AudioStreamCache {
                 ResourceLifecycleStats.onAudioTrackCached(null, byteSize);
                 trimToBudget();
             }
-            this.pendingTracks.remove(trackData);
+            this.pendingTracks.release(trackData);
         }
 
         void cancelAudioData(AudioTrackData trackData) {
-            this.pendingTracks.remove(trackData);
+            this.pendingTracks.release(trackData);
         }
 
         @Override
@@ -120,7 +120,7 @@ public class AudioStreamCache {
             }
             // S0.2 修复：contains(Object) 是 value 查询（value 恒为 LOCK sentinel），去重永远失效；
             // 改用 putIfAbsent 原子占位，同一音轨的 cache builder 至多创建一次。
-            if (trackData.getDuration() / trackData.getSampleRate() <= 4 && this.pendingTracks.putIfAbsent(trackData, AudioStreamCache.LOCK) == null) {
+            if (trackData.getDuration() / trackData.getSampleRate() <= 4 && this.pendingTracks.tryClaim(trackData)) {
                 cacheBuilder = new AudioCacheBuilder(this, trackData);
             } else {
                 cacheBuilder = null;
