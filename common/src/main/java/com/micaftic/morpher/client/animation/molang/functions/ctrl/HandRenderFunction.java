@@ -3,7 +3,7 @@ package com.micaftic.morpher.client.animation.molang.functions.ctrl;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.input.InputStateKey;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
 import com.micaftic.morpher.geckolib3.util.MolangUtils;
 import com.micaftic.morpher.geckolib3.core.molang.funciton.entity.LivingEntityFunction;
@@ -154,7 +154,7 @@ public class HandRenderFunction extends LivingEntityFunction {
 
     private void debugSwing(LivingEntity entity, InteractionHand hand, String id, ItemStack itemStack, String stage, int result) {
         if (!"swing".equals(this.debugName)
-                || !GeneralConfig.safeGet(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)
+                || !ConfigPolicies.diagnostics().inputStateDebugLog()
                 || !InputStateKey.isLocalPlayerEntity(entity)
                 || InputStateKey.getLocalSwingPulseTicks() <= 0) {
             return;

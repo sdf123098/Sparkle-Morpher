@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.renderer.layer;
 
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.cosmeticarmorreworked.CosmeticArmorHelper;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.geckolib3.geo.GeoLayerRenderer;
@@ -33,7 +33,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
 
     private static final String RIGHT_WING_BONE_NAME = "RightWing";
 
-    private static final Identifier WINGS_LOCATION = Identifier.withDefaultNamespace("textures/entity/equipment/wings/elytra.png");
+    private static final Identifier WINGS_LOCATION = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "textures/entity/equipment/wings/elytra.png");
 
     private final net.minecraft.client.model.object.equipment.ElytraModel elytraModel;
 
@@ -129,7 +129,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         if (isImportedPlayerModel(customPlayer)) {
             return ElytraRenderMode.FALLBACK;
         }
-        if (GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_FALLBACK_ELYTRA_WITHOUT_LOCATOR)) {
+        if (ConfigPolicies.features().experimentalFallbackElytraWithoutLocator()) {
             return ElytraRenderMode.FALLBACK;
         }
         return ElytraRenderMode.NONE;
@@ -163,7 +163,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
     }
 
     private static boolean isCompatibilityElytraBlocked(String modelId, AnimatedGeoModel animatedGeoModel) {
-        if (GeneralConfig.safeGet(GeneralConfig.EXPERIMENTAL_ENABLE_ELYTRA_FOR_DEFAULT_AND_MISC_MODELS)) {
+        if (ConfigPolicies.features().experimentalEnableElytraForDefaultAndMiscModels()) {
             return false;
         }
         return isDefaultOrMiscModel(modelId) || hasNestedElytraLocator(animatedGeoModel);

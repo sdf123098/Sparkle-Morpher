@@ -14,7 +14,7 @@ final class ConditionResourceUtil {
         if (value == null || value.isEmpty()) {
             return null;
         }
-        return Identifier.tryParse(value);
+        return com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(value);
     }
 
     static <T> TagKey<T> parseTag(ResourceKey<? extends Registry<T>> registry, String value) {

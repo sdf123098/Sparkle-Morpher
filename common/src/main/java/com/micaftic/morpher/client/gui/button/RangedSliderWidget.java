@@ -12,7 +12,7 @@ import org.lwjgl.glfw.GLFW;
 import java.text.DecimalFormat;
 
 public class RangedSliderWidget extends AbstractSliderButton {
-    protected static final Identifier SLIDER_LOCATION = Identifier.fromNamespaceAndPath("minecraft", "textures/gui/slider.png");
+    protected static final Identifier SLIDER_LOCATION = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "textures/gui/slider.png");
 
     protected Component prefix;
     protected Component suffix;
@@ -153,7 +153,7 @@ public class RangedSliderWidget extends AbstractSliderButton {
         blitWithBorder(guiGraphics, SLIDER_LOCATION, handleX, this.getY(), 0, getHandleTextureY(), 8, this.height, 200, 20, 2, 3, 2, 2);
 
         int color = this.active ? 16777215 : 10526880;
-/*         GuiGraphicsExtractor.renderScrollingString(mc.getFont(), getMessage(), getX() + 2, getY(), getX() + getWidth() - 2, getY() + getHeight(), color | Mth.ceil(this.alpha * 255.0F) << 24); */
+/*         GuiGraphicsExtractor.renderScrollingString(mc.getFont(), getMessage(), getX() + 2, getY(), getX() + getWidth() - 2, getY() + getHeight(), color | Mth.ceil(this.alpha * 255.0F) << 24); */
     }
 
     //https://github.com/MinecraftForge/MinecraftForge/blob/26.1.2/src/main/java/net/minecraftforge/client/extensions/IForgeGuiGraphicsExtractor.java#L71

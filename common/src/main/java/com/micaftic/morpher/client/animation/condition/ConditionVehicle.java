@@ -16,9 +16,9 @@ public class ConditionVehicle {
 
     private static final String EMPTY = "";
 
-    private static final Identifier LEGACY_BOAT_ID = Identifier.fromNamespaceAndPath("minecraft", "boat");
+    private static final Identifier LEGACY_BOAT_ID = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "boat");
 
-    private static final Identifier LEGACY_CHEST_BOAT_ID = Identifier.fromNamespaceAndPath("minecraft", "chest_boat");
+    private static final Identifier LEGACY_CHEST_BOAT_ID = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "chest_boat");
 
     private final ObjectOpenHashSet<Identifier> idTest = new ObjectOpenHashSet<>();
 

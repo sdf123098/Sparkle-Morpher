@@ -1,5 +1,7 @@
 package com.elfmcys.yesstevemodel.geckolib3.geo;
 
+import com.micaftic.morpher.core.config.ConfigPolicies;
+
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.core.gpu.GpuDebugLog;
 import com.micaftic.morpher.core.render.RenderBackend;
@@ -26,10 +28,10 @@ public final class JavaRenderBackend implements RenderBackend {
         GeoModel model = request.model();
         GpuDebugLog.verbose("entry rendered through Java model path texture={} nativeSimdPolicy={} translucent={} preview={} firstPerson={} compat={} disableGlow={}",
                 request.textureLocation(),
-                com.micaftic.morpher.config.GeneralConfig.safeGet(com.micaftic.morpher.config.GeneralConfig.NATIVE_SIMD_POLICY, com.micaftic.morpher.config.GeneralConfig.NativeSimdPolicy.AGGRESSIVE),
+                ConfigPolicies.graphics().nativeSimdPolicy(),
                 request.translucentTexture(), request.isPreview(),
                 com.micaftic.morpher.client.renderer.ModelPreviewRenderer.isFirstPerson(),
-                com.micaftic.morpher.config.GeneralConfig.USE_COMPATIBILITY_RENDERER.get(),
+                ConfigPolicies.render().useCompatibilityRenderer(),
                 request.disableGlow());
         ModelRendererBridge.renderModel(
                 request.buffer(), request.pose(), request.projectionModelViewMatrix(),

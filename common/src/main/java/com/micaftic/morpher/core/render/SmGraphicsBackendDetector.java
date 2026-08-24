@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.render;
 
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.mixin.client.GpuDeviceAccessor;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -31,7 +31,7 @@ public final class SmGraphicsBackendDetector {
     }
 
     public static boolean isRawOpenGlAllowed() {
-        SmRenderBackendMode mode = GeneralConfig.safeGet(GeneralConfig.GRAPHICS_BACKEND_MODE, SmRenderBackendMode.AUTO);
+        SmRenderBackendMode mode = ConfigPolicies.graphics().backendMode();
         if (mode == SmRenderBackendMode.DISABLED_GPU_ACCELERATION || mode == SmRenderBackendMode.VANILLA_PIPELINE_ONLY) {
             return false;
         }
@@ -49,12 +49,12 @@ public final class SmGraphicsBackendDetector {
 
     public static boolean isOpenGlLegacyGpuRendererEnabled() {
         return isRawOpenGlAllowed()
-                && GeneralConfig.safeGet(GeneralConfig.ENABLE_OPENGL_LEGACY_GPU_RENDERER, false);
+                && ConfigPolicies.graphics().openGlLegacyGpuRenderer();
     }
 
     public static boolean isOpenGlGuiBlurEnabled() {
         return isRawOpenGlAllowed()
-                && GeneralConfig.safeGet(GeneralConfig.ENABLE_OPENGL_GUI_BLUR, false);
+                && ConfigPolicies.graphics().openGlGuiBlur();
     }
 
     public static synchronized void resetForTests() {

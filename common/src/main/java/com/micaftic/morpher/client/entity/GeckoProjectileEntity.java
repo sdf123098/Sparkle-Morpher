@@ -56,7 +56,7 @@ public class GeckoProjectileEntity extends GeoEntity<Projectile> {
         // several AbstractArrow entity ids, so let the generic mapping cover those unless
         // the model explicitly registered a more specific projectile model.
         if (this.entity instanceof AbstractArrow) {
-            return modelAssembly.getProjectileModels().get(Identifier.withDefaultNamespace("arrow"));
+            return modelAssembly.getProjectileModels().get(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "arrow"));
         }
         return null;
     }

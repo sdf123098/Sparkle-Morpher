@@ -28,11 +28,11 @@ import java.util.Optional;
  * 26.2 Blaze3D 统一编译执行，不再区分 Raw GL 快路径与 fill 回退。
  */
 final class PiePipeline {
-    static final Identifier SHADER = Identifier.fromNamespaceAndPath("sparkle_morpher", "core/pie_portable");
+    static final Identifier SHADER = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "core/pie_portable");
 
     static final RenderPipeline PIPELINE = RenderPipeline
             .builder()
-            .withLocation(Identifier.fromNamespaceAndPath("sparkle_morpher", "pipeline/pie_portable"))
+            .withLocation(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/pie_portable"))
             .withVertexShader(SHADER)
             .withFragmentShader(SHADER)
             .withBindGroupLayout(BindGroupLayout.builder()

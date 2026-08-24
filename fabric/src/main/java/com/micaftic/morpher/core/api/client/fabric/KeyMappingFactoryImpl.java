@@ -19,7 +19,7 @@ public final class KeyMappingFactoryImpl {
 
     private static KeyMapping.Category getOrCreateCategory(String categoryKey) {
         return CATEGORY_CACHE.computeIfAbsent(categoryKey, k ->
-            KeyMapping.Category.register(Identifier.fromNamespaceAndPath("sparkle_morpher", "keys")));
+            KeyMapping.Category.register(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "keys")));
     }
 
     public static KeyMapping createInGameAlt(String name, InputConstants.Type type, int keyCode, String category) {

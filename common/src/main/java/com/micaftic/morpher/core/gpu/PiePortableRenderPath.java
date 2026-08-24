@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.render.SmGraphicsCapabilities;
 import com.mojang.blaze3d.IndexType;
 import com.mojang.blaze3d.buffers.GpuBuffer;
@@ -66,7 +66,7 @@ public final class PiePortableRenderPath {
     }
 
     public static boolean isExperimentalEnabled() {
-        return GeneralConfig.safeGet(GeneralConfig.ENABLE_BLAZE3D_ROULETTE_RENDERER, false);
+        return ConfigPolicies.graphics().blaze3dRouletteRenderer();
     }
 
     public static boolean hasStableApi() {

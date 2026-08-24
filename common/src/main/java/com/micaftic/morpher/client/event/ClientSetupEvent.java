@@ -6,7 +6,7 @@ import com.micaftic.morpher.client.input.AnimationRouletteKey;
 import com.micaftic.morpher.client.input.DebugAnimationKey;
 import com.micaftic.morpher.client.input.ExtraAnimationKey;
 import com.micaftic.morpher.client.input.PlayerModelToggleKey;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
 import com.micaftic.morpher.core.architectury.registry.client.keymappings.KeyMappingRegistry;
 import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
@@ -87,7 +87,7 @@ public final class ClientSetupEvent {
 
     private static void maybeProbeVulkanCapability() {
         if (!Boolean.getBoolean("sparkle_morpher.vulkanProbe")
-                && !GeneralConfig.safeGet(GeneralConfig.VULKAN_EXPERIMENTAL_CAPABILITY_PROBE, false)) {
+                && !ConfigPolicies.features().vulkanExperimentalCapabilityProbe()) {
             return;
         }
         Blaze3D26_2Capability.Report blaze3DReport = Blaze3D26_2Capability.report();

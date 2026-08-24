@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client;
 
-import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.api.network.state.PrivacyState;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
@@ -21,7 +21,7 @@ public final class PrivacyMode {
     }
 
     public static boolean isConfigured() {
-        return GeneralConfig.safeGet(GeneralConfig.PRIVACY_MODE, false);
+        return ConfigPolicies.privacy().enabled();
     }
 
     public static boolean isActive() {

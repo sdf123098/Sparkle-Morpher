@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.input;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.ItemTagsConstants;
 import com.micaftic.morpher.core.architectury.event.EventResult;
@@ -380,7 +380,7 @@ public class InputStateKey {
     }
 
     private static void logInputSnapshot(String reason) {
-        if (!GeneralConfig.safeGet(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)) {
+        if (!ConfigPolicies.diagnostics().inputStateDebugLog()) {
             return;
         }
         LocalPlayer player = Minecraft.getInstance().player;

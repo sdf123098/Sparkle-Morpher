@@ -10,7 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 public class ModelSyncStateOverlay implements HudOverlay {
-    private static final Identifier MODEL_PANEL_ICONS = Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
+    private static final Identifier MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
     private static final int WIDTH = 190;
     private static final int HEIGHT = 42;
     private static final int GLASS = 0xD21F282E;

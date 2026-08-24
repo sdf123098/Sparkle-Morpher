@@ -4,6 +4,8 @@ import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.api.version.VersionAdapters;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.core.gpu.Blaze3DRenderPath;
 import com.micaftic.morpher.core.gpu.GpuCapability;
@@ -36,10 +38,10 @@ public final class RenderBackendDecision {
         boolean isPreview = ModelPreviewRenderer.isPreview() || com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
         boolean firstPerson = ModelPreviewRenderer.isFirstPerson();
         boolean worldRender = ModelPreviewRenderer.isWorldRender();
-        boolean hasSubmitContext = SubmitRenderContext.get() != null;
-        boolean compatibilityRenderer = GeneralConfig.USE_COMPATIBILITY_RENDERER.get();
-        boolean gpuConfigured = GeneralConfig.USE_GPU_RENDERER.get();
-        SmRenderBackendMode backendMode = GeneralConfig.safeGet(GeneralConfig.GRAPHICS_BACKEND_MODE, SmRenderBackendMode.AUTO);
+        boolean hasSubmitContext = VersionAdapters.current().supportsSubmitNodeCollector() && SubmitRenderContext.get() != null;
+        boolean compatibilityRenderer = ConfigPolicies.render().useCompatibilityRenderer();
+        boolean gpuConfigured = ConfigPolicies.render().useGpuRenderer();
+        SmRenderBackendMode backendMode = ConfigPolicies.graphics().backendMode();
         SmGraphicsBackend graphicsBackend = SmGraphicsBackendDetector.currentBackend();
         boolean conservativeRenderOnly = model != null && model.ensureConservativeRenderOnly();
 
@@ -49,7 +51,8 @@ public final class RenderBackendDecision {
         if (backendMode == SmRenderBackendMode.DISABLED_GPU_ACCELERATION) {
             return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "raw OpenGL GPU acceleration disabled by backend mode");
         }
-        if (isVulkanBlaze3DBackend(graphicsBackend) && Blaze3DRenderPath.isExperimentalEnabled()) {
+        if (VersionAdapters.current().supportsBlaze3dGpuPipeline()
+                && isVulkanBlaze3DBackend(graphicsBackend) && Blaze3DRenderPath.isExperimentalEnabled()) {
             if (!allowDirectGpuRenderer) {
                 return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled by caller");
             }

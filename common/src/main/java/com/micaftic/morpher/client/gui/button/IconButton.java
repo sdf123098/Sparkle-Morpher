@@ -8,7 +8,7 @@ import net.minecraft.resources.Identifier;
 
 public class IconButton extends FlatColorButton {
 
-    private static final Identifier ICON_TEXTURE = Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
+    private static final Identifier ICON_TEXTURE = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
 
     private final int iconU;
 

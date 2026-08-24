@@ -23,7 +23,7 @@ public final class NetworkHandler {
 
     public static final String VERSION = "2.6.0";
 
-    public static final Identifier CHANNEL_ID = Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
+    public static final Identifier CHANNEL_ID = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
 
     /** 服务端按连接记录的 SPM 协商版本（平台存储：netty Channel attribute，R9.2 保留在本层）。 */
     private static final AttributeKey<String> CHANNEL_VERSION_KEY = AttributeKey.valueOf("sparkle_morpher_channel_version");

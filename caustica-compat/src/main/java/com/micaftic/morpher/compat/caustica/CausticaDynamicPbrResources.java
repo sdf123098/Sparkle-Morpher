@@ -317,7 +317,7 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
     }
 
     private static Identifier resource(Identifier base, String path) {
-        return Identifier.fromNamespaceAndPath(base.getNamespace(), path);
+        return com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(base.getNamespace(), path);
     }
 
     private static boolean putIfChanged(Identifier id, byte[] data) {
@@ -341,7 +341,7 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
             updateDigest(digest, albedo);
             updateDigest(digest, normal);
             updateDigest(digest, specular);
-            return Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID,
+            return com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID,
                     "textures/pbr/" + HexFormat.of().formatHex(digest.digest()));
         } catch (NoSuchAlgorithmException impossible) {
             throw new IllegalStateException("SHA-256 unavailable", impossible);
@@ -371,7 +371,7 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
                 if (relative.getNameCount() < 2) continue;
                 String namespace = relative.getName(0).toString();
                 String path = relative.subpath(1, relative.getNameCount()).toString().replace('\\', '/');
-                RESOURCES.put(Identifier.fromNamespaceAndPath(namespace, path), Files.readAllBytes(file));
+                RESOURCES.put(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(namespace, path), Files.readAllBytes(file));
                 loaded++;
             }
         } catch (Exception exception) {

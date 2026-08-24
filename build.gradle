@@ -3,10 +3,7 @@ plugins {
     id 'com.gradleup.shadow' version '9.0.0-beta4' apply false
 }
 
-ext.isCurseForgeDist = providers.gradleProperty("dist")
-        .map { it.equalsIgnoreCase("curseforge") }
-        .orElse(false)
-        .get()
+apply from: rootProject.file('gradle/distribution.gradle')
 
 allprojects {
     group = rootProject.maven_group
@@ -105,12 +102,7 @@ subprojects {
     afterEvaluate {
         tasks.withType(ProcessResources).configureEach {
             if (rootProject.ext.isCurseForgeDist) {
-                exclude 'natives/**'
-                exclude '**/*.dll'
-                exclude '**/*.so'
-                exclude '**/*.dylib'
-                exclude '**/*.jnilib'
-                exclude '**/*.exe'
+                rootProject.ext.distributionResourceExcludes(delegate)
             }
         }
     }

@@ -14,17 +14,17 @@ import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 
 public final class Blaze3DBoneSkinPipeline {
-    static final Identifier SHADER = Identifier.fromNamespaceAndPath("sparkle_morpher", "core/blaze3d_bone_skin");
-    static final Identifier TRANSLUCENT_SHADER = Identifier.fromNamespaceAndPath(
+    static final Identifier SHADER = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "core/blaze3d_bone_skin");
+    static final Identifier TRANSLUCENT_SHADER = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(
             "sparkle_morpher", "core/blaze3d_bone_skin_translucent");
     /** 现代 HUD（client.renderer.modernhud 包）复用。 */
     public static final RenderPipeline PIPELINE = buildPipeline(
-            Identifier.fromNamespaceAndPath("sparkle_morpher", "pipeline/blaze3d_bone_skin"),
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/blaze3d_bone_skin"),
                     SHADER, ColorTargetState.DEFAULT);
 
     /** Same skinning path with the entity-translucent blend state used by the world renderer. */
     public static final RenderPipeline TRANSLUCENT_PIPELINE = buildPipeline(
-            Identifier.fromNamespaceAndPath("sparkle_morpher", "pipeline/blaze3d_bone_skin_translucent"),
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/blaze3d_bone_skin_translucent"),
             TRANSLUCENT_SHADER, new ColorTargetState(BlendFunction.TRANSLUCENT));
 
     private static RenderPipeline buildPipeline(Identifier location, Identifier fragmentShader,

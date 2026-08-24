@@ -20,7 +20,7 @@ public final class KeyMappingFactory {
     private static KeyMapping.Category getOrCreateCategory(String categoryKey) {
         return CATEGORY_CACHE.computeIfAbsent(categoryKey, k -> {
             // MC 26.x: Category uses Identifier; label() generates "key.category.<ns>.<path>"
-            return KeyMapping.Category.register(Identifier.fromNamespaceAndPath("sparkle_morpher", "keys"));
+            return KeyMapping.Category.register(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "keys"));
         });
     }
 

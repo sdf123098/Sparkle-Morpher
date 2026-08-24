@@ -3,7 +3,7 @@ package com.micaftic.morpher.client.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.renderer.RendererManager;
-import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.util.CameraUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -29,10 +29,10 @@ public class ReplacePlayerRenderEvent {
             return false;
         }
         LocalPlayer localPlayer = Minecraft.getInstance().player;
-        if (entity.equals(localPlayer) && GeneralConfig.safeGet(GeneralConfig.DISABLE_SELF_MODEL)) {
+        if (entity.equals(localPlayer) && ConfigPolicies.render().disableSelfModel()) {
             return false;
         }
-        if ((!entity.equals(localPlayer) && GeneralConfig.safeGet(GeneralConfig.DISABLE_OTHER_MODEL)) || entity.isSpectator()) {
+        if ((!entity.equals(localPlayer) && ConfigPolicies.render().disableOtherModel()) || entity.isSpectator()) {
             return false;
         }
         PlayerCapability cap = null;
@@ -42,7 +42,7 @@ public class ReplacePlayerRenderEvent {
                 if (!CameraUtil.isFirstPerson(cap)
                         || FirstPersonCompat.isFirstPersonActive()
                         || RealCameraCompat.isActive()
-                        || GeneralConfig.safeGet(GeneralConfig.DISABLE_EXTERNAL_FP_ANIM)
+                        || ConfigPolicies.render().disableExternalFirstPersonAnimation()
                         || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
                     // Reuse the capability resolved for the render-pre check.
                     RendererManager.getPlayerRenderer().render(cap, entityYaw, partialTick, poseStack, bufferSource, collector, packedLight);

@@ -73,7 +73,7 @@ import java.util.function.BiConsumer;
 
 public class ModernPlayerModelScreen extends Screen {
     private static final ModelPanelState STATE = new ModelPanelState();
-    private static final Identifier MODEL_PANEL_ICONS = Identifier.fromNamespaceAndPath(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
+    private static final Identifier MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
     private static final int BG = 0x90171A1D;
     private static final int PANEL = 0x4A34424A;
     private static final int PANEL_HOVER = 0x66576B76;

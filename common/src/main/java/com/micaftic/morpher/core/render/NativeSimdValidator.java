@@ -3,6 +3,7 @@ package com.micaftic.morpher.core.render;
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,7 +47,7 @@ public final class NativeSimdValidator {
     }
 
     public static GeneralConfig.NativeSimdValidationMode mode() {
-        return GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF);
+        return ConfigPolicies.graphics().nativeSimdValidationMode();
     }
 
     /**
