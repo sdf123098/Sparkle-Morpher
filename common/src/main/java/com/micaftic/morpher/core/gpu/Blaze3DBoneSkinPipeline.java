@@ -1,0 +1,57 @@
+package com.micaftic.morpher.core.gpu;
+
+import com.mojang.blaze3d.GpuFormat;
+import com.mojang.blaze3d.PrimitiveTopology;
+import com.mojang.blaze3d.pipeline.BindGroupLayout;
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.renderer.BindGroupLayouts;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.resources.Identifier;
+
+public final class Blaze3DBoneSkinPipeline {
+    static final Identifier SHADER = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "core/blaze3d_bone_skin");
+    static final Identifier TRANSLUCENT_SHADER = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(
+            "sparkle_morpher", "core/blaze3d_bone_skin_translucent");
+    /** 现代 HUD（client.renderer.modernhud 包）复用。 */
+    public static final RenderPipeline PIPELINE = buildPipeline(
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/blaze3d_bone_skin"),
+                    SHADER, ColorTargetState.DEFAULT);
+
+    /** Same skinning path with the entity-translucent blend state used by the world renderer. */
+    public static final RenderPipeline TRANSLUCENT_PIPELINE = buildPipeline(
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/blaze3d_bone_skin_translucent"),
+            TRANSLUCENT_SHADER, new ColorTargetState(BlendFunction.TRANSLUCENT));
+
+    private static RenderPipeline buildPipeline(Identifier location, Identifier fragmentShader,
+                                                ColorTargetState colorTargetState) {
+        return RenderPipeline
+                .builder(RenderPipelines.MATRICES_FOG_LIGHT_DIR_SNIPPET)
+                .withLocation(location)
+                .withVertexShader(SHADER)
+                .withFragmentShader(fragmentShader)
+                .withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2)
+                .withBindGroupLayout(BindGroupLayout.builder()
+                        .withUniform("BoneMatrices", UniformType.TEXEL_BUFFER, GpuFormat.RGBA32_FLOAT)
+                        .build())
+                .withVertexBinding(0, VertexFormat.builder(0)
+                        .addAttribute("Position", GpuFormat.RGB32_FLOAT)
+                        .addAttribute("UV0", GpuFormat.RG32_FLOAT)
+                        .addAttribute("Normal", GpuFormat.RGBA8_SNORM)
+                        .addAttribute("BoneId", GpuFormat.R32_UINT)
+                        .addAttribute("Cullable", GpuFormat.R32_UINT)
+                        .build())
+                .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
+                .withCull(false)
+                .withColorTargetState(colorTargetState)
+                .withDepthStencilState(DepthStencilState.DEFAULT)
+                .build();
+    }
+
+    private Blaze3DBoneSkinPipeline() {
+    }
+}
