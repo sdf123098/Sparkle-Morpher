@@ -21,6 +21,9 @@ sourceSets {
     main {
         java {
             srcDir rootProject.file('common/src/main/java')
+            if (!rootProject.ext.isCurseForgeDist) {
+                srcDir rootProject.ext.distributionNativeJavaSourceDir
+            }
         }
         resources {
             srcDir rootProject.file('common/src/main/resources')
@@ -46,9 +49,7 @@ if (rootProject.ext.isCurseForgeDist) {
     tasks.named('compileJava', JavaCompile) {
         source = files(
                 fileTree('src/main/java'),
-                fileTree(rootProject.file('common/src/main/java')) {
-                    rootProject.ext.distributionSourceExcludes(delegate)
-                },
+                fileTree(rootProject.file('common/src/main/java')),
                 fileTree(rootProject.file('common/src/curseforge/java'))
         )
     }

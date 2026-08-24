@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
-import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
@@ -192,7 +191,7 @@ public final class Blaze3DRenderPath {
         int boneCount = model.bakedBones == null ? 0 : model.bakedBones.size();
         if (boneCount <= 0 || boneParams == null || boneParams.length < boneCount * 12
                 || ConfigPolicies.graphics().nativeSimdPolicy()
-                == GeneralConfig.NativeSimdPolicy.OFF
+                == com.micaftic.morpher.core.render.NativeSimdPolicy.OFF
                 || !AccelerationCapability.canRenderSimd()
                 || !model.ensureVulkanNativeGpuMesh()) {
             return false;

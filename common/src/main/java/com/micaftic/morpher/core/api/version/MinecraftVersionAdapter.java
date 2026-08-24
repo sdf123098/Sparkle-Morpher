@@ -14,9 +14,5 @@ public interface MinecraftVersionAdapter {
     boolean supportsBlaze3dGpuPipeline();
     boolean supportsGuiGraphicsExtractor();
 
-    default boolean supports(VersionAdapterSurface surface) {
-        return switch (surface) {
-            case RENDER, GUI, PACKET, ENTITY, RESOURCE, CAMERA, CAPABILITY_COMPONENT, GPU_RENDER_PIPELINE -> true;
-        };
-    }
+    boolean supports(VersionAdapterSurface surface);
 }

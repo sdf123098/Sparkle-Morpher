@@ -7,6 +7,7 @@ public final class VersionAdapters {
         public boolean supportsSubmitNodeCollector() { return true; }
         public boolean supportsBlaze3dGpuPipeline() { return true; }
         public boolean supportsGuiGraphicsExtractor() { return true; }
+        public boolean supports(VersionAdapterSurface surface) { return true; }
     };
     private VersionAdapters() { }
     public static MinecraftVersionAdapter current() { return CURRENT; }
