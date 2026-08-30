@@ -47,6 +47,31 @@ public final class LegacyModelSyncClient {
     private LegacyModelSyncClient() {
     }
 
+    /** Narrow entry points used only by the legacy-compat adapter. */
+    public static void compatEnqueueSync(Connection connection, ByteBuffer data) {
+        enqueueSync(connection, data);
+    }
+
+    public static void compatProcessServerData(ByteBuffer data) {
+        processServerData(data);
+    }
+
+    public static void compatResetSyncState() {
+        resetSyncState();
+    }
+
+    public static void compatResetStep() {
+        syncStep = 1;
+    }
+
+    public static byte[] compatClientKey() {
+        return clientKey == null ? null : clientKey.clone();
+    }
+
+    public static String compatCurrentCacheFolderName() {
+        return currentCacheFolderName;
+    }
+
     static void enqueueSync(Connection connection, ByteBuffer data) {
         long deadline = System.nanoTime() + MAX_ENQUEUE_WAIT_MILLIS * 1_000_000L;
         while (true) {

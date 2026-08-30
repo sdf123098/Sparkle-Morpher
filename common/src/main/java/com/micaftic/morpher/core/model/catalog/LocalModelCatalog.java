@@ -48,7 +48,7 @@ public final class LocalModelCatalog {
     /** 本地模型文件大小上限（与原 ClientModelManager 常量一致）。 */
     public static final long DEFAULT_MAX_FILE_BYTES = 512L * 1024L * 1024L;
 
-    private static final String[] IMPORT_EXTENSIONS = {".ysm", ".zip", ".bbmodel"};
+    private static final String[] IMPORT_EXTENSIONS = {".ysm", ".zip", ".bbmodel", ".gltf", ".glb"};
 
     private final long maxFileBytes;
 
@@ -102,8 +102,17 @@ public final class LocalModelCatalog {
     public record ScanResult(boolean foundAny, Map<String, Entry> entries, Map<String, Path> sources) {
     }
 
-    /** 旧 catalog → 新 catalog 的 diff：需要释放的 stale id + 迁移后的完整新 catalog。 */
+    /** 旧 catalog → 新 catalog 的 diff：需要重新尝试或最终移除的 stale id + 新 catalog。 */
     public record Diff(List<String> staleIds, Map<String, Entry> catalog) {
+        /** 来源发生变化或条目已删除，需要处理该 id。 */
+        public boolean isStale(String modelId) {
+            return staleIds.contains(modelId);
+        }
+
+        /** 条目已从本地 catalog 删除，可在新装配提交后移除旧装配。 */
+        public boolean isRemoved(String modelId) {
+            return isStale(modelId) && !catalog.containsKey(modelId);
+        }
     }
 
     // ===================== 扫描 =====================
@@ -143,7 +152,8 @@ public final class LocalModelCatalog {
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 String fileName = file.getFileName() == null ? "" : file.getFileName().toString();
                 String lower = fileName.toLowerCase(Locale.ROOT);
-                if (!lower.endsWith(".ysm") && !lower.endsWith(".zip") && !lower.endsWith(".bbmodel")) {
+                if (!lower.endsWith(".ysm") && !lower.endsWith(".zip") && !lower.endsWith(".bbmodel")
+                        && !lower.endsWith(".gltf") && !lower.endsWith(".glb")) {
                     return FileVisitResult.CONTINUE;
                 }
                 if (attrs.size() > maxFileBytes) {

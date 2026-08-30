@@ -178,6 +178,13 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
     private boolean uploadLocalModelFile(LocalUploadFile file) {
         this.error = Component.empty();
         this.lastFlashTime = ClientUiUtil.getMillis();
+        if (ClientModelManager.isGltfFileName(file.fileName())) {
+            this.localStatus = Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", file.modelId());
+            this.localStatusColor = ChatFormatting.GREEN;
+            this.serverStatus = Component.translatable("gui.sparkle_morpher.import.state.server_skipped");
+            this.serverStatusColor = ChatFormatting.GRAY;
+            return false;
+        }
         ModelUploadSession existing = ModelUploadSession.getInstance();
         if (existing != null && !existing.isTerminal()) {
             this.error = Component.translatable("gui.sparkle_morpher.import.error.in_progress");
@@ -206,6 +213,12 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         }
         if (lower.endsWith(".bbmodel")) {
             return ".bbmodel";
+        }
+        if (lower.endsWith(".gltf")) {
+            return ".gltf";
+        }
+        if (lower.endsWith(".glb")) {
+            return ".glb";
         }
         return "";
     }
@@ -250,7 +263,11 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         }
         this.localStatus = Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId);
         this.localStatusColor = ChatFormatting.GREEN;
-
+        if (ClientModelManager.isGltfFileName(fileName)) {
+            this.serverStatus = Component.translatable("gui.sparkle_morpher.import.state.server_skipped");
+            this.serverStatusColor = ChatFormatting.GRAY;
+            return;
+        }
         Component uploadError = ModelUploadSession.start(modelId, fileName, data);
         if (uploadError != null) {
             this.serverStatus = Component.translatable("gui.sparkle_morpher.import.state.server_upload_failed", uploadError);
@@ -277,7 +294,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
 
     private static String stripImportExtension(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
-        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel", ".gltf", ".glb"}) {
             if (lower.endsWith(extension)) {
                 return fileName.substring(0, fileName.length() - extension.length());
             }

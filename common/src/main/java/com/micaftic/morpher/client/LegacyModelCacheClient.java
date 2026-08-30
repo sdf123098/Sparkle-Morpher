@@ -47,6 +47,15 @@ public final class LegacyModelCacheClient {
     private LegacyModelCacheClient() {
     }
 
+    /** Narrow entry points used only by the legacy-compat adapter. */
+    public static void compatClearCachedModelHashes() {
+        clearCachedModelHashes();
+    }
+
+    public static void compatReleaseAllInFlightBuffers() {
+        releaseAllInFlightBuffers();
+    }
+
     private record ModelHash(long hash1, long hash2) {
     }
 
