@@ -311,6 +311,8 @@ class LocalModelCatalogTest {
         Diff diff = LocalModelCatalog.diff(Map.of("gone", prev), Map.of());
 
         assertEquals(List.of("gone"), diff.staleIds());
+        assertTrue(diff.isStale("gone"));
+        assertTrue(diff.isRemoved("gone"));
     }
 
     @Test
@@ -327,6 +329,8 @@ class LocalModelCatalogTest {
 
         assertEquals(List.of("m"), diff.staleIds(), "同 id 但 source 变化 → stale");
         assertTrue(diff.catalog().containsKey("m"));
+        assertTrue(diff.isStale("m"));
+        assertFalse(diff.isRemoved("m"), "来源变更但新条目仍存在，失败时应保留旧装配");
     }
 
     @Test

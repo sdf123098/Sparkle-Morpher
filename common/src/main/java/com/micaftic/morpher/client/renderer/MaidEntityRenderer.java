@@ -2,8 +2,11 @@ package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
+import com.micaftic.morpher.client.renderer.layer.MaidItemInHandLayer;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
+import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -16,6 +19,7 @@ import org.jetbrains.annotations.NotNull;
 public final class MaidEntityRenderer extends GeoReplacedEntityRenderer<LivingEntity, MaidCapability> {
     public MaidEntityRenderer(EntityRendererProvider.Context context) {
         super(context);
+        addLayerRenderer(new MaidItemInHandLayer(context.getEntityRenderDispatcher().getItemInHandRenderer()));
     }
 
     @Override
@@ -24,21 +28,27 @@ public final class MaidEntityRenderer extends GeoReplacedEntityRenderer<LivingEn
     }
 
     public static boolean tryRender(Entity entity, float entityYaw, float partialTick, PoseStack poseStack,
-                                    MultiBufferSource bufferSource, int packedLight) {
+                                    MultiBufferSource bufferSource, SubmitNodeCollector collector, int packedLight) {
         if (!(entity instanceof LivingEntity) || !TouhouMaidCompat.isMaidEntity(entity)) {
             return true;
         }
-        return MaidCapability.get(entity).map(capability -> {
-            capability.syncOfficialYsmState();
-            capability.tickModel();
-            if (!capability.isModelActive() || !capability.isModelReady()) {
-                return true;
-            }
-            RendererManager.getMaidRenderer().renderEntity(capability,
-                    CustomVehicleRenderer.getBodyRotation(entity, entityYaw, partialTick),
-                    partialTick, poseStack, bufferSource, packedLight);
-            return false;
-        }).orElse(true);
+        SubmitNodeCollector previousCollector = SubmitRenderContext.get();
+        SubmitRenderContext.set(collector != null ? collector : previousCollector);
+        try {
+            return MaidCapability.get(entity).map(capability -> {
+                capability.syncOfficialYsmState();
+                capability.tickModel();
+                if (!capability.isModelActive() || !capability.isModelReady()) {
+                    return true;
+                }
+                RendererManager.getMaidRenderer().renderEntity(capability,
+                        CustomVehicleRenderer.getBodyRotation(entity, entityYaw, partialTick),
+                        partialTick, poseStack, bufferSource, packedLight);
+                return false;
+            }).orElse(true);
+        } finally {
+            SubmitRenderContext.set(previousCollector);
+        }
     }
 
     @NotNull
