@@ -85,6 +85,8 @@ class LocalModelImportStoreTest {
         assertEquals(".ysm", LocalModelImportStore.importExtension("model.YSM"));
         assertEquals(".zip", LocalModelImportStore.importExtension("model.zip"));
         assertEquals(".bbmodel", LocalModelImportStore.importExtension("model.bbmodel"));
+        assertEquals(".gltf", LocalModelImportStore.importExtension("model.GLTF"));
+        assertEquals(".glb", LocalModelImportStore.importExtension("model.glb"));
         assertEquals("", LocalModelImportStore.importExtension("model.txt"));
         assertEquals("", LocalModelImportStore.importExtension(null));
         assertEquals("", LocalModelImportStore.importExtension("noext"));

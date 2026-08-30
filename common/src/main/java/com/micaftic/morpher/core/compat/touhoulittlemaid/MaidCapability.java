@@ -6,6 +6,7 @@ import com.micaftic.morpher.client.entity.GeoEntity;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
+import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.molang.parser.ParseException;
 import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import com.micaftic.morpher.molang.runtime.Struct;
@@ -119,5 +120,10 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     public void setupAnim(float seekTime, boolean firstPerson) {
         super.setupAnim(seekTime, firstPerson);
         getEvaluationContext().setRoamingProperties(this.serverVars);
+    }
+
+    @Override
+    public boolean shouldSkipAnimation(AnimationEvent<?> event) {
+        return event.isFirstPerson();
     }
 }

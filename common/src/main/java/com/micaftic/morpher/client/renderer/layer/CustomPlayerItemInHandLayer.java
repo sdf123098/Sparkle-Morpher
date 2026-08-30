@@ -21,7 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import com.mojang.math.Axis;
 import com.micaftic.morpher.util.ItemTagsConstants;
 
-public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEntity> {
+public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEntity> implements HeldItemLayer {
 
     private final ItemInHandRenderer itemRenderer;
 
@@ -180,6 +180,20 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
     private void applyFallbackHandTransform(PoseStack poseStack) {
         poseStack.translate(0.0d, -0.0625d, -0.1d);
         poseStack.mulPose(Axis.XP.rotationDegrees(-90.0f));
+    }
+
+    /**
+     * Renders an item at a glTF hand attachment point.  The display context is
+     * deliberately third-person so the normal 3D item model is always used.
+     */
+    public void renderGltfThirdPersonItem(LivingEntity livingEntity, ItemStack itemStack,
+                                          HumanoidArm humanoidArm, PoseStack poseStack,
+                                          MultiBufferSource bufferSource, int packedLight, float partialTick) {
+        if (itemStack == null || itemStack.isEmpty()) {
+            return;
+        }
+        this.itemRenderer.renderItem(livingEntity, itemStack, getDisplayContext(humanoidArm),
+                humanoidArm == HumanoidArm.LEFT, poseStack, bufferSource, packedLight);
     }
 
     private ItemDisplayContext getDisplayContext(HumanoidArm humanoidArm) {

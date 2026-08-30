@@ -8,19 +8,13 @@ import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import dev.architectury.event.events.common.LifecycleEvent;
 
-import java.io.IOException;
-
 public final class CommonEvent {
 
     private CommonEvent() {
     }
 
     public static Object nativeInit() {
-        try {
-            ServerModelManager.reloadPacks();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        ServerModelManager.reloadPacks();
         return null;
     }
 

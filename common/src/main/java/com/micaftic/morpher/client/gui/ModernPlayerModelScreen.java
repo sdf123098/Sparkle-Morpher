@@ -685,7 +685,7 @@ public class ModernPlayerModelScreen extends Screen {
         renderSelectedModelPreview(g, assembly, modelId, x + 8, previewTop, w - 16, previewH, mouseX, mouseY, partialTick);
         drawText(g, Component.literal(trim(displayName(modelId, assembly), w - 16)), x + 8, previewTop + previewH + 8);
         drawMuted(g, Component.literal(trim(modelId, w - 16)), x + 8, previewTop + previewH + 20);
-        Metadata metadata = assembly.getModelData().getExtraInfo();
+        Metadata metadata = assembly.getModelData() == null ? null : assembly.getModelData().getExtraInfo();
         int yy = previewTop + previewH + 38;
         if (metadata != null && metadata.getAuthors() != null && !metadata.getAuthors().isEmpty()) {
             drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.authors"), x + 8, yy);
@@ -704,7 +704,7 @@ public class ModernPlayerModelScreen extends Screen {
         }
         drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.textures"), x + 8, yy);
         yy += 12;
-        List<String> textures = new ArrayList<>(assembly.getAnimationBundle().getTextures().keySet());
+        List<String> textures = assembly.getTextureNames();
         for (int i = 0; i < Math.min(8, textures.size()) && yy + 16 < y + h - 8; i++) {
             String texture = textures.get(i);
             boolean selected = texture.equals(selectedTextureOrDefault(assembly));
@@ -719,6 +719,11 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderSelectedModelPreview(GuiGraphics g, ModelAssembly assembly, String modelId, int x, int y, int w, int h, int mouseX, int mouseY, float partialTick) {
         fill(g, x, y, w, h, GLASS_DARK);
         border(g, x, y, w, h, 0x33FFFFFF);
+        if (assembly.isGltf()) {
+            drawIcon(g, IconGlyph.MODEL, x + w / 2 - 8, y + h / 2 - 8);
+            drawCentered(g, Component.literal("glTF"), x + w / 2, y + h - 12, MUTED);
+            return;
+        }
         String textureId = selectedTextureOrDefault(assembly);
         boolean wasTrimmed = ClientModelManager.isGpuCacheTrimmed(modelId);
         ClientModelManager.markModelUsed(modelId);
@@ -1218,7 +1223,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     private boolean matchesModelSearch(String modelId, ModelAssembly assembly, String query) {
         if (query.startsWith("@")) {
-            return authors(assembly.getModelData().getExtraInfo()).toLowerCase(Locale.ROOT).contains(query.substring(1));
+            Metadata metadata = assembly.getModelData() == null ? null : assembly.getModelData().getExtraInfo();
+            return authors(metadata).toLowerCase(Locale.ROOT).contains(query.substring(1));
         }
         String haystack = modelId + " " + displayName(modelId, assembly) + " " + modelSubtitle(modelId, assembly);
         return haystack.toLowerCase(Locale.ROOT).contains(query.startsWith("#") ? query.substring(1) : query);
@@ -1609,6 +1615,10 @@ public class ModernPlayerModelScreen extends Screen {
                 setStatus(error, ChatFormatting.RED);
                 return;
             }
+            if (ClientModelManager.isGltfFileName(fileName)) {
+                setStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
+                return;
+            }
             Component uploadError = ModelUploadSession.start(modelId, fileName, file.data());
             if (uploadError != null) {
                 setStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
@@ -1624,7 +1634,8 @@ public class ModernPlayerModelScreen extends Screen {
         PlayerCapability.get(minecraft.player).ifPresent(cap -> {
             String modelId = cap.getModelId();
             ModelAssembly modelAssembly = cap.getModelAssembly();
-            if (modelAssembly != null && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
+            if (modelAssembly != null && !modelAssembly.isGltf() && modelAssembly.getModelData() != null
+                    && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
                 minecraft.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
             }
         });
@@ -1791,10 +1802,11 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private String selectedTextureOrDefault(ModelAssembly assembly) {
-        if (STATE.selectedTextureId != null && !STATE.selectedTextureId.isBlank() && assembly.getAnimationBundle().getTextures().containsKey(STATE.selectedTextureId)) {
+        List<String> names = assembly.getTextureNames();
+        if (STATE.selectedTextureId != null && !STATE.selectedTextureId.isBlank() && names.contains(STATE.selectedTextureId)) {
             return STATE.selectedTextureId;
         }
-        return assembly.getAnimationBundle().getDefaultTextureName();
+        return names.isEmpty() ? "" : names.get(0);
     }
 
     private Set<String> authModels() {
@@ -1860,7 +1872,7 @@ public class ModernPlayerModelScreen extends Screen {
             parts.add("auth");
         }
         if (assembly.isRuntimeResident()) {
-            parts.add(assembly.getAnimationBundle().getTextures().size() + " tex");
+            parts.add(assembly.getTextureNames().size() + " tex");
         }
         return String.join(" | ", parts);
     }
@@ -2081,7 +2093,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private static String stripImportExtension(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
-        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel", ".gltf", ".glb"}) {
             if (lower.endsWith(extension)) {
                 return fileName.substring(0, fileName.length() - extension.length());
             }
@@ -2141,7 +2153,7 @@ public class ModernPlayerModelScreen extends Screen {
             drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 22, y + 5);
             return;
         }
-        List<String> textures = new ArrayList<>(assembly.getAnimationBundle().getTextures().keySet());
+        List<String> textures = assembly.getTextureNames();
         String selectedTexture = selectedTextureOrDefault(assembly);
         int quickButtonW = 52;
         int quickCount = Math.min(textures.size(), Math.max(0, Math.min(3, (w - 150) / (quickButtonW + 2))));

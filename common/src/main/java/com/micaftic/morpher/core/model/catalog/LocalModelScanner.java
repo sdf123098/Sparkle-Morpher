@@ -19,7 +19,7 @@ import java.util.function.Predicate;
  * R8 LocalModelScanner — 本地模型来源遍历发现（从 ServerModelManager.scanDirectoryModels 抽取）。
  *
  * <p>职责：遍历本地模型 baseDir（builtin/custom/auth），发现模型文件夹与模型文件
- * （.ysm/.zip/.bbmodel），归一 modelId 后逐条回调 {@link Sink}。解析与缓存由调用方
+ * （.ysm/.zip/.bbmodel/.gltf/.glb），归一 modelId 后逐条回调 {@link Sink}。解析与缓存由调用方
  * 在回调内完成——scanner 只负责"发现"，纯 Java 可测。</p>
  *
  * <p>判定规则（与原实现逐字节一致）：</p>
@@ -35,13 +35,15 @@ public final class LocalModelScanner {
     private static final String EXT_YSM = ".ysm";
     private static final String EXT_ZIP = ".zip";
     private static final String EXT_BBMODEL = ".bbmodel";
+    private static final String EXT_GLTF = ".gltf";
+    private static final String EXT_GLB = ".glb";
 
     private LocalModelScanner() {
     }
 
     /** 命中的模型来源类型。 */
     public enum Kind {
-        FOLDER, YSM, ZIP, BBMODEL, UNKNOWN
+        FOLDER, YSM, ZIP, BBMODEL, GLTF, GLB, UNKNOWN
     }
 
     /** 一次扫描命中：归一后的 modelId + 来源路径 + 类型。 */
@@ -119,6 +121,12 @@ public final class LocalModelScanner {
         if (lower.endsWith(EXT_BBMODEL)) {
             return Kind.BBMODEL;
         }
+        if (lower.endsWith(EXT_GLTF)) {
+            return Kind.GLTF;
+        }
+        if (lower.endsWith(EXT_GLB)) {
+            return Kind.GLB;
+        }
         return Kind.UNKNOWN;
     }
 
@@ -128,6 +136,8 @@ public final class LocalModelScanner {
             case YSM -> EXT_YSM;
             case ZIP -> EXT_ZIP;
             case BBMODEL -> EXT_BBMODEL;
+            case GLTF -> EXT_GLTF;
+            case GLB -> EXT_GLB;
             case FOLDER, UNKNOWN -> "";
         };
     }
@@ -135,7 +145,7 @@ public final class LocalModelScanner {
     /** 去掉导入文件扩展名（.ysm/.zip/.bbmodel，大小写不敏感）。 */
     public static String stripImportExtension(String modelId) {
         String lower = modelId.toLowerCase(Locale.ROOT);
-        for (String extension : new String[]{EXT_YSM, EXT_ZIP, EXT_BBMODEL}) {
+        for (String extension : new String[]{EXT_YSM, EXT_ZIP, EXT_BBMODEL, EXT_GLTF, EXT_GLB}) {
             if (lower.endsWith(extension)) {
                 return modelId.substring(0, modelId.length() - extension.length());
             }

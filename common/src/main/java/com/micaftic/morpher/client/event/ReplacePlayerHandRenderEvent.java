@@ -31,11 +31,18 @@ public class ReplacePlayerHandRenderEvent {
                 return;
             }
             ModelAssembly context = cap.getModelAssembly();
+            if (context != null && context.isGltf()) {
+                cancelled[0] = RendererManager.getHandRenderer().renderHandItem(localPlayer, context, cap, arm,
+                        poseStack, bufferSource, packedLight,
+                        Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false));
+                return;
+            }
             if (context == null || context.getAnimationBundle() == null || !hasArmBone(arm, context.getAnimationBundle().getArmModel())) {
                 return;
             }
-            RendererManager.getHandRenderer().renderHandItem(localPlayer, context, cap, arm, poseStack, bufferSource, packedLight, Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false));
-            cancelled[0] = true;
+            cancelled[0] = RendererManager.getHandRenderer().renderHandItem(localPlayer, context, cap, arm,
+                    poseStack, bufferSource, packedLight,
+                    Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false));
         });
         return cancelled[0];
     }

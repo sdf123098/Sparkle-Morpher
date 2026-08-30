@@ -5,6 +5,7 @@ import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.resource.models.Metadata;
+import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.model.format.ServerModelInfo;
 import com.micaftic.morpher.client.gui.ModelMetadataPresenter;
@@ -13,6 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 import java.util.Map;
+import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
 
 public class ModelAssembly {
 
@@ -30,6 +32,8 @@ public class ModelAssembly {
 
     private volatile List<AbstractTexture> textures;
 
+    private volatile GltfModel gltfModel;
+
     public ModelAssembly(PlayerModelBundle animationBundle, Map<ResourceLocation, ProjectileModelBundle> projectileModels, Map<ResourceLocation, VehicleModelBundle> vehicleModels, ModelResourceBundle expressionCache, ServerModelInfo modelData, ModelDisplayAssets textureRegistry, List<AbstractTexture> list) {
         this.animationBundle = animationBundle;
         this.projectileModels = projectileModels;
@@ -38,6 +42,18 @@ public class ModelAssembly {
         this.modelData = modelData;
         this.textureRegistry = textureRegistry;
         this.textures = list;
+        this.gltfModel = null;
+    }
+
+    /** Creates a runtime assembly for the independent glTF path. */
+    public static ModelAssembly forGltf(GltfModel model, List<AbstractTexture> imageTextures) {
+        if (model == null) throw new IllegalArgumentException("glTF model must not be null");
+        ModelResourceBundle resources = new ModelResourceBundle(
+                Map.of(), new Object2ReferenceOpenHashMap<>(), new Object2ReferenceOpenHashMap<>(), Map.of());
+        ModelAssembly assembly = new ModelAssembly(null, Map.of(), Map.of(), resources, null,
+                new ModelDisplayAssets(null, false, Map.of(), Map.of()), imageTextures);
+        assembly.gltfModel = model;
+        return assembly;
     }
 
     public PlayerModelBundle getAnimationBundle() {
@@ -46,6 +62,22 @@ public class ModelAssembly {
 
     public List<AbstractTexture> getTextures() {
         return this.textures;
+    }
+
+    /** Returns stable texture labels for both legacy YSM and glTF assemblies. */
+    public List<String> getTextureNames() {
+        if (gltfModel != null) {
+            java.util.ArrayList<String> names = new java.util.ArrayList<>();
+            for (int i = 0; i < gltfModel.images().size(); i++) {
+                String name = gltfModel.images().get(i).name();
+                names.add(name == null || name.isBlank() ? "image" + i : name);
+            }
+            return List.copyOf(names);
+        }
+        if (animationBundle == null) {
+            return List.of();
+        }
+        return List.copyOf(animationBundle.getTextures().keySet());
     }
 
     public ModelResourceBundle getExpressionCache() {
@@ -60,6 +92,21 @@ public class ModelAssembly {
         return this.vehicleModels;
     }
 
+    public GltfModel getGltfModel() {
+        return this.gltfModel;
+    }
+
+    public boolean isGltf() {
+        return this.gltfModel != null;
+    }
+
+    /** Resolves a glTF material texture index to the corresponding image texture. */
+    public AbstractTexture getGltfTexture(int textureIndex) {
+        if (gltfModel == null || textureIndex < 0 || textureIndex >= gltfModel.textures().size()) return null;
+        int imageIndex = gltfModel.textures().get(textureIndex).imageIndex();
+        return imageIndex >= 0 && imageIndex < textures.size() ? textures.get(imageIndex) : null;
+    }
+
     public ServerModelInfo getModelData() {
         return this.modelData;
     }
@@ -69,7 +116,7 @@ public class ModelAssembly {
     }
 
     public boolean isRuntimeResident() {
-        return animationBundle != null && expressionCache != null;
+        return (animationBundle != null || gltfModel != null) && expressionCache != null;
     }
 
     public synchronized void unloadRuntime() {
@@ -78,6 +125,7 @@ public class ModelAssembly {
         vehicleModels = null;
         expressionCache = null;
         textures = List.of();
+        gltfModel = null;
         textureRegistry.clearTextureReferences();
     }
 
@@ -184,6 +232,9 @@ public class ModelAssembly {
     }
 
     public String getDisplayName(String str) {
+        if (getModelData() == null) {
+            return str;
+        }
         Metadata name = getModelData().getExtraInfo();
         if (name != null) {
             return ModelMetadataPresenter.getLocalizedModelString(this, "metadata.name", name.getName());

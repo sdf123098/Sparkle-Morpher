@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
+import com.micaftic.morpher.client.renderer.layer.MaidItemInHandLayer;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -15,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 public final class MaidEntityRenderer extends GeoReplacedEntityRenderer<LivingEntity, MaidCapability> {
     public MaidEntityRenderer(EntityRendererProvider.Context context) {
         super(context);
+        addLayerRenderer(new MaidItemInHandLayer(context.getItemInHandRenderer()));
     }
 
     public static boolean tryRender(Entity entity, float entityYaw, float partialTick, PoseStack poseStack,

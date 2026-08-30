@@ -130,7 +130,7 @@ public final class YSMChannelImpl {
                 ServerPlayNetworking.send(p, new YSMPayload(encode(packet)));
             }
         }
-        if (player instanceof ServerPlayer self) {
+        if (player instanceof ServerPlayer self && canSendToClient(self)) {
             ServerPlayNetworking.send(self, new YSMPayload(encode(packet)));
         }
     }

@@ -3,13 +3,13 @@
   "abi": 3,
   "version": "8d572acf572e62817de5a08086df2188d91c989f",
   "source": "sdf123098/openysm.cpp@8d572acf572e62817de5a08086df2188d91c989f",
-  "comment": "R1.2.2 §11 Native 信任链：digest mismatch 禁止加载。SHA-256 与 NATIVE_SOURCES.md 一致；发布前用实际制品重新核对（verify-native-abi.gradle 扩展点）。",
+  "comment": "R1.2.2 §11 Native 信任链：digest mismatch 禁止加载。构建前由 verify-native-abi.gradle 根据实际原生文件自动刷新 SHA-256，并在打包前复核。",
   "artifacts": [
-    { "platform": "windows-x64", "filename": "ysm-core.dll", "sha256": "68552E0BD336988D6AA7C012B2B5355E677B77E2E95BB9F8902F30ED5E773D04", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "windows-x86", "filename": "ysm-core.dll", "sha256": "1A2AF959C097815F2235F209D380D5E353FDD9B3A0B2799E09F67EEC0843211B", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "linux-x64", "filename": "libysm-core.so", "sha256": "432BFD4EE33A03A5ACB1BE4CAFD2507C8CC79160EF7DEDA000F4F3B7C03C7087", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "macos-x64", "filename": "libysm-core.dylib", "sha256": "B0AB5494403833AC080851B6805B0C38EE38051F9CB2B1AB9B93F59BD0176F39", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "macos-arm64", "filename": "libysm-core.dylib", "sha256": "E2A591CB7464C1B492305C24FB98994FE2B1E2023B781CFAC0033F1770B774E2", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "android-arm64", "filename": "libysm-core.so", "sha256": "5890A9CFF20500238B49170E2633C68D3CD5A9A91C890E7F9A5B84E36E87EA5B", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" }
+    { "platform": "windows-x64", "filename": "ysm-core.dll", "sha256": "BE9220EB779E332C3D3AEC1C1C56A23EBECE9455755B042F2A686FB17930550A", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
+    { "platform": "windows-x86", "filename": "ysm-core.dll", "sha256": "38FB99931E022A29172A9D34930C6D115844CA420BD7DE5A88D2FEC12E606C37", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
+    { "platform": "linux-x64", "filename": "libysm-core.so", "sha256": "5A70BD270CFFA461973606452EDE720C688E83A48DF8AE2B63003EC3F6788811", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
+    { "platform": "macos-x64", "filename": "libysm-core.dylib", "sha256": "10A1F4DE36EC3CA69DED52A357F64E50FBCACF7C3CC4DBCDD69224FE07D55954", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
+    { "platform": "macos-arm64", "filename": "libysm-core.dylib", "sha256": "DB2CAC51E7F875DFC49BBFAD5E52BF7462D73BBAB51B874D3FDE235AD194DCB9", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
+    { "platform": "android-arm64", "filename": "libysm-core.so", "sha256": "12D55085B2ADB7B524458C6F161C5D4FC0F0DA9CBE2933ED226E73695C3864A4", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" }
   ]
 }

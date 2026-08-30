@@ -33,10 +33,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 public final class ModelImportFilePicker {
-    private static final String[] IMPORT_SUFFIXES = {"ysm", "zip", "bbmodel"};
-    private static final String[] IMPORT_EXTENSIONS = {".ysm", ".zip", ".bbmodel"};
-    private static final String FILE_FILTER_PATTERN = "*.ysm;*.zip;*.bbmodel";
-    private static final String FILE_FILTER_DESCRIPTION = "Model (*.ysm, *.zip, *.bbmodel)";
+    private static final String[] IMPORT_SUFFIXES = {"ysm", "zip", "bbmodel", "gltf", "glb"};
+    private static final String[] IMPORT_EXTENSIONS = {".ysm", ".zip", ".bbmodel", ".gltf", ".glb"};
+    private static final String FILE_FILTER_PATTERN = "*.ysm;*.zip;*.bbmodel;*.gltf;*.glb";
+    private static final String FILE_FILTER_DESCRIPTION = "Model (*.ysm, *.zip, *.bbmodel, *.gltf, *.glb)";
     private static final int MAX_FOLDER_DEPTH = 16;
     private static final int MAX_FOLDER_FILE_COUNT = 4096;
     private static final int CLIPBOARD_OPEN = 2002;
@@ -900,11 +900,15 @@ public final class ModelImportFilePicker {
         java.nio.ByteBuffer ysmPattern = (java.nio.ByteBuffer) memUTF8.invoke(null, "*.ysm");
         java.nio.ByteBuffer zipPattern = (java.nio.ByteBuffer) memUTF8.invoke(null, "*.zip");
         java.nio.ByteBuffer bbmodelPattern = (java.nio.ByteBuffer) memUTF8.invoke(null, "*.bbmodel");
-        Object filters = memAllocPointer.invoke(null, 3);
+        java.nio.ByteBuffer gltfPattern = (java.nio.ByteBuffer) memUTF8.invoke(null, "*.gltf");
+        java.nio.ByteBuffer glbPattern = (java.nio.ByteBuffer) memUTF8.invoke(null, "*.glb");
+        Object filters = memAllocPointer.invoke(null, 5);
         try {
             pointerPut.invoke(filters, 0, ysmPattern);
             pointerPut.invoke(filters, 1, zipPattern);
             pointerPut.invoke(filters, 2, bbmodelPattern);
+            pointerPut.invoke(filters, 3, gltfPattern);
+            pointerPut.invoke(filters, 4, glbPattern);
             return (String) open.invoke(null,
                     Component.translatable("gui.sparkle_morpher.import.title").getString(),
                     "",
@@ -918,6 +922,8 @@ public final class ModelImportFilePicker {
                 memFreeBuffer.invoke(null, ysmPattern);
                 memFreeBuffer.invoke(null, zipPattern);
                 memFreeBuffer.invoke(null, bbmodelPattern);
+                memFreeBuffer.invoke(null, gltfPattern);
+                memFreeBuffer.invoke(null, glbPattern);
             }
         }
     }
@@ -1017,7 +1023,7 @@ public final class ModelImportFilePicker {
         try {
             Class<?> filterClass = Class.forName("javax.swing.filechooser.FileNameExtensionFilter");
             Object filter = filterClass.getConstructor(String.class, String[].class)
-                    .newInstance(FILE_FILTER_DESCRIPTION, new String[]{"ysm", "zip", "bbmodel"});
+                    .newInstance(FILE_FILTER_DESCRIPTION, new String[]{"ysm", "zip", "bbmodel", "gltf", "glb"});
             chooserClass.getMethod("setFileFilter", Class.forName("javax.swing.filechooser.FileFilter")).invoke(chooser, filter);
         } catch (Throwable t) {
             rememberPickerProbe("Swing file filter unavailable: " + safeMessage(t));

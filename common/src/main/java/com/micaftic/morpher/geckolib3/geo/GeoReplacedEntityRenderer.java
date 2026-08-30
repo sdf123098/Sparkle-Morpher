@@ -1,8 +1,20 @@
 package com.micaftic.morpher.geckolib3.geo;
 
 import com.micaftic.morpher.capability.VehicleCapability;
+import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.input.InputStateKey;
+import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.client.renderer.gltf.GltfMaterialResolver;
+import com.micaftic.morpher.client.renderer.gltf.GltfRenderTypes;
+import com.micaftic.morpher.client.renderer.gltf.GltfVertexConsumerRenderer;
+import com.micaftic.morpher.client.renderer.layer.HeldItemLayer;
+import com.micaftic.morpher.resource.gltf.GltfHandNodeResolver;
+import com.micaftic.morpher.resource.gltf.GltfAnimationClock;
+import com.micaftic.morpher.resource.gltf.GltfAnimationController;
+import com.micaftic.morpher.client.upload.IResourceLocatable;
+import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.util.Color;
 import com.micaftic.morpher.geckolib3.extended.LivingEntityRendererAccessor;
@@ -13,6 +25,7 @@ import com.micaftic.morpher.geckolib3.util.IRenderCycle;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelLayers;
@@ -26,7 +39,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import com.mojang.math.Axis;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
@@ -39,6 +54,7 @@ import com.micaftic.morpher.core.api.client.RenderLivingBridge;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T extends LivingAnimatable<TEntity>> extends LivingEntityRenderer<TEntity, PlayerModel<TEntity>> implements IGeoRenderer<T> {
 
@@ -87,6 +103,13 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
     public void renderEntityWithTexture(T t, @Nullable ResourceLocation resourceLocation, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource multiBufferSource, int packedLight) {
         Direction bedOrientation;
         if (RenderLivingBridge.firePre(t.getEntity(), this, partialTick, poseStack, multiBufferSource, packedLight)) {
+            return;
+        }
+        if (t.getModelAssembly() != null && t.getModelAssembly().isGltf()) {
+            renderGltfEntity(t, resourceLocation, entityYaw, partialTick, poseStack, multiBufferSource, packedLight);
+            TEntity entity = t.getEntity();
+            ((LivingEntityRendererAccessor) this).tlm$renderNameTag(entity, entityYaw, partialTick, poseStack, multiBufferSource, packedLight);
+            RenderLivingBridge.firePost(entity, this, partialTick, poseStack, multiBufferSource, packedLight);
             return;
         }
         AnimationEvent<?> event = t.processAnimation(partialTick);
@@ -139,6 +162,97 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         }
         ((LivingEntityRendererAccessor) this).tlm$renderNameTag(entity, entityYaw, partialTick, poseStack, multiBufferSource, packedLight);
         RenderLivingBridge.firePost(entity, this, partialTick, poseStack, multiBufferSource, packedLight);
+    }
+
+    private void renderGltfEntity(T t, @Nullable ResourceLocation overrideTexture, float entityYaw, float partialTick,
+                                  PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
+        TEntity entity = t.getEntity();
+        ModelAssembly assembly = t.getModelAssembly();
+        if (assembly == null || assembly.getGltfModel() == null) return;
+        poseStack.pushPose();
+        try {
+            setupRotations(entity, poseStack, entity.tickCount + partialTick,
+                    Mth.rotLerp(partialTick, entity.yBodyRotO, entity.yBodyRot), partialTick);
+            preRenderCallback(entity, poseStack, partialTick);
+            poseStack.translate(0.0f, 0.01f, 0.0f);
+
+            var model = assembly.getGltfModel();
+            float renderScale = model.recommendedMinecraftScale();
+            poseStack.scale(renderScale, renderScale, renderScale);
+            if (model.scenes().isEmpty() || model.defaultScene() < 0) return;
+            var evaluator = new com.micaftic.morpher.resource.gltf.GltfSceneEvaluator(model);
+            float animationTimeSeconds = GltfAnimationClock.fromMinecraftTicks(entity.tickCount, partialTick);
+            GltfAnimationController controller = t.getGltfAnimationController();
+            if (controller == null) {
+                controller = new GltfAnimationController(model);
+            }
+            boolean attacking = InputStateKey.isAnyHandSwinging(entity);
+            boolean usingItem = InputStateKey.isUsingItem(entity, InputStateKey.getUsedItemHand(entity));
+            controller.selectForMotion((float) entity.getDeltaMovement().horizontalDistance(), entity.onGround(),
+                    entity.isCrouching(), entity.deathTime > 0, attacking, usingItem, animationTimeSeconds);
+            var pose = controller.evaluate(evaluator, model.defaultScene(), animationTimeSeconds);
+            int overlay = packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick));
+            Function<com.micaftic.morpher.resource.gltf.GltfModel.Material, VertexConsumer> consumerFactory = material -> {
+                GltfMaterialResolver.ResolvedMaterial<ResourceLocation> resolved = GltfMaterialResolver.<ResourceLocation>resolve(
+                        material, ClientModelManager.getDefaultTexture(), overrideTexture, textureIndex -> {
+                    AbstractTexture texture = assembly.getGltfTexture(material.baseColorTextureIndex());
+                    if (texture != null) {
+                        IResourceLocatable locatable = UploadManager.getOrCreateLocatable(texture, true);
+                        return locatable.getResourceLocationOrNull();
+                    }
+                    return null;
+                });
+                return bufferSource.getBuffer(GltfRenderTypes.get(
+                        resolved.texture(), resolved.alphaMode(), resolved.doubleSided()));
+            };
+            GltfVertexConsumerRenderer.render(model, evaluator, pose, poseStack, consumerFactory,
+                    packedLight, overlay, 1.0f, 1.0f, 1.0f, 1.0f);
+            renderGltfHeldItems(t, model, pose, poseStack, bufferSource, packedLight, partialTick, model.recommendedMinecraftScale());
+        } finally {
+            poseStack.popPose();
+        }
+    }
+
+    private void renderGltfHeldItems(T animatable, com.micaftic.morpher.resource.gltf.GltfModel model,
+                                     com.micaftic.morpher.resource.gltf.GltfSceneEvaluator.Pose pose,
+                                     PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
+                                     float partialTick, float renderScale) {
+        HeldItemLayer itemLayer = null;
+        for (GeoLayerRenderer<T> layerRenderer : this.layerRenderers) {
+            if (layerRenderer instanceof HeldItemLayer) {
+                itemLayer = (HeldItemLayer) layerRenderer;
+                break;
+            }
+        }
+        if (itemLayer == null) return;
+        TEntity entity = animatable.getEntity();
+        renderGltfHeldItem(itemLayer, entity, entity.getMainHandItem(), entity.getMainArm(), model, pose,
+                poseStack, bufferSource, packedLight, partialTick, renderScale);
+        renderGltfHeldItem(itemLayer, entity, entity.getOffhandItem(), entity.getMainArm().getOpposite(), model, pose,
+                poseStack, bufferSource, packedLight, partialTick, renderScale);
+    }
+
+    private void renderGltfHeldItem(HeldItemLayer itemLayer, LivingEntity entity, ItemStack itemStack,
+                                    HumanoidArm humanoidArm, com.micaftic.morpher.resource.gltf.GltfModel model,
+                                    com.micaftic.morpher.resource.gltf.GltfSceneEvaluator.Pose pose,
+                                    PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
+                                    float partialTick, float renderScale) {
+        if (itemStack == null || itemStack.isEmpty()) return;
+        GltfHandNodeResolver.Hand hand = humanoidArm == HumanoidArm.LEFT
+                ? GltfHandNodeResolver.Hand.LEFT : GltfHandNodeResolver.Hand.RIGHT;
+        int handNode = GltfHandNodeResolver.find(model, hand);
+        if (handNode < 0) return;
+        poseStack.pushPose();
+        try {
+            poseStack.mulPose(pose.worldMatrix(handNode));
+            if (renderScale != 0.0f && renderScale != 1.0f) {
+                poseStack.scale(1.0f / renderScale, 1.0f / renderScale, 1.0f / renderScale);
+            }
+            itemLayer.renderGltfThirdPersonItem(entity, itemStack, humanoidArm, poseStack, bufferSource,
+                    packedLight, partialTick);
+        } finally {
+            poseStack.popPose();
+        }
     }
 
     public void render(T entity, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLightIn, AnimationEvent<?> event, EntityModelData data) {

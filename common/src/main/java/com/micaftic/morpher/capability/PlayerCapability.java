@@ -176,6 +176,14 @@ public final class PlayerCapability extends CustomPlayerEntity {
     @Override
     public void onModelLoaded(ModelAssembly context) {
         super.onModelLoaded(context);
+        if (context.isGltf()) {
+            // glTF assemblies intentionally do not carry legacy ServerModelInfo or
+            // roaming-variable state. Keep the player capability on the independent
+            // renderer path instead of dereferencing the legacy model metadata.
+            this.currentModelHashId = 0;
+            this.serverVarContainer = null;
+            return;
+        }
         this.currentModelHashId = getModelAssembly().getModelData().getHashId();
     }
 
@@ -189,14 +197,17 @@ public final class PlayerCapability extends CustomPlayerEntity {
     public void setCurrentModel(AnimatedGeoModel model) {
         super.setCurrentModel(model);
         MolangVarHolder varHolder = this.molangVarsMap.get(this.currentModelHashId);
+        if (isLocalPlayerModel()) {
+            // Local model settings must not depend on a server variable table.
+            this.serverVarContainer = createLocalRoamingStruct(
+                    this.currentModelHashId,
+                    varHolder == null ? null : varHolder.currentVars
+            );
+            return;
+        }
         if (varHolder != null && varHolder.currentVars != null) {
-            if (isLocalPlayerModel()) {
-                this.serverVarContainer = createLocalRoamingStruct(this.currentModelHashId, varHolder.currentVars);
-                return;
-            } else {
-                this.serverVarContainer = new Int2FloatOpenHashMapStruct(varHolder.currentVars);
-                return;
-            }
+            this.serverVarContainer = new Int2FloatOpenHashMapStruct(varHolder.currentVars);
+            return;
         }
         this.serverVarContainer = null;
     }
