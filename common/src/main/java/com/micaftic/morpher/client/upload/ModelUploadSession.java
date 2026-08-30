@@ -2,19 +2,20 @@ package com.micaftic.morpher.client.upload;
 
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
+import com.micaftic.morpher.legacy.compat.LegacyCompatUploadTransport;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.util.DigestUtil;
 import com.micaftic.morpher.util.PerformanceProfiler;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import com.micaftic.morpher.core.legacy.YesModelUtils;
+import com.micaftic.morpher.legacy.compat.LegacyCompatModelFormat;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public final class ModelUploadSession {
     private static final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     /** R9.3：发包交给 transport；当前默认 legacy 服务器通道，行为与旧版本一致。 */
-    private static volatile ModelUploadTransport transport = LegacyServerUploadTransport.INSTANCE;
+    private static volatile ModelUploadTransport transport = LegacyCompatUploadTransport.INSTANCE;
     private static volatile ModelUploadSession instance;
     private static volatile boolean serverLimitsKnown = false;
     private static volatile int lastMaxTotalBytes = 16777216; // 16MB
@@ -80,7 +81,7 @@ public final class ModelUploadSession {
         return null;
     }
 
-    /** R9.3：切换上传传输实现（默认 LegacyServerUploadTransport；云接入后由上层切换）。 */
+    /** 切换上传传输实现；默认值由 legacy-compat 边界提供。 */
     public static void setTransport(ModelUploadTransport transport) {
         ModelUploadSession.transport = transport;
     }
@@ -190,7 +191,7 @@ public final class ModelUploadSession {
     }
 
     private static boolean isYsmFile(byte[] data) {
-        return YesModelUtils.getYsmCryptoVersion(data) != -1;
+        return LegacyCompatModelFormat.detectCryptoVersion(data) != -1;
     }
 
     private static boolean isZipFile(byte[] data) {

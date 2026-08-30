@@ -1,5 +1,7 @@
 package com.micaftic.morpher.core.api.network.state;
 
+import com.micaftic.morpher.legacy.compat.LegacyCompatState;
+
 /**
  * Legacy SPM 握手状态（R9.2 从 NetworkHandler.isClientConnected() 拆分出的客户端语义）。
  *
@@ -13,27 +15,24 @@ package com.micaftic.morpher.core.api.network.state;
  * <p>服务端按连接记录的协商版本（WeakHashMap / netty Channel attribute）是平台相关存储，
  * 留在各加载器的 {@code NetworkHandler}，不属于本类。
  */
+@Deprecated(forRemoval = true)
 public final class LegacySpmHandshakeState {
-
-    private static volatile boolean clientComplete = false;
-    private static volatile boolean oysmServer = false;
-    private static volatile boolean allowUpload = false;
 
     private LegacySpmHandshakeState() {
     }
 
     /** 客户端版本协商成功（版本与 {@code NetworkHandler.VERSION} 一致）时置位。 */
     public static void markClientComplete() {
-        clientComplete = true;
+        LegacyCompatState.markClientComplete();
     }
 
     /** 退出服务器 / 进入隐私模式时复位。 */
     public static void resetClientComplete() {
-        clientComplete = false;
+        LegacyCompatState.resetClientComplete();
     }
 
     public static boolean isClientComplete() {
-        return clientComplete;
+        return LegacyCompatState.isClientComplete();
     }
 
     /**
@@ -41,29 +40,27 @@ public final class LegacySpmHandshakeState {
      * 握手已完成，或当前 MC 连接已与 SPM 服务器协商（26.x 分支为连接存在，fa 分支为 channel 已协商）。
      */
     public static boolean isClientSessionActive(boolean mcConnectionNegotiated) {
-        return clientComplete || mcConnectionNegotiated;
+        return LegacyCompatState.isClientSessionActive(mcConnectionNegotiated);
     }
 
     public static void setOysmServer(boolean value) {
-        oysmServer = value;
+        LegacyCompatState.setOysmServer(value);
     }
 
     public static boolean isOysmServer() {
-        return oysmServer;
+        return LegacyCompatState.isOysmServer();
     }
 
     public static void setAllowUpload(boolean value) {
-        allowUpload = value;
+        LegacyCompatState.setAllowUpload(value);
     }
 
     public static boolean isAllowUpload() {
-        return allowUpload;
+        return LegacyCompatState.isAllowUpload();
     }
 
     /** 清空整个客户端 legacy 会话状态（握手 + 服务器能力），用于退出服务器 / 进入隐私模式。 */
     public static void resetClientSession() {
-        clientComplete = false;
-        oysmServer = false;
-        allowUpload = false;
+        LegacyCompatState.resetClientSession();
     }
 }

@@ -22,11 +22,19 @@ public class ModelLoadResult {
 
     private final Set<String> authModelIds;
 
+    private final Map<String, ServerPackData> packs;
+
     public ModelLoadResult(boolean success, @Nullable Object errorMessage, Map<String, ServerModelData> map, String[] strArr) {
+        this(success, errorMessage, map, strArr, null);
+    }
+
+    public ModelLoadResult(boolean success, @Nullable Object errorMessage, Map<String, ServerModelData> map,
+                           String[] strArr, Map<String, ServerPackData> packs) {
         this.success = success;
         this.errorMessage = (Component) errorMessage;
         this.modelDefinitions = map == null ? Object2ReferenceMaps.emptyMap() : ImmutableMap.copyOf(map);
         this.authModelIds = strArr == null ? ObjectSets.emptySet() : ImmutableSet.copyOf(strArr);
+        this.packs = packs == null ? Object2ReferenceMaps.emptyMap() : ImmutableMap.copyOf(packs);
     }
 
     public boolean isSuccess() {
@@ -44,5 +52,9 @@ public class ModelLoadResult {
 
     public Set<String> getAuthModelIds() {
         return this.authModelIds;
+    }
+
+    public Map<String, ServerPackData> getPacks() {
+        return this.packs;
     }
 }
