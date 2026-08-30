@@ -87,6 +87,8 @@ repositories {
 dependencies {
     // Optional at runtime. Used only to compile the TaCZ 1.21.1 compatibility bridge.
     compileOnly "maven.modrinth:OypNE65K:wPvGWIj9"
+    // Optional at runtime. Used only to compile the SlashBlade 1.21.1 compatibility bridge.
+    compileOnly "maven.modrinth:8T53F0sy:u02EDgAr"
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 

@@ -58,7 +58,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
             }
             if (hasHandAnchor(animatedGeoModel, offArm)) {
                 if (SlashBladeCompat.isSlashBladeItem(offhandItem)) {
-                    SlashBladeRenderer.renderRightWaist(animatedGeoModel, poseStack, bufferSource, packedLightIn, offhandItem);
+                    SlashBladeRenderer.renderRightWaist(animatedGeoModel, entity, poseStack, bufferSource, packedLightIn, offhandItem);
                 } else {
                     if (!SWarfareCompat.isGunItem(offhandItem)) {
                         renderItem(animatedGeoModel, entity, offhandItem, getDisplayContext(offArm), offArm, poseStack, bufferSource, packedLightIn, handLocatorProfile);
