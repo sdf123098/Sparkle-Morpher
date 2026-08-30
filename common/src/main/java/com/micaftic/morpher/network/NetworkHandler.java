@@ -15,7 +15,8 @@ import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 import com.micaftic.morpher.core.api.network.PacketDirection;
 import com.micaftic.morpher.core.api.network.YSMChannel;
-import com.micaftic.morpher.core.api.network.state.LegacySpmHandshakeState;
+import com.micaftic.morpher.legacy.compat.LegacyCompatNetwork;
+import com.micaftic.morpher.legacy.compat.LegacyCompatState;
 import com.micaftic.morpher.core.api.network.state.PrivacyState;
 import com.micaftic.morpher.network.protocol.*;
 import com.micaftic.morpher.network.state.MinecraftConnectionState;
@@ -34,12 +35,12 @@ public final class NetworkHandler {
     }
 
     public static void markClientHandshakeComplete() {
-        LegacySpmHandshakeState.markClientComplete();
+        LegacyCompatState.markClientComplete();
     }
 
     /** 复位客户端 legacy 会话（握手完成 + oySm/allowUpload 能力），用于退出服务器 / 进入隐私模式。 */
     public static void resetClientHandshake() {
-        LegacySpmHandshakeState.resetClientSession();
+        LegacyCompatState.resetClientSession();
     }
 
     public static boolean isPlayerConnected(ServerPlayer serverPlayer) {
@@ -50,7 +51,7 @@ public final class NetworkHandler {
     public static boolean isClientConnected() {
         // R9.2：只做组合——隐私未激活，且 legacy 会话活跃（握手完成或 MC 连接已协商 SPM channel）
         return PrivacyState.isInactive()
-                && LegacySpmHandshakeState.isClientSessionActive(MinecraftConnectionState.isClientConnected());
+                && LegacyCompatState.isClientSessionActive(MinecraftConnectionState.isClientConnected());
     }
 
     public static boolean isConnectionValid(@Nullable Connection connection) {
@@ -72,7 +73,7 @@ public final class NetworkHandler {
 
     public static void init() {
         YSMChannel.init(CHANNEL_ID, VERSION);
-        LegacyModelProtocol.register();
+        LegacyCompatNetwork.register();
         AnimationProtocol.register();
         EntityModelProtocol.register();
         ServerPolicyProtocol.register();

@@ -182,6 +182,20 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         poseStack.mulPose(Axis.XP.rotationDegrees(-90.0f));
     }
 
+    /**
+     * Renders an item at a glTF hand attachment point.  The display context is
+     * deliberately third-person so the normal 3D item model is always used.
+     */
+    public void renderGltfThirdPersonItem(LivingEntity livingEntity, ItemStack itemStack,
+                                          HumanoidArm humanoidArm, PoseStack poseStack,
+                                          MultiBufferSource bufferSource, int packedLight, float partialTick) {
+        if (itemStack == null || itemStack.isEmpty()) {
+            return;
+        }
+        this.itemRenderer.renderItem(livingEntity, itemStack, getDisplayContext(humanoidArm),
+                humanoidArm == HumanoidArm.LEFT, poseStack, bufferSource, packedLight);
+    }
+
     private ItemDisplayContext getDisplayContext(HumanoidArm humanoidArm) {
         return humanoidArm == HumanoidArm.LEFT ? ItemDisplayContext.THIRD_PERSON_LEFT_HAND : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
     }

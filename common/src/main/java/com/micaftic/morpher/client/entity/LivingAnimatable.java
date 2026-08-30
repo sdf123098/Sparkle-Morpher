@@ -19,6 +19,7 @@ import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.geckolib3.model.provider.data.EntityModelData;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
+import com.micaftic.morpher.resource.gltf.GltfAnimationController;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.booleans.BooleanArrayList;
 import it.unimi.dsi.fastutil.booleans.BooleanList;
@@ -50,6 +51,8 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
 
     private boolean extraRenderFlag;
 
+    private GltfAnimationController gltfAnimationController;
+
     public LivingAnimatable(T t, boolean isActive) {
         super(t, isActive);
         this.armorBoneOffset = new Vector2f();
@@ -58,6 +61,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
         this.updateExpressionArgs = new BooleanArrayList(1);
         this.forceDisabled = false;
         this.extraRenderFlag = false;
+        this.gltfAnimationController = null;
         this.updateExpressionArgs.size(1);
     }
 
@@ -122,6 +126,13 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     @Override
     public void onModelLoaded(ModelAssembly context) {
         super.onModelLoaded(context);
+        if (context.isGltf()) {
+            this.playerUpdateIValue = null;
+            this.gltfAnimationController = new GltfAnimationController(context.getGltfModel());
+            updateCurrentTexture();
+            return;
+        }
+        this.gltfAnimationController = null;
         updateCurrentTexture();
         List<IValue> values = context.getExpressionCache().getEvents().get(MolangEventDispatcher.PLAYER_UPDATE);
         if (values != null) {
@@ -146,6 +157,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
         this.currentTextureName = null;
         this.textureIndex = 0;
         this.forceDisabled = false;
+        this.gltfAnimationController = null;
     }
 
     @Override
@@ -176,9 +188,26 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
         return getModelAssembly().getAnimationBundle().getConditionManager();
     }
 
+    @Nullable
+    public GltfAnimationController getGltfAnimationController() {
+        if (this.gltfAnimationController == null) {
+            ModelAssembly assembly = getModelAssembly();
+            if (assembly != null && assembly.isGltf() && assembly.getGltfModel() != null) {
+                this.gltfAnimationController = new GltfAnimationController(assembly.getGltfModel());
+            }
+        }
+        return this.gltfAnimationController;
+    }
+
     private void updateCurrentTexture() {
         if (isModelReady()) {
+            if (getModelAssembly().isGltf()) {
+                return;
+            }
             OrderedStringMap<String, ? extends AbstractTexture> map = getModelAssembly().getAnimationBundle().getTextures();
+            if (map.isEmpty()) {
+                return;
+            }
             AbstractTexture abstractTexture = map.get(this.currentTextureName);
             if (abstractTexture != null) {
                 ((TexturedModelWrapper) getRenderShape()).setTexture(abstractTexture);
@@ -228,7 +257,8 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     @NotNull
     public ResourceLocation getTextureLocation() {
         if (isModelReady()) {
-            ResourceLocation location = ((TexturedModelWrapper) getRenderShape()).currentTexture.getResourceLocationOrNull();
+            IResourceLocatable texture = ((TexturedModelWrapper) getRenderShape()).currentTexture;
+            ResourceLocation location = texture == null ? null : texture.getResourceLocationOrNull();
             if (location != null) {
                 return location;
             }
@@ -277,6 +307,13 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
         public TexturedModelWrapper(ModelAssembly modelAssembly, boolean isActive, boolean collectAllTextures, boolean registerImmediately, int textureResolution) {
             super(modelAssembly, isActive);
             this.textureResolution = textureResolution;
+            if (modelAssembly.isGltf()) {
+                AbstractTexture firstTexture = modelAssembly.getTextures().isEmpty() ? null : modelAssembly.getTextures().get(0);
+                this.currentTexture = firstTexture == null ? null
+                        : UploadManager.getOrCreateLocatableWithSize(firstTexture, registerImmediately, textureResolution);
+                this.allTextures = null;
+                return;
+            }
             PlayerModelBundle animationBundle = modelAssembly.getAnimationBundle();
             if (animationBundle == null) {
                 this.currentTexture = null;

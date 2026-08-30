@@ -18,6 +18,7 @@ import com.micaftic.morpher.model.cache.ServerModelCache;
 import com.micaftic.morpher.model.format.UUIDComponentData;
 import com.micaftic.morpher.model.validation.UploadPolicy;
 import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.legacy.compat.LegacyCompatNetwork;
 import com.micaftic.morpher.network.message.S2CModelSyncPayload;
 import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
 import com.micaftic.morpher.resource.YSMBinaryDeserializer;
@@ -52,7 +53,7 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import com.micaftic.morpher.core.legacy.YesModelUtils;
+import com.micaftic.morpher.legacy.compat.LegacyCompatModelFormat;
 import com.micaftic.morpher.core.security.YSMByteBuf;
 import com.micaftic.morpher.core.security.YsmCrypt;
 
@@ -115,6 +116,10 @@ public final class ServerModelManager {
     static final SecureRandom theRandom = new SecureRandom();
     public static volatile byte[] serverKey;
     private static volatile boolean initialized = false;
+    private static final ModelReloadCoordinator<ModelLoadResult> MODEL_RELOAD_COORDINATOR =
+            new ModelReloadCoordinator<>(
+                    com.micaftic.morpher.util.SmExecutors.pool(com.micaftic.morpher.util.SmExecutors.Pool.MODEL_RELOAD),
+                    Runnable::run);
 
     private static RateLimiter bandwidthLimiter = null;
     private static boolean bandwidthLimitEnabled = true;
@@ -160,9 +165,16 @@ public final class ServerModelManager {
         }
     }
 
-    public static void reloadPacks() throws IOException {
+    public static void reloadPacks() {
         initialized = false;
-        CATALOG.clear();
+        MODEL_RELOAD_COORDINATOR.submit(() -> {
+            reloadPacksSync();
+            return loadModelsSnapshot();
+        }, ServerModelManager::publishModelLoadResult,
+                error -> YesSteveModel.LOGGER.error("[SM] Failed to reload model packs", error));
+    }
+
+    private static void reloadPacksSync() throws IOException {
         // 版本升级时清空缓存重建（缓存按 modVersion 派生的 identity 加密/校验，旧版本缓存不兼容）
         ModelStoragePaths.checkCacheVersionAndReset();
 
@@ -288,7 +300,6 @@ public final class ServerModelManager {
         }
 
         serverKey = serverKeyBytes;
-        nativeLoadModels(null);
     }
 
     private static void extractBuiltinModels() {
@@ -407,7 +418,7 @@ public final class ServerModelManager {
 
     public static void nativeSendModelData(UUID uuid, @Nullable ByteBuffer data) {
 
-        LegacyModelSyncProtocol.nativeSendModelData(uuid, data);
+        LegacyCompatNetwork.sendModelData(uuid, data);
 
     }
 
@@ -416,36 +427,31 @@ public final class ServerModelManager {
 
     public static boolean nativeLoadModels(Object callback) {
         try {
-            Map<String, ServerModelData> loadedModels = new LinkedHashMap<>();
-            Set<String> authIds = new HashSet<>();
-            Set<String> validCacheFiles = new HashSet<>();
-
-            prepareBbmodelImportCache();
-            packs.clear();
-            scanDirectoryPacks(BUILT);
-            scanDirectoryPacks(CUSTOM);
-            scanDirectoryPacks(AUTH);
-
-            scanDirectoryModels(BUILT, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
-            scanDirectoryModels(CUSTOM, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
-            scanDirectoryModels(AUTH, CACHE_SERVER, loadedModels, authIds, validCacheFiles, true);
-            try (Stream<Path> stream = Files.list(CACHE_SERVER)) {
-                stream.forEach(file -> {
-                    if (!validCacheFiles.contains(file.getFileName().toString())) {
-                        try { Files.deleteIfExists(file); } catch (Exception ignored) {}
-                    }
-                });
-            } catch (Exception ignored) {}
-
-            ModelLoadResult result = new ModelLoadResult(true, null, loadedModels, authIds.toArray(new String[0]));
-            CATALOG.replaceAuth(authIds);
-
+            ModelLoadResult result = loadModelsSnapshot();
             onModelLoadComplete(result, callback);
             return true;
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("[SM] Model loading failed", e);
             return false;
         }
+    }
+
+    private static ModelLoadResult loadModelsSnapshot() {
+        Map<String, ServerModelData> loadedModels = new LinkedHashMap<>();
+        Set<String> authIds = new HashSet<>();
+        Set<String> validCacheFiles = new HashSet<>();
+        Map<String, ServerPackData> loadedPacks = new LinkedHashMap<>();
+
+        prepareBbmodelImportCache();
+        scanDirectoryPacks(BUILT, loadedPacks);
+        scanDirectoryPacks(CUSTOM, loadedPacks);
+        scanDirectoryPacks(AUTH, loadedPacks);
+
+        scanDirectoryModels(BUILT, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
+        scanDirectoryModels(CUSTOM, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
+        scanDirectoryModels(AUTH, CACHE_SERVER, loadedModels, authIds, validCacheFiles, true);
+        cleanupServerCache(validCacheFiles);
+        return new ModelLoadResult(true, null, loadedModels, authIds.toArray(new String[0]), loadedPacks);
     }
 
     private static void scanDirectoryModels(Path baseDir, Path cacheDir, Map<String, ServerModelData> loaded, Set<String> authIds, Set<String> validCaches, boolean isAuth) {
@@ -480,6 +486,10 @@ public final class ServerModelManager {
     }
 
     private static void scanDirectoryPacks(Path baseDir) {
+        scanDirectoryPacks(baseDir, packs);
+    }
+
+    private static void scanDirectoryPacks(Path baseDir, Map<String, ServerPackData> target) {
         if (baseDir == null || !Files.isDirectory(baseDir)) return;
         try (var stream = Files.walk(baseDir, 1)) {
             stream.filter(Files::isDirectory).forEach(path -> {
@@ -489,7 +499,7 @@ public final class ServerModelManager {
                     try {
                         // R8-4：pack 元数据解析集中到 ServerPackReader（纯 Java 可测）
                         ServerPackData packData = ServerPackReader.read(baseDir, path);
-                        packs.put(packData.folderPath, packData);
+                        target.put(packData.folderPath, packData);
                     } catch (Exception e) {
                         YesSteveModel.LOGGER.error("Failed to load pack metadata: " + packJson, e);
                     }
@@ -524,13 +534,13 @@ public final class ServerModelManager {
     }
 
     private static RawYsmModel parseBinaryModel(byte[] raw, String source) throws Exception {
-        int ysmCryptoVersion = YesModelUtils.getYsmCryptoVersion(raw);
+        int ysmCryptoVersion = LegacyCompatModelFormat.detectCryptoVersion(raw);
         if (ysmCryptoVersion == -1) {
             throw new IllegalStateException("Unknown YSM crypto version for file: " + source);
         }
 
         if (ysmCryptoVersion == 1 || ysmCryptoVersion == 2) {
-            Map<String, byte[]> input = YesModelUtils.input(raw);
+            Map<String, byte[]> input = LegacyCompatModelFormat.read(raw);
             try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(input)) {
                 return deserializer.deserialize();
             }
@@ -600,6 +610,7 @@ public final class ServerModelManager {
             case YSM -> parseBinaryModel(raw, source);
             case ZIP -> parseArchiveModel(raw, source);
             case BBMODEL -> parseBbModelImport(raw, source);
+            case GLTF, GLB -> throw new IllegalArgumentException("glTF uploads are client-local only for now: " + source);
             case UNKNOWN -> throw new IllegalArgumentException("Unsupported model import type for file: " + source);
             case FOLDER -> throw new IllegalArgumentException("Folder is not a file import: " + source);
         };
@@ -744,7 +755,7 @@ public final class ServerModelManager {
 
     public static void nativeSyncModels(UUID[] uuids, String[] playerNames, String[] modelIds, Object callback) {
 
-        LegacyModelSyncProtocol.nativeSyncModels(uuids, playerNames, modelIds, callback);
+        LegacyCompatNetwork.syncModels(uuids, playerNames, modelIds, callback);
 
     }
 
@@ -964,26 +975,12 @@ public final class ServerModelManager {
 
     private static ModelLoadResult reloadModelsAfterImport() {
         long perfStart = PerformanceProfiler.start();
-        Map<String, ServerModelData> loadedModels = new LinkedHashMap<>();
-        Set<String> authIds = new HashSet<>();
-        Set<String> validCacheFiles = new HashSet<>();
-
         try {
-            prepareBbmodelImportCache();
-            packs.clear();
-            scanDirectoryPacks(BUILT);
-            scanDirectoryPacks(CUSTOM);
-            scanDirectoryPacks(AUTH);
-
-            scanDirectoryModels(BUILT, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
-            scanDirectoryModels(CUSTOM, CACHE_SERVER, loadedModels, authIds, validCacheFiles, false);
-            scanDirectoryModels(AUTH, CACHE_SERVER, loadedModels, authIds, validCacheFiles, true);
-            cleanupServerCache(validCacheFiles);
-            ModelLoadResult result = new ModelLoadResult(true, null, loadedModels, authIds.toArray(new String[0]));
+            ModelLoadResult result = loadModelsSnapshot();
             onModelLoadComplete(result, null);
             syncLoadedModelsToPlayers();
             PerformanceProfiler.logElapsed("server_reload_after_import", null, perfStart,
-                    "models=" + loadedModels.size() + " auth=" + authIds.size());
+                    "models=" + result.getModelDefinitions().size() + " auth=" + result.getAuthModelIds().size());
             return result;
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("[SM] Failed to reload models after import", e);
@@ -1117,7 +1114,20 @@ public final class ServerModelManager {
                 nativeSyncModels(players.stream().filter(NetworkHandler::isPlayerConnected).map((player) -> player.getUUID()).toArray(i -> new UUID[i]), players.stream().filter(NetworkHandler::isPlayerConnected).map(serverPlayer -> serverPlayer.getGameProfile().getName()).toArray(i2 -> new String[i2]), collectPlayerModelIds(players), consumer2);
             });
         };
-        return nativeLoadModels(action);
+        initialized = false;
+        MODEL_RELOAD_COORDINATOR.submit(ServerModelManager::loadModelsSnapshot,
+                result -> onModelLoadComplete(result, action),
+                error -> onModelLoadComplete(failedLoadResult(error), action));
+        return true;
+    }
+
+    private static ModelLoadResult failedLoadResult(Throwable error) {
+        String message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+        return new ModelLoadResult(false, Component.literal(message), null, null);
+    }
+
+    private static void publishModelLoadResult(ModelLoadResult result) {
+        onModelLoadComplete(result, null);
     }
 
     private static String[] collectPlayerModelIds(Collection<ServerPlayer> collection) {
@@ -1135,6 +1145,8 @@ public final class ServerModelManager {
                         intOpenHashSet.add(data.getLoadedModelData().getHashId());
                     }
                     CATALOG.replaceAll(modelLoadResult.getModelDefinitions(), modelLoadResult.getAuthModelIds(), intOpenHashSet);
+                    packs.clear();
+                    packs.putAll(modelLoadResult.getPacks());
                     initialized = true;
                 }
                 if (consumer != null) {
@@ -1145,6 +1157,8 @@ public final class ServerModelManager {
         }
         if (modelLoadResult.isSuccess()) {
             CATALOG.replaceDefinitionsAndAuth(modelLoadResult.getModelDefinitions(), modelLoadResult.getAuthModelIds());
+            packs.clear();
+            packs.putAll(modelLoadResult.getPacks());
             initialized = true;
         }
         if (consumer != null) {
@@ -1162,7 +1176,7 @@ public final class ServerModelManager {
 
     public static void clearPlayerSyncState(UUID uuid) {
 
-        LegacyModelSyncProtocol.clearPlayerSyncState(uuid);
+        LegacyCompatNetwork.clearPlayerSyncState(uuid);
 
     }
 

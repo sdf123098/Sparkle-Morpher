@@ -723,6 +723,11 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderSelectedModelPreview(GuiGraphics g, ModelAssembly assembly, String modelId, int x, int y, int w, int h, int mouseX, int mouseY, float partialTick) {
         fill(g, x, y, w, h, GLASS_DARK);
         border(g, x, y, w, h, 0x33FFFFFF);
+        if (assembly.isGltf()) {
+            drawIcon(g, IconGlyph.MODEL, x + w / 2 - 8, y + h / 2 - 8);
+            drawCentered(g, Component.literal("glTF"), x + w / 2, y + h - 12, MUTED);
+            return;
+        }
         String textureId = selectedTextureOrDefault(assembly);
         boolean wasTrimmed = ClientModelManager.isGpuCacheTrimmed(modelId);
         ClientModelManager.markModelUsed(modelId);
@@ -1613,6 +1618,10 @@ public class ModernPlayerModelScreen extends Screen {
                 setStatus(error, ChatFormatting.RED);
                 return;
             }
+            if (ClientModelManager.isGltfFileName(fileName)) {
+                setStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
+                return;
+            }
             Component uploadError = ModelUploadSession.start(modelId, fileName, file.data());
             if (uploadError != null) {
                 setStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
@@ -2086,7 +2095,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private static String stripImportExtension(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
-        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel", ".gltf", ".glb"}) {
             if (lower.endsWith(extension)) {
                 return fileName.substring(0, fileName.length() - extension.length());
             }

@@ -14,7 +14,7 @@ import java.util.Locale;
  * <ul>
  *   <li>路径沙箱：modelId 拼出的目标必须落在 customRoot 内（`..`/绝对路径拒绝）</li>
  *   <li>原子写：同目录 .tmp + ATOMIC_MOVE（不支持时回退普通 move），失败清理临时文件</li>
- *   <li>扩展名归一：按文件名识别 .ysm/.zip/.bbmodel，未知回退 .ysm</li>
+ *   <li>扩展名归一：按文件名识别 .ysm/.zip/.bbmodel/.gltf/.glb，未知回退 .ysm</li>
  *   <li>sibling 清理：同一 modelId 的其他扩展名旧文件删除（如 .zip 导入后清 .ysm）</li>
  * </ul>
  *
@@ -22,7 +22,7 @@ import java.util.Locale;
  */
 public final class LocalModelImportStore {
 
-    private static final String[] IMPORT_EXTENSIONS = {".ysm", ".zip", ".bbmodel"};
+    private static final String[] IMPORT_EXTENSIONS = {".ysm", ".zip", ".bbmodel", ".gltf", ".glb"};
 
     private final Path customRoot;
 
@@ -71,7 +71,7 @@ public final class LocalModelImportStore {
         }
     }
 
-    /** 识别导入文件扩展名（.ysm/.zip/.bbmodel，大小写不敏感）；未知返回空串。 */
+    /** 识别导入文件扩展名（.ysm/.zip/.bbmodel/.gltf/.glb，大小写不敏感）；未知返回空串。 */
     public static String importExtension(String fileName) {
         String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
         for (String extension : IMPORT_EXTENSIONS) {

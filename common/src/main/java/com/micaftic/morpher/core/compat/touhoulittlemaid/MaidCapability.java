@@ -6,6 +6,7 @@ import com.micaftic.morpher.client.entity.GeoEntity;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
+import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.molang.parser.ParseException;
 import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import com.micaftic.morpher.molang.runtime.Struct;
@@ -127,5 +128,16 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     public void setupAnim(float seekTime, boolean firstPerson) {
         super.setupAnim(seekTime, firstPerson);
         getEvaluationContext().setRoamingProperties(this.serverVars);
+    }
+
+    /**
+     * Iris invokes the entity renderer again for its shadow pass.  Unlike the
+     * player replacement, a maid has no local-player distinction, so the
+     * generic GeoEntity policy was skipping every maid animation in that pass.
+     * Keep only the real first-person guard for maid replacements.
+     */
+    @Override
+    public boolean shouldSkipAnimation(AnimationEvent<?> event) {
+        return event.isFirstPerson();
     }
 }
