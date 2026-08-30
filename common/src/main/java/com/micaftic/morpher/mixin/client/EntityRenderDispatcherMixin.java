@@ -53,7 +53,7 @@ public class EntityRenderDispatcherMixin {
                     return true;
                 }
                 boolean maidVanilla = MaidEntityRenderer.tryRender(guiEntity, guiYaw,
-                        ModelPreviewRenderer.getGuiPreviewPartialTick(), poseStack, guiBuffer, 0xF000F0);
+                        ModelPreviewRenderer.getGuiPreviewPartialTick(), poseStack, guiBuffer, collector, 0xF000F0);
                 if (!maidVanilla) {
                     guiBuffer.endBatch();
                     return false;
@@ -88,7 +88,7 @@ public class EntityRenderDispatcherMixin {
                 return shouldRenderVanilla;
             }
         }
-        boolean maidVanilla = MaidEntityRenderer.tryRender(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+        boolean maidVanilla = MaidEntityRenderer.tryRender(entity, entityYaw, partialTick, poseStack, bufferSource, collector, packedLight);
         if (!maidVanilla) {
             bufferSource.endBatch();
             return false;

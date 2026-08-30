@@ -1,3 +1,8 @@
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+
 def isNativeAbiVerificationEnabled = {
     def dist = providers.gradleProperty("dist").orElse("").get()
     return !dist.equalsIgnoreCase("curseforge")
@@ -23,6 +28,87 @@ if (rootCommonNativeDir.isDirectory()) {
     nativeAbiDirs << rootCommonNativeDir
 }
 nativeAbiDirs = nativeAbiDirs.unique { it.canonicalPath }
+
+def nativeSha256 = { File nativeFile ->
+    def digest = MessageDigest.getInstance('SHA-256')
+    nativeFile.withInputStream { input ->
+        byte[] buffer = new byte[8192]
+        int read
+        while ((read = input.read(buffer)) != -1) {
+            digest.update(buffer, 0, read)
+        }
+    }
+    digest.digest().collect { String.format('%02X', it & 0xff) }.join()
+}
+
+// The native binaries are the source of truth. Refresh the checked-in manifest
+// before resources are copied, so a SIMD rebuild cannot leave stale digests.
+tasks.register('updateNativeManifest') {
+    group = 'build setup'
+    description = 'Refreshes native-manifest.json and NATIVE_SOURCES.md from the native binaries.'
+    outputs.upToDateWhen { false }
+
+    doLast {
+        if (nativeAbiDirs.isEmpty()) {
+            throw new GradleException('Native manifest update expected native resources, but no natives directory was found.')
+        }
+
+        def docFile = rootProject.file('NATIVE_SOURCES.md')
+        def docText = docFile.isFile() ? docFile.getText('UTF-8') : null
+        def updatedDocText = docText
+
+        nativeAbiDirs.each { nativeDir ->
+            def manifestFile = new File(nativeDir.parentFile, 'native-manifest.json')
+            if (!manifestFile.isFile()) {
+                throw new GradleException("Missing native manifest next to ${nativeDir}: ${manifestFile}")
+            }
+            def manifest = new JsonSlurper().parse(manifestFile)
+            def manifestText = manifestFile.getText('UTF-8')
+            def updatedManifestText = manifestText
+
+            manifest.artifacts.each { artifact ->
+                def platform = artifact.platform.toString()
+                def filename = artifact.filename.toString()
+                def nativeFile = new File(nativeDir, "${platform}/${filename}")
+                if (!nativeFile.isFile()) {
+                    throw new GradleException("Missing native library: ${nativeFile}")
+                }
+                def actualDigest = nativeSha256(nativeFile)
+                def pattern = Pattern.compile(
+                        '(?s)("platform"\\s*:\\s*"' + Pattern.quote(platform) +
+                                '"\\s*,\\s*"filename"\\s*:\\s*"' + Pattern.quote(filename) +
+                                '"\\s*,\\s*"sha256"\\s*:\\s*")([0-9A-Fa-f]+)(")')
+                def matcher = pattern.matcher(updatedManifestText)
+                if (!matcher.find()) {
+                    throw new GradleException("Native manifest entry cannot be updated: ${platform}/${filename} in ${manifestFile}")
+                }
+                def replacement = matcher.group(1) + actualDigest + matcher.group(3)
+                updatedManifestText = matcher.replaceFirst(Matcher.quoteReplacement(replacement))
+
+                if (updatedDocText != null) {
+                    def docPattern = Pattern.compile(
+                            '(?m)(\\|[^\\r\\n]*`natives/' + Pattern.quote(platform) + '/' + Pattern.quote(filename) +
+                                    '`\\s*\\|\\s*)([0-9A-Fa-f]+)(\\s*\\|)')
+                    def docMatcher = docPattern.matcher(updatedDocText)
+                    if (docMatcher.find()) {
+                        def docReplacement = docMatcher.group(1) + actualDigest + docMatcher.group(3)
+                        updatedDocText = docMatcher.replaceFirst(Matcher.quoteReplacement(docReplacement))
+                    }
+                }
+            }
+
+            if (updatedManifestText != manifestText) {
+                manifestFile.setText(updatedManifestText, 'UTF-8')
+                logger.lifecycle("Updated native digests in ${manifestFile}")
+            }
+        }
+
+        if (docText != null && updatedDocText != docText) {
+            docFile.setText(updatedDocText, 'UTF-8')
+            logger.lifecycle("Updated native digests in ${docFile}")
+        }
+    }
+}
 
 tasks.register('verifyNativeAbi') {
     group = 'verification'
@@ -55,6 +141,11 @@ tasks.register('verifyNativeAbi') {
         ]
 
         nativeAbiDirs.each { nativeDir ->
+            def manifestFile = new File(nativeDir.parentFile, 'native-manifest.json')
+            if (!manifestFile.isFile()) {
+                throw new GradleException("Missing native manifest next to ${nativeDir}: ${manifestFile}")
+            }
+            def manifest = new JsonSlurper().parse(manifestFile)
             expectedFiles.each { relPath ->
                 def nativeFile = new File(nativeDir, relPath)
                 if (!nativeFile.isFile()) {
@@ -67,9 +158,19 @@ tasks.register('verifyNativeAbi') {
                     }
                 }
                 forbidden.each { marker ->
-                    if (text.contains(marker)) {
+                if (text.contains(marker)) {
                         throw new GradleException("Forbidden stale native ABI marker '${marker}' found in ${nativeFile}")
                     }
+                }
+                def expectedDigest = manifest.artifacts.find { artifact ->
+                    "${artifact.platform}/${artifact.filename}" == relPath
+                }?.sha256?.toString()
+                if (!expectedDigest) {
+                    throw new GradleException("Native manifest entry missing: ${relPath} in ${manifestFile}")
+                }
+                def actualDigest = nativeSha256(nativeFile)
+                if (!actualDigest.equalsIgnoreCase(expectedDigest)) {
+                    throw new GradleException("Native digest mismatch: ${nativeFile}; expected ${expectedDigest}, got ${actualDigest}")
                 }
             }
         }
@@ -78,4 +179,8 @@ tasks.register('verifyNativeAbi') {
 
 tasks.named('processResources') {
     dependsOn tasks.named('verifyNativeAbi')
+}
+
+tasks.named('verifyNativeAbi') {
+    dependsOn tasks.named('updateNativeManifest')
 }

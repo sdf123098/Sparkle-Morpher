@@ -31,7 +31,7 @@ import com.mojang.math.Axis;
 import org.joml.Matrix4f;
 import com.micaftic.morpher.util.ItemTagsConstants;
 
-public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEntity> {
+public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEntity> implements HeldItemLayer {
 
     // 原版装备（bbmodel）矛使用姿态参数：改这里只影响 bbmodel
     private static final float EQUIPMENT_SPEAR_TIRED_TIP_PLANE_ROLL_DEGREES = 90.0f;
@@ -383,6 +383,20 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
 
     private InteractionHand getRenderedHand(LivingEntity livingEntity, HumanoidArm humanoidArm) {
         return humanoidArm == livingEntity.getMainArm() ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
+    }
+
+    /**
+     * Renders an item at a glTF hand attachment point.  The display context is
+     * deliberately third-person so the normal 3D item model is always used.
+     */
+    public void renderGltfThirdPersonItem(LivingEntity livingEntity, ItemStack itemStack,
+                                          HumanoidArm humanoidArm, PoseStack poseStack,
+                                          MultiBufferSource bufferSource, int packedLight, float partialTick) {
+        if (itemStack == null || itemStack.isEmpty()) {
+            return;
+        }
+        renderVanillaItemWithUseOrientation(livingEntity, itemStack, getDisplayContext(humanoidArm),
+                humanoidArm, poseStack, packedLight, partialTick, false);
     }
 
     private ItemDisplayContext getDisplayContext(HumanoidArm humanoidArm) {

@@ -150,14 +150,18 @@ public final class PlayerCapability extends CustomPlayerEntity {
     public void setCurrentModel(AnimatedGeoModel model) {
         super.setCurrentModel(model);
         MolangVarHolder varHolder = this.molangVarsMap.get(this.currentModelHashId);
+        if (isLocalPlayerModel()) {
+            // Local model settings must also work before a server has supplied a variable table
+            // (privacy mode, singleplayer startup, or a server without model state sync).
+            this.serverVarContainer = createLocalRoamingStruct(
+                    this.currentModelHashId,
+                    varHolder == null ? null : varHolder.currentVars
+            );
+            return;
+        }
         if (varHolder != null && varHolder.currentVars != null) {
-            if (isLocalPlayerModel()) {
-                this.serverVarContainer = createLocalRoamingStruct(this.currentModelHashId, varHolder.currentVars);
-                return;
-            } else {
-                this.serverVarContainer = new Int2FloatOpenHashMapStruct(varHolder.currentVars);
-                return;
-            }
+            this.serverVarContainer = new Int2FloatOpenHashMapStruct(varHolder.currentVars);
+            return;
         }
         this.serverVarContainer = null;
     }

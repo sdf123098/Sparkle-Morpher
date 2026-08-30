@@ -11,7 +11,8 @@ import com.micaftic.morpher.client.gui.GuiWidgetRegistry;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
-import com.micaftic.morpher.core.api.network.state.LegacySpmHandshakeState;
+import com.micaftic.morpher.legacy.compat.LegacyCompatState;
+import com.micaftic.morpher.legacy.compat.LegacyCompatClient;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import com.micaftic.morpher.core.model.ModelRef;
 import com.micaftic.morpher.core.model.ModelSourceType;
@@ -37,6 +38,8 @@ import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
 import com.micaftic.morpher.resource.YSMBinaryDeserializer;
 import com.micaftic.morpher.resource.YSMClientMapper;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
+import com.micaftic.morpher.resource.gltf.GltfLoader;
+import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.model.format.ServerModelInfo;
 import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.resource.models.ModelPackData;
@@ -70,7 +73,7 @@ import net.minecraft.world.entity.player.Player;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
-import com.micaftic.morpher.core.legacy.YesModelUtils;
+import com.micaftic.morpher.legacy.compat.LegacyCompatModelFormat;
 import com.micaftic.morpher.core.security.YSMByteBuf;
 import com.micaftic.morpher.core.security.YSMClientCache;
 import com.micaftic.morpher.core.security.YsmCrypt;
@@ -379,7 +382,7 @@ public class ClientModelManager {
     static void resetClientState() {
         MODEL_TASK_GENERATION.incrementAndGet();
         modelTaskDispatcher.getQueue().clear();
-        LegacyModelSyncClient.resetSyncState();
+        LegacyCompatClient.resetSyncState();
 
         int discardedModelTasks = modelPhraseExecutor.getQueue().size();
         modelPhraseExecutor.getQueue().clear();
@@ -389,9 +392,9 @@ public class ClientModelManager {
         failedSyncModelsCount.set(0);
         syncManifestProcessed = false;
         syncCompletionScheduled.set(false);
-        LegacyModelCacheClient.clearCachedModelHashes();
+        LegacyCompatClient.clearCachedModelHashes();
 
-        LegacyModelCacheClient.releaseAllInFlightBuffers();
+        LegacyCompatClient.releaseAllInFlightBuffers();
         serverModels.clear();
         cachedModelFiles.clear();
         cpuReloadInFlight.clear();
@@ -797,6 +800,12 @@ public class ClientModelManager {
             Component error = null;
             try {
                 ModelMemoryProfiler.logBytes("local-import-read", modelKey, importData);
+                if (isGltfFileName(fileName)) {
+                    importLocalGltfModel(modelKey, fileName, importData);
+                    Minecraft.getInstance().execute(ClientModelManager::flushPendingModels);
+                    YesSteveModel.LOGGER.info("[SM] Imported local glTF model: {}", modelKey);
+                    return;
+                }
                 RawYsmModel rawModel = parseImportModel(fileName, importData);
                 ModelMemoryProfiler.log("local-import-parsed", modelKey);
                 ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, modelKey);
@@ -849,17 +858,28 @@ public class ClientModelManager {
                 scanLocalModelSources(ServerModelManager.BUILT, false, catalog);
                 scanLocalModelSources(ServerModelManager.CUSTOM, false, catalog);
                 scanLocalModelSources(ServerModelManager.AUTH, true, catalog);
-                applyLocalModelCatalog(catalog);
+                LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
+                Set<String> staleIds = new HashSet<>(diff.staleIds());
+                List<String> failedModelIds = new ArrayList<>();
                 if (!isLazyModelLoading()) {
                     for (Map.Entry<String, LocalModelCatalog.Entry> entry : catalog.entrySet()) {
-                        if (!modelAssemblyMap.containsKey(entry.getKey())
-                                || !modelAssemblyMap.get(entry.getKey()).isRuntimeResident()) {
-                            loadLocalModelSource(entry.getKey(), entry.getValue());
+                        ModelAssembly current = modelAssemblyMap.get(entry.getKey());
+                        if (staleIds.contains(entry.getKey()) || current == null || !current.isRuntimeResident()) {
+                            try {
+                                loadLocalModelSource(entry.getKey(), entry.getValue());
+                            } catch (Exception e) {
+                                failedModelIds.add(entry.getKey());
+                                YesSteveModel.LOGGER.warn("[SM] Failed to reload local model {}, keeping previous assembly", entry.getKey(), e);
+                            }
                         }
                     }
                 }
+                if (!failedModelIds.isEmpty()) {
+                    error = Component.translatable("gui.sparkle_morpher.import.error.local_reload_failed", String.join(", ", failedModelIds));
+                }
                 ((Executor) Minecraft.getInstance()).execute(() -> {
                     flushPendingModels();
+                    finalizeLocalModelCatalog(diff);
                     ClientRenderCompatibilityRegistry.flush();
                     forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
                 });
@@ -935,7 +955,7 @@ public class ClientModelManager {
 
     public static synchronized void resetSync() {
         // R9.2：oySm/allowUpload 与握手标志统一由 resetClientHandshake（→ LegacySpmHandshakeState.resetClientSession）复位
-        LegacyModelSyncClient.processServerData(null);
+        LegacyCompatClient.processServerData(null);
         NetworkHandler.resetClientHandshake();
         ((Executor) Minecraft.getInstance()).execute(() -> {
             syncState.setState(SyncState.WAITING);
@@ -943,7 +963,7 @@ public class ClientModelManager {
     }
 
     public static void enterPrivacyMode() {
-        LegacyModelSyncClient.processServerData(null);
+        LegacyCompatClient.processServerData(null);
         NetworkHandler.resetClientHandshake();
         ((Executor) Minecraft.getInstance()).execute(() -> {
             syncState.setState(SyncState.LOADING);
@@ -960,17 +980,17 @@ public class ClientModelManager {
     }
 
     public static boolean isAllowUpload() {
-        return LegacySpmHandshakeState.isAllowUpload();
+        return LegacyCompatState.isAllowUpload();
     }
 
     public static boolean isOysmServer() {
-        return LegacySpmHandshakeState.isOysmServer();
+        return LegacyCompatState.isOysmServer();
     }
 
     // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
 
     public static void startSync(Connection connection, ByteBuffer byteBuffer) {
-        LegacyModelSyncClient.enqueueSync(connection, byteBuffer);
+        LegacyCompatClient.enqueueSync(connection, byteBuffer);
     }
 
 
@@ -1127,10 +1147,44 @@ public class ClientModelManager {
         throw new IllegalArgumentException("Unsupported model import type: " + fileName);
     }
 
+    public static boolean isGltfFileName(@Nullable String fileName) {
+        String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".gltf") || lower.endsWith(".glb");
+    }
+
+    private static void importLocalGltfModel(String modelId, String fileName, byte[] data) throws Exception {
+        Path persisted = LOCAL_IMPORT_STORE.persist(modelId, fileName, data);
+        if (persisted == null) throw new IOException("Failed to persist glTF import");
+        GltfModel gltfModel = GltfLoader.load(persisted);
+        ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
+        localOnlyModelIds.add(modelId);
+        touchModel(modelId);
+        pendingModelQueue.add(Pair.of(runtimeModel, modelId));
+        localModelSourcePaths.put(modelId, persisted.toAbsolutePath().normalize());
+        lazyModelSources.put(modelId, new LocalModelCatalog.Entry(
+                persisted, null, false, false, LocalModelCatalog.fingerprint(persisted), null, null));
+    }
+
+    private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth) throws Exception {
+        GltfModel gltfModel = GltfLoader.load(source);
+        ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
+        localOnlyModelIds.add(modelId);
+        touchModel(modelId);
+        pendingModelQueue.add(Pair.of(runtimeModel, modelId));
+    }
+
+    private static ModelAssembly buildGltfAssembly(GltfModel model, String modelId) {
+        List<AbstractTexture> imageTextures = new ArrayList<>(model.images().size());
+        for (GltfModel.Image image : model.images()) {
+            imageTextures.add(image.data().length == 0 ? null : new OuterFileTexture(image.data(), modelId));
+        }
+        return ModelAssembly.forGltf(model, imageTextures);
+    }
+
     private static RawYsmModel parseYsmImport(byte[] data, String source) throws Exception {
-        int ysmCryptoVersion = YesModelUtils.getYsmCryptoVersion(data);
+        int ysmCryptoVersion = LegacyCompatModelFormat.detectCryptoVersion(data);
         if (ysmCryptoVersion == 1 || ysmCryptoVersion == 2) {
-            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(YesModelUtils.input(data))) {
+            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(LegacyCompatModelFormat.read(data))) {
                 return deserializer.deserialize();
             }
         }
@@ -1361,34 +1415,50 @@ public class ClientModelManager {
         }
     }
 
-    private static void applyLocalModelCatalog(Map<String, LocalModelCatalog.Entry> catalog) {
+    private static LocalModelCatalog.Diff applyLocalModelCatalog(Map<String, LocalModelCatalog.Entry> catalog) {
         LocalModelCatalog.Diff diff = LocalModelCatalog.diff(lazyModelSources, catalog);
         Set<String> validIds = new HashSet<>(catalog.keySet());
-        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
-        ArrayList<Pair<String, ModelAssembly>> staleAssemblies = new ArrayList<>();
-        for (String staleId : diff.staleIds()) {
-            ModelAssembly stale = map.remove(staleId);
-            if (stale != null) {
-                staleAssemblies.add(Pair.of(staleId, stale));
-            }
-            modelLastUsedAt.remove(staleId);
-            gpuCacheTrimmedModels.remove(staleId);
-        }
 
         lazyModelSources.entrySet().removeIf(entry -> !entry.getValue().remote);
         lazyModelSources.putAll(diff.catalog());
         localOnlyModelIds.clear();
         localOnlyModelIds.addAll(validIds);
-        modelAssemblyMap = map;
+        return diff;
+    }
 
-        if (!staleAssemblies.isEmpty()) {
-            ((Executor) Minecraft.getInstance()).execute(() -> staleAssemblies.forEach(pair ->
-                    releaseModelAssembly(pair.getLeft(), pair.getRight())));
+    private static void finalizeLocalModelCatalog(LocalModelCatalog.Diff diff) {
+        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+        ArrayList<Pair<String, ModelAssembly>> removedAssemblies = new ArrayList<>();
+        for (String staleId : diff.staleIds()) {
+            if (!diff.isRemoved(staleId)) {
+                continue;
+            }
+            ModelAssembly stale = map.remove(staleId);
+            if (stale != null) {
+                removedAssemblies.add(Pair.of(staleId, stale));
+                if (localModelContext == stale) {
+                    localModelContext = null;
+                    defaultModelLoadAttempted = false;
+                }
+            }
+            modelLastUsedAt.remove(staleId);
+            gpuCacheTrimmedModels.remove(staleId);
+        }
+        if (removedAssemblies.isEmpty()) {
+            return;
+        }
+        modelAssemblyMap = map;
+        for (Pair<String, ModelAssembly> pair : removedAssemblies) {
+            releaseModelAssembly(pair.getLeft(), pair.getRight());
         }
     }
 
     private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source) throws Exception {
         if (source.remote) return;
+        if (!Files.isDirectory(source.path) && isGltfFileName(source.path.getFileName().toString())) {
+            loadLocalGltfModel(modelId, source.path, source.auth);
+            return;
+        }
         RawYsmModel rawModel;
         if (Files.isDirectory(source.path)) {
             try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(source.path)) {
@@ -1414,7 +1484,9 @@ public class ClientModelManager {
         touchModel(modelId);
         runPendingModelCallback();
         if (!processModelData(parsedBundle, modelId, false, isAuth)) {
-            localOnlyModelIds.remove(modelId);
+            if (!lazyModelSources.containsKey(modelId)) {
+                localOnlyModelIds.remove(modelId);
+            }
             throw new IllegalStateException("Failed to build local model");
         }
     }
@@ -1580,8 +1652,8 @@ public class ClientModelManager {
         NetworkOnlineDebugLog.info("onSyncComplete: selectedModelId={} selectedTextureId={} assemblyMapSize={}",
                 MODEL_SELECTION.selectedModelId(), MODEL_SELECTION.selectedTextureId(), modelAssemblyMap.size());
         int failedModels = failedSyncModelsCount.getAndSet(0);
-        LegacyModelSyncClient.syncStep = 1;
-        LegacyModelCacheClient.clearCachedModelHashes();
+        LegacyCompatClient.resetStep();
+        LegacyCompatClient.clearCachedModelHashes();
         lastSyncActivityMillis = 0L;
         syncManifestProcessed = false;
 
@@ -1606,11 +1678,11 @@ public class ClientModelManager {
     }
 
     public static void setAllowUpload(boolean allowUpload) {
-        LegacySpmHandshakeState.setAllowUpload(allowUpload);
+        LegacyCompatState.setAllowUpload(allowUpload);
     }
 
     public static void setOysmServer(boolean isOysmServer) {
-        LegacySpmHandshakeState.setOysmServer(isOysmServer);
+        LegacyCompatState.setOysmServer(isOysmServer);
     }
 
     private static void onSyncError(@Nullable Object obj) {
@@ -1651,6 +1723,9 @@ public class ClientModelManager {
                 }
                 touchModel(modelKey);
                 gpuCacheTrimmedModels.remove(modelKey);
+                if (previous == localModelContext) {
+                    localModelContext = pairPoll.getLeft();
+                }
                 if (previous != null && previous != pairPoll.getLeft()) {
                     releaseModelAssembly(modelKey, previous);
                 }
@@ -2051,14 +2126,14 @@ public class ClientModelManager {
     public static void exportAllCachedModels(@Nullable String extra, @Nullable Consumer<ExportResult> callback) {
         YSMThreadPool.submit(() -> {
             try {
-                if (LegacyModelSyncClient.clientKey == null) {
+                if (LegacyCompatClient.clientKey() == null) {
                     if (callback != null) {
                         callback.accept(new ExportResult(false, Component.literal("(unavailable)"), "", "", 0));
                     }
                     return;
                 }
 
-                String folder = LegacyModelSyncClient.currentCacheFolderName != null ? LegacyModelSyncClient.currentCacheFolderName : "default_cache";
+                String folder = LegacyCompatClient.currentCacheFolderName() != null ? LegacyCompatClient.currentCacheFolderName() : "default_cache";
                 File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(folder).toFile();
 
                 if (!cacheDir.exists() || !cacheDir.isDirectory()) {
@@ -2082,7 +2157,7 @@ public class ClientModelManager {
 
                     try {
                         byte[] fileBytes = Files.readAllBytes(file.toPath());
-                        byte[] clearText = YsmCrypt.readInPlace(fileBytes, LegacyModelSyncClient.clientKey);
+                        byte[] clearText = YsmCrypt.readInPlace(fileBytes, LegacyCompatClient.clientKey());
 
                         int coreDataLength;
                         String exportName = file.getName(); // Fallback name

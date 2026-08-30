@@ -135,9 +135,11 @@ public final class YSMChannelImpl {
 
     public static void sendToTrackingEntityAndSelf(Object packet, Player player) {
         for (ServerPlayer p : PlayerLookup.tracking(player)) {
-            ServerPlayNetworking.send(p, new YSMPayload(encode(packet)));
+            if (canSendToClient(p)) {
+                ServerPlayNetworking.send(p, new YSMPayload(encode(packet)));
+            }
         }
-        if (player instanceof ServerPlayer self) {
+        if (player instanceof ServerPlayer self && canSendToClient(self)) {
             ServerPlayNetworking.send(self, new YSMPayload(encode(packet)));
         }
     }

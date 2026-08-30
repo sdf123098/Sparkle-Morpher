@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -77,9 +78,23 @@ public final class ZipModelSniffer {
      */
     public static ZipModelSniffer sniff(byte[] zipBytes, long sizeLimit) {
         if (zipBytes == null || zipBytes.length < 22 /* EOCD min size */) {
-            return new ZipModelSniffer(Kind.UNKNOWN, null, null, null, null, false, null, null, null);
+            return unknown();
         }
+        try {
+            return sniff(zipBytes, sizeLimit, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException malformedUtf8Name) {
+            // Windows tools may write ZIP entry names in the local system code page.
+            // Retry with GBK so such archives remain discoverable instead of failing
+            // before the model classifier can inspect their contents.
+            try {
+                return sniff(zipBytes, sizeLimit, Charset.forName("GBK"));
+            } catch (IllegalArgumentException malformedFallbackName) {
+                return unknown();
+            }
+        }
+    }
 
+    private static ZipModelSniffer sniff(byte[] zipBytes, long sizeLimit, Charset charset) {
         byte[] bbmodel = null;
         String bbmodelPath = null;
         byte[] avatar = null;
@@ -92,7 +107,7 @@ public final class ZipModelSniffer {
         long bestBbmodelSize = -1;
         long bestBedrockGeoSize = -1;
 
-        try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+        try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(zipBytes), charset)) {
             ZipEntry entry;
             while ((entry = zin.getNextEntry()) != null) {
                 if (entry.isDirectory()) continue;
@@ -136,7 +151,7 @@ public final class ZipModelSniffer {
             }
         } catch (IOException e) {
             // 损坏的 zip：直接走 UNKNOWN，让上层处理
-            return new ZipModelSniffer(Kind.UNKNOWN, null, null, null, null, false, null, null, null);
+            return unknown();
         }
 
         Kind kind;
@@ -154,6 +169,10 @@ public final class ZipModelSniffer {
 
         return new ZipModelSniffer(kind, bbmodel, bbmodelPath, textures, avatar, ysmMarker,
                 bedrockGeo, bedrockGeoPath, bedrockAnimations);
+    }
+
+    private static ZipModelSniffer unknown() {
+        return new ZipModelSniffer(Kind.UNKNOWN, null, null, null, null, false, null, null, null);
     }
 
     /** 拆下 zip 条目，超过 {@code sizeLimit} 时丢弃返回 null。0 表示无上限。 */

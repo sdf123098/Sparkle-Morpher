@@ -31,8 +31,8 @@ public class RoamingStruct implements Struct {
 
     public RoamingStruct(int i, Int2FloatOpenHashMap int2FloatOpenHashMap) {
         this.pendingBoneData = new RoamingSyncBatch(i, 4);
-        this.floatVars = int2FloatOpenHashMap;
-        this.varNames = new IntOpenHashSet(int2FloatOpenHashMap.keySet());
+        this.floatVars = int2FloatOpenHashMap == null ? new Int2FloatOpenHashMap() : int2FloatOpenHashMap;
+        this.varNames = new IntOpenHashSet(this.floatVars.keySet());
         this.modelHashId = i;
     }
 

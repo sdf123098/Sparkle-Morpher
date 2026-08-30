@@ -328,6 +328,10 @@ public final class ResourceDownloadManager {
             finishTask(task, TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
             return;
         }
+        if (ClientModelManager.isGltfFileName(task.entry.fileName())) {
+            finishTask(task, TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
+            return;
+        }
         synchronized (LOCK) {
             if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
                 return;
@@ -388,7 +392,7 @@ public final class ResourceDownloadManager {
     }
 
     private static void removeSiblingModelFiles(Path customRoot, String modelId, Path keepTarget) throws IOException {
-        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel", ".gltf", ".glb"}) {
             Path sibling = ServerModelManager.CUSTOM.resolve(modelId + extension).toAbsolutePath().normalize();
             if (sibling.startsWith(customRoot) && !sibling.equals(keepTarget)) {
                 Files.deleteIfExists(sibling);
@@ -404,12 +408,18 @@ public final class ResourceDownloadManager {
         if (lower.endsWith(".bbmodel")) {
             return ".bbmodel";
         }
+        if (lower.endsWith(".gltf")) {
+            return ".gltf";
+        }
+        if (lower.endsWith(".glb")) {
+            return ".glb";
+        }
         return ".ysm";
     }
 
     private static String stripKnownImportExtension(String modelId) {
         String lower = modelId == null ? "" : modelId.toLowerCase(Locale.ROOT);
-        for (String extension : new String[]{".ysm", ".zip", ".bbmodel"}) {
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel", ".gltf", ".glb"}) {
             if (lower.endsWith(extension)) {
                 return modelId.substring(0, modelId.length() - extension.length());
             }

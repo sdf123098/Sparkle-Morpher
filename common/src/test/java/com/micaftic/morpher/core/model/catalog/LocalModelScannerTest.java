@@ -53,6 +53,8 @@ class LocalModelScannerTest {
         assertEquals(Kind.YSM, LocalModelScanner.kindFromFileName("model.YSM"));
         assertEquals(Kind.ZIP, LocalModelScanner.kindFromFileName("model.zip"));
         assertEquals(Kind.BBMODEL, LocalModelScanner.kindFromFileName("model.bbmodel"));
+        assertEquals(Kind.GLTF, LocalModelScanner.kindFromFileName("model.gltf"));
+        assertEquals(Kind.GLB, LocalModelScanner.kindFromFileName("model.GLB"));
         assertEquals(Kind.UNKNOWN, LocalModelScanner.kindFromFileName("model.txt"));
         assertEquals(Kind.UNKNOWN, LocalModelScanner.kindFromFileName(null));
         assertEquals(Kind.UNKNOWN, LocalModelScanner.kindFromFileName("noext"));
@@ -63,6 +65,8 @@ class LocalModelScannerTest {
         assertEquals(".ysm", LocalModelScanner.extensionFor(Kind.YSM));
         assertEquals(".zip", LocalModelScanner.extensionFor(Kind.ZIP));
         assertEquals(".bbmodel", LocalModelScanner.extensionFor(Kind.BBMODEL));
+        assertEquals(".gltf", LocalModelScanner.extensionFor(Kind.GLTF));
+        assertEquals(".glb", LocalModelScanner.extensionFor(Kind.GLB));
         assertEquals("", LocalModelScanner.extensionFor(Kind.UNKNOWN));
         assertEquals("", LocalModelScanner.extensionFor(Kind.FOLDER));
     }
@@ -72,6 +76,7 @@ class LocalModelScannerTest {
         assertEquals("cirno", LocalModelScanner.stripImportExtension("cirno.ysm"));
         assertEquals("cirno", LocalModelScanner.stripImportExtension("cirno.ZIP"));
         assertEquals("cirno", LocalModelScanner.stripImportExtension("cirno.bbmodel"));
+        assertEquals("cirno", LocalModelScanner.stripImportExtension("cirno.GLTF"));
         assertEquals("cirno.txt", LocalModelScanner.stripImportExtension("cirno.txt"));
         assertEquals("noext", LocalModelScanner.stripImportExtension("noext"));
     }
@@ -106,13 +111,15 @@ class LocalModelScannerTest {
         write(base.resolve("standalone.ysm"), "data");
         write(base.resolve("pack.zip"), "data");
         write(base.resolve("bb.bbmodel"), "{}");
+        write(base.resolve("bird.gltf"), "{}");
+        write(base.resolve("bird2.glb"), "data");
         write(base.resolve("readme.txt"), "hi");
 
         List<Hit> hits = scanCollect(base);
-        assertEquals(5, hits.size(), "cirno/dai/standalone/pack/bb 五个命中");
+        assertEquals(7, hits.size(), "cirno/dai/standalone/pack/bb/bird.gltf/bird.glb 七个命中");
 
         Set<String> ids = hits.stream().map(Hit::modelId).collect(Collectors.toSet());
-        assertTrue(ids.containsAll(Set.of("cirno", "dai", "standalone", "pack", "bb")));
+        assertTrue(ids.containsAll(Set.of("cirno", "dai", "standalone", "pack", "bb", "bird", "bird2")));
 
         Hit folderHit = hits.stream().filter(h -> h.modelId().equals("cirno")).findFirst().orElseThrow();
         assertEquals(Kind.FOLDER, folderHit.kind());
