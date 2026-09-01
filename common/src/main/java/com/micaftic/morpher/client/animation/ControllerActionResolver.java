@@ -2,39 +2,49 @@ package com.micaftic.morpher.client.animation;
 
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
+import com.micaftic.morpher.core.compat.parcool.ParcoolCompat;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.EntityFrameStateTracker;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.util.MovementQuery;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
-import com.micaftic.morpher.core.compat.parcool.ParcoolCompat;
 
+/**
+ * 1.2.4（§14.1）：玩家基础动作的唯一权威判定入口。
+ *
+ * <p>快照采集（{@link #snapshot}）→ 状态映射（{@link #resolveState}）为纯函数，
+ * 不产生 gameplay / network / molang 副作用；动画状态机、{@code ctrl.*} Molang
+ * 绑定、vanilla fallback 与 compat 扩展都必须经由这里取得同一个
+ * {@link PlayerActionState}，不允许各自独立从 entity 重新判定。
+ *
+ * <p>历史 String 常量与 {@code isState(String, ...)} 保留为兼容层（Molang 绑定、
+ * 旧调用点），其值全部派生自 {@link PlayerActionState}，保证单一事实源。
+ */
 public final class ControllerActionResolver {
 
-    public static final String DEATH = "death";
-    public static final String RIPTIDE = "riptide";
-    public static final String SLEEP = "sleep";
-    public static final String SWIM = "swim";
-    public static final String CLIMB = "climb";
-    public static final String CLIMBING = "climbing";
-    public static final String LADDER_UP = "ladder_up";
-    public static final String LADDER_STILLNESS = "ladder_stillness";
-    public static final String LADDER_DOWN = "ladder_down";
-    public static final String FLY = "fly";
-    public static final String ELYTRA_FLY = "elytra_fly";
-    public static final String SWIM_STAND = "swim_stand";
-    public static final String ATTACKED = "attacked";
-    public static final String JUMP = "jump";
-    public static final String SNEAK = "sneak";
-    public static final String SNEAKING = "sneaking";
-    public static final String RUN = "run";
-    public static final String WALK = "walk";
-    public static final String IDLE = "idle";
+    public static final String DEATH = PlayerActionState.DEATH.animationName();
+    public static final String RIPTIDE = PlayerActionState.RIPTIDE.animationName();
+    public static final String SLEEP = PlayerActionState.SLEEP.animationName();
+    public static final String SWIM = PlayerActionState.SWIM.animationName();
+    public static final String CLIMB = PlayerActionState.CLIMB.animationName();
+    public static final String CLIMBING = PlayerActionState.CLIMBING.animationName();
+    public static final String LADDER_UP = PlayerActionState.LADDER_UP.animationName();
+    public static final String LADDER_STILLNESS = PlayerActionState.LADDER_STILLNESS.animationName();
+    public static final String LADDER_DOWN = PlayerActionState.LADDER_DOWN.animationName();
+    public static final String FLY = PlayerActionState.FLY.animationName();
+    public static final String ELYTRA_FLY = PlayerActionState.ELYTRA_FLY.animationName();
+    public static final String SWIM_STAND = PlayerActionState.SWIM_STAND.animationName();
+    public static final String ATTACKED = PlayerActionState.ATTACKED.animationName();
+    public static final String JUMP = PlayerActionState.JUMP.animationName();
+    public static final String SNEAK = PlayerActionState.SNEAK.animationName();
+    public static final String SNEAKING = PlayerActionState.SNEAKING.animationName();
+    public static final String RUN = PlayerActionState.RUN.animationName();
+    public static final String WALK = PlayerActionState.WALK.animationName();
+    public static final String IDLE = PlayerActionState.IDLE.animationName();
 
     public static final float MIN_MOVEMENT_SPEED = 0.05f;
     private static final float LADDER_STILLNESS_SPEED = 0.01f;
@@ -42,6 +52,7 @@ public final class ControllerActionResolver {
     private ControllerActionResolver() {
     }
 
+    /** 带帧内缓存的状态解析（Molang / 渲染路径使用）。 */
     public static String resolve(IContext<LivingEntity> context) {
         LivingEntity entity = context.entity();
         AnimatableEntity<?> animatable = context.geoInstance();
@@ -55,14 +66,21 @@ public final class ControllerActionResolver {
         return state;
     }
 
+    /** String 兼容层：映射为统一的 {@link PlayerActionState} 后再取动画名。 */
     public static String resolve(AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
-        if (entity == null || animatable instanceof IPreviewAnimatable || isParcooling(entity) || isRidingAliveVehicle(entity)) {
-            return StringPool.EMPTY;
+        return resolveState(animatable, entity, event).animationName();
+    }
+
+    /** 唯一权威判定：直接返回状态枚举。 */
+    public static PlayerActionState resolveState(AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
+        if (entity == null || animatable instanceof IPreviewAnimatable || isParcooling(entity)) {
+            return PlayerActionState.NONE;
         }
         return resolveState(snapshot(animatable, entity, event));
     }
 
-    public static ActionSnapshot snapshot(AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
+    /** 采集帧级动作快照（纯读取，无副作用）。 */
+    public static PlayerActionSnapshot snapshot(AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
         EntityFrameStateTracker<?> tracker = animatable.getPositionTracker();
         float groundSpeed = getGroundSpeed(entity, tracker, event);
         float verticalSpeed = getVerticalSpeed(entity, tracker);
@@ -70,7 +88,7 @@ public final class ControllerActionResolver {
         boolean onGround = entity.onGround();
         boolean inWater = entity.isInWater();
         boolean swimmingPose = entity.getPose() == Pose.SWIMMING;
-        return new ActionSnapshot(
+        return new PlayerActionSnapshot(
                 entity.isDeadOrDying(),
                 entity.isAutoSpinAttack(),
                 entity.getPose() == Pose.SLEEPING,
@@ -85,66 +103,71 @@ public final class ControllerActionResolver {
                 entity.isSprinting(),
                 entity.hurtTime > 0,
                 moving,
-                verticalSpeed
+                verticalSpeed,
+                isRidingAliveVehicle(entity)
         );
     }
 
-    public static String resolveState(ActionSnapshot state) {
+    /** 快照 → 状态映射（纯函数；RIDE 最先压制其余状态，与历史"骑乘即无动作"优先级一致）。 */
+    public static PlayerActionState resolveState(PlayerActionSnapshot state) {
+        if (state.riding()) {
+            return PlayerActionState.RIDE;
+        }
         if (state.deadOrDying()) {
-            return DEATH;
+            return PlayerActionState.DEATH;
         }
         if (state.riptide()) {
-            return RIPTIDE;
+            return PlayerActionState.RIPTIDE;
         }
         if (state.sleeping()) {
-            return SLEEP;
+            return PlayerActionState.SLEEP;
         }
         if (state.swimming()) {
-            return SWIM;
+            return PlayerActionState.SWIM;
         }
         if (state.swimmingPose() && state.moving()) {
-            return CLIMB;
+            return PlayerActionState.CLIMB;
         }
         if (state.swimmingPose()) {
-            return CLIMBING;
+            return PlayerActionState.CLIMBING;
         }
         if (state.onClimbable()) {
             if (state.verticalSpeed() > LADDER_STILLNESS_SPEED) {
-                return LADDER_UP;
+                return PlayerActionState.LADDER_UP;
             }
             if (state.verticalSpeed() < -LADDER_STILLNESS_SPEED) {
-                return LADDER_DOWN;
+                return PlayerActionState.LADDER_DOWN;
             }
-            return LADDER_STILLNESS;
+            return PlayerActionState.LADDER_STILLNESS;
         }
         if (state.elytraFlying()) {
-            return ELYTRA_FLY;
+            return PlayerActionState.ELYTRA_FLY;
         }
         if (state.flying()) {
-            return FLY;
+            return PlayerActionState.FLY;
         }
         if (state.inWater() && !state.onGround()) {
-            return SWIM_STAND;
+            return PlayerActionState.SWIM_STAND;
         }
         if (state.attacked()) {
-            return ATTACKED;
+            return PlayerActionState.ATTACKED;
         }
         if (!state.onGround() && !state.inWater()) {
-            return JUMP;
+            return PlayerActionState.JUMP;
         }
         if (state.onGround() && state.crouching() && state.moving()) {
-            return SNEAK;
+            return PlayerActionState.SNEAK;
         }
         if (state.onGround() && state.crouching()) {
-            return SNEAKING;
+            return PlayerActionState.SNEAKING;
         }
         if (state.onGround() && state.sprinting() && state.moving()) {
-            return RUN;
+            return PlayerActionState.RUN;
         }
         if (state.onGround() && state.moving()) {
-            return WALK;
+            return PlayerActionState.WALK;
         }
-        return IDLE;
+        return PlayerActionState.IDLE;
     }
 
     public static boolean isState(String expectedState, AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
@@ -183,24 +206,5 @@ public final class ControllerActionResolver {
     private static boolean isRidingAliveVehicle(LivingEntity entity) {
         Entity vehicle = entity.getVehicle();
         return vehicle != null && vehicle.isAlive();
-    }
-
-    public record ActionSnapshot(
-            boolean deadOrDying,
-            boolean riptide,
-            boolean sleeping,
-            boolean swimming,
-            boolean swimmingPose,
-            boolean onClimbable,
-            boolean flying,
-            boolean elytraFlying,
-            boolean inWater,
-            boolean onGround,
-            boolean crouching,
-            boolean sprinting,
-            boolean attacked,
-            boolean moving,
-            float verticalSpeed
-    ) {
     }
 }
