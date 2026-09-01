@@ -5,6 +5,7 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.gltf.GltfMaterialResolver;
+import com.micaftic.morpher.client.renderer.gltf.GltfPlayerActionMapper;
 import com.micaftic.morpher.client.renderer.gltf.GltfRenderTypes;
 import com.micaftic.morpher.client.renderer.gltf.GltfVertexConsumerRenderer;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
@@ -12,6 +13,7 @@ import com.micaftic.morpher.geckolib3.geo.LayerTypeConstants;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.resource.gltf.GltfAnimationClock;
+import com.micaftic.morpher.resource.gltf.GltfAnimationController;
 import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.resource.gltf.GltfSceneEvaluator;
 import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
@@ -82,9 +84,10 @@ public class HandItemRenderer {
         }
 
         GltfSceneEvaluator evaluator = new GltfSceneEvaluator(model);
-        int animation = model.animations().isEmpty() ? -1 : 0;
-        GltfSceneEvaluator.Pose pose = evaluator.evaluate(model.defaultScene(), animation,
-                GltfAnimationClock.fromMinecraftTicks(localPlayer.tickCount, partialTick), true);
+        float clock = GltfAnimationClock.fromMinecraftTicks(localPlayer.tickCount, partialTick);
+        GltfAnimationController controller = new GltfAnimationController(model);
+        controller.selectState(GltfPlayerActionMapper.resolveForMotion(localPlayer), clock);
+        GltfSceneEvaluator.Pose pose = controller.evaluate(evaluator, model.defaultScene(), clock);
         Function<GltfModel.Material, VertexConsumer> consumerFactory = material -> {
             GltfMaterialResolver.ResolvedMaterial<ResourceLocation> resolved = GltfMaterialResolver.<ResourceLocation>resolve(
                     material, ClientModelManager.getDefaultTexture(), null, textureIndex -> {

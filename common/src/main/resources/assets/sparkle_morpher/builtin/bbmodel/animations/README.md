@@ -44,5 +44,7 @@
 - `walk` / `swim` / `sneak` / `sleep` / `ride` / `swing_hand` 改编自 Mojang 原版
   Bedrock 玩家动画（`tools/convert_vanilla_animations.py` 烘焙 Molang 为数值帧）；
   `idle` 改编自 Blockbench Workshop 免费模型（`tools/convert_bbmodel_animations.py`，
-  cc-by 署名见 `CREDITS.md`）；其余状态为 vanilla 骨骼简版占位。
+  cc-by 署名见 `CREDITS.md`）；其余 13 个状态（run/jump/fly/elytra_fly/attacked/death/
+  climb/climbing/ladder_*/riptide/swim_stand/sneaking）为自研精修版
+  （`tools/refine_placeholder_animations.py`，参考 Minecraft 原版玩家动作）。
 - 丰富、精修的动作可由社区/原创内容逐步替换（替换同名 JSON 即可）。
