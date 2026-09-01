@@ -42,6 +42,7 @@
 - **19 个状态动画 + 7 个武器手臂兜底 + fp.arm 并行槽与武器兜底**，覆盖
   `PlayerActionState` 全部基础动作与第一人称手臂持有/使用/挥舞。
 - `walk` / `swim` / `sneak` / `sleep` / `ride` / `swing_hand` 改编自 Mojang 原版
-  Bedrock 玩家动画（`tools/convert_vanilla_animations.py` 烘焙 Molang 为数值帧，
-  见 `CREDITS.md`）；其余状态为 vanilla 骨骼简版占位。
+  Bedrock 玩家动画（`tools/convert_vanilla_animations.py` 烘焙 Molang 为数值帧）；
+  `idle` 改编自 Blockbench Workshop 免费模型（`tools/convert_bbmodel_animations.py`，
+  cc-by 署名见 `CREDITS.md`）；其余状态为 vanilla 骨骼简版占位。
 - 丰富、精修的动作可由社区/原创内容逐步替换（替换同名 JSON 即可）。
