@@ -13,7 +13,9 @@ import java.util.Locale;
  */
 public final class GltfAnimationController {
     public enum State {
-        IDLE, WALK, RUN, JUMP, FALL, ATTACK, USE, DEATH, CUSTOM
+        IDLE, WALK, RUN, JUMP, FALL, ATTACK, USE, DEATH, CUSTOM,
+        FLY, ELYTRA_FLY, SWIM, SWIM_STAND, SNEAK, SNEAKING, RIDE, SLEEP, ATTACKED,
+        CLIMB, CLIMBING, LADDER_UP, LADDER_STILLNESS, LADDER_DOWN
     }
 
     private final GltfModel model;
@@ -202,6 +204,20 @@ public final class GltfAnimationController {
             case ATTACK -> List.of("attack", "swing", "swing_hand", "attack_empty", "dianchuo", "click", "poke", "stab");
             case USE -> List.of("use", "use_mainhand", "use_offhand", "interact", "dianchuo", "click", "poke");
             case DEATH -> List.of("death", "die");
+            case FLY -> List.of("fly", "flying", "creativefly", "creative_fly");
+            case ELYTRA_FLY -> List.of("elytra_fly", "elytra", "glide", "gliding", "fall_flying");
+            case SWIM -> List.of("swim", "swimming");
+            case SWIM_STAND -> List.of("swim_stand", "swimstand", "treading", "tread_water");
+            case SNEAK -> List.of("sneak", "sneaking", "crouch", "crouching", "creep");
+            case SNEAKING -> List.of("sneaking", "sneak", "crouching", "crouch");
+            case RIDE -> List.of("ride", "riding", "sit", "sitting", "mount");
+            case SLEEP -> List.of("sleep", "sleeping", "lay", "lying");
+            case ATTACKED -> List.of("attacked", "hurt", "damage", "hit", "flinch");
+            case CLIMB -> List.of("climb", "climbing", "climb_up");
+            case CLIMBING -> List.of("climbing", "climb", "climb_up");
+            case LADDER_UP -> List.of("ladder_up", "ladderup", "climb_up", "climbup");
+            case LADDER_STILLNESS -> List.of("ladder_stillness", "ladderstill", "ladder_idle", "ladderidle");
+            case LADDER_DOWN -> List.of("ladder_down", "ladderdown", "climb_down", "climbdown");
             case CUSTOM -> List.of();
         };
         for (String alias : aliases) {

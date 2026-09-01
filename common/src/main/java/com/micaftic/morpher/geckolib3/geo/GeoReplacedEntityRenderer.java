@@ -24,7 +24,7 @@ import com.micaftic.morpher.resource.gltf.GltfAnimationClock;
 import com.micaftic.morpher.resource.gltf.GltfAnimationController;
 import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.resource.gltf.GltfSceneEvaluator;
-import com.micaftic.morpher.client.input.InputStateKey;
+import com.micaftic.morpher.client.renderer.gltf.GltfPlayerActionMapper;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -197,10 +197,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             float clock = GltfAnimationClock.fromMinecraftTicks(entity.tickCount, partialTick);
             GltfAnimationController controller = t.getGltfAnimationController();
             if (controller == null) controller = new GltfAnimationController(model);
-            boolean attacking = InputStateKey.isAnyHandSwinging(entity);
-            boolean usingItem = InputStateKey.isUsingItem(entity, InputStateKey.getUsedItemHand(entity));
-            controller.selectForMotion((float) entity.getDeltaMovement().horizontalDistance(), entity.onGround(),
-                    entity.isCrouching(), entity.deathTime > 0, attacking, usingItem, clock);
+            controller.selectState(GltfPlayerActionMapper.resolveForMotion(entity), clock);
             GltfSceneEvaluator.Pose pose = controller.evaluate(evaluator, model.defaultScene(), clock);
             java.util.function.Function<GltfModel.Material, VertexConsumer> consumerFactory = material -> {
                 GltfMaterialResolver.ResolvedMaterial<Identifier> resolved = GltfMaterialResolver.resolve(

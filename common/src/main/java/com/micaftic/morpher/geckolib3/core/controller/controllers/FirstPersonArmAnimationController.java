@@ -3,8 +3,10 @@ package com.micaftic.morpher.geckolib3.core.controller.controllers;
 import com.micaftic.morpher.client.animation.condition.ConditionArmor;
 import com.micaftic.morpher.client.animation.predicate.EquipmentSlotAnimationPredicate;
 import com.micaftic.morpher.client.animation.predicate.FirstPersonLanceAnimationPredicate;
+import com.micaftic.morpher.client.animation.predicate.FirstPersonWeaponAnimationPredicate;
 import com.micaftic.morpher.client.animation.predicate.NamedAnimationPredicate;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
+import com.micaftic.morpher.client.model.ModelSourceFormat;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.processor.*;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
@@ -40,6 +42,17 @@ public class FirstPersonArmAnimationController {
             "lance_fall_flying_charge"
     };
 
+    /** bbmodel/figura 导入模型第一人称自动武器兜底槽：从 arm 表按动作播放 hold/use/swing。 */
+    private static final String[] REQUIRED_WEAPON_ANIMATIONS = {
+            "hold_mainhand",
+            "hold_offhand",
+            "use_mainhand",
+            "use_offhand",
+            "swing_hand",
+            "swing_offhand",
+            "attack_empty"
+    };
+
     private static final ProcessorPipeline<PlayerGeoEntity, PlayerModelBundle> processorRegistry = new ProcessorPipeline<>();
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -50,9 +63,26 @@ public class FirstPersonArmAnimationController {
         registerNamedProcessor("lance", REQUIRED_LANCE_ANIMATIONS, false, (animationEntryKey, entity) -> new CompositeAnimationController(entity, animationEntryKey, 0.0f, new FirstPersonLanceAnimationPredicate()));
     }
 
+    /** 仅在 bbmodel/figura 导入模型上安装第一人称自动武器兜底槽。 */
+    private static void registerWeaponProcessors() {
+        ModelProcessor<PlayerGeoEntity, PlayerModelBundle> weapon = new NamedModelProcessor<>(
+                FP_ARM_PREFIX, "weapon", REQUIRED_WEAPON_ANIMATIONS, false,
+                DefaultBoneExpressionProvider.INSTANCE,
+                (animationEntryKey, entity) -> new CompositeAnimationController(entity, animationEntryKey, 0.0f, new FirstPersonWeaponAnimationPredicate()));
+        processorRegistry.register(weapon);
+    }
+
     public static Consumer<PlayerGeoEntity> buildControllers(PlayerModelBundle modelBundle, ModelResourceBundle resourceBundle) {
         processorRegistry.initializeOnce(FirstPersonArmAnimationController::registerDefaultProcessors);
+        if (isImportedPlayerModel(modelBundle)) {
+            registerWeaponProcessors();
+        }
         return processorRegistry.buildAll(modelBundle, resourceBundle);
+    }
+
+    private static boolean isImportedPlayerModel(PlayerModelBundle modelBundle) {
+        ModelSourceFormat sourceFormat = modelBundle.getSourceFormat();
+        return sourceFormat == ModelSourceFormat.BBMODEL || sourceFormat == ModelSourceFormat.FIGURA_BBMODEL;
     }
 
     private static void registerSimpleProcessor(String slotName, BiFunction<String, PlayerGeoEntity, IAnimationController<PlayerGeoEntity>> controllerFactory) {
