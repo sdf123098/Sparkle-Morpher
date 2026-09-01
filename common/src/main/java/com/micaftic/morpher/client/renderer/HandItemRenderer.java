@@ -13,6 +13,7 @@ import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
 import com.micaftic.morpher.geckolib3.geo.LayerTypeConstants;
 import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.renderer.gltf.GltfPlayerActionMapper;
 import com.micaftic.morpher.resource.gltf.GltfAnimationClock;
 import com.micaftic.morpher.resource.gltf.GltfAnimationController;
 import com.micaftic.morpher.resource.gltf.GltfModel;
@@ -103,8 +104,7 @@ public class HandItemRenderer {
         GltfSceneEvaluator evaluator = new GltfSceneEvaluator(model);
         float clock = GltfAnimationClock.fromMinecraftTicks(localPlayer.tickCount, partialTick);
         GltfAnimationController controller = new GltfAnimationController(model);
-        controller.selectForMotion((float) localPlayer.getDeltaMovement().horizontalDistance(), localPlayer.onGround(),
-                localPlayer.isCrouching(), false, clock);
+        controller.selectState(GltfPlayerActionMapper.resolveForMotion(localPlayer), clock);
         GltfSceneEvaluator.Pose pose = controller.evaluate(evaluator, model.defaultScene(), clock);
         List<GltfModel.Material> passes = new ArrayList<>();
         boolean includeDefaultMaterial = false;
