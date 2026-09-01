@@ -4,7 +4,6 @@ import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.animation.debug.AnimationFrameProfiler;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.gltf.GltfMaterialResolver;
@@ -25,6 +24,7 @@ import com.micaftic.morpher.resource.gltf.GltfAnimationClock;
 import com.micaftic.morpher.resource.gltf.GltfAnimationController;
 import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.resource.gltf.GltfSceneEvaluator;
+import com.micaftic.morpher.client.renderer.gltf.GltfPlayerActionMapper;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -126,10 +126,11 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             this.dispatchedMat.set(poseStack.last().pose());
             setCurrentModelRenderCycle(EModelRenderCycle.INITIAL);
             poseStack.pushPose();
-            if (entity.getPose() == Pose.SLEEPING && (bedOrientation = entity.getBedOrientation()) != null) {
-                float eyeHeight = entity.getEyeHeight(Pose.STANDING) - 0.1f;
-                poseStack.translate((-bedOrientation.getStepX()) * eyeHeight, 0.0f, (-bedOrientation.getStepZ()) * eyeHeight);
-            }
+            try {
+                if (entity.getPose() == Pose.SLEEPING && (bedOrientation = entity.getBedOrientation()) != null) {
+                    float eyeHeight = entity.getEyeHeight(Pose.STANDING) - 0.1f;
+                    poseStack.translate((-bedOrientation.getStepX()) * eyeHeight, 0.0f, (-bedOrientation.getStepZ()) * eyeHeight);
+                }
             boolean previousFallFlyingPitchState = this.fallFlyingPitchHandledByAnimation;
             this.fallFlyingPitchHandledByAnimation = t.getModelAssembly() != null
                     && t.getModelAssembly().getAnimationBundle() != null
@@ -140,36 +141,38 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
                 this.fallFlyingPitchHandledByAnimation = previousFallFlyingPitchState;
             }
             if (t.getEntity().getVehicle() != null && !com.micaftic.morpher.client.render.RenderContext.isGuiPreview()) {
-                Entity vehicle = t.getEntity().getVehicle();
-                VehicleCapability.get(vehicle).ifPresent(cap -> {
-                    if (cap.isModelReady()) {
-                        Vector3f vector3f = cap.getExpressionOffset();
-                        if (vector3f != null) {
-                            poseStack.mulPose(new Quaternionf().rotateZYX(vector3f.z, 0.0f, vector3f.x).invert());
+                    Entity vehicle = t.getEntity().getVehicle();
+                    VehicleCapability.get(vehicle).ifPresent(cap -> {
+                        if (cap.isModelReady()) {
+                            Vector3f vector3f = cap.getExpressionOffset();
+                            if (vector3f != null) {
+                                poseStack.mulPose(new Quaternionf().rotateZYX(vector3f.z, 0.0f, vector3f.x).invert());
+                            }
                         }
-                    }
-                });
+                    });
+                }
+                preRenderCallback(entity, poseStack, partialTick);
+                poseStack.translate(0.0f, 0.01f, 0.0f);
+                AnimatedGeoModel animatedGeoModel = t.getCurrentModel();
+                Identifier renderTexture = textureLocation == null ? t.getTextureLocation() : textureLocation;
+                int textureIndex = textureLocation == null ? t.getTextureIndex() : 0;
+                // MC 26.x: isBodyVisible/shouldEntityAppearGlowing API changed
+                RenderType renderType = getRenderType(renderTexture, true /* isBodyVisible(entity) */ && !entity.isInvisibleTo(minecraft.player), false /* minecraft.shouldEntityAppearGlowing(entity) */, t.getCurrentModel().getGeoModel().isTranslucentTexture(textureIndex));
+                boolean useExtraPlayer = t.isRenderLayersFirst();
+                Color color = getRenderColor(t, partialTick, poseStack, multiBufferSource, null, packedLight);
+                renderWithBone(animatedGeoModel, t, partialTick, poseStack, multiBufferSource, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f);
+                if (useExtraPlayer && !entity.isSpectator()) {
+                    render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
+                }
+                if (renderType != null) {
+                    renderWithBoneAndRenderType(animatedGeoModel, t, partialTick, renderType, poseStack, multiBufferSource, textureIndex, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f, renderTexture);
+                }
+                if (!useExtraPlayer && !entity.isSpectator()) {
+                    render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
+                }
+            } finally {
+                poseStack.popPose();
             }
-            preRenderCallback(entity, poseStack, partialTick);
-            poseStack.translate(0.0f, 0.01f, 0.0f);
-            AnimatedGeoModel animatedGeoModel = t.getCurrentModel();
-            Identifier renderTexture = textureLocation == null ? t.getTextureLocation() : textureLocation;
-            int textureIndex = textureLocation == null ? t.getTextureIndex() : 0;
-            // MC 26.x: isBodyVisible/shouldEntityAppearGlowing API changed
-            RenderType renderType = getRenderType(renderTexture, true /* isBodyVisible(entity) */ && !entity.isInvisibleTo(minecraft.player), false /* minecraft.shouldEntityAppearGlowing(entity) */, t.getCurrentModel().getGeoModel().isTranslucentTexture(textureIndex));
-            boolean useExtraPlayer = t.isRenderLayersFirst();
-            Color color = getRenderColor(t, partialTick, poseStack, multiBufferSource, null, packedLight);
-            renderWithBone(animatedGeoModel, t, partialTick, poseStack, multiBufferSource, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f);
-            if (useExtraPlayer && !entity.isSpectator()) {
-                render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
-            }
-            if (renderType != null) {
-                renderWithBoneAndRenderType(animatedGeoModel, t, partialTick, renderType, poseStack, multiBufferSource, textureIndex, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f, renderTexture);
-            }
-            if (!useExtraPlayer && !entity.isSpectator()) {
-                render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
-            }
-            poseStack.popPose();
         }
         ((LivingEntityRendererAccessor) this).tlm$renderNameTag(entity, entityYaw, partialTick, poseStack, multiBufferSource, packedLight);
         RenderLivingBridge.firePost(entity, this, partialTick, poseStack, multiBufferSource, packedLight);
@@ -187,16 +190,14 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             preRenderCallback(entity, poseStack, partialTick);
             poseStack.translate(0.0f, 0.01f, 0.0f);
             GltfModel model = assembly.getGltfModel();
-            poseStack.scale(model.recommendedMinecraftScale(), model.recommendedMinecraftScale(), model.recommendedMinecraftScale());
+            float renderScale = model.recommendedMinecraftScale();
+            poseStack.scale(renderScale, renderScale, renderScale);
             if (model.scenes().isEmpty() || model.defaultScene() < 0) return;
             GltfSceneEvaluator evaluator = new GltfSceneEvaluator(model);
             float clock = GltfAnimationClock.fromMinecraftTicks(entity.tickCount, partialTick);
             GltfAnimationController controller = t.getGltfAnimationController();
             if (controller == null) controller = new GltfAnimationController(model);
-            boolean attacking = InputStateKey.isAnyHandSwinging(entity);
-            boolean usingItem = InputStateKey.isUsingItem(entity, InputStateKey.getUsedItemHand(entity));
-            controller.selectForMotion((float) entity.getDeltaMovement().horizontalDistance(), entity.onGround(),
-                    entity.isCrouching(), entity.deathTime > 0, attacking, usingItem, clock);
+            controller.selectState(GltfPlayerActionMapper.resolveForMotion(entity), clock);
             GltfSceneEvaluator.Pose pose = controller.evaluate(evaluator, model.defaultScene(), clock);
             java.util.function.Function<GltfModel.Material, VertexConsumer> consumerFactory = material -> {
                 GltfMaterialResolver.ResolvedMaterial<Identifier> resolved = GltfMaterialResolver.resolve(
@@ -340,7 +341,8 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
 
     public boolean shouldShowName(TEntity entity) {
         double d = entity.isDiscrete() ? 32.0d : 64.0d;
-        return Minecraft.getInstance().getEntityRenderDispatcher().distanceToSqr(entity) < d * d && entity == Minecraft.getInstance().getEntityRenderDispatcher().crosshairPickEntity && entity.hasCustomName() && Minecraft.renderNames();
+        // MC 26.2: Minecraft.renderNames() 已移除（名字渲染改由 EntityRenderState.nameTag 状态驱动）
+        return Minecraft.getInstance().getEntityRenderDispatcher().distanceToSqr(entity) < d * d && entity == Minecraft.getInstance().getEntityRenderDispatcher().crosshairPickEntity && entity.hasCustomName();
     }
 
     public final boolean addLayerRenderer(GeoLayerRenderer<T> layerRenderer) {

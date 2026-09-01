@@ -99,10 +99,12 @@ public final class BuiltinBbmodelActionPreset {
 
     private static Map<String, String> createPlayerAnimationFiles() {
         LinkedHashMap<String, String> files = new LinkedHashMap<>();
-        // 基础游戏动作（状态驱动：fly/elytra/swim/sneak/jump/...）
+        // 基础游戏动作（状态驱动：idle/walk/run/fly/elytra/swim/sneak/jump/...）
         files.put("main", "main.animation.json");
         // 通用轮盘表情（extra0/extra1/...）
         files.put("extra", "extra.animation.json");
+        // 第一人称手臂动画（fp_arm 条目全部进 arm 表：并行槽 + 武器兜底）
+        files.put("fp_arm", "fp.arm.animation.json");
         return Collections.unmodifiableMap(files);
     }
 
