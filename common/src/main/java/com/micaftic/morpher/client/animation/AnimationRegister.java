@@ -1,65 +1,111 @@
 package com.micaftic.morpher.client.animation;
 
-import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
+import com.micaftic.morpher.geckolib3.core.EntityFrameStateTracker;
 import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 
+import java.util.List;
 import java.util.function.BiPredicate;
 
+/**
+ * 1.2.4（§14.1）：基础动作动画注册表 —— 双轨收敛后的声明层。
+ *
+ * <p><b>历史（已废弃的双轨）</b>：本类曾各自从 {@code player}/{@code event}
+ * 独立推导基础动作（climb 用 limbSwingAmount、ladder 用符号判定、run 缺 moving 判定等），
+ * 与 {@link ControllerActionResolver} 的判定口径存在漂移。
+ *
+ * <p><b>现在</b>：只声明「动画名 / 循环 / 优先级」三要素，判定谓词统一走
+ * {@link ControllerActionResolver}（唯一权威来源）。行为差异属收敛修复：
+ * ladder 引入 ±0.01 死区、run/walk/sneak 以 moving（groundSpeed）为准、飞行判定复用
+ * {@code PlayerCapability} 追踪器。
+ *
+ * @deprecated 双轨判定已收敛，本类仅保留为动画注册声明层；整体删除与替代见 1.2.8（R13）。
+ */
+@Deprecated
 public class AnimationRegister {
-    private static final float MIN_SPEED = 0.05f;
-    private static boolean registered;
 
-    public static synchronized void registerAnimationState() {
-        if (registered) {
-            return;
-        }
-        registered = true;
-        YesSteveModel.LOGGER.info("[SM-ANIM] Registered player animation states");
-        register("death", ILoopType.EDefaultLoopTypes.PLAY_ONCE, Priority.HIGHEST, (player, event) -> player.isDeadOrDying());
-        register("riptide", Priority.HIGHEST, (player, event) -> player.isAutoSpinAttack());
-        register("sleep", Priority.HIGHEST, (player, event) -> player.getPose() == Pose.SLEEPING);
-        register("swim", Priority.HIGHEST, (player, event) -> player.isSwimming());
-        register("climb", Priority.HIGHEST, (player, event) -> player.getPose() == Pose.SWIMMING && Math.abs(event.getLimbSwingAmount()) > MIN_SPEED);
-        register("climbing", Priority.HIGHEST, (player, event) -> player.getPose() == Pose.SWIMMING);
-        register("ladder_up", Priority.HIGHEST, (player, event) -> player.onClimbable() && getVerticalSpeed(player) > 0.0f);
-        register("ladder_stillness", Priority.HIGHEST, (player, event) -> player.onClimbable() && getVerticalSpeed(player) == 0.0f);
-        register("ladder_down", Priority.HIGHEST, (player, event) -> player.onClimbable() && getVerticalSpeed(player) < 0.0f);
-        register("elytra_fly", Priority.HIGH, (player, event) -> player.getPose() == Pose.FALL_FLYING && player.isFallFlying());
-        register("fly", Priority.HIGH, (player, event) -> {
-            if (player.getPose() == Pose.FALL_FLYING && player.isFallFlying()) {
-                return false;
-            }
-            AnimatableEntity<Player> animatable = event.getAnimatable();
-            if (animatable instanceof PlayerCapability cap && !cap.isLocalPlayerModel()) {
-                return cap.getPositionTracker().isFlying();
-            }
-            return player.getAbilities().flying;
-        });
-        register("swim_stand", Priority.NORMAL, (player, event) -> player.isInWater() && !player.onGround());
-        register("attacked", ILoopType.EDefaultLoopTypes.PLAY_ONCE, Priority.NORMAL, (player, event) -> player.hurtTime > 0);
-        register("jump", Priority.NORMAL, (player, event) -> !player.onGround() && !player.isInWater());
-        register("sneak", Priority.NORMAL, (player, event) -> player.onGround() && player.getPose() == Pose.CROUCHING && Math.abs(event.getLimbSwingAmount()) > MIN_SPEED);
-        register("sneaking", Priority.NORMAL, (player, event) -> player.onGround() && player.getPose() == Pose.CROUCHING);
-        register("run", Priority.LOW, (player, event) -> player.onGround() && player.isSprinting());
-        register("walk", Priority.LOW, (player, event) -> player.onGround() && event.getLimbSwingAmount() > MIN_SPEED);
-        register("idle", Priority.LOWEST, (player, event) -> true);
+    private static final List<PlayerActionState> REGISTERED_STATES = List.of(
+            PlayerActionState.DEATH,
+            PlayerActionState.RIPTIDE,
+            PlayerActionState.SLEEP,
+            PlayerActionState.SWIM,
+            PlayerActionState.CLIMB,
+            PlayerActionState.CLIMBING,
+            PlayerActionState.LADDER_UP,
+            PlayerActionState.LADDER_STILLNESS,
+            PlayerActionState.LADDER_DOWN,
+            PlayerActionState.ELYTRA_FLY,
+            PlayerActionState.FLY,
+            PlayerActionState.SWIM_STAND,
+            PlayerActionState.ATTACKED,
+            PlayerActionState.JUMP,
+            PlayerActionState.SNEAK,
+            PlayerActionState.SNEAKING,
+            PlayerActionState.RUN,
+            PlayerActionState.WALK,
+            PlayerActionState.IDLE
+    );
+
+    private AnimationRegister() {
+    }
+
+    public static void registerAnimationState() {
+        register(PlayerActionState.DEATH, ILoopType.EDefaultLoopTypes.PLAY_ONCE, Priority.HIGHEST);
+        register(PlayerActionState.RIPTIDE, Priority.HIGHEST);
+        register(PlayerActionState.SLEEP, Priority.HIGHEST);
+        register(PlayerActionState.SWIM, Priority.HIGHEST);
+        register(PlayerActionState.CLIMB, Priority.HIGHEST);
+        register(PlayerActionState.CLIMBING, Priority.HIGHEST);
+        register(PlayerActionState.LADDER_UP, Priority.HIGHEST);
+        register(PlayerActionState.LADDER_STILLNESS, Priority.HIGHEST);
+        register(PlayerActionState.LADDER_DOWN, Priority.HIGHEST);
+        register(PlayerActionState.ELYTRA_FLY, Priority.HIGH);
+        register(PlayerActionState.FLY, Priority.HIGH);
+        register(PlayerActionState.SWIM_STAND, Priority.NORMAL);
+        register(PlayerActionState.ATTACKED, ILoopType.EDefaultLoopTypes.PLAY_ONCE, 2);
+        register(PlayerActionState.JUMP, Priority.NORMAL);
+        register(PlayerActionState.SNEAK, Priority.NORMAL);
+        register(PlayerActionState.SNEAKING, Priority.NORMAL);
+        register(PlayerActionState.RUN, Priority.LOW);
+        register(PlayerActionState.WALK, Priority.LOW);
+        register(PlayerActionState.IDLE, Priority.LOWEST);
+    }
+
+    /**
+     * 已声明的基础动作集合（供收敛测试核对注册完整性与唯一性）。
+     * 不包含 {@link PlayerActionState#NONE}（占位）与 {@link PlayerActionState#RIDE}
+     * （骑乘动画由 {@code ctrl.ride} 函数 / {@code AnimationManager} 骑乘守卫处理）。
+     */
+    static List<PlayerActionState> registeredStates() {
+        return REGISTERED_STATES;
+    }
+
+    private static void register(PlayerActionState state, ILoopType loopType, int priority) {
+        register(state.animationName(), loopType, priority, (player, event) -> isState(state, player, event));
+    }
+
+    private static void register(PlayerActionState state, int priority) {
+        register(state, ILoopType.EDefaultLoopTypes.LOOP, priority);
     }
 
     private static void register(String animationName, ILoopType loopType, int priority, BiPredicate<Player, AnimationEvent<CustomPlayerEntity>> predicate) {
         AnimationManager.register(new AnimationState<>(animationName, loopType, priority, predicate));
     }
 
-    private static void register(String animationName, int priority, BiPredicate<Player, AnimationEvent<CustomPlayerEntity>> predicate) {
-        register(animationName, ILoopType.EDefaultLoopTypes.LOOP, priority, predicate);
-    }
-
-    private static float getVerticalSpeed(Player player) {
-        return 20.0f * ((float) (player.position().y - player.yo));
+    /**
+     * 统一判定入口：走 {@link ControllerActionResolver}，并按帧缓存结果，
+     * 避免每个已注册状态重复做一次快照采集（每帧至多一次 MovementQuery 计算）。
+     */
+    private static boolean isState(PlayerActionState state, Player player, AnimationEvent<CustomPlayerEntity> event) {
+        CustomPlayerEntity animatable = event.getAnimatable();
+        EntityFrameStateTracker<?> tracker = animatable.getPositionTracker();
+        String cached = tracker.getCachedControllerState();
+        if (cached == null) {
+            cached = ControllerActionResolver.resolve(animatable, player, event);
+            tracker.setCachedControllerState(cached);
+        }
+        return state.animationName().equals(cached);
     }
 }
