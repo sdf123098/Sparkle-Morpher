@@ -17,7 +17,14 @@
 - `https://github.com/ZtechNetwork/MCBVanillaResourcePack`（原版 Bedrock 资源包镜像）
 - 原资产归 Mojang / Microsoft 所有（Minecraft EULA）
 
-## Blockbench Workshop 模型（占位）
+## Blockbench Workshop 模型
 
-以下动画若取自 Blockbench Workshop 免费模型，将在此逐条署名（作者 / 模型名 /
-license / 链接）。转换工具：`tools/workshop_scan.py`。
+`idle` 动作改编自以下 Blockbench Workshop 免费模型（cc-by，须署名）：
+
+| 模型 | 作者 | license | 链接 | 说明 |
+|---|---|---|---|---|
+| Skin idle animation | splatty | CC BY | https://blockbenchworkshop.com/model/splatty/skin-animation-idle | 1.5s 呼吸/微点头/摆臂 idle，转 `idle` |
+| metro man and idle player animations | kidasap817 | CC BY | https://blockbenchworkshop.com/model/kidasap817/metro-man-and-idle-player-animations | 已下载备选（Player Idle / Player emote metroman），未并入预设 |
+
+转换工具：`tools/convert_bbmodel_animations.py`；骨骼名已归一化为 vanilla 规范名
+（`Right Arm`→`RightArm`、`Waist`→`Body`），`Skin` 辅助骨骼已丢弃。
