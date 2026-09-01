@@ -3,7 +3,7 @@ package com.micaftic.morpher.geckolib3.geo;
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.client.input.InputStateKey;
+import com.micaftic.morpher.client.renderer.gltf.GltfPlayerActionMapper;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.gltf.GltfMaterialResolver;
@@ -185,10 +185,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             float clock = GltfAnimationClock.fromMinecraftTicks(entity.tickCount, partialTick);
             GltfAnimationController controller = t.getGltfAnimationController();
             if (controller == null) controller = new GltfAnimationController(model);
-            boolean attacking = InputStateKey.isAnyHandSwinging(entity);
-            boolean usingItem = InputStateKey.isUsingItem(entity, InputStateKey.getUsedItemHand(entity));
-            controller.selectForMotion((float) entity.getDeltaMovement().horizontalDistance(), entity.onGround(),
-                    entity.isCrouching(), entity.deathTime > 0, attacking, usingItem, clock);
+            controller.selectState(GltfPlayerActionMapper.resolveForMotion(entity), clock);
             GltfSceneEvaluator.Pose pose = controller.evaluate(evaluator, model.defaultScene(), clock);
             java.util.function.Function<GltfModel.Material, VertexConsumer> consumerFactory = material -> {
                 GltfMaterialResolver.ResolvedMaterial<ResourceLocation> resolved = GltfMaterialResolver.resolve(

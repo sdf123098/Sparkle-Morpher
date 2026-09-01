@@ -5,6 +5,7 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.gltf.GltfMaterialResolver;
+import com.micaftic.morpher.client.renderer.gltf.GltfPlayerActionMapper;
 import com.micaftic.morpher.client.renderer.gltf.GltfRenderTypes;
 import com.micaftic.morpher.client.renderer.gltf.GltfVertexConsumerRenderer;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
@@ -77,8 +78,7 @@ public class HandItemRenderer {
         GltfSceneEvaluator evaluator = new GltfSceneEvaluator(model);
         float clock = GltfAnimationClock.fromMinecraftTicks(localPlayer.tickCount, partialTick);
         GltfAnimationController controller = new GltfAnimationController(model);
-        controller.selectForMotion((float) localPlayer.getDeltaMovement().horizontalDistance(), localPlayer.onGround(),
-                localPlayer.isCrouching(), false, clock);
+        controller.selectState(GltfPlayerActionMapper.resolveForMotion(localPlayer), clock);
         GltfSceneEvaluator.Pose pose = controller.evaluate(evaluator, model.defaultScene(), clock);
         Function<GltfModel.Material, VertexConsumer> consumerFactory = material -> {
             GltfMaterialResolver.ResolvedMaterial<ResourceLocation> resolved = GltfMaterialResolver.resolve(
