@@ -257,21 +257,31 @@ public class YSMFolderDeserializer implements AutoCloseable {
     }
 
     private void loadGuiImage(String path, String id) {
-        if (path == null || path.isEmpty()) return;
-        byte[] data = readResource(path);
-        if (data == null) data = readResource("background/" + id + ".png");
-
-        if (data != null) {
-            ImageMeta meta = parseImageMeta(data, path);
-            RawYsmModel.RawImage img = new RawYsmModel.RawImage();
-            img.width = meta.width();
-            img.height = meta.height();
-            img.format = meta.format();
-            img.name = id;
-            img.data = data;
-            img.unknownFlag = 1;
-            model.properties.backgroundImages.add(img);
+        byte[] data = null;
+        if (path != null && !path.isEmpty()) {
+            data = readResource(path);
         }
+        if (data == null) {
+            data = readResource(id + ".png");
+        }
+        if (data == null) {
+            data = readResource(id + ".jpg");
+        }
+        if (data == null) {
+            data = readResource("background/" + id + ".png");
+        }
+        if (data == null) {
+            return;
+        }
+        ImageMeta meta = parseImageMeta(data, path == null || path.isEmpty() ? id : path);
+        RawYsmModel.RawImage img = new RawYsmModel.RawImage();
+        img.width = meta.width();
+        img.height = meta.height();
+        img.format = meta.format();
+        img.name = id;
+        img.data = data;
+        img.unknownFlag = 1;
+        model.properties.backgroundImages.add(img);
     }
 
     private void parseMainEntity(JsonObject playerObj) {
