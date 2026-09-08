@@ -59,6 +59,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -158,6 +159,14 @@ public class ModernPlayerModelScreen extends Screen {
     private final Set<String> preloadWatching = new HashSet<>();
     private final Map<String, Integer> preloadWatchStart = new LinkedHashMap<>();
     private int preloadTicker;
+
+    // 模型网格“稳定排序”:指纹不变(集合/路径/筛选/搜索/星标未变)时复用上一次的排序结果。
+    // 后台预载把模型从“目录项”变成“常驻”时,其名字来源会从懒加载的嗅探名/路径升级为真名;
+    // 若每帧按名字重排,整排卡片就会在加载完成瞬间来回乱跳。指纹只跟“有哪些模型”绑定、与名字无关,
+    // 所以加载期名字刷新只会原位更新卡片文字,不会让卡片挪动位置。
+    private String modelListFingerprint = "";
+    private List<String> modelListOrder = List.of();
+
 
     private enum IconGlyph {
         MODEL(0, 0),
@@ -1790,7 +1799,7 @@ public class ModernPlayerModelScreen extends Screen {
                 continue;
             }
             boolean locked = assembly.getTextureRegistry().isAuthModel() && !auth.contains(modelId);
-            out.add(ModelEntry.model(modelId, displayName(modelId, assembly), modelSubtitle(modelId, assembly), locked));
+            out.add(ModelEntry.model(modelId, listTitle(modelId, assembly), modelSubtitle(modelId, assembly), locked));
         }
         for (String modelId : ClientModelManager.getAvailableModelIds()) {
             if (ClientModelManager.getModelAssemblyMap().containsKey(modelId)) continue;
@@ -1808,11 +1817,76 @@ public class ModernPlayerModelScreen extends Screen {
             out.add(ModelEntry.model(modelId, lazyTitle,
                     Component.translatable("gui.sparkle_morpher.model_panel.model.on_demand").getString(), locked));
         }
-        out.sort(Comparator
-                .<ModelEntry, Boolean>comparing(e -> !stars.contains(e.modelId()))
-                .thenComparing(Comparator.<ModelEntry, Boolean>comparing(entry -> entry.folder()).reversed())
-                .thenComparing(e -> e.title().toLowerCase(Locale.ROOT)));
-        return out;
+        return applyStableModelOrder(out, stars);
+    }
+
+    /**
+     * 模型条目的稳定排序键:文件夹与模型分开记名,避免同名字符串被两种条目同时占用。
+     */
+    private static String modelEntryOrderKey(ModelEntry entry) {
+        return (entry.folder() ? "F/" : "M/") + entry.modelId();
+    }
+
+    /**
+     * 排序指纹:只依赖“当前模型集合 + 浏览上下文”,与条目名字/常驻加载状态无关。
+     * 集合/路径/筛选/搜索/星标任一变化 → 指纹变化 → 重新全量排序;否则复用上一次排序。
+     */
+    private String modelListFingerprintOf(List<ModelEntry> entries, Set<String> stars) {
+        StringBuilder sb = new StringBuilder(96 + entries.size() * 24);
+        sb.append(STATE.currentPath).append('\0');
+        sb.append(STATE.modelFilter).append('\0');
+        sb.append(STATE.modelSearchText.trim()).append('\0');
+        List<String> keys = new ArrayList<>(entries.size());
+        for (ModelEntry entry : entries) {
+            String key = modelEntryOrderKey(entry);
+            if (!entry.folder() && stars.contains(entry.modelId())) {
+                key = "*" + key; // 星标集合也参与指纹:列表内点星/取消后需要重排
+            }
+            keys.add(key);
+        }
+        keys.sort(String::compareTo);
+        for (String key : keys) {
+            sb.append(key).append('\1');
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 集合未变时复用上次的稳定顺序,只为仍存在的条目刷新文字(title/subtitle/locked),
+     * 新出现的条目(指纹变化必走全量重建,此分支仅作兜底)按当前顺序追加到末尾。
+     */
+    private List<ModelEntry> applyStableModelOrder(List<ModelEntry> unsorted, Set<String> stars) {
+        String fingerprint = modelListFingerprintOf(unsorted, stars);
+        if (fingerprint.equals(this.modelListFingerprint) && !this.modelListOrder.isEmpty()) {
+            Map<String, ModelEntry> byKey = new HashMap<>(Math.max(16, unsorted.size() * 2));
+            for (ModelEntry entry : unsorted) {
+                byKey.put(modelEntryOrderKey(entry), entry);
+            }
+            List<ModelEntry> ordered = new ArrayList<>(unsorted.size());
+            for (String key : this.modelListOrder) {
+                ModelEntry entry = byKey.remove(key);
+                if (entry != null) {
+                    ordered.add(entry);
+                }
+            }
+            for (ModelEntry entry : unsorted) {
+                if (byKey.containsKey(modelEntryOrderKey(entry))) {
+                    ordered.add(entry);
+                }
+            }
+            return ordered;
+        }
+        List<ModelEntry> sorted = new ArrayList<>(unsorted);
+        sorted.sort(Comparator
+                .<ModelEntry, Boolean>comparing(entry -> !stars.contains(entry.modelId()))
+                .thenComparing(Comparator.<ModelEntry, Boolean>comparing(ModelEntry::folder).reversed())
+                .thenComparing(entry -> entry.title().toLowerCase(Locale.ROOT)));
+        this.modelListFingerprint = fingerprint;
+        this.modelListOrder = new ArrayList<>(sorted.size());
+        for (ModelEntry entry : sorted) {
+            this.modelListOrder.add(modelEntryOrderKey(entry));
+        }
+        return sorted;
     }
 
     private boolean matchesModelFilter(String modelId, ModelAssembly assembly, Set<String> auth, Set<String> stars) {
@@ -2487,6 +2561,24 @@ public class ModernPlayerModelScreen extends Screen {
 
     private boolean isMainlandResourceMode() {
         return this.resourceConfig.mainlandChinaMode();
+    }
+
+    /**
+     * 卡片名字的单一来源:真正常驻(有运行态几何/表达式缓存)的模型显示实时本地化名;
+     * 尚未真正加载的(LazyModelAssembly 占位 / 纯目录项)用目录缓存名——嗅探到的 metadata 名
+     * 或服务器解析后写回 source.displayName 的真名,都没有才退回 modelId。
+     *
+     * <p>这样同一模型在“目录项→常驻”两个状态下名字不各算一套:占位被真正模型替换时,
+     * 卡片只是原位把名字升级成真名,不会因为换了一套名字源而被重新排序乱跳。</p>
+     */
+    private String listTitle(String modelId, ModelAssembly assembly) {
+        if (assembly != null && assembly.isRuntimeResident()) {
+            String live = displayName(modelId, assembly);
+            if (!modelId.equals(live)) {
+                return live;
+            }
+        }
+        return lazyModelDisplayName(modelId);
     }
 
     private String displayName(String modelId, ModelAssembly assembly) {
