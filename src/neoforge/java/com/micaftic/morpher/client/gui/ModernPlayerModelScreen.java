@@ -15,8 +15,12 @@ import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
+import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
+import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
+import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.LoadingStateConfig;
@@ -38,6 +42,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
@@ -53,9 +58,11 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
@@ -65,6 +72,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 
 public class ModernPlayerModelScreen extends Screen {
@@ -88,12 +96,48 @@ public class ModernPlayerModelScreen extends Screen {
     private static final int ICON = 18;
     private static final ExecutorService RESOURCE_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.MODEL_IO);
 
+    // 卡片网格(封面卡片模式)相关常量。
+    private static final int NAME_BAND = 34;             // 卡片底部名字条高度
+    private static final int CARD_MIN_W = 150;           // 进入卡片模式的网格最小宽度
+    private static final int CARD_MIN_H = 168;           // 进入卡片模式的网格最小高度
+    private static final int CARD_TARGET_W = 140;        // 期望卡片宽(参与列数推导)
+    private static final int CARD_MAX_W = 216;           // 卡片最大宽
+    private static final int CARD_MIN_CELL_W = 124;      // 卡片最小宽
+    private static final int CARD_MAX_CELL_H = 208;      // 卡片最大高
+    private static final int PRELOAD_BUDGET = 4;         // 每 tick 最多新启动的预载数
+    private static final int PRELOAD_GIVE_UP_TICKS = 400; // 预载观察超时(约20秒),超时未落地判为失败
+    private static final int WHEEL_STEP_MAX = 28;        // 模型网格单次滚轮的像素步长上限
+
+    // 目录卡片页相关常量。
+    private static final int CAT_BASE = 0xFF434242;        // 卡片底
+    private static final int CAT_BASE_HOVER = 0xFF505755;  // 悬停
+    private static final int CAT_SELECT = 0xFF58636E;      // 选中
+    private static final int CAT_FOLDER = 0xFF9B51E0;      // 资源包/文件夹 = 紫色卡
+    private static final int CAT_FOLDER_HOVER = 0xFFB17BEA;
+    private static final int CAT_NAME = 0xFFF3EFE0;        // 卡名(奶油色)
+    private static final int CAT_STAR_BORDER = 0xFFF3EFE0; // 悬停奶油描边
+    private static final int CAT_DIM = 0x9F222222;         // 需授权压暗
+    private static final int CAT_MARGIN = 6;
+    private static final int CAT_PAD = 4;                  // 卡间距
+    private static final int CAT_COLS_MAX = 5;             // 一页最多 5 列
+    private static final int CAT_ROWS = 2;                 // 一页 2 行
+    private static final int CAT_MIN_W = 220;              // 进入卡片页的最小网格宽
+    private static final int CAT_MIN_H = 170;              // 进入卡片页的最小网格高
+    private static final float CAT_ASPECT = 1.73f;         // 竖卡比例 52:90
+
+    /** 封面贴图实际像素尺寸缓存(仅渲染线程读写;key 用弱引用避免阻止贴图回收)。 */
+    private static final WeakHashMap<AbstractTexture, int[]> COVER_DIMS = new WeakHashMap<>();
+
     private final List<Hit> hits = new ArrayList<>();
     private final List<ModelRepoEntry> resourceEntries = new ArrayList<>();
     private final Set<String> selectedModelIds = new LinkedHashSet<>();
     private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
     private final Queue<ModelImportFilePicker.PickedFile> pendingImports = new ArrayDeque<>();
     private final PlayerPreviewEntity previewEntity = new PlayerPreviewEntity();
+    /** 目录卡页每张卡的实时 3D 预览实体(id → figure)。 */
+    private final Map<String, PlayerPreviewEntity> cardPreviewEntities = new LinkedHashMap<>(16);
+    /** 各卡预览实体当前绑定的贴图 id(换贴图时重建 figure)。 */
+    private final Map<String, String> cardPreviewTextureIds = new LinkedHashMap<>(16);
     private final BiConsumer<String, String> modelSelectionTarget;
     private ModelPanelLayout layout;
     private EditBox modelSearchBox;
@@ -110,6 +154,13 @@ public class ModernPlayerModelScreen extends Screen {
     private String previewModelId = "";
     private String previewTextureId = "";
     private String pendingModelApplyId;
+    /** 可视卡封面预载:本次打开已尝试但未能常驻(缺源/解析失败/损坏)的模型 id。 */
+    private final Set<String> preloadFailed = new HashSet<>();
+    /** 可视卡封面预载:已发起后台加载、正在等待落地的模型 id。 */
+    private final Set<String> preloadWatching = new HashSet<>();
+    /** 预载开始 tick 记录:用于超时把“永不落地”的 id 移入 preloadFailed。 */
+    private final Map<String, Integer> preloadWatchStart = new LinkedHashMap<>();
+    private int preloadTicker;
 
     private enum IconGlyph {
         MODEL(0, 0),
@@ -246,6 +297,9 @@ public class ModernPlayerModelScreen extends Screen {
         super.tick();
         ResourceDownloadManager.tick();
         pollImports();
+        if ((++this.preloadTicker & 3) == 0) {
+            preloadVisibleCovers();
+        }
         if (this.pendingModelApplyId != null) {
             String pendingId = this.pendingModelApplyId;
             ClientModelManager.getModelContext(pendingId).ifPresent(assembly -> {
@@ -509,7 +563,7 @@ public class ModernPlayerModelScreen extends Screen {
         int detailStripH = compactDetailStripH();
         int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
         int gridH = Math.max(compact ? 34 : 50, actionsBandY - 4 - reserve - gridY);
-        renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
+        renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH, partialTick);
         if (detailStripH > 0) {
             renderCompactDetail(g, mouseX, mouseY, listX, gridY + gridH + 3, listW, detailStripH, partialTick);
         }
@@ -550,67 +604,488 @@ public class ModernPlayerModelScreen extends Screen {
         });
     }
 
-    private void renderModelGrid(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h) {
+    /**
+     * 模型网格。面积足够大时走「目录卡片页」(52:90 竖卡、每页 ≤5×2 张,
+     * 卡主体为实时 3D 小人),否则退回文字行格。卡片判定只看网格区尺寸,与整窗紧凑模式无关——
+     * 常见 guiScale3 满屏会走 compactModelLayout(),若把卡片也绑在紧凑上,卡片页就永远不出现。
+     */
+    private void renderModelGrid(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
         glassPanel(g, x, y, w, h);
-        Set<String> starredModels = starModels();
         List<ModelEntry> entries = collectModelEntries();
-        ModelListMetrics metrics = modelListMetrics(w, h, entries.size());
-        STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
         if (entries.isEmpty()) {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.model_panel.no_models"), x + w / 2, y + h / 2 - 4, MUTED);
             return;
         }
-        int start = STATE.modelScroll * metrics.cols();
-        for (int i = 0; i < metrics.rows() * metrics.cols() && start + i < entries.size(); i++) {
-            ModelEntry entry = entries.get(start + i);
-            int cx = x + (i % metrics.cols()) * metrics.cellW() + 3;
-            int cy = y + (i / metrics.cols()) * metrics.cellH() + 3;
-            int cw = metrics.cellW() - 6;
-            int ch = metrics.cellH() - 6;
-            boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
-            boolean hover = inside(mouseX, mouseY, cx, cy, cw, ch);
-            boolean starred = !entry.folder() && starredModels.contains(entry.modelId());
-            fill(g, cx, cy, cw, ch, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
-            border(g, cx, cy, cw, ch, selected ? RED : 0x33FFFFFF);
-            int iconY = metrics.dense() ? cy + Math.max(0, (ch - 16) / 2) : cy + 3;
-            drawIcon(g, entry.folder() ? IconGlyph.FOLDER : entry.locked() ? IconGlyph.LOCK : IconGlyph.MODEL, cx + 4, iconY);
-            if (metrics.dense()) {
-                if (starred) {
-                    drawIcon(g, IconGlyph.STAR, cx + cw - 18, iconY);
-                }
-                int titleW = starred ? cw - 44 : cw - 26;
-                drawText(g, Component.literal(trim(entry.title(), titleW)), cx + 22, cy + (ch - this.font.lineHeight) / 2 + 1);
-            } else {
-                if (starred) {
-                    drawIcon(g, IconGlyph.STAR, cx + cw - 16, cy + metrics.cellH() - 22);
-                }
-                drawText(g, Component.literal(trim(entry.title(), cw - 28)), cx + 22, cy + 6);
-                drawMuted(g, Component.literal(trim(entry.subtitle(), cw - 12)), cx + 6, cy + 22);
-            }
-            hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> clickModelEntry(entry));
+        if (fitsCatalog(w, h)) {
+            renderCatalogGrid(g, mouseX, mouseY, entries, x, y, w, h, partialTick);
+            return;
         }
+        Set<String> starredModels = starModels();
+        ModelListMetrics metrics = modelListMetrics(w, h, entries.size());
+        STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
+        int cols = metrics.cols();
+        int cellW = metrics.cellW();
+        int cellH = metrics.cellH();
+        int contentRows = metrics.contentRows();
+        int scroll = STATE.modelScroll;
+        int startRow = Math.min(contentRows - 1, Math.max(0, scroll / Math.max(1, cellH)));
+        g.enableScissor(x, y, x + w, y + h);
+        try {
+            for (int row = startRow; row < contentRows; row++) {
+                int rowTop = y + row * cellH - scroll;
+                if (rowTop >= y + h) {
+                    break;
+                }
+                if (rowTop + cellH <= y) {
+                    continue;
+                }
+                for (int col = 0; col < cols; col++) {
+                    int index = row * cols + col;
+                    if (index >= entries.size()) {
+                        break;
+                    }
+                    ModelEntry entry = entries.get(index);
+                    int cx = x + col * cellW + 3;
+                    int cy = rowTop + 3;
+                    int cw = cellW - 6;
+                    int ch = cellH - 6;
+                    renderLegacyCell(g, mouseX, mouseY, entry, cx, cy, cw, ch, y, y + h, metrics.dense(), starredModels);
+                }
+            }
+        } finally {
+            g.disableScissor();
+        }
+    }
+
+    private static boolean fitsCatalog(int w, int h) {
+        return w >= CAT_MIN_W && h >= CAT_MIN_H;
+    }
+
+    /** 目录页是否生效(与 renderModelGrid 同源:按当前列表区实际尺寸,不看 compact 整窗标记)。 */
+    private boolean modelCardsActive() {
+        return this.layout != null
+                && STATE.secondaryPanel == ModelPanelState.SecondaryPanel.NONE
+                && fitsCatalog(modelListW(), currentModelGridH());
+    }
+
+    /** 目录页排版:每页 ≤5 列 × 2 行,52:90 竖卡等比缩放去填满网格区;STATE.modelScroll 在目录模式下表示页号。 */
+    private CatalogMetrics catalogMetrics(int w, int h, int entryCount) {
+        int cols = clamp((w - 2 * CAT_MARGIN + CAT_PAD) / (40 + CAT_PAD), 1, CAT_COLS_MAX);
+        int wFit = (w - 2 * CAT_MARGIN - (cols - 1) * CAT_PAD) / cols;
+        int hFit = (int) ((h - 2 * CAT_MARGIN - (CAT_ROWS - 1) * CAT_PAD) / (CAT_ROWS * CAT_ASPECT));
+        int cellW = clamp(Math.min(wFit, hFit), 32, 170);
+        int cellH = Math.max(1, (int) Math.floor(cellW * CAT_ASPECT));
+        int capacity = Math.max(1, cols * CAT_ROWS);
+        int totalPages = entryCount == 0 ? 1 : (entryCount + capacity - 1) / capacity;
+        return new CatalogMetrics(cols, cellW, cellH, capacity, totalPages);
+    }
+
+    /** 目录卡片页网格:一页 ≤10 卡,整块居中,每张卡 = 实时 3D 小人 + 名字条。 */
+    private void renderCatalogGrid(GuiGraphics g, int mouseX, int mouseY, List<ModelEntry> entries, int x, int y, int w, int h, float partialTick) {
+        CatalogMetrics m = catalogMetrics(w, h, entries.size());
+        STATE.modelScroll = clamp(STATE.modelScroll, 0, m.totalPages() - 1);
+        int start = STATE.modelScroll * m.capacity();
+        int blockW = m.cols() * m.cellW() + (m.cols() - 1) * CAT_PAD;
+        int blockH = CAT_ROWS * m.cellH() + (CAT_ROWS - 1) * CAT_PAD;
+        int x0 = x + Math.max(CAT_MARGIN, (w - blockW) / 2);
+        int y0 = y + Math.max(CAT_MARGIN, (h - blockH) / 2);
+        Set<String> starred = starModels();
+        Set<String> pageIds = new HashSet<>();
+        outer:
+        for (int row = 0; row < CAT_ROWS; row++) {
+            for (int col = 0; col < m.cols(); col++) {
+                int index = start + row * m.cols() + col;
+                if (index >= entries.size()) {
+                    break outer;
+                }
+                ModelEntry entry = entries.get(index);
+                if (!entry.folder()) {
+                    pageIds.add(entry.modelId());
+                }
+                int cx = x0 + col * (m.cellW() + CAT_PAD);
+                int cy = y0 + row * (m.cellH() + CAT_PAD);
+                renderCatalogCard(g, mouseX, mouseY, entry, cx, cy, m.cellW(), m.cellH(), starred, partialTick);
+            }
+        }
+        evictCardPreviews(pageIds);
+    }
+
+    /** 单张竖卡:实时 3D 小人 / 紫色文件夹卡 / 懒模型加载小圆点。 */
+    private void renderCatalogCard(GuiGraphics g, int mouseX, int mouseY, ModelEntry entry, int cx, int cy, int cw, int ch, Set<String> starredModels, float partialTick) {
+        boolean folder = entry.folder();
+        boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
+        boolean multiSelected = !entry.modelId().equals(STATE.selectedModelId) && this.selectedModelIds.contains(entry.modelId());
+        boolean hover = inside(mouseX, mouseY, cx, cy, cw, ch);
+        boolean starred = !folder && starredModels.contains(entry.modelId());
+        boolean locked = !folder && entry.locked();
+        int nameH = clamp((int) (ch * 0.24f), 20, 46);
+        int coverH = Math.max(1, ch - nameH);
+
+        if (folder) {
+            fill(g, cx, cy, cw, ch, hover ? CAT_FOLDER_HOVER : CAT_FOLDER);
+        } else {
+            fill(g, cx, cy, cw, ch, selected ? CAT_SELECT : hover ? CAT_BASE_HOVER : CAT_BASE);
+        }
+
+        if (folder) {
+            int size = Math.min(34, Math.min(cw - 12, coverH - 12));
+            drawIconScaled(g, IconGlyph.FOLDER, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
+        } else if (!locked) {
+            ModelAssembly asm = residentAssembly(entry.modelId());
+            if (asm == null) {
+                drawCatalogLoading(g, cx, cy, cw, coverH);
+            } else if (asm.isGltf()) {
+                int size = Math.min(30, Math.min(cw - 8, coverH - 10));
+                drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
+            } else {
+                AbstractTexture cover = coverTextureOf(asm);
+                if (cover != null && drawCoverImage(g, cover, cx + 2, cy + 2, cw - 4, coverH - 2)) {
+                    fill(g, cx, cy, cw, coverH, 0x8C000000); // 封面压暗当底,凸显上面的实时小人
+                }
+                renderCatalogCardFigure(g, entry.modelId(), asm, cx, cy, cw, coverH, partialTick);
+            }
+        }
+
+        // 名字条:压在 3D 之后,保证不被小人遮挡
+        fill(g, cx, cy + coverH, cw, nameH, 0xC6000000);
+        drawCatalogName(g, entry, cx, cy + coverH, cw, nameH, folder);
+
+        if (locked) {
+            fill(g, cx, cy, cw, ch, CAT_DIM);
+            drawIcon(g, IconGlyph.LOCK, cx + (cw - 18) / 2, cy + Math.max(2, (coverH - 18) / 2));
+        } else if (!folder) {
+            if (multiSelected) {
+                drawIcon(g, IconGlyph.CHECK, cx + cw - 18, cy + 3);
+            } else if (starred) {
+                drawIcon(g, IconGlyph.STAR, cx + cw - 18, cy + 3);
+            }
+        }
+
+        border(g, cx, cy, cw, ch, selected ? RED : hover ? CAT_STAR_BORDER : 0x55FFFFFF);
+        hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> clickModelEntry(entry));
+    }
+
+    /** 卡片底部名字条。名字够高(≥34)且有条目副标题时排两行,否则单行居中。 */
+    private void drawCatalogName(GuiGraphics g, ModelEntry entry, int bx, int by, int cw, int nameH, boolean folder) {
+        int w = Math.max(6, cw - 6);
+        String title = trim(entry.title(), w);
+        String sub = entry.subtitle();
+        boolean twoLine = !folder && nameH >= 34 && sub != null && !sub.isEmpty() && !"folder".equals(sub);
+        int tx = bx + 3;
+        if (twoLine) {
+            g.drawString(this.font, Component.literal(title), tx, by + 3, CAT_NAME, false);
+            g.drawString(this.font, Component.literal(trim(sub, w)), tx, by + nameH - this.font.lineHeight - 3, 0xFF9A9A9A, false);
+        } else {
+            g.drawString(this.font, Component.literal(title), tx, by + Math.max(2, (nameH - this.font.lineHeight) / 2), CAT_NAME, false);
+        }
+    }
+
+    /** 懒模型未常驻:在卡片上部画加载提示小圆点。 */
+    private void drawCatalogLoading(GuiGraphics g, int cx, int cy, int cw, int coverH) {
+        int dots = (this.preloadTicker / 3) % 4;
+        String s = "." + ".".repeat(dots);
+        g.drawString(this.font, Component.literal(s), cx + (cw - this.font.width(s)) / 2, cy + Math.max(6, (coverH - this.font.lineHeight) / 2), CAT_NAME, false);
+    }
+
+    /** 卡片里该模型的实时 3D 小人(与右栏详情同一渲染管线、静止正面;带封面时已垫压暗底)。 */
+    private void renderCatalogCardFigure(GuiGraphics g, String modelId, ModelAssembly asm, int cx, int cy, int cw, int coverH, float partialTick) {
+        if (cw < 14 || coverH < 22) {
+            return;
+        }
+        try {
+            String textureId = selectedTextureOrDefault(asm);
+            ClientModelManager.markModelUsed(modelId);
+            PlayerPreviewEntity entity = cardPreviewEntityFor(modelId, textureId);
+            if (entity == null || !entity.isModelReady()) {
+                return;
+            }
+            float scale = clamp(coverH * 0.5f, 16.0f, 170.0f);
+            ModelPreviewRenderer.renderLivingEntityPreview(cx + cw / 2.0f, cy + coverH - 2.0f, scale, partialTick, entity,
+                    RendererManager.getPlayerRenderer(), true, true, ModelPreviewRenderer.FRONT_FACING_YAW);
+        } catch (Exception ignored) {
+            int size = Math.min(26, Math.min(cw - 8, coverH - 10));
+            drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
+        }
+    }
+
+    /** 取/建某模型的卡片预览实体;换贴图时重建。失败返回 null(调用方回退图标)。 */
+    private PlayerPreviewEntity cardPreviewEntityFor(String modelId, String textureId) {
+        PlayerPreviewEntity existing = this.cardPreviewEntities.get(modelId);
+        if (existing != null) {
+            if (!textureId.equals(this.cardPreviewTextureIds.get(modelId))) {
+                try {
+                    existing.initModelWithTexture(modelId, textureId);
+                    this.cardPreviewTextureIds.put(modelId, textureId);
+                } catch (Exception ignored) {
+                }
+            }
+            return existing;
+        }
+        PlayerPreviewEntity created = new PlayerPreviewEntity();
+        try {
+            created.initModelWithTexture(modelId, textureId);
+        } catch (Exception e) {
+            return null;
+        }
+        this.cardPreviewEntities.put(modelId, created);
+        this.cardPreviewTextureIds.put(modelId, textureId);
+        return created;
+    }
+
+    /** 只保留当前页上的卡片预览实体,翻页即释放上一页(防止实体/资源堆积)。 */
+    private void evictCardPreviews(Set<String> keep) {
+        if (this.cardPreviewEntities.size() > keep.size()) {
+            this.cardPreviewEntities.keySet().retainAll(keep);
+            this.cardPreviewTextureIds.keySet().retainAll(keep);
+        }
+    }
+
+    /** 旧式(紧凑/小窗)文字小格,保持原样外观。 */
+    private void renderLegacyCell(GuiGraphics g, int mouseX, int mouseY, ModelEntry entry, int cx, int cy, int cw, int ch, int clipTop, int clipBottom, boolean dense, Set<String> starredModels) {
+        boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
+        int[] hitBox = clampCellToViewport(cx, cy, cw, ch, clipTop, clipBottom);
+        boolean hover = hitBox != null && inside(mouseX, mouseY, hitBox[0], hitBox[1], hitBox[2], hitBox[3]);
+        boolean starred = !entry.folder() && starredModels.contains(entry.modelId());
+        fill(g, cx, cy, cw, ch, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
+        border(g, cx, cy, cw, ch, selected ? RED : 0x33FFFFFF);
+        int iconY = dense ? cy + Math.max(0, (ch - 16) / 2) : cy + 3;
+        drawIcon(g, entry.folder() ? IconGlyph.FOLDER : entry.locked() ? IconGlyph.LOCK : IconGlyph.MODEL, cx + 4, iconY);
+        if (dense) {
+            if (starred) {
+                drawIcon(g, IconGlyph.STAR, cx + cw - 18, iconY);
+            }
+            int titleW = starred ? cw - 44 : cw - 26;
+            drawText(g, Component.literal(trim(entry.title(), titleW)), cx + 22, cy + (ch - this.font.lineHeight) / 2 + 1);
+        } else {
+            if (starred) {
+                drawIcon(g, IconGlyph.STAR, cx + cw - 16, cy + ch - 16);
+            }
+            drawText(g, Component.literal(trim(entry.title(), cw - 28)), cx + 22, cy + 6);
+            drawMuted(g, Component.literal(trim(entry.subtitle(), cw - 12)), cx + 6, cy + 22);
+        }
+        if (hitBox != null) {
+            hit(hitBox[0], hitBox[1], hitBox[2], hitBox[3], Component.literal(entry.title()), () -> clickModelEntry(entry));
+        }
+    }
+
+    /** 卡片格:上方封面/占位图,底部压名条。封面=文件夹 ysm 内嵌的 gui_background/gui_foreground。 */
+    private void renderCardCell(GuiGraphics g, int mouseX, int mouseY, ModelEntry entry, int cx, int cy, int cw, int ch, int clipTop, int clipBottom, Set<String> starredModels) {
+        boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
+        boolean multiSelected = !entry.modelId().equals(STATE.selectedModelId) && this.selectedModelIds.contains(entry.modelId());
+        int[] hitBox = clampCellToViewport(cx, cy, cw, ch, clipTop, clipBottom);
+        boolean hover = hitBox != null && inside(mouseX, mouseY, hitBox[0], hitBox[1], hitBox[2], hitBox[3]);
+        boolean starred = !entry.folder() && starredModels.contains(entry.modelId());
+        fill(g, cx, cy, cw, ch, selected ? 0xEF5E7784 : hover ? 0xEF3F4A54 : 0xEF171A1E);
+        int coverH = Math.max(1, ch - NAME_BAND);
+        if (entry.folder()) {
+            int size = Math.min(48, Math.min(cw - 18, coverH - 26));
+            drawIconScaled(g, IconGlyph.FOLDER, cx + Math.max(0, (cw - size) / 2), cy + Math.max(4, (coverH - size) / 2), size);
+        } else {
+            ModelAssembly asm = residentAssembly(entry.modelId());
+            AbstractTexture coverTex = coverTextureOf(asm);
+            boolean coverDrawn = coverTex != null && drawCoverImage(g, coverTex, cx + 2, cy + 2, cw - 4, Math.max(1, coverH - 2));
+            if (!coverDrawn) {
+                int size = Math.min(42, Math.min(cw - 20, coverH - 30));
+                drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(4, (coverH - size) / 2), size);
+                if (asm == null && !entry.locked()) {
+                    drawCentered(g, Component.translatable("gui.sparkle_morpher.model_panel.model.on_demand"), cx + cw / 2, cy + coverH - 13, MUTED);
+                }
+            }
+        }
+        if (entry.locked()) {
+            fill(g, cx + 1, cy + 1, cw - 2, coverH - 2, 0x99000000);
+            drawIcon(g, IconGlyph.LOCK, cx + (cw - 18) / 2, cy + Math.max(2, (coverH - 18) / 2));
+        }
+        if (multiSelected) {
+            drawIcon(g, IconGlyph.CHECK, cx + cw - 19, cy + 3);
+        } else if (starred) {
+            drawIcon(g, IconGlyph.STAR, cx + cw - 19, cy + 3);
+        }
+        int bandY = cy + coverH;
+        if (ch > NAME_BAND) {
+            fill(g, cx + 1, bandY, cw - 2, ch - coverH - 1, 0xB0000000);
+        }
+        drawText(g, Component.literal(trim(entry.title(), Math.max(8, cw - 10))), cx + 5, bandY + 3);
+        if (!entry.folder() && NAME_BAND >= 29) {
+            String sub = entry.subtitle();
+            if (sub != null && !sub.isEmpty()) {
+                drawMuted(g, Component.literal(trim(sub, Math.max(8, cw - 10))), cx + 5, bandY + 14);
+            }
+        }
+        border(g, cx, cy, cw, ch, selected ? RED : hover ? 0x99FFFFFF : 0x374D5A66);
+        if (hitBox != null) {
+            hit(hitBox[0], hitBox[1], hitBox[2], hitBox[3], Component.literal(entry.title()), () -> clickModelEntry(entry));
+        }
+    }
+
+    /** 把格子点击/悬停区夹到网格视口内,避免像素滚动时半可见首/末行把可点区伸出面板外。返回 null 表示完全不可见。 */
+    private static int[] clampCellToViewport(int cx, int cy, int cw, int ch, int clipTop, int clipBottom) {
+        int top = Math.max(cy, clipTop);
+        int bottom = Math.min(cy + ch, clipBottom);
+        if (bottom <= top) {
+            return null;
+        }
+        return new int[]{cx, top, cw, bottom - top};
     }
 
     private ModelListMetrics modelListMetrics(int w, int h, int entryCount) {
         boolean dense = compactModelLayout() || h < 132;
-        int targetW = dense ? 104 : 116;
-        int minW = dense ? 86 : 92;
-        int maxW = dense ? 132 : 150;
-        int cellW = Math.max(minW, Math.min(maxW, w / Math.max(1, w / targetW)));
-        int cols = Math.max(1, w / cellW);
-        int cellH = dense ? DENSE_MODEL_ROW : h < 90 ? 42 : 50;
-        int rows = Math.max(1, h / cellH);
-        int maxScroll = Math.max(0, (entryCount + cols - 1) / cols - rows);
-        return new ModelListMetrics(cellW, cellH, cols, rows, maxScroll, dense);
+        boolean cards = false; // 目录卡片页由 renderCatalogGrid 独占;此处恒为文字行格
+        int cellW;
+        int cellH;
+        int cols;
+        if (cards) {
+            int targetCols = Math.max(1, w / CARD_TARGET_W);
+            cellW = clamp(w / targetCols, CARD_MIN_CELL_W, CARD_MAX_W);
+            cols = Math.max(1, w / cellW);
+            cellH = Math.max(CARD_MIN_H - 12, Math.min(CARD_MAX_CELL_H, cellW + 26));
+        } else {
+            int targetW = dense ? 104 : 116;
+            int minW = dense ? 86 : 92;
+            int maxW = dense ? 132 : 150;
+            cellW = Math.max(minW, Math.min(maxW, w / Math.max(1, w / targetW)));
+            cols = Math.max(1, w / cellW);
+            cellH = dense ? DENSE_MODEL_ROW : h < 90 ? 42 : 50;
+        }
+        int contentRows = entryCount == 0 ? 0 : (entryCount + cols - 1) / cols;
+        int maxScroll = Math.max(0, contentRows * cellH - h);
+        return new ModelListMetrics(cellW, cellH, cols, contentRows, maxScroll, dense, cards);
     }
 
     private List<ModelEntry> visibleModelEntries() {
         List<ModelEntry> entries = collectModelEntries();
+        if (entries.isEmpty()) {
+            return List.of();
+        }
+        if (modelCardsActive()) {
+            CatalogMetrics m = catalogMetrics(modelListW(), currentModelGridH(), entries.size());
+            int page = clamp(STATE.modelScroll, 0, m.totalPages() - 1);
+            int start = page * m.capacity();
+            int end = Math.min(entries.size(), start + m.capacity());
+            return start >= end ? List.of() : entries.subList(start, end);
+        }
         ModelListMetrics metrics = modelListMetrics(modelListW(), currentModelGridH(), entries.size());
         STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
-        int start = STATE.modelScroll * metrics.cols();
-        int end = Math.min(entries.size(), start + metrics.rows() * metrics.cols());
-        return start >= end ? List.of() : entries.subList(start, end);
+        int[] range = visibleIndexRange(metrics, entries.size());
+        return range[1] <= range[0] ? List.of() : entries.subList(range[0], range[1]);
+    }
+
+    /** 当前滚动下至少部分可见的条目下标区间 [first, endExclusive)。 */
+    private int[] visibleIndexRange(ModelListMetrics metrics, int count) {
+        if (count == 0 || metrics.cellH() <= 0) {
+            return new int[]{0, 0};
+        }
+        int cols = metrics.cols();
+        int contentRows = metrics.contentRows();
+        int startRow = clamp(STATE.modelScroll / metrics.cellH(), 0, Math.max(0, contentRows - 1));
+        int viewportH = currentModelGridH();
+        int rowsVisible = Math.max(1, (viewportH + metrics.cellH() - 1) / metrics.cellH());
+        int first = startRow * cols;
+        int last = Math.min(count, first + rowsVisible * cols);
+        return new int[]{first, last};
+    }
+
+    /** 模型网格每格滚轮滚动像素量;卡片较高时限制步长避免跳太快。 */
+    private int modelWheelStep() {
+        int cellH = DENSE_MODEL_ROW;
+        if (this.layout != null) {
+            List<ModelEntry> entries = collectModelEntries();
+            if (!entries.isEmpty()) {
+                ModelListMetrics metrics = modelListMetrics(modelListW(), currentModelGridH(), entries.size());
+                cellH = metrics.cellH();
+            }
+        }
+        return Math.max(8, Math.min(WHEEL_STEP_MAX, cellH));
+    }
+
+    /** 常驻(运行时已解析)assembly;懒/占位 assembly 返回 null。 */
+    private ModelAssembly residentAssembly(String modelId) {
+        if (modelId == null) {
+            return null;
+        }
+        ModelAssembly asm = ClientModelManager.getModelAssemblyMap().get(modelId);
+        return asm != null && asm.isRuntimeResident() ? asm : null;
+    }
+
+    /** 文件夹 ysm 内嵌 GUI 封面:优先 gui_background,缺则退回 gui_foreground。 */
+    private AbstractTexture coverTextureOf(ModelAssembly asm) {
+        if (asm == null) {
+            return null;
+        }
+        ModelDisplayAssets assets = asm.getTextureRegistry();
+        if (assets == null) {
+            return null;
+        }
+        AbstractTexture background = assets.getGuiBackground();
+        return background != null ? background : assets.getGuiForeground();
+    }
+
+    /** 把封面等宽高比 fit 进 (x,y,w,h),居中不拉伸。无法获得资源/尺寸时返回 false。 */
+    private boolean drawCoverImage(GuiGraphics g, AbstractTexture tex, int x, int y, int w, int h) {
+        if (tex == null || w <= 0 || h <= 0) {
+            return false;
+        }
+        int[] dims = coverDimensions(tex);
+        if (dims == null) {
+            return false;
+        }
+        IResourceLocatable locatable = UploadManager.getOrCreateLocatable(tex, true);
+        if (locatable == null) {
+            return false;
+        }
+        ResourceLocation loc = locatable.getResourceLocationOrNull();
+        if (loc == null) {
+            return false;
+        }
+        int texW = dims[0];
+        int texH = dims[1];
+        double scale = Math.min((double) w / texW, (double) h / texH);
+        int dw = Math.max(1, (int) Math.floor(texW * scale));
+        int dh = Math.max(1, (int) Math.floor(texH * scale));
+        g.blit(loc, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh, 0.0f, 0.0f, texW, texH, texW, texH);
+        return true;
+    }
+
+    /** 封面尺寸(像素)。gui 图一定是 OuterFileTexture(构建链 toPng),直接读 PNG IHDR。 */
+    private int[] coverDimensions(AbstractTexture tex) {
+        if (!(tex instanceof OuterFileTexture outer)) {
+            return null;
+        }
+        synchronized (COVER_DIMS) {
+            int[] dims = COVER_DIMS.get(tex);
+            if (dims == null) {
+                dims = pngHeaderSize(outer.getResourceData());
+                if (dims != null) {
+                    COVER_DIMS.put(tex, dims);
+                }
+            }
+            return dims;
+        }
+    }
+
+    private static int[] pngHeaderSize(byte[] data) {
+        if (data == null || data.length < 24) {
+            return null;
+        }
+        // PNG 签名 8 字节 + IHDR 块(length 4 + "IHDR" 4),宽高自偏移 16 起大端。
+        if ((data[0] & 0xFF) != 0x89 || data[1] != 0x50 || data[2] != 0x4E || data[3] != 0x47) {
+            return null;
+        }
+        int w = readIntBE(data, 16);
+        int h = readIntBE(data, 20);
+        return w > 0 && h > 0 && w <= 16384 && h <= 16384 ? new int[]{w, h} : null;
+    }
+
+    private static int readIntBE(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 24) | ((data[offset + 1] & 0xFF) << 16) | ((data[offset + 2] & 0xFF) << 8) | (data[offset + 3] & 0xFF);
+    }
+
+    /** 图标纹理按 size 等比放大绘制(源是 16px 格)。 */
+    private void drawIconScaled(GuiGraphics g, IconGlyph icon, int x, int y, int size) {
+        if (size <= 0) {
+            return;
+        }
+        g.blit(MODEL_PANEL_ICONS, x, y, size, size, icon.u, icon.v, 16, 16, 128, 64);
     }
 
     private int currentModelGridH() {
@@ -657,22 +1132,107 @@ public class ModernPlayerModelScreen extends Screen {
         if (entries.isEmpty()) {
             return;
         }
+        if (fitsCatalog(w, gridH)) {
+            renderCatalogPageControls(g, mouseX, mouseY, entries, x, y, w, gridH);
+            return;
+        }
         ModelListMetrics metrics = modelListMetrics(w, gridH, entries.size());
         STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
-        int visible = metrics.rows() * metrics.cols();
-        int start = Math.min(entries.size(), STATE.modelScroll * metrics.cols());
-        int end = Math.min(entries.size(), start + visible);
-        Component range = Component.literal((start + 1) + "-" + end + "/" + entries.size());
+        int[] range = visibleIndexRange(metrics, entries.size());
+        int start = range[0];
+        int end = Math.min(entries.size(), range[1]);
+        Component countRange = Component.literal((start + 1) + "-" + end + "/" + entries.size());
         int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
         int prevX = nextX - MODEL_PAGE_BUTTON_WIDTH - 4;
-        int labelX = Math.max(x + 82, prevX - this.font.width(range) - 8);
-        drawMuted(g, range, labelX, y + 8);
+        int labelX = Math.max(x + 82, prevX - this.font.width(countRange) - 8);
+        drawMuted(g, countRange, labelX, y + 8);
+        int pageStep = Math.max(1, gridH - metrics.cellH() / 2);
         renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.pre_page"), () -> {
-            STATE.modelScroll = Math.max(0, STATE.modelScroll - metrics.rows());
+            STATE.modelScroll = Math.max(0, STATE.modelScroll - pageStep);
         });
         renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.next_page"), () -> {
-            STATE.modelScroll = Math.min(metrics.maxScroll(), STATE.modelScroll + metrics.rows());
+            STATE.modelScroll = Math.min(metrics.maxScroll(), STATE.modelScroll + pageStep);
         });
+    }
+
+    /** 目录卡片页翻页控件:STATE.modelScroll 此时即页号,整页前进/后退。 */
+    private void renderCatalogPageControls(GuiGraphics g, int mouseX, int mouseY, List<ModelEntry> entries, int x, int y, int w, int gridH) {
+        CatalogMetrics m = catalogMetrics(w, gridH, entries.size());
+        int page = clamp(STATE.modelScroll, 0, m.totalPages() - 1);
+        STATE.modelScroll = page;
+        int start = page * m.capacity();
+        int end = Math.min(entries.size(), start + m.capacity());
+        Component countRange = Component.literal((start + 1) + "-" + end + "/" + entries.size());
+        int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
+        int prevX = nextX - MODEL_PAGE_BUTTON_WIDTH - 4;
+        int labelX = Math.max(x + 82, prevX - this.font.width(countRange) - 8);
+        drawMuted(g, countRange, labelX, y + 8);
+        renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.pre_page"), () -> {
+            if (page > 0) {
+                STATE.modelScroll = page - 1;
+            }
+        });
+        renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.next_page"), () -> {
+            if (page < m.totalPages() - 1) {
+                STATE.modelScroll = page + 1;
+            }
+        });
+    }
+
+    /**
+     * 目录页懒模型自动预载:后台把「当前页 + 下一页」的未常驻模型逐个载入常驻,
+     * 落地后卡片小人/封面随后续渲染自然出现。只对目录页生效(文字行格不做预载)。
+     */
+    private void preloadVisibleCovers() {
+        if (STATE.activeTab != ModelPanelState.Tab.MODEL
+                || STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE
+                || this.layout == null
+                || !modelCardsActive()) {
+            return;
+        }
+        List<ModelEntry> entries = collectModelEntries();
+        if (entries.isEmpty()) {
+            return;
+        }
+        CatalogMetrics m = catalogMetrics(modelListW(), currentModelGridH(), entries.size());
+        STATE.modelScroll = clamp(STATE.modelScroll, 0, m.totalPages() - 1);
+        int budget = PRELOAD_BUDGET;
+        for (int p = 0; p < 2 && budget > 0; p++) {
+            int page = clamp(STATE.modelScroll + p, 0, m.totalPages() - 1);
+            int start = page * m.capacity();
+            int end = Math.min(entries.size(), start + m.capacity());
+            for (int i = start; i < end && budget > 0; i++) {
+                ModelEntry entry = entries.get(i);
+                if (entry.folder()) {
+                    continue;
+                }
+                String id = entry.modelId();
+                if (residentAssembly(id) != null) {
+                    this.preloadFailed.remove(id);
+                    this.preloadWatching.remove(id);
+                    this.preloadWatchStart.remove(id);
+                    continue;
+                }
+                if (this.preloadFailed.contains(id)) {
+                    continue;
+                }
+                if (this.preloadWatching.contains(id)) {
+                    Integer started = this.preloadWatchStart.get(id);
+                    if (started != null && this.preloadTicker - started >= PRELOAD_GIVE_UP_TICKS
+                            && !ClientModelManager.isModelLoadPending(id)) {
+                        // 长时间未落地且不再有加载任务:判为失败,本屏幕内不再尝试。
+                        this.preloadWatching.remove(id);
+                        this.preloadWatchStart.remove(id);
+                        this.preloadFailed.add(id);
+                    }
+                    continue;
+                }
+                this.preloadWatching.add(id);
+                this.preloadWatchStart.put(id, this.preloadTicker);
+                budget--;
+                ClientModelManager.getModelContext(id);
+            }
+        }
     }
 
     private void renderModelDetails(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
@@ -1137,7 +1697,15 @@ public class ModernPlayerModelScreen extends Screen {
             return true;
         }
         switch (STATE.activeTab) {
-            case MODEL -> STATE.modelScroll = Math.max(0, STATE.modelScroll + delta);
+            case MODEL -> {
+                if (modelCardsActive()) {
+                    List<ModelEntry> pageEntries = collectModelEntries();
+                    int pages = pageEntries.isEmpty() ? 1 : catalogMetrics(modelListW(), currentModelGridH(), pageEntries.size()).totalPages();
+                    STATE.modelScroll = clamp(STATE.modelScroll + delta, 0, pages - 1);
+                } else {
+                    STATE.modelScroll = Math.max(0, STATE.modelScroll + delta * modelWheelStep());
+                }
+            }
             case RESOURCE -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll + delta);
             case SETTINGS -> STATE.settingsScroll = Math.max(0, STATE.settingsScroll + delta);
         }
@@ -2293,7 +2861,10 @@ public class ModernPlayerModelScreen extends Screen {
     private record Hit(int x, int y, int w, int h, Component tooltip, Runnable action) {
     }
 
-    private record ModelListMetrics(int cellW, int cellH, int cols, int rows, int maxScroll, boolean dense) {
+    private record ModelListMetrics(int cellW, int cellH, int cols, int contentRows, int maxScroll, boolean dense, boolean cards) {
+    }
+
+    private record CatalogMetrics(int cols, int cellW, int cellH, int capacity, int totalPages) {
     }
 
     private record ModelEntry(String modelId, String title, String subtitle, boolean folder, boolean locked) {
