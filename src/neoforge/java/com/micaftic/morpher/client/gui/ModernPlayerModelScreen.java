@@ -13,6 +13,7 @@ import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
 import com.micaftic.morpher.client.gui.resource.ResourceDownloadManager;
 import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
+import com.micaftic.morpher.resource.models.ModelPackData;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
@@ -82,6 +83,7 @@ import java.util.function.BiConsumer;
 public class ModernPlayerModelScreen extends Screen {
     private static final ModelPanelState STATE = new ModelPanelState();
     private static final Identifier MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
+    private static final Identifier DEFAULT_PACK_ICON = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/default_pack_icon.png");
     private static final int BG = 0x90171A1D;
     private static final int PANEL = 0x4A34424A;
     private static final int PANEL_HOVER = 0x66576B76;
@@ -122,7 +124,7 @@ public class ModernPlayerModelScreen extends Screen {
     private static final int CAT_MIN_W = 220;              // 进入卡片页的最小网格宽
     private static final int CAT_MIN_H = 170;              // 进入卡片页的最小网格高
     private static final float CAT_ASPECT = 1.73f;         // 竖卡比例 52:90
-    private static final int PRELOAD_BUDGET = 4;         // 每 tick 最多新启动的预载数
+    private static final int PRELOAD_BUDGET = 16;
     private static final int PRELOAD_GIVE_UP_TICKS = 400; // 预载观察超时(约20秒),超时未落地判为失败
     private static final int WHEEL_STEP_MAX = 28;        // 模型网格单次滚轮的像素步长上限
     /** 封面尺寸缓存:gui 封面 texture 实例 -> [宽,高]。键是弱引用,随 assembly 一起回收。 */
@@ -138,6 +140,13 @@ public class ModernPlayerModelScreen extends Screen {
     /** 目录卡片页:每卡一个实时 3D 预览实体(按 modelId 缓存,仅保留当页 ≤10)。 */
     private final Map<String, PlayerPreviewEntity> cardPreviewEntities = new LinkedHashMap<>(16);
     private final Map<String, String> cardPreviewTextureIds = new LinkedHashMap<>(16);
+    private final YsmCardAnimator cardAnimator = new YsmCardAnimator();
+    private static final float layoutGridX = 78f;
+    private static final float layoutGridY = -16f;
+    private static final float layoutBandY = 28f;
+    private static final float layoutRefX = -27f;
+    private static final float layoutRefY = 9f;
+    private static final float layoutHdrY = -1f;
     private final Screen parentScreen;
     private final BiConsumer<String, String> modelSelectionTarget;
     private ModelPanelLayout layout;
@@ -264,7 +273,7 @@ public class ModernPlayerModelScreen extends Screen {
         this.siteEditBox = null;
         this.categoryEditBox = null;
         if (STATE.activeTab == ModelPanelState.Tab.MODEL) {
-            this.modelSearchBox = new EditBox(this.font, modelListX(), this.layout.contentTop + 8, modelListW(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
+            this.modelSearchBox = new EditBox(this.font, ysmPaneX(), ysmPaneY() + (int) layoutHdrY, 150, 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
             this.modelSearchBox.setMaxLength(256);
             this.modelSearchBox.setValue(STATE.modelSearchText);
             this.modelSearchBox.setTextColor(TEXT);
@@ -377,7 +386,7 @@ public class ModernPlayerModelScreen extends Screen {
         blurGlass(g, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, 0x1CFFFFFF, 6.0f);
         fill(g, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, 0x18171A1D);
         switch (STATE.activeTab) {
-            case MODEL -> renderModelTab(g, mainMouseX, mainMouseY, partialTick);
+            case MODEL -> renderYsmModelTab(g, mainMouseX, mainMouseY, partialTick);
             case RESOURCE -> renderResourceTab(g, mainMouseX, mainMouseY, partialTick);
             case SETTINGS -> renderSettingsTab(g, mainMouseX, mainMouseY);
         }
@@ -597,6 +606,206 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
+    private static final int YSM_CARD_W = 52;
+    private static final int YSM_CARD_H = 90;
+    private static final int YSM_COL_PITCH = 55;
+    private static final int YSM_ROW_PITCH = 93;
+    private static final int YSM_GRID_TOP = 44;
+    private static final int YSM_PAGE_BAND = 34;
+    private static final float[][] YSM_CAM = {
+            {31.1f, 0.9f, 0.5f, -0.7f},
+            {32.5f, 4.4f, -0.3f, 0.0f}
+    };
+
+    private boolean ysmDialogMode() {
+        return this.layout.contentWidth >= 660 && this.layout.contentHeight >= 400;
+    }
+
+    private int ysmDialogW() {
+        return Math.min(this.layout.contentWidth - 48, 640);
+    }
+
+    private int ysmDialogH() {
+        return Math.min(this.layout.contentHeight - 72, 560);
+    }
+
+    private int ysmPaneX() {
+        if (ysmDialogMode()) {
+            return this.layout.contentLeft + (this.layout.contentWidth - ysmDialogW()) / 2 + 10;
+        }
+        return this.layout.contentLeft + 4;
+    }
+
+    private int ysmPaneY() {
+        if (ysmDialogMode()) {
+            return this.layout.contentTop + (this.layout.contentHeight - ysmDialogH()) / 2 + 8;
+        }
+        return this.layout.contentTop + 6;
+    }
+
+    private int ysmRight() {
+        if (ysmDialogMode()) {
+            return ysmPaneX() + ysmDialogW() - 20;
+        }
+        return this.layout.contentLeft + this.layout.contentWidth - 4;
+    }
+
+    private int ysmBottom() {
+        if (ysmDialogMode()) {
+            return ysmPaneY() + ysmDialogH() - 12;
+        }
+        return this.layout.footerTop - 6;
+    }
+
+    private List<ModelEntry> modelYsmEntries() {
+        List<ModelEntry> all = new ArrayList<>(collectModelEntries());
+        if (STATE.modelFilter == ModelPanelState.ModelFilter.STAR) {
+            all.removeIf(entry -> !entry.folder() && !starModels().contains(entry.modelId()));
+        }
+        return all;
+    }
+
+    private int[] ysmGridMetrics() {
+        return new int[]{5, 2, 10};
+    }
+
+    private void renderYsmModelTab(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        int px = ysmPaneX();
+        int py = ysmPaneY();
+        if (ysmDialogMode()) {
+            fill(g, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, 0x66000000);
+            fill(g, px - 10, py - 8, ysmDialogW(), ysmDialogH(), 0xFF1E2126);
+            border(g, px - 10, py - 8, ysmDialogW(), ysmDialogH(), 0x88FFFFFF);
+        }
+        int headerY = py + (int) layoutHdrY;
+        int right = ysmRight();
+        int contentBottom = ysmBottom();
+
+        int toolX = right - 3 * 18 - 6;
+        renderIconButton(g, mouseX, mouseY, toolX, headerY, IconGlyph.FOLDER,
+                Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
+        renderIconButton(g, mouseX, mouseY, toolX + 20, headerY, IconGlyph.RESOURCE,
+                Component.translatable("gui.sparkle_morpher.resource_station.title"), () -> switchTab(ModelPanelState.Tab.RESOURCE));
+        renderIconButton(g, mouseX, mouseY, toolX + 40, headerY, IconGlyph.SETTINGS,
+                Component.translatable("gui.sparkle_morpher.model_panel.settings"), () -> switchTab(ModelPanelState.Tab.SETTINGS));
+        int filterX = toolX - 3 * 18 - 8;
+        renderYsmFilterIcon(g, mouseX, mouseY, filterX, headerY, ModelPanelState.ModelFilter.STAR, IconGlyph.STAR,
+                Component.translatable("gui.sparkle_morpher.model_panel.filter.star"));
+        renderYsmFilterIcon(g, mouseX, mouseY, filterX + 20, headerY, ModelPanelState.ModelFilter.AUTH, IconGlyph.LOCK,
+                Component.translatable("gui.sparkle_morpher.model_panel.filter.auth"));
+        renderYsmFilterIcon(g, mouseX, mouseY, filterX + 40, headerY, ModelPanelState.ModelFilter.ALL, IconGlyph.ROOT,
+                Component.translatable("gui.sparkle_morpher.model_panel.filter.all"));
+        if (this.modelSearchBox != null) {
+            this.modelSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+            if (this.modelSearchBox.getValue().isEmpty() && !this.modelSearchBox.isFocused()) {
+                g.text(this.font, Component.translatable("gui.sparkle_morpher.resource_station.search"),
+                        px + 4, headerY + 4, 0x777777, false);
+            }
+        }
+        if (!STATE.currentPath.isBlank()) {
+            renderIconButton(g, mouseX, mouseY, px + 158, headerY, IconGlyph.UP,
+                    Component.translatable("gui.back"), this::navigateUp);
+        }
+
+        int cols = 5;
+        int rows = 2;
+        int perPage = cols * rows;
+        int gridW = cols * YSM_COL_PITCH - 3;
+        int gx = px + Math.max(0, (right - px - gridW) / 2) + (int) layoutGridX;
+        int gridTop = py + YSM_GRID_TOP + (int) layoutGridY;
+        int pvW = 124;
+        int pvH = 168;
+        int refX = Math.max(px, gx - pvW - 8) + (int) layoutRefX;
+        int refY = gridTop + (int) layoutRefY;
+        renderYsmPreviewPane(g, mouseX, mouseY, refX, refY, pvW, pvH, partialTick);
+        List<ModelEntry> entries = modelYsmEntries();
+        int pages = Math.max(1, (entries.size() + perPage - 1) / perPage);
+        int page = clamp(STATE.modelScroll, 0, pages - 1);
+        STATE.modelScroll = page;
+        int start = page * perPage;
+        Set<String> starred = starModels();
+        for (int slot = 0; slot < perPage; slot++) {
+            int index = start + slot;
+            if (index >= entries.size()) {
+                break;
+            }
+            int cx = gx + YSM_COL_PITCH * (slot % cols);
+            int cy = gridTop + YSM_ROW_PITCH * (slot / cols);
+            renderCatalogCard(g, mouseX, mouseY, entries.get(index), cx, cy, YSM_CARD_W, YSM_CARD_H, starred, partialTick);
+        }
+
+        int bandY = contentBottom - 22 + (int) layoutBandY;
+        int centerX = gx + gridW / 2;
+        renderTextButton(g, mouseX, mouseY, centerX - 70, bandY, 52, 14, Component.literal("‹"), () -> {
+            if (page > 0) {
+                STATE.modelScroll = page - 1;
+            }
+        });
+        renderTextButton(g, mouseX, mouseY, centerX + 18, bandY, 52, 14, Component.literal("›"), () -> {
+            if (page < pages - 1) {
+                STATE.modelScroll = page + 1;
+            }
+        });
+        Component pageLabel = Component.literal((page + 1) + "/" + pages);
+        g.text(this.font, pageLabel, centerX - this.font.width(pageLabel) / 2, bandY + 2, CAT_NAME, false);
+    }
+
+    private void renderYsmPreviewPane(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
+        fill(g, x, y, w, h, 0xDF1A1D22);
+        border(g, x, y, w, h, 0x44FFFFFF);
+        String mid = STATE.selectedModelId;
+        if (mid == null || mid.isBlank()) {
+            drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 8, y + h / 2);
+            return;
+        }
+        ModelAssembly asm = residentAssembly(mid);
+        if (asm != null) {
+            renderSelectedModelPreview(g, asm, mid, x + 4, y + 4, w - 8, h - 24, mouseX, mouseY, partialTick);
+        } else {
+            drawMuted(g, Component.literal("…"), x + w / 2 - 4, y + h / 2);
+        }
+        String name = asm == null ? mid.substring(mid.lastIndexOf('/') + 1) : displayName(mid, asm);
+        String line = trim(name, w - 8);
+        g.text(this.font, Component.literal(line), x + (w - this.font.width(line)) / 2, y + h - 11, CAT_NAME, false);
+    }
+
+    private void renderYsmFilterIcon(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y,
+                                     ModelPanelState.ModelFilter filter, IconGlyph icon, Component tooltip) {
+        boolean selected = STATE.modelFilter == filter;
+        boolean hover = inside(mouseX, mouseY, x, y, 18, 18);
+        fill(g, x, y, 18, 18, selected ? CAT_SELECT : hover ? CAT_BASE_HOVER : CAT_BASE);
+        border(g, x, y, 18, 18, selected ? RED : hover ? CAT_STAR_BORDER : 0x33FFFFFF);
+        drawIcon(g, icon, x + 1, y + 1);
+        hit(x, y, 18, 18, tooltip, () -> setModelFilter(filter));
+    }
+
+    private List<String> wrapText(String text, int maxWidth, int maxLines) {
+        List<String> lines = new ArrayList<>();
+        if (text == null || text.isEmpty() || maxLines <= 0) {
+            return lines;
+        }
+        int start = 0;
+        int width = 0;
+        int total = text.codePointCount(0, text.length());
+        for (int k = 0; k < total; k++) {
+            int cp = text.codePointAt(text.offsetByCodePoints(0, k));
+            int cw = this.font.width(new String(Character.toChars(cp)));
+            if (k > start && width + cw > maxWidth) {
+                lines.add(text.substring(text.offsetByCodePoints(0, start), text.offsetByCodePoints(0, k)));
+                start = k;
+                width = 0;
+                if (lines.size() == maxLines - 1) {
+                    break;
+                }
+            }
+            width += cw;
+        }
+        if (lines.size() < maxLines) {
+            lines.add(trim(text.substring(text.offsetByCodePoints(0, start)), maxWidth));
+        }
+        return lines;
+    }
+
     private void renderCurrentModelSummary(GuiGraphicsExtractor g, int x, int y, int w) {
         LocalPlayer player = Minecraft.getInstance().player;
         String model = "default";
@@ -734,7 +943,6 @@ public class ModernPlayerModelScreen extends Screen {
         evictCardPreviews(pageIds);
     }
 
-    /** 单张竖卡:实时 3D 小人 / 紫色文件夹卡 / 懒模型加载小圆点。 */
     private void renderCatalogCard(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelEntry entry, int cx, int cy, int cw, int ch, Set<String> starredModels, float partialTick) {
         boolean folder = entry.folder();
         boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
@@ -742,42 +950,46 @@ public class ModernPlayerModelScreen extends Screen {
         boolean hover = inside(mouseX, mouseY, cx, cy, cw, ch);
         boolean starred = !folder && starredModels.contains(entry.modelId());
         boolean locked = !folder && entry.locked();
-        int nameH = clamp((int) (ch * 0.24f), 20, 46);
-        int coverH = Math.max(1, ch - nameH);
+        int figureH = Math.max(1, ch - 20);
+
+        fill(g, cx, cy, cw, ch, folder ? CAT_FOLDER : CAT_BASE);
 
         if (folder) {
-            fill(g, cx, cy, cw, ch, hover ? CAT_FOLDER_HOVER : CAT_FOLDER);
+            ModelPackData pack = ClientModelManager.getModelPackMap().get(entry.modelId());
+            AbstractTexture packIcon = pack == null ? null : pack.getTexture();
+            if (packIcon != null) {
+                drawCoverStretch(g, packIcon, cx, cy, cw, ch);
+            } else {
+                g.blit(DEFAULT_PACK_ICON, cx, cy, cx + cw, cy + ch, 0.0f, 1.0f, 0.0f, 1.0f);
+            }
+        } else if (locked) {
+            int size = Math.min(26, cw - 12);
+            drawIconScaled(g, IconGlyph.LOCK, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (figureH - size) / 2), size);
         } else {
-            fill(g, cx, cy, cw, ch, selected ? CAT_SELECT : hover ? CAT_BASE_HOVER : CAT_BASE);
-        }
-
-        if (folder) {
-            int size = Math.min(34, Math.min(cw - 12, coverH - 12));
-            drawIconScaled(g, IconGlyph.FOLDER, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
-        } else if (!locked) {
             ModelAssembly asm = residentAssembly(entry.modelId());
             if (asm == null) {
-                drawCatalogLoading(g, cx, cy, cw, coverH);
+                drawCatalogLoading(g, cx, cy, cw, figureH);
             } else if (asm.isGltf()) {
-                int size = Math.min(30, Math.min(cw - 8, coverH - 10));
-                drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
+                int size = Math.min(26, Math.min(cw - 8, figureH - 12));
+                drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (figureH - size) / 2), size);
             } else {
                 AbstractTexture cover = coverTextureOf(asm);
-                if (cover != null && drawCoverImage(g, cover, cx + 2, cy + 2, cw - 4, coverH - 2)) {
-                    fill(g, cx, cy, cw, coverH, 0x8C000000); // 封面压暗当底,凸显上面的实时小人
+                ModelDisplayAssets displayAssets = asm.getTextureRegistry();
+                AbstractTexture foreground = displayAssets == null ? null : displayAssets.getGuiForeground();
+                if (cover != null) {
+                    drawCoverStretch(g, cover, cx, cy, cw, ch);
                 }
-                renderCatalogCardFigure(g, entry.modelId(), asm, cx, cy, cw, coverH, partialTick);
+                String textureId = selectedTextureOrDefault(asm);
+                PlayerPreviewEntity cardEntity = cardPreviewEntityFor(entry.modelId(), textureId);
+                this.cardAnimator.update(entry.modelId(), cardEntity, hover, System.currentTimeMillis());
+                renderCatalogCardFigure(g, entry.modelId(), asm, cx, cy, cw, figureH, partialTick);
+                if (foreground != null) {
+                    drawCoverStretch(g, foreground, cx, cy, cw, ch);
+                }
             }
         }
 
-        // 名字条:压在 3D 之后,保证不被小人遮挡
-        fill(g, cx, cy + coverH, cw, nameH, 0xC6000000);
-        drawCatalogName(g, entry, cx, cy + coverH, cw, nameH, folder);
-
-        if (locked) {
-            fill(g, cx, cy, cw, ch, CAT_DIM);
-            drawIcon(g, IconGlyph.LOCK, cx + (cw - 18) / 2, cy + Math.max(2, (coverH - 18) / 2));
-        } else if (!folder) {
+        if (!locked) {
             if (multiSelected) {
                 drawIcon(g, IconGlyph.CHECK, cx + cw - 18, cy + 3);
             } else if (starred) {
@@ -785,8 +997,44 @@ public class ModernPlayerModelScreen extends Screen {
             }
         }
 
-        border(g, cx, cy, cw, ch, selected ? RED : hover ? CAT_STAR_BORDER : 0x55FFFFFF);
-        hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> clickModelEntry(entry));
+        String cardTitle = entry.title();
+        if (cardTitle == null || cardTitle.isEmpty()) {
+            String raw = entry.modelId();
+            if (raw != null) {
+                cardTitle = raw.substring(raw.lastIndexOf('/') + 1);
+            } else {
+                cardTitle = "";
+            }
+        }
+        List<String> nameLines = wrapText(cardTitle, Math.max(6, cw - 6), 2);
+        if (nameLines.isEmpty()) {
+            nameLines.add(trim(cardTitle, Math.max(6, cw - 6)));
+        }
+        int nameTy = cy + ch - (nameLines.size() > 1 ? 19 : 15);
+        int nameColor = folder ? 0xFF2B2B2B : CAT_NAME;
+        for (int li = 0; li < nameLines.size(); li++) {
+            String line = nameLines.get(li);
+            int tx = cx + (cw - this.font.width(line)) / 2;
+            int ty = nameTy + li * this.font.lineHeight;
+            g.text(this.font, Component.literal(line), tx, ty, nameColor, false);
+        }
+
+        if (locked) {
+            fill(g, cx, cy, cw, ch, CAT_DIM);
+        }
+
+        if (!folder && !locked && hover) {
+            fill(g, cx, cy + 1, 1, ch - 2, CAT_NAME);
+            fill(g, cx, cy, cw, 1, CAT_NAME);
+            fill(g, cx + cw - 1, cy + 1, 1, ch - 2, CAT_NAME);
+            fill(g, cx, cy + ch - 1, cw, 1, CAT_NAME);
+        }
+        if (locked) {
+            hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> {
+            });
+        } else {
+            hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> clickModelEntry(entry));
+        }
     }
 
     /** 卡片底部名字条。名字够高(≥34)且有条目副标题时排两行,否则单行居中。 */
@@ -804,14 +1052,12 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
-    /** 懒模型未常驻:在卡片上部画加载提示小圆点。 */
     private void drawCatalogLoading(GuiGraphicsExtractor g, int cx, int cy, int cw, int coverH) {
-        int dots = (this.preloadTicker / 3) % 4;
+        int dots = (int) ((System.currentTimeMillis() / 250L) % 4L);
         String s = "." + ".".repeat(dots);
         g.text(this.font, Component.literal(s), cx + (cw - this.font.width(s)) / 2, cy + Math.max(6, (coverH - this.font.lineHeight) / 2), CAT_NAME, false);
     }
 
-    /** 卡片里该模型的实时 3D 小人(与右栏详情同一渲染管线、静止正面;带封面时已垫压暗底)。 */
     private void renderCatalogCardFigure(GuiGraphicsExtractor g, String modelId, ModelAssembly asm, int cx, int cy, int cw, int coverH, float partialTick) {
         if (cw < 14 || coverH < 22) {
             return;
@@ -823,10 +1069,19 @@ public class ModernPlayerModelScreen extends Screen {
             if (entity == null || !entity.isModelReady()) {
                 return;
             }
-            float scale = clamp(coverH * 0.5f, 16.0f, 170.0f);
+            boolean disableRotation;
+            try {
+                var props = asm.getModelData().getModelProperties();
+                disableRotation = props != null && props.isDisablePreviewRotation();
+            } catch (Exception ignored) {
+                disableRotation = false;
+            }
+            float[] cam = YSM_CAM[disableRotation ? 0 : 1];
+            float scale = clamp(coverH * (cam[0] / 70.0f), 16.0f, 170.0f);
             ModelPreviewRenderer.renderLivingEntityPreview(g, cx, cy, cx + cw, cy + coverH,
-                    cx + cw / 2.0f, cy + coverH - 2.0f, scale, partialTick, entity,
-                    RendererManager.getPlayerRenderer(), true, true);
+                    cx + cw / 2.0f, cy + coverH - cam[1], scale, partialTick, entity,
+                    RendererManager.getPlayerRenderer(), disableRotation, true,
+                    Integer.MIN_VALUE, Integer.MIN_VALUE, cam[2], cam[3]);
         } catch (Exception ignored) {
             int size = Math.min(26, Math.min(cw - 8, coverH - 10));
             drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
@@ -860,6 +1115,11 @@ public class ModernPlayerModelScreen extends Screen {
     /** 只保留当前页上的卡片预览实体,翻页即释放上一页(防止实体/资源堆积)。 */
     private void evictCardPreviews(Set<String> keep) {
         if (this.cardPreviewEntities.size() > keep.size()) {
+            for (String old : this.cardPreviewEntities.keySet()) {
+                if (!keep.contains(old)) {
+                    this.cardAnimator.forget(old);
+                }
+            }
             this.cardPreviewEntities.keySet().retainAll(keep);
             this.cardPreviewTextureIds.keySet().retainAll(keep);
         }
@@ -1045,6 +1305,14 @@ public class ModernPlayerModelScreen extends Screen {
         return background != null ? background : assets.getGuiForeground();
     }
 
+    private Identifier coverResource(AbstractTexture tex, int[] dims) {
+        IResourceLocatable locatable = UploadManager.getOrCreateLocatable(tex, true);
+        if (locatable == null && tex instanceof OuterFileTexture) {
+            locatable = UploadManager.getOrCreateLocatableWithSize(tex, true, Math.max(64, dims[0]));
+        }
+        return locatable == null ? null : locatable.getResourceLocationOrNull();
+    }
+
     /** 把封面等比 fit 进 (x,y,w,h),居中不拉伸。无法获得资源/尺寸时返回 false。 */
     private boolean drawCoverImage(GuiGraphicsExtractor g, AbstractTexture tex, int x, int y, int w, int h) {
         if (tex == null || w <= 0 || h <= 0) {
@@ -1054,11 +1322,7 @@ public class ModernPlayerModelScreen extends Screen {
         if (dims == null) {
             return false;
         }
-        IResourceLocatable locatable = UploadManager.getOrCreateLocatable(tex, true);
-        if (locatable == null) {
-            return false;
-        }
-        Identifier loc = locatable.getResourceLocationOrNull();
+        Identifier loc = coverResource(tex, dims);
         if (loc == null) {
             return false;
         }
@@ -1070,6 +1334,22 @@ public class ModernPlayerModelScreen extends Screen {
         int x0 = x + (w - dw) / 2;
         int y0 = y + (h - dh) / 2;
         g.blit(loc, x0, y0, x0 + dw, y0 + dh, 0.0f, 1.0f, 0.0f, 1.0f);
+        return true;
+    }
+
+    private boolean drawCoverStretch(GuiGraphicsExtractor g, AbstractTexture tex, int x, int y, int w, int h) {
+        if (tex == null || w <= 0 || h <= 0) {
+            return false;
+        }
+        int[] dims = coverDimensions(tex);
+        if (dims == null) {
+            return false;
+        }
+        Identifier loc = coverResource(tex, dims);
+        if (loc == null) {
+            return false;
+        }
+        g.blit(loc, x, y, x + w, y + h, 0.0f, 1.0f, 0.0f, 1.0f);
         return true;
     }
 
@@ -1213,8 +1493,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void preloadVisibleCovers() {
         if (STATE.activeTab != ModelPanelState.Tab.MODEL
                 || STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE
-                || this.layout == null
-                || !modelCardsActive()) {
+                || this.layout == null) {
             return;
         }
         List<ModelEntry> entries = collectModelEntries();
@@ -1737,13 +2016,9 @@ public class ModernPlayerModelScreen extends Screen {
         }
         switch (STATE.activeTab) {
             case MODEL -> {
-                if (modelCardsActive()) {
-                    List<ModelEntry> pageEntries = collectModelEntries();
-                    int pages = pageEntries.isEmpty() ? 1 : catalogMetrics(modelListW(), currentModelGridH(), pageEntries.size()).totalPages();
-                    STATE.modelScroll = clamp(STATE.modelScroll + delta, 0, pages - 1);
-                } else {
-                    STATE.modelScroll = Math.max(0, STATE.modelScroll + delta * modelWheelStep());
-                }
+                int perPage = ysmGridMetrics()[2];
+                int pages = Math.max(1, (modelYsmEntries().size() + perPage - 1) / perPage);
+                STATE.modelScroll = clamp(STATE.modelScroll + delta, 0, pages - 1);
             }
             case RESOURCE -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll + delta);
             case SETTINGS -> STATE.settingsScroll = Math.max(0, STATE.settingsScroll + delta);
