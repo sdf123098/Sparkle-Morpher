@@ -236,6 +236,10 @@ public final class ModelPreviewRenderer {
     }
 
     public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, int mouseX, int mouseY) {
+        renderLivingEntityPreview(guiGraphics, left, top, right, bottom, originX, originY, scale, partialTick, animatable, renderer, disablePreviewRotation, hideEquipment, mouseX, mouseY, 0.0f, 0.0f);
+    }
+
+    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, int mouseX, int mouseY, float extraYaw, float extraPitch) {
         if (guiGraphics == null || animatable == null || right <= left || bottom <= top || scale <= 0.0f) {
             return;
         }
@@ -253,8 +257,8 @@ public final class ModelPreviewRenderer {
                 renderer,
                 disablePreviewRotation,
                 hideEquipment,
-                (disablePreviewRotation ? 180.0f : 200.0f) + mouseRotation.yaw,
-                mouseRotation.pitch,
+                (disablePreviewRotation ? 180.0f : 200.0f) + mouseRotation.yaw + extraYaw,
+                mouseRotation.pitch + extraPitch,
                 false
         ));
         guiGraphics.entity(state, scale, new Vector3f(), new Quaternionf(), null, left, top, right, bottom);
