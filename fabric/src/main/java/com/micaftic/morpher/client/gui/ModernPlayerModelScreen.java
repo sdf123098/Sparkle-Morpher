@@ -118,10 +118,12 @@ public class ModernPlayerModelScreen extends Screen {
     private static final int CAT_DIM = 0x9F222222;         // 需授权压暗
     private static final int CAT_MARGIN = 6;
     private static final int CAT_PAD = 4;                  // 卡间距
-    private static final int CAT_COLS_MAX = 5;             // 一页最多 5 列
-    private static final int CAT_ROWS = 2;                 // 一页 2 行
-    private static final int CAT_MIN_W = 220;              // 进入卡片页的最小网格宽
-    private static final int CAT_MIN_H = 170;              // 进入卡片页的最小网格高
+    private static final int CAT_MAX_COLS = 8;             // 一页最多 8 列
+    private static final int CAT_MAX_ROWS = 3;             // 一页最多 3 行(实时 3D 卡,留性能余量)
+    private static final int CAT_MIN_CELL_W = 64;          // 卡片最小宽(保证可读)
+    private static final int CAT_MAX_CELL_W = 170;         // 卡片最大宽
+    private static final int CAT_MIN_W = 140;              // 进入卡片页的最小网格宽
+    private static final int CAT_MIN_H = 120;              // 进入卡片页的最小网格高
     private static final float CAT_ASPECT = 1.73f;         // 竖卡比例 52:90
     private static final int PRELOAD_BUDGET = 4;         // 每 tick 最多新启动的预载数
     private static final int PRELOAD_GIVE_UP_TICKS = 400; // 预载观察超时(约20秒),超时未落地判为失败
@@ -446,43 +448,48 @@ public class ModernPlayerModelScreen extends Screen {
         return this.layout.contentWidth < 680 || this.layout.contentHeight < 260;
     }
 
-    private boolean compactModelLayout() {
-        return listPriority();
+    /** 右详情栏:内容区够宽够高才画在右侧;否则详情退回底部条。旧二值 compact 会整体丢掉右栏,这里拆成独立档位。 */
+    private boolean modelDetailsRight() {
+        return this.layout.contentWidth >= 520 && this.layout.contentHeight >= 200;
+    }
+
+    /** 左摘要栏:在右栏基础上再多要一行宽/高;不足则标题/筛选/动作改为列表列顶部的内联行。 */
+    private boolean modelHeaderWide() {
+        return modelDetailsRight() && this.layout.contentWidth >= 720 && this.layout.contentHeight >= 280;
     }
 
     private int modelLeftW() {
-        if (compactModelLayout()) {
+        if (!modelHeaderWide()) {
             return 0;
         }
-        int minList = modelListMinW();
-        int max = Math.max(72, Math.min(140, this.layout.contentWidth - minList - 86 - 28));
-        return clamp(this.layout.contentWidth / 4, 72, max);
+        int free = this.layout.contentWidth - modelRightW() - modelListMinW() - 46;
+        return clamp(this.layout.contentWidth / 6, 140, Math.max(140, Math.min(220, free)));
     }
 
     private int modelRightW() {
-        if (compactModelLayout()) {
+        if (!modelDetailsRight()) {
             return 0;
         }
-        int max = Math.max(72, Math.min(180, this.layout.contentWidth - modelLeftW() - modelListMinW() - 28));
-        return clamp(this.layout.contentWidth / 3, 72, max);
+        int cap = Math.max(150, Math.min(250, this.layout.contentWidth - 240));
+        return clamp(this.layout.contentWidth / 4, 150, cap);
     }
 
     private int modelListX() {
-        if (compactModelLayout()) {
-            return this.layout.contentLeft + 8;
+        if (modelHeaderWide()) {
+            return modelLeftX() + modelLeftW() + 12;
         }
-        return modelLeftX() + modelLeftW() + 10;
+        return this.layout.contentLeft + 8;
     }
 
     private int modelListW() {
-        if (compactModelLayout()) {
-            return Math.max(60, this.layout.contentWidth - 16);
-        }
-        return Math.max(24, this.layout.contentWidth - modelLeftW() - modelRightW() - 28);
+        int left = modelLeftW();
+        int right = modelRightW();
+        int used = 16 + (left > 0 ? left + 12 : 0) + (right > 0 ? right + 12 : 0);
+        return Math.max(modelListMinW(), this.layout.contentWidth - used);
     }
 
     private int modelListMinW() {
-        return this.layout.contentWidth < 420 ? 54 : 90;
+        return this.layout.contentWidth < 560 ? 110 : 180;
     }
 
     private int resourceListX() {
@@ -532,7 +539,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderModelTab(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        boolean compact = compactModelLayout();
+        boolean sideDetails = modelDetailsRight();
         int x = modelLeftX();
         int y = this.layout.contentTop + 8;
         int leftW = modelLeftW();
@@ -542,7 +549,7 @@ public class ModernPlayerModelScreen extends Screen {
         int detailX = listX + listW + 10;
         int contentBottom = this.layout.footerTop - 6;
 
-        if (compact) {
+        if (!modelHeaderWide()) {
             int filtersY = y + 24;
             renderChip(g, listX, filtersY, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.all"), STATE.modelFilter == ModelPanelState.ModelFilter.ALL, () -> setModelFilter(ModelPanelState.ModelFilter.ALL));
             renderChip(g, listX + 42, filtersY, 42, Component.translatable("gui.sparkle_morpher.model_panel.filter.auth"), STATE.modelFilter == ModelPanelState.ModelFilter.AUTH, () -> setModelFilter(ModelPanelState.ModelFilter.AUTH));
@@ -580,20 +587,18 @@ public class ModernPlayerModelScreen extends Screen {
         if (this.modelSearchBox != null) {
             this.modelSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
         }
-        boolean stackedControls = compact && listW < 260;
-        int pathY = compact ? stackedControls ? y + 68 : y + 48 : y + 30;
+        int pathY = modelPathY();
         renderPathBar(g, listX, pathY, listW);
         int gridY = pathY + 20;
         int actionsBandY = contentBottom - 28;
-        int detailStripH = compactDetailStripH();
-        int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
-        int gridH = Math.max(compact ? 34 : 50, actionsBandY - 4 - reserve - gridY);
+        int gridH = modelListGridHeight();
         renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH, partialTick);
-        if (detailStripH > 0) {
-            renderCompactDetail(g, mouseX, mouseY, listX, gridY + gridH + 3, listW, detailStripH, partialTick);
+        int stripH = compactDetailStripH();
+        if (stripH > 0) {
+            renderCompactDetail(g, mouseX, mouseY, listX, gridY + gridH + 3, listW, stripH, partialTick);
         }
         renderModelBottomActions(g, mouseX, mouseY, listX, actionsBandY, listW, gridH);
-        if (!compact) {
+        if (sideDetails) {
             renderModelDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
         }
     }
@@ -630,9 +635,8 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     /**
-     * 模型网格。面积足够大时走「目录卡片页」(52:90 竖卡、每页 ≤5×2 张,
-     * 卡主体为实时 3D 小人),否则退回文字行格。卡片判定只看网格区尺寸,与整窗紧凑模式无关——
-     * 常见 guiScale3 满屏会走 compactModelLayout(),若把卡片也绑在紧凑上,卡片页就永远不出现。
+     * 模型网格。面积足够时走「目录卡片页」(52:90 竖卡,列×行随可用面积自适应,卡主体为实时 3D 小人);
+     * 面积不足则退回文字行格(统一两行,副标题保留)。卡片判定只看网格区实际尺寸,与整窗档位无关。
      */
     private void renderModelGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
         glassPanel(g, x, y, w, h);
@@ -683,7 +687,12 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private static boolean fitsCatalog(int w, int h) {
-        return w >= CAT_MIN_W && h >= CAT_MIN_H;
+        if (w < CAT_MIN_W || h < CAT_MIN_H) {
+            return false;
+        }
+        // 结构探测:即便过了最小宽高,也要能至少放 1 列 1 行才采用目录页。
+        CatalogMetrics m = catalogMetrics(w, h, 2);
+        return m.cols() >= 1 && m.rows() >= 1;
     }
 
     /** 目录页是否生效(与 renderModelGrid 同源:按当前列表区实际尺寸,不看 compact 整窗标记)。 */
@@ -693,31 +702,37 @@ public class ModernPlayerModelScreen extends Screen {
                 && fitsCatalog(modelListW(), currentModelGridH());
     }
 
-    /** 目录页排版:每页 ≤5 列 × 2 行,52:90 竖卡等比缩放去填满网格区;STATE.modelScroll 在目录模式下表示页号。 */
-    private CatalogMetrics catalogMetrics(int w, int h, int entryCount) {
-        int cols = clamp((w - 2 * CAT_MARGIN + CAT_PAD) / (40 + CAT_PAD), 1, CAT_COLS_MAX);
+    /**
+     * 目录页排版:宽推列、高推行(列×行随面积自适应,最多 CAT_MAX_COLS×CAT_MAX_ROWS),
+     * 卡宽取宽/高两方向都放得下的值,STATE.modelScroll 在目录模式下表示页号。
+     */
+    private static CatalogMetrics catalogMetrics(int w, int h, int entryCount) {
+        int cols = clamp((w - 2 * CAT_MARGIN + CAT_PAD) / (CAT_MIN_CELL_W + CAT_PAD), 1, CAT_MAX_COLS);
+        int rows = clamp((h - 2 * CAT_MARGIN + CAT_PAD) / ((int) (CAT_MIN_CELL_W * CAT_ASPECT) + CAT_PAD), 1, CAT_MAX_ROWS);
         int wFit = (w - 2 * CAT_MARGIN - (cols - 1) * CAT_PAD) / cols;
-        int hFit = (int) ((h - 2 * CAT_MARGIN - (CAT_ROWS - 1) * CAT_PAD) / (CAT_ROWS * CAT_ASPECT));
-        int cellW = clamp(Math.min(wFit, hFit), 32, 170);
+        int hFit = (int) ((h - 2 * CAT_MARGIN - (rows - 1) * CAT_PAD) / (rows * CAT_ASPECT));
+        int cellW = clamp(Math.min(wFit, hFit), CAT_MIN_CELL_W, CAT_MAX_CELL_W);
+        cols = clamp((w - 2 * CAT_MARGIN + CAT_PAD) / (cellW + CAT_PAD), 1, cols);
         int cellH = Math.max(1, (int) Math.floor(cellW * CAT_ASPECT));
-        int capacity = Math.max(1, cols * CAT_ROWS);
+        rows = clamp((h - 2 * CAT_MARGIN + CAT_PAD) / (cellH + CAT_PAD), 1, rows);
+        int capacity = cols * rows;
         int totalPages = entryCount == 0 ? 1 : (entryCount + capacity - 1) / capacity;
-        return new CatalogMetrics(cols, cellW, cellH, capacity, totalPages);
+        return new CatalogMetrics(cols, rows, cellW, cellH, capacity, totalPages);
     }
 
-    /** 目录卡片页网格:一页 ≤10 卡,整块居中,每张卡 = 实时 3D 小人 + 名字条。 */
+    /** 目录卡片页网格:列×行随面积自适应,整块居中,每张卡 = 实时 3D 小人 + 名字条。 */
     private void renderCatalogGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, List<ModelEntry> entries, int x, int y, int w, int h, float partialTick) {
         CatalogMetrics m = catalogMetrics(w, h, entries.size());
         STATE.modelScroll = clamp(STATE.modelScroll, 0, m.totalPages() - 1);
         int start = STATE.modelScroll * m.capacity();
         int blockW = m.cols() * m.cellW() + (m.cols() - 1) * CAT_PAD;
-        int blockH = CAT_ROWS * m.cellH() + (CAT_ROWS - 1) * CAT_PAD;
+        int blockH = m.rows() * m.cellH() + (m.rows() - 1) * CAT_PAD;
         int x0 = x + Math.max(CAT_MARGIN, (w - blockW) / 2);
         int y0 = y + Math.max(CAT_MARGIN, (h - blockH) / 2);
         Set<String> starred = starModels();
         Set<String> pageIds = new HashSet<>();
         outer:
-        for (int row = 0; row < CAT_ROWS; row++) {
+        for (int row = 0; row < m.rows(); row++) {
             for (int col = 0; col < m.cols(); col++) {
                 int index = start + row * m.cols() + col;
                 if (index >= entries.size()) {
@@ -790,12 +805,12 @@ public class ModernPlayerModelScreen extends Screen {
         hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> clickModelEntry(entry));
     }
 
-    /** 卡片底部名字条。名字够高(≥34)且有条目副标题时排两行,否则单行居中。 */
+    /** 卡片底部名字条。名字够高(≥28)且有条目副标题时排两行,否则单行居中。 */
     private void drawCatalogName(GuiGraphicsExtractor g, ModelEntry entry, int bx, int by, int cw, int nameH, boolean folder) {
         int w = Math.max(6, cw - 6);
         String title = trim(entry.title(), w);
         String sub = entry.subtitle();
-        boolean twoLine = !folder && nameH >= 34 && sub != null && !sub.isEmpty() && !"folder".equals(sub);
+        boolean twoLine = !folder && nameH >= 28 && sub != null && !sub.isEmpty() && !"folder".equals(sub);
         int tx = bx + 3;
         if (twoLine) {
             g.text(this.font, Component.literal(title), tx, by + 3, CAT_NAME, false);
@@ -955,7 +970,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private ModelListMetrics modelListMetrics(int w, int h, int entryCount) {
-        boolean dense = compactModelLayout() || h < 132;
+        boolean dense = false; // 兜底文字行格统一两行,保证副标题(作者/纹理数)始终可见
         boolean cards = false; // 目录卡片页由 renderCatalogGrid 独占;此处恒为文字行格
         int cellW;
         int cellH;
@@ -971,7 +986,7 @@ public class ModernPlayerModelScreen extends Screen {
             int maxW = dense ? 132 : 150;
             cellW = Math.max(minW, Math.min(maxW, w / Math.max(1, w / targetW)));
             cols = Math.max(1, w / cellW);
-            cellH = dense ? DENSE_MODEL_ROW : h < 90 ? 42 : 50;
+            cellH = dense ? DENSE_MODEL_ROW : h < 110 ? 42 : 50;
         }
         int contentRows = entryCount == 0 ? 0 : (entryCount + cols - 1) / cols;
         int maxScroll = Math.max(0, contentRows * cellH - h);
@@ -1117,15 +1132,24 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int currentModelGridH() {
+        return modelListGridHeight();
+    }
+
+    /** 列表列纵向几何的单一来源:renderModelTab 与各 metrics 消费者共用,避免两处公式漂移。 */
+    private int modelPathY() {
         int y = this.layout.contentTop + 8;
-        int contentBottom = this.layout.footerTop - 6;
-        boolean compact = compactModelLayout();
-        boolean stackedControls = compact && modelListW() < 260;
-        int pathY = compact ? stackedControls ? y + 68 : y + 48 : y + 30;
-        int gridY = pathY + 20;
-        int detailStripH = compactDetailStripH();
-        int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
-        return Math.max(compact ? 34 : 50, contentBottom - 28 - 4 - reserve - gridY);
+        if (modelHeaderWide()) {
+            return y + 30;
+        }
+        return modelListW() < 260 ? y + 68 : y + 48;
+    }
+
+    private int modelListGridHeight() {
+        int bottom = this.layout.footerTop - 6;
+        int stripH = modelDetailsRight() ? 0 : compactDetailStripH(); // 详情在右栏时不再占用底部条空间
+        int reserve = stripH > 0 ? stripH + 3 : 0;
+        int minH = (modelHeaderWide() || modelDetailsRight()) ? 50 : 34;
+        return Math.max(minH, bottom - 28 - 4 - reserve - modelPathY() - 20);
     }
 
     private void renderModelBottomActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int gridH) {
@@ -2866,19 +2890,23 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int compactDetailStripH() {
-        if (!compactModelLayout()) {
+        if (modelDetailsRight()) {
             return 0;
         }
-        return STATE.compactPreviewExpanded ? 112 : 18;
+        boolean hasSel = !STATE.selectedModelId.isBlank();
+        if (hasSel) {
+            return STATE.compactPreviewState == 2 ? 18 : 112; // 选中即自动展开,除非用户手动收起
+        }
+        return STATE.compactPreviewState == 1 ? 112 : 18;
     }
 
     private void renderCompactDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
         int barH = 18;
         fill(g, x, y, w, h, GLASS_DARK);
         border(g, x, y, w, h, 0x33FFFFFF);
-        boolean expanded = STATE.compactPreviewExpanded;
+        boolean expanded = h > 18;
         renderIconButton(g, mouseX, mouseY, x + 1, y, expanded ? IconGlyph.MINUS : IconGlyph.PLUS,
-                Component.translatable("gui.sparkle_morpher.model_panel.details"), () -> STATE.compactPreviewExpanded = !STATE.compactPreviewExpanded);
+                Component.translatable("gui.sparkle_morpher.model_panel.details"), () -> STATE.compactPreviewState = expanded ? 2 : 1);
         ModelAssembly assembly = selectedAssembly();
         String modelId = STATE.selectedModelId;
         if (assembly == null) {
@@ -2906,7 +2934,7 @@ public class ModernPlayerModelScreen extends Screen {
                     });
         }
         renderIconButton(g, mouseX, mouseY, x + w - 19, y, IconGlyph.INFO,
-                Component.translatable("gui.sparkle_morpher.model_panel.info"), () -> STATE.compactPreviewExpanded = true);
+                Component.translatable("gui.sparkle_morpher.model_panel.info"), () -> STATE.compactPreviewState = 1);
         if (!expanded) {
             return;
         }
@@ -3026,7 +3054,7 @@ public class ModernPlayerModelScreen extends Screen {
     private record ModelListMetrics(int cellW, int cellH, int cols, int contentRows, int maxScroll, boolean dense, boolean cards) {
     }
 
-    private record CatalogMetrics(int cols, int cellW, int cellH, int capacity, int totalPages) {
+    private record CatalogMetrics(int cols, int rows, int cellW, int cellH, int capacity, int totalPages) {
     }
 
     private record ModelEntry(String modelId, String title, String subtitle, boolean folder, boolean locked) {

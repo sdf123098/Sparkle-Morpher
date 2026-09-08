@@ -42,14 +42,15 @@ final class ModelPanelLayout {
     }
 
     static ModelPanelLayout create(int screenWidth, int screenHeight) {
-        int marginX = screenWidth >= 760 ? 32 : 12;
-        int marginY = screenHeight >= 420 ? 28 : 12;
-        int maxWidth = Math.max(1, screenWidth - marginX);
-        int maxHeight = Math.max(1, screenHeight - marginY);
-        int panelWidth = clamp(screenWidth - marginX, Math.min(520, maxWidth), Math.min(920, maxWidth));
-        int panelHeight = clamp(screenHeight - marginY, Math.min(300, maxHeight), Math.min(540, maxHeight));
-        double guiScale = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
-        boolean verticalTabs = guiScale >= 3.0 || screenHeight < 300 || screenWidth < 430;
+        // 面板随逻辑分辨率按比例放大:大屏留比例边距,小屏几乎全屏;硬顶去掉后超大屏能装更多内容。
+        int marginX = screenWidth >= 760 ? clamp(screenWidth / 24, 28, 80) : 12;
+        int marginY = screenHeight >= 460 ? clamp(screenHeight / 24, 24, 60) : 12;
+        int availW = Math.max(1, screenWidth - marginX);
+        int availH = Math.max(1, screenHeight - marginY);
+        int panelWidth = clamp(availW, Math.min(520, availW), Math.min(1600, availW));
+        int panelHeight = clamp(availH, Math.min(300, availH), Math.min(900, availH));
+        // 竖向选项卡只看逻辑宽高:极窄/极矮才竖排。guiScale 是物理/逻辑比值,与逻辑空间无关,不再参与。
+        boolean verticalTabs = screenHeight < 300 || screenWidth < 430;
         boolean tight = verticalTabs || screenHeight < 400 || screenWidth < 560;
         return new ModelPanelLayout((screenWidth - panelWidth) / 2, (screenHeight - panelHeight) / 2, panelWidth, panelHeight, tight, verticalTabs);
     }
