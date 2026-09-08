@@ -50,7 +50,7 @@ final class ModelPanelState {
     int settingsScroll;
     int sitesScroll;
     int categoryScroll;
-    boolean compactPreviewExpanded;
+    int compactPreviewState; // 底部紧凑详情条:0=auto(选中即展开),1=展开,2=收起
     boolean resourceLoaded;
     boolean resourceLoading;
     int resourceRequestId;
