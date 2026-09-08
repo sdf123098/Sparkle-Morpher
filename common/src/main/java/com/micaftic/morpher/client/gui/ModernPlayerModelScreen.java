@@ -33,6 +33,7 @@ import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
 import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.Metadata;
+import com.micaftic.morpher.resource.models.ModelPackData;
 import com.micaftic.morpher.util.LocalStarModelsStore;
 import com.micaftic.morpher.util.ModelIdUtil;
 import net.minecraft.ChatFormatting;
@@ -121,6 +122,14 @@ public class ModernPlayerModelScreen extends Screen {
     private static final int CAT_MARGIN = 6;
     private static final int CAT_PAD = 4;                  // 卡间距
     private static final int CAT_MAX_COLS = 8;             // 一页最多 8 列
+    /**
+     * 卡片小人镜头(fa26.1.2):row0=关闭预览旋转(正面),row1=正常旋转。
+     * {scale基准系数, 脚底到封面底的 y 锚点像素, 已弃用额外 yaw, 已弃用额外 pitch}。
+     */
+    private static final float[][] YSM_CAM = {
+            {31.1f, 0.9f, 0.5f, -0.7f},
+            {32.5f, 4.4f, -0.3f, 0.0f}
+    };
     private static final int CAT_MAX_ROWS = 3;             // 一页最多 3 行(实时 3D 卡,留性能余量)
     private static final int CAT_MIN_CELL_W = 64;          // 卡片最小宽(保证可读)
     private static final int CAT_MAX_CELL_W = 170;         // 卡片最大宽
@@ -141,6 +150,8 @@ public class ModernPlayerModelScreen extends Screen {
     private final Map<String, PlayerPreviewEntity> cardPreviewEntities = new LinkedHashMap<>(16);
     /** 各卡预览实体当前绑定的贴图 id(换贴图时重建 figure)。 */
     private final Map<String, String> cardPreviewTextureIds = new LinkedHashMap<>(16);
+    /** 卡片小人 hover/idle 动画编排(fa26.1.2 port)。 */
+    private final YsmCardAnimator cardAnimator = new YsmCardAnimator();
     private final BiConsumer<String, String> modelSelectionTarget;
     private ModelPanelLayout layout;
     private EditBox modelSearchBox;
@@ -747,7 +758,13 @@ public class ModernPlayerModelScreen extends Screen {
         }
 
         if (folder) {
-            int size = Math.min(34, Math.min(cw - 12, coverH - 12));
+            // fa26.1.2: 文件夹卡若已有常驻 model-pack,在其上图铺封面贴图;否则纯紫 + 文件夹图标。
+            ModelPackData pack = ClientModelManager.getModelPackMap().get(entry.modelId());
+            AbstractTexture packIcon = pack == null ? null : pack.getTexture();
+            if (packIcon != null) {
+                drawCoverImage(g, packIcon, cx + 2, cy + 2, cw - 4, coverH - 2);
+            }
+            int size = Math.min(30, Math.min(cw - 10, coverH - 10));
             drawIconScaled(g, IconGlyph.FOLDER, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
         } else if (!locked) {
             ModelAssembly asm = residentAssembly(entry.modelId());
@@ -761,7 +778,16 @@ public class ModernPlayerModelScreen extends Screen {
                 if (cover != null && drawCoverImage(g, cover, cx + 2, cy + 2, cw - 4, coverH - 2)) {
                     fill(g, cx, cy, cw, coverH, 0x8C000000); // 封面压暗当底,凸显上面的实时小人
                 }
+                String textureId = selectedTextureOrDefault(asm);
+                PlayerPreviewEntity cardEntity = cardPreviewEntityFor(entry.modelId(), textureId);
+                this.cardAnimator.update(entry.modelId(), cardEntity, hover, System.currentTimeMillis());
                 renderCatalogCardFigure(g, entry.modelId(), asm, cx, cy, cw, coverH, partialTick);
+                // fa26.1.2: 封面 gui_foreground 前景叠在小人上方(图框成卡)。
+                ModelDisplayAssets displayAssets = asm.getTextureRegistry();
+                AbstractTexture foreground = displayAssets == null ? null : displayAssets.getGuiForeground();
+                if (foreground != null) {
+                    drawCoverImage(g, foreground, cx, cy, cw, coverH);
+                }
             }
         }
 
@@ -818,9 +844,19 @@ public class ModernPlayerModelScreen extends Screen {
             if (entity == null || !entity.isModelReady()) {
                 return;
             }
-            float scale = clamp(coverH * 0.5f, 16.0f, 170.0f);
-            ModelPreviewRenderer.renderLivingEntityPreview(cx + cw / 2.0f, cy + coverH - 2.0f, scale, partialTick, entity,
-                    RendererManager.getPlayerRenderer(), true, true, ModelPreviewRenderer.FRONT_FACING_YAW);
+            // fa26.1.2: 依模型 disable_rotation 决定朝向与缩放;main 无 extraYaw/extraPitch,微调角度并入 previewYaw。
+            boolean disableRotation;
+            try {
+                var props = asm.getModelData().getModelProperties();
+                disableRotation = props != null && props.isDisablePreviewRotation();
+            } catch (Exception ignored) {
+                disableRotation = false;
+            }
+            float[] cam = YSM_CAM[disableRotation ? 0 : 1];
+            float scale = clamp(coverH * (cam[0] / 70.0f), 16.0f, 170.0f);
+            float yaw = disableRotation ? ModelPreviewRenderer.FRONT_FACING_YAW : ModelPreviewRenderer.FRONT_FACING_YAW - 24.0f;
+            ModelPreviewRenderer.renderLivingEntityPreview(cx + cw / 2.0f, cy + coverH - cam[1], scale, partialTick, entity,
+                    RendererManager.getPlayerRenderer(), disableRotation, true, yaw);
         } catch (Exception ignored) {
             int size = Math.min(26, Math.min(cw - 8, coverH - 10));
             drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
@@ -854,6 +890,11 @@ public class ModernPlayerModelScreen extends Screen {
     /** 只保留当前页上的卡片预览实体,翻页即释放上一页(防止实体/资源堆积)。 */
     private void evictCardPreviews(Set<String> keep) {
         if (this.cardPreviewEntities.size() > keep.size()) {
+            for (String old : this.cardPreviewEntities.keySet()) {
+                if (!keep.contains(old)) {
+                    this.cardAnimator.forget(old);
+                }
+            }
             this.cardPreviewEntities.keySet().retainAll(keep);
             this.cardPreviewTextureIds.keySet().retainAll(keep);
         }
