@@ -85,6 +85,7 @@ final class OrihimeDirectModelCompat {
     private static void openModelScreen(Screen parent, Entity maid) {
         InputUtil.setScreen(new ModernPlayerModelScreen(parent,
                 (modelId, texture) -> NetworkHandler.sendToServer(
-                        new C2SSetMaidModelPacket(maid.getId(), modelId, texture))));
+                        new C2SSetMaidModelPacket(maid.getId(), modelId, texture)),
+                "maid:" + maid.getUUID()));
     }
 }

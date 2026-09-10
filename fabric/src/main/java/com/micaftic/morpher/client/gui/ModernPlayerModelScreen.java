@@ -72,7 +72,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 public class ModernPlayerModelScreen extends Screen {
-    private static final ModelPanelState STATE = new ModelPanelState();
+    private static final java.util.Map<String, ModelPanelState> STATE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final int STATE_CACHE_LIMIT = 64;
+    private final ModelPanelState STATE;
     private static final Identifier MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
     private static final int BG = 0x90171A1D;
     private static final int PANEL = 0x4A34424A;
@@ -160,25 +162,42 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     public ModernPlayerModelScreen() {
-        this((Screen) null);
+        this((Screen) null, null, "self");
     }
 
     public ModernPlayerModelScreen(Screen parentScreen) {
-        this(parentScreen, null);
+        this(parentScreen, null, "self");
     }
 
     public ModernPlayerModelScreen(Screen parentScreen, BiConsumer<String, String> modelSelectionTarget) {
+        this(parentScreen, modelSelectionTarget, "self");
+    }
+
+    public ModernPlayerModelScreen(Screen parentScreen, BiConsumer<String, String> modelSelectionTarget, String stateKey) {
         super(Component.translatable("key.sparkle_morpher.player_model.desc"));
         this.parentScreen = parentScreen;
         this.modelSelectionTarget = modelSelectionTarget;
+        this.STATE = resolveState(stateKey);
+    }
+
+    private static ModelPanelState resolveState(String stateKey) {
+        if (STATE_CACHE.size() > STATE_CACHE_LIMIT) {
+            STATE_CACHE.clear();
+        }
+        return STATE_CACHE.computeIfAbsent(stateKey == null || stateKey.isBlank() ? "self" : stateKey,
+                key -> new ModelPanelState());
     }
 
     public ModernPlayerModelScreen(ModelPanelState.Tab tab) {
-        this(tab, null);
+        this(tab, null, "self");
     }
 
     public ModernPlayerModelScreen(ModelPanelState.Tab tab, Screen parentScreen) {
-        this(parentScreen);
+        this(tab, parentScreen, "self");
+    }
+
+    public ModernPlayerModelScreen(ModelPanelState.Tab tab, Screen parentScreen, String stateKey) {
+        this(parentScreen, null, stateKey);
         STATE.activeTab = tab;
         if (tab == ModelPanelState.Tab.RESOURCE) {
             STATE.resourceLoaded = false;
@@ -186,20 +205,24 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     public static ModernPlayerModelScreen resourceStation() {
-        return new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE);
+        return new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE, null, "resource");
     }
 
     public static ModernPlayerModelScreen settings() {
-        return settings(null);
+        return settings(null, "self");
     }
 
     public static ModernPlayerModelScreen settings(Screen parentScreen) {
-        return new ModernPlayerModelScreen(ModelPanelState.Tab.SETTINGS, parentScreen);
+        return settings(parentScreen, "self");
+    }
+
+    public static ModernPlayerModelScreen settings(Screen parentScreen, String stateKey) {
+        return new ModernPlayerModelScreen(ModelPanelState.Tab.SETTINGS, parentScreen, stateKey);
     }
 
     public static ModernPlayerModelScreen downloads() {
-        ModernPlayerModelScreen screen = new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE);
-        STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
+        ModernPlayerModelScreen screen = new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE, null, "resource");
+        screen.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
         return screen;
     }
 
@@ -251,6 +274,7 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     public void removed() {
         this.screenGeneration++;
+        this.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
         ModelImportFilePicker.cancelPicking();
         super.removed();
     }
@@ -1712,6 +1736,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility", GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK));
+        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_face_culling", GeneralConfig.DISABLE_MODEL_FACE_CULLING));
         rows.add(rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(nativeSimdPolicyRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(nativeSimdValidationRow(ModelPanelState.SettingGroup.DEBUG));
