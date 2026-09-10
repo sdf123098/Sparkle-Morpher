@@ -57,6 +57,10 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue ANIMATION_DEBUG_LOG;
 
+    public static ModConfigSpec.BooleanValue DEVELOPER_STATE_WRITEBACK;
+
+    public static ModConfigSpec.BooleanValue ANIMATION_ROULETTE_DEBUG_LOG;
+
     public static ModConfigSpec.BooleanValue INPUT_STATE_DEBUG_LOG;
 
     public static ModConfigSpec.BooleanValue EXPERIMENTAL_FALLBACK_ELYTRA_WITHOUT_LOCATOR;
@@ -205,6 +209,10 @@ public class GeneralConfig {
         ANIMATION_FRAME_PROFILER = builder.define("AnimationFrameProfiler", false);
         builder.comment("Print one [SM-ANIM] line for each animation evaluation when AnimationFrameProfiler is enabled.");
         ANIMATION_DEBUG_LOG = builder.define("AnimationDebugLog", false);
+        builder.comment("Allow panel-state writeback in the developer group. Default off; enabling it lets a model author reproduce a captured panel state. Client-side only.");
+        DEVELOPER_STATE_WRITEBACK = builder.define("DeveloperStateWriteback", false);
+        builder.comment("Print [SM-ROULETTE] diagnostics for animation roulette clicks, server resolution, and client playback resolution. Default off.");
+        ANIMATION_ROULETTE_DEBUG_LOG = builder.define("AnimationRouletteDebugLog", false);
         builder.comment("Print [SM-INPUT] diagnostics for attack/use mouse clicks, key state, vanilla swing/use state, and local animation pulses.");
         INPUT_STATE_DEBUG_LOG = builder.define("InputStateDebugLog", false);
         builder.comment("Allow fallback elytra rendering for models without ElytraLocator. Experimental and may not align perfectly.");
