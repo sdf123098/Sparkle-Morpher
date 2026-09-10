@@ -66,7 +66,8 @@ final class OrihimeDirectModelCompat {
                 return;
             }
             Minecraft.getInstance().setScreen(new ModernPlayerModelScreen(
-                    (modelId, texture) -> applyModel(maid, modelId, texture)));
+                    (modelId, texture) -> applyModel(maid, modelId, texture),
+                    "maid:" + maid.getUUID()));
         } catch (Throwable ignored) {
             // Optional integration must never affect the maid screen.
         }

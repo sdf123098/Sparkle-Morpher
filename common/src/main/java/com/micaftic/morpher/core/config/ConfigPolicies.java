@@ -33,6 +33,11 @@ public final class ConfigPolicies {
                 bool(GeneralConfig.ANIMATION_DISTANCE_LOD, false));
     }
 
+    /** Face-cull escape hatch; default false keeps upstream bake semantics. */
+    public static boolean disableModelFaceCulling() {
+        return bool(GeneralConfig.DISABLE_MODEL_FACE_CULLING, false);
+    }
+
     public static MemoryPolicy memory() {
         return new MemoryPolicy(
                 integer(GeneralConfig.AUDIO_CACHE_MAX_BYTES, 64 * 1024 * 1024),

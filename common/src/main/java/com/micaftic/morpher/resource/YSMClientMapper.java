@@ -601,7 +601,9 @@ public class YSMClientMapper {
                     isZeroThickness = false;
                 }
 
-                if (forceCull) {
+                if (com.micaftic.morpher.core.config.ConfigPolicies.disableModelFaceCulling()) {
+                    bc.cullable = false;
+                } else if (forceCull) {
                     bc.cullable = true;
                 } else if (hasTranslucentFace) {
                     bc.cullable = false;
