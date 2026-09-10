@@ -1717,6 +1717,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(nativeSimdValidationRow(ModelPanelState.SettingGroup.DEBUG));
         rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.blaze3d_vulkan_gpu_renderer", GeneralConfig.ENABLE_BLAZE3D_VULKAN_GPU_RENDERER));
+        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.blaze3d_in_pipeline_draw", GeneralConfig.ENABLE_BLAZE3D_IN_PIPELINE_DRAW));
         rows.add(bool(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.lazy_model_loading", GeneralConfig.LAZY_MODEL_LOADING));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.cpu_cache_limit", GeneralConfig.MAX_RESIDENT_CPU_MODELS, 1, 512, 1, ""));
