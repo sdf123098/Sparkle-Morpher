@@ -74,19 +74,21 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
 
     @Override
     public PhysicsManager getPhysicsManager() {
-        if (ModelPreviewRenderer.isPreview()) {
+        com.micaftic.morpher.client.render.RenderContext.PhysicsDomain physicsDomain =
+                com.micaftic.morpher.client.render.RenderContext.physicsDomain();
+        if (physicsDomain == com.micaftic.morpher.client.render.RenderContext.PhysicsDomain.PREVIEW) {
             if (this.previewBones == null) {
                 this.previewBones = new PhysicsManager();
             }
             return this.previewBones;
         }
-        if (com.micaftic.morpher.client.render.RenderContext.isGuiPreview()) {
+        if (physicsDomain == com.micaftic.morpher.client.render.RenderContext.PhysicsDomain.EXTRA_PLAYER) {
             if (this.extraPlayerBones == null) {
                 this.extraPlayerBones = new PhysicsManager();
             }
             return this.extraPlayerBones;
         }
-        if (ModelPreviewRenderer.isFirstPerson()) {
+        if (physicsDomain == com.micaftic.morpher.client.render.RenderContext.PhysicsDomain.FIRST_PERSON) {
             return this.physicsManager;
         }
         if (this.bones == null) {
@@ -309,7 +311,7 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
             }
             return null;
         }
-        boolean isGuiPreview = ModelPreviewRenderer.isPreview() || com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
+        boolean isGuiPreview = com.micaftic.morpher.client.render.RenderContext.isAnyPreview();
         boolean useAsyncResult = !isGuiPreview && !(this.entity instanceof LocalPlayer && InputStateKey.hasLocalInteractionState());
         if (useAsyncResult) {
             int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
