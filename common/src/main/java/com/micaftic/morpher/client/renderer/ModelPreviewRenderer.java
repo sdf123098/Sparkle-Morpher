@@ -78,9 +78,6 @@ public final class ModelPreviewRenderer {
 
     private static final Map<EntityRenderState, GuiPreviewRequest> GUI_PREVIEWS = Collections.synchronizedMap(new IdentityHashMap<>());
 
-    private static final ThreadLocal<Boolean> PREVIEW_MODE = ThreadLocal.withInitial(() -> false);
-
-
     // Animation evaluation runs on worker threads during a world render. Unlike the preview
     // modes, this frame-scoped flag must therefore be visible across threads.
     private static volatile boolean worldRenderMode;
@@ -123,11 +120,11 @@ public final class ModelPreviewRenderer {
     }
 
     public static void setPreviewMode(boolean previewMode) {
-        PREVIEW_MODE.set(previewMode);
+        RenderContext.setModelPreview(previewMode);
     }
 
     public static boolean isPreview() {
-        return PREVIEW_MODE.get();
+        return RenderContext.isModelPreview();
     }
 
     /** 26.2 GUI 预览（InventoryScreen.extractEntityInInventoryFollowsMouse）当前渲染的实体。 */
