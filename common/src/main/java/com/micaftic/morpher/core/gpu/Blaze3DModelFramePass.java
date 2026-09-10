@@ -37,24 +37,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@code LivingEntityRenderer.submit}。故本通道即使不向 collector 提交几何也不会丢阴影。
  *
  * <h2>开关与安全</h2>
- * 默认<b>关闭</b>（系统属性 {@code sparkle_morpher.blaze3d.inPipelineDraw=true} 才开），因为该路径
- * 需要实机验证（framegraph pass 内自建 render pass 的语义、与光影/描边的交互）。关闭时
- * {@link #tryDefer} 恒返回 false，调用方走既有路径，行为与改动前一致。
+ * 由模组配置项 {@code EnableBlaze3DInPipelineDraw} 控制（游戏内「模型面板 → 性能」可切换，
+ * 无需任何 JVM 参数），默认<b>关闭</b>：该路径仍需实机验证（framegraph pass 内自建 render pass
+ * 的语义、与光影/描边的交互）。关闭时 {@link #tryDefer} 恒返回 false，调用方走既有路径，
+ * 行为与改动前一致。
  * 所有异常都被吞掉并清空本帧待绘，绝不向上抛。
  */
 public final class Blaze3DModelFramePass {
 
-    /** 系统属性开关；未设为 true 时本通道完全不介入。 */
-    public static final String ENABLE_PROPERTY = "sparkle_morpher.blaze3d.inPipelineDraw";
-
-    private static final boolean ENABLED = isEnabledValue(System.getProperty(ENABLE_PROPERTY));
-
     /**
-     * 开关解析（纯函数，便于测试）：只有显式 {@code "true"}（忽略大小写）才启用。
-     * 未设置 / 其他值 / 空串一律关闭——保证默认行为与改动前完全一致。
+     * 本通道是否启用。读取模组配置（{@code EnableBlaze3DInPipelineDraw}），默认关闭；
+     * 配置未注册/不可读时按关闭处理（见 {@code ConfigPolicies.bool} 的 fallback），
+     * 保证默认行为与未引入本通道时完全一致。
      */
-    public static boolean isEnabledValue(String propertyValue) {
-        return "true".equalsIgnoreCase(propertyValue);
+    public static boolean isEnabled() {
+        return com.micaftic.morpher.core.config.ConfigPolicies.graphics().blaze3dInPipelineDraw();
     }
 
     private static final String PASS_NAME = "sparkle_morpher_blaze3d_models";
@@ -66,11 +63,6 @@ public final class Blaze3DModelFramePass {
     private static final AtomicBoolean warnedRenderFailure = new AtomicBoolean(false);
 
     private Blaze3DModelFramePass() {
-    }
-
-    /** 本通道是否被开关启用（不含运行期条件判断）。 */
-    public static boolean isEnabled() {
-        return ENABLED;
     }
 
     /** 帧开始：清空上一帧残留。由 {@code WorldRendererMixin} 在 render HEAD 调用。 */
@@ -102,7 +94,7 @@ public final class Blaze3DModelFramePass {
             float red, float green, float blue, float alpha,
             Identifier textureLocation,
             boolean entityGlowing) {
-        if (!ENABLED) {
+        if (!isEnabled()) {
             return false;
         }
         try {
@@ -161,7 +153,9 @@ public final class Blaze3DModelFramePass {
      * 那时 {@code targets.main} 已被 main/alwaysOnTop pass 更新为最新 handle，我们据此排在它们之后。
      */
     public static void appendPass(FrameGraphBuilder builder, LevelTargetBundle targets) {
-        if (!ENABLED || builder == null || targets == null || PENDING.isEmpty()) {
+        // 这里不再查开关：只要本帧已登记绘制（tryDefer 通过）就必须执行，否则用户在游戏内
+        // 切换开关的瞬间会丢一帧模型。开关只由 tryDefer 决定是否接管。
+        if (builder == null || targets == null || PENDING.isEmpty()) {
             return;
         }
         try {
