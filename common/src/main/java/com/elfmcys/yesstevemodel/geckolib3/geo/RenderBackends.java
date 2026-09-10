@@ -29,4 +29,9 @@ public final class RenderBackends {
     public static RenderBackend gpu() {
         return OpenGlGpuRenderBackend.INSTANCE;
     }
+
+    /** Blaze3D GPU 后端（持有 Blaze3D mesh 租约，release 需经此 revoke）。 */
+    public static RenderBackend blaze3d() {
+        return Blaze3DGpuRenderBackend.INSTANCE;
+    }
 }

@@ -32,4 +32,12 @@ public final class Blaze3DGpuRenderBackend implements RenderBackend {
                 request.red(), request.green(), request.blue(), request.alpha(),
                 request.textureLocation(), request.translucentTexture());
     }
+
+    @Override
+    public void release(GeoModel model) {
+        // Blaze3D mesh ownership is bound to the model runtime, mirroring the
+        // OpenGL backend; without this the cached GpuBuffers and direct bone
+        // buffer would leak on model unload.
+        Blaze3DRenderPath.disposeOwner(model);
+    }
 }

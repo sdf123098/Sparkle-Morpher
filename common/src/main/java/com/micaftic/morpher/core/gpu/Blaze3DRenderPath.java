@@ -181,6 +181,21 @@ public final class Blaze3DRenderPath {
         return mesh;
     }
 
+    /**
+     * 释放指定模型持有的 Blaze3D GPU mesh（租约 revoke），与
+     * {@link OpenGlGpuRenderBackend#release(GeoModel)} 对称。WeakHashMap 仅能回收 key，
+     * 不会关闭其 GpuBuffer / 直接内存，故模型装配释放时必须显式调用。
+     */
+    public static void disposeOwner(GeoModel model) {
+        if (model == null) {
+            return;
+        }
+        Blaze3DModelMesh mesh = meshCache.remove(model);
+        if (mesh != null) {
+            mesh.close();
+        }
+    }
+
     private static boolean computeBoneMatricesNativeVulkan(
             GeoModel model,
             PoseStack.Pose pose,

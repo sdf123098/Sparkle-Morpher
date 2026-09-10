@@ -460,6 +460,9 @@ public class GeoModel {
             vulkanNativeGpuMeshHandle = 0;
         }
         freeGpuCache();
+        // Blaze3D GPU mesh is an independent lease (not tracked by gpuMeshHandle),
+        // so it must be revoked unconditionally on model unload.
+        RenderBackends.blaze3d().release(this);
     }
 
     public boolean freeGpuCache() {
