@@ -14,6 +14,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
 import java.util.Map;
+import com.micaftic.morpher.util.AnimationRouletteDebugLog;
 
 public class C2SPlayAnimationPacket {
 
@@ -76,43 +77,63 @@ public class C2SPlayAnimationPacket {
     }
 
     private static void handleCapability(C2SPlayAnimationPacket message, ServerPlayer sender) {
+        AnimationRouletteDebugLog.info("server receive player={} index={} category={} entityId={} key={}",
+                sender.getGameProfile().getName(), message.animationIndex, message.category, message.entityId, message.animationKey);
         if (message.entityId != -1) {
             Entity entity = sender.serverLevel().getEntity(message.entityId);
             if (TouhouMaidCompat.isMaidEntity(entity)) {
+                AnimationRouletteDebugLog.info("server route maid entityId={} index={} category={}",
+                        message.entityId, message.animationIndex, message.category);
                 TouhouMaidCompat.registerAnimationRoulette(entity, message.category, message.animationIndex);
                 return;
             }
+            AnimationRouletteDebugLog.warn("server ignored non-maid target entityId={} entity={} index={} category={}",
+                    message.entityId, entity == null ? "null" : entity.getType().toString(), message.animationIndex, message.category);
             return;
         }
 
         ModelInfoCapability.get(sender).ifPresent(modelInfoCap -> {
             if (message.animationIndex == -1) {
+                AnimationRouletteDebugLog.info("server stop player={} model={}",
+                        sender.getGameProfile().getName(), modelInfoCap.getModelId());
                 modelInfoCap.stopAnimation(sender);
             } else {
                 ServerModelManager.getModelDefinition(modelInfoCap.getModelId()).ifPresentOrElse(serverModelCap -> {
-                    OrderedStringMap<String, String> extraAnimations;
                     ModelProperties modelProperties = serverModelCap.getLoadedModelData().getModelProperties();
                     Map<String, OrderedStringMap<String, String>> extraAnimationClassify = modelProperties.getExtraAnimationClassify();
-                    if (StringUtils.isNotBlank(message.category) && extraAnimationClassify.containsKey(message.category)) {
-                        extraAnimations = extraAnimationClassify.get(message.category);
-                    } else {
-                        extraAnimations = modelProperties.getExtraAnimation();
-                    }
                     // 优先使用客户端发送的准确动画 key：轮盘点击发送的 key 来自客户端模型列表，
                     // 若服务端与客户端 extraAnimations 顺序/内容不一致，按 index 回查会错位（点 A 播 B）。
+                    boolean categoryMatched = StringUtils.isNotBlank(message.category) && extraAnimationClassify.containsKey(message.category);
+                    OrderedStringMap<String, String> extraAnimations = categoryMatched
+                        ? extraAnimationClassify.get(message.category)
+                        : modelProperties.getExtraAnimation();
                     String playKey = StringUtils.isNotBlank(message.animationKey)
-                            ? message.animationKey
-                            : (message.animationIndex >= 0 && extraAnimations.size() > message.animationIndex
-                                ? extraAnimations.getKeyAt(message.animationIndex)
-                                : null);
+                        ? message.animationKey
+                        : (message.animationIndex >= 0 && extraAnimations.size() > message.animationIndex
+                            ? extraAnimations.getKeyAt(message.animationIndex)
+                            : null);
+                    AnimationRouletteDebugLog.info("server resolved player={} model={} index={} category={} matched={} key={} value={}",
+                        sender.getGameProfile().getName(), modelInfoCap.getModelId(), message.animationIndex,
+                        message.category, categoryMatched, playKey, playKey == null ? null : extraAnimations.get(playKey));
                     if (playKey != null) {
                         modelInfoCap.playAnimation(sender, playKey);
+                    } else {
+                        AnimationRouletteDebugLog.warn("server invalid index player={} model={} index={} category={} matched={} size={}",
+                                sender.getGameProfile().getName(), modelInfoCap.getModelId(), message.animationIndex,
+                                message.category, categoryMatched, extraAnimations.size());
                     }
                 }, () -> {
                     Pair<String, String> defaultConfig = ServerModelManager.getDefaultModelConfig();
                     if (modelInfoCap.getModelId().equals(defaultConfig.getLeft()) && StringUtils.isNotBlank(message.animationKey)) {
+                        AnimationRouletteDebugLog.info("server default fallback player={} model={} key={} index={} category={}",
+                                sender.getGameProfile().getName(), modelInfoCap.getModelId(), message.animationKey,
+                                message.animationIndex, message.category);
                         modelInfoCap.playAnimation(sender, message.animationKey);
+                        return;
                     }
+                    AnimationRouletteDebugLog.warn("server missing model definition player={} model={} index={} category={} key={}",
+                            sender.getGameProfile().getName(), modelInfoCap.getModelId(), message.animationIndex,
+                            message.category, message.animationKey);
                 });
             }
         });

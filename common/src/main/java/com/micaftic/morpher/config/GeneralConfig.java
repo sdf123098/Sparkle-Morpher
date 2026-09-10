@@ -47,6 +47,10 @@ public class GeneralConfig {
 
     public static ForgeConfigSpec.BooleanValue ANIMATION_DEBUG_LOG;
 
+    public static ForgeConfigSpec.BooleanValue DEVELOPER_STATE_WRITEBACK;
+
+    public static ForgeConfigSpec.BooleanValue ANIMATION_ROULETTE_DEBUG_LOG;
+
     public static ForgeConfigSpec.BooleanValue INPUT_STATE_DEBUG_LOG;
 
     public static ForgeConfigSpec.BooleanValue WARN_REPEATED_ANIMATION_EVALUATION;
@@ -166,6 +170,10 @@ public class GeneralConfig {
         ANIMATION_FRAME_PROFILER = builder.define("AnimationFrameProfiler", false);
         builder.comment("Verbose per-evaluation [SM-ANIM] debug log. Very noisy, default off.");
         ANIMATION_DEBUG_LOG = builder.define("AnimationDebugLog", false);
+        builder.comment("Allow panel-state writeback in the developer group. Default off; enabling it lets a model author reproduce a captured panel state. Client-side only.");
+        DEVELOPER_STATE_WRITEBACK = builder.define("DeveloperStateWriteback", false);
+        builder.comment("Print [SM-ROULETTE] diagnostics for animation roulette clicks, server resolution, and client playback resolution. Default off.");
+        ANIMATION_ROULETTE_DEBUG_LOG = builder.define("AnimationRouletteDebugLog", false);
         builder.comment("Print [SM-INPUT] diagnostics for attack/use mouse clicks, key state, vanilla swing/use state, and local animation pulses.");
         INPUT_STATE_DEBUG_LOG = builder.define("InputStateDebugLog", false);
         builder.comment("Warn when the same entity is fully evaluated more than once in a single render frame.");

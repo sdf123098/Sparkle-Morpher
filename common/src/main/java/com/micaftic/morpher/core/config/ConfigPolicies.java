@@ -38,6 +38,15 @@ public final class ConfigPolicies {
         return bool(GeneralConfig.DISABLE_MODEL_FACE_CULLING, false);
     }
 
+    /** Developer-options panel-state writeback gate; default false keeps state immutable from the UI. */
+    public static boolean developerStateWriteback() {
+        return bool(GeneralConfig.DEVELOPER_STATE_WRITEBACK, false);
+    }
+
+    public static FeaturePolicy features() {
+        return new FeaturePolicy(false, false, false, true, bool(GeneralConfig.ANIMATION_ROULETTE_DEBUG_LOG, false));
+    }
+
     public static MemoryPolicy memory() {
         return new MemoryPolicy(
                 integer(GeneralConfig.AUDIO_CACHE_MAX_BYTES, 64 * 1024 * 1024),
@@ -125,6 +134,9 @@ public final class ConfigPolicies {
         } catch (Exception ignored) {
             return fallback;
         }
+    }
+
+    public record FeaturePolicy(boolean experimentalFallbackElytraWithoutLocator, boolean experimentalEnableElytraForDefaultAndMiscModels, boolean vulkanExperimentalCapabilityProbe, boolean worldRendererHook, boolean animationRouletteDebugLog) {
     }
 
     public record Snapshot(RenderPolicy render, MemoryPolicy memory, DiagnosticsPolicy diagnostics,
