@@ -12,6 +12,11 @@ public final class ConfigPolicies {
     private ConfigPolicies() { }
     public static Snapshot snapshot() { return new Snapshot(render(), memory(), diagnostics(), privacy(), network()); }
     public static RenderPolicy render() { return new RenderPolicy(bool(GeneralConfig.DISABLE_SELF_MODEL, false), bool(GeneralConfig.DISABLE_OTHER_MODEL, false), bool(GeneralConfig.DISABLE_SELF_HANDS, false), bool(GeneralConfig.DISABLE_PROJECTILE_MODEL, false), bool(GeneralConfig.DISABLE_VEHICLE_MODEL, false), bool(GeneralConfig.DISABLE_EXTERNAL_FP_ANIM, false), bool(GeneralConfig.USE_COMPATIBILITY_RENDERER, false), bool(GeneralConfig.USE_GPU_RENDERER, true), bool(GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK, true), bool(GeneralConfig.ANIMATION_DISTANCE_LOD, false)); }
+    /** Face-cull escape hatch; default false keeps upstream bake semantics. */
+    public static boolean disableModelFaceCulling() {
+        return bool(GeneralConfig.DISABLE_MODEL_FACE_CULLING, false);
+    }
+
     public static MemoryPolicy memory() { return new MemoryPolicy(integer(GeneralConfig.AUDIO_CACHE_MAX_BYTES, 64 * 1024 * 1024), integer(GeneralConfig.MAX_CACHED_GPU_MODELS, 24), bool(GeneralConfig.LAZY_MODEL_LOADING, true), integer(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 64), integer(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300)); }
     public static DiagnosticsPolicy diagnostics() { return new DiagnosticsPolicy(bool(GeneralConfig.ANIMATION_FRAME_PROFILER, false), bool(GeneralConfig.ANIMATION_DEBUG_LOG, false), bool(GeneralConfig.WARN_REPEATED_ANIMATION_EVALUATION, true), bool(GeneralConfig.RESOURCE_STATION_MONITOR_LOG, false), bool(GeneralConfig.NETWORK_ONLINE_DEBUG_LOG, false), bool(GeneralConfig.MODEL_MEMORY_PROFILER, false), bool(GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG, false), bool(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)); }
     public static PrivacyPolicy privacy() { return new PrivacyPolicy(bool(GeneralConfig.PRIVACY_MODE, false)); }

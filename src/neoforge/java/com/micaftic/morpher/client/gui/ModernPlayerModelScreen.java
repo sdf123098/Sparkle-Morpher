@@ -68,7 +68,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 public class ModernPlayerModelScreen extends Screen {
-    private static final ModelPanelState STATE = new ModelPanelState();
+    private static final java.util.Map<String, ModelPanelState> STATE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final int STATE_CACHE_LIMIT = 64;
+    private final ModelPanelState STATE;
     private static final ResourceLocation MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
     private static final int BG = 0x90171A1D;
     private static final int PANEL = 0x4A34424A;
@@ -155,16 +157,37 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     public ModernPlayerModelScreen() {
-        this((BiConsumer<String, String>) null);
+        this((BiConsumer<String, String>) null, "self");
     }
 
     public ModernPlayerModelScreen(BiConsumer<String, String> modelSelectionTarget) {
+        this(modelSelectionTarget, "self");
+    }
+
+    public ModernPlayerModelScreen(BiConsumer<String, String> modelSelectionTarget, String stateKey) {
         super(Component.translatable("key.sparkle_morpher.player_model.desc"));
         this.modelSelectionTarget = modelSelectionTarget;
+        this.STATE = resolveState(stateKey);
+    }
+
+    private static ModelPanelState resolveState(String stateKey) {
+        if (STATE_CACHE.size() > STATE_CACHE_LIMIT) {
+            STATE_CACHE.clear();
+        }
+        return STATE_CACHE.computeIfAbsent(stateKey == null || stateKey.isBlank() ? "self" : stateKey,
+                key -> new ModelPanelState());
     }
 
     public ModernPlayerModelScreen(ModelPanelState.Tab tab) {
-        this();
+        this((BiConsumer<String, String>) null, "self");
+        STATE.activeTab = tab;
+        if (tab == ModelPanelState.Tab.RESOURCE) {
+            STATE.resourceLoaded = false;
+        }
+    }
+
+    public ModernPlayerModelScreen(ModelPanelState.Tab tab, String stateKey) {
+        this((BiConsumer<String, String>) null, stateKey);
         STATE.activeTab = tab;
         if (tab == ModelPanelState.Tab.RESOURCE) {
             STATE.resourceLoaded = false;
@@ -172,11 +195,11 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     public static ModernPlayerModelScreen resourceStation() {
-        return new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE);
+        return new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE, "resource");
     }
 
     public static ModernPlayerModelScreen settings() {
-        return new ModernPlayerModelScreen(ModelPanelState.Tab.SETTINGS);
+        return new ModernPlayerModelScreen(ModelPanelState.Tab.SETTINGS, "self");
     }
 
     public static ModernPlayerModelScreen settings(Screen parentScreen) {
@@ -184,8 +207,8 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     public static ModernPlayerModelScreen downloads() {
-        ModernPlayerModelScreen screen = new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE);
-        STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
+        ModernPlayerModelScreen screen = new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE, "resource");
+        screen.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
         return screen;
     }
 
@@ -237,6 +260,7 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     public void removed() {
         this.screenGeneration++;
+        this.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
         ModelImportFilePicker.cancelPicking();
         super.removed();
     }
@@ -1663,6 +1687,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility", GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK));
+        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_face_culling", GeneralConfig.DISABLE_MODEL_FACE_CULLING));
         rows.add(rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.java_vector_renderer", GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER));
         rows.add(bool(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.lazy_model_loading", GeneralConfig.LAZY_MODEL_LOADING));

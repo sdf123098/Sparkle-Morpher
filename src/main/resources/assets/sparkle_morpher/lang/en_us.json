@@ -775,6 +775,7 @@
   "gui.sparkle_morpher.model_panel.setting.native_simd_renderer": "Native SIMD renderer",
   "gui.sparkle_morpher.model_panel.setting.java_vector_renderer": "Java Vector renderer",
   "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility": "Shader glow compatibility",
+  "gui.sparkle_morpher.model_panel.setting.disable_face_culling": "Disable model face culling",
   "gui.sparkle_morpher.model_panel.setting.show_model_id_first": "Show model ID first",
   "gui.sparkle_morpher.model_panel.setting.resource_monitor_log": "Resource monitor log",
   "gui.sparkle_morpher.model_panel.setting.model_memory_profiler": "Model memory profiler",
