@@ -169,6 +169,11 @@ dependencies {
     testRuntimeOnly files(fileTree("build/moddev/artifacts") {
         include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
     })
+    // MC classes are also needed on the test compile classpath so render-context
+    // tests can reference types such as net.minecraft.world.entity.Entity.
+    testCompileOnly files(fileTree("build/moddev/artifacts") {
+        include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
+    })
 }
 
 test {
