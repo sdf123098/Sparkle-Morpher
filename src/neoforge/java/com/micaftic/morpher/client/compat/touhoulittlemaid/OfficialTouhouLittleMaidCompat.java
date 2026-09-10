@@ -65,7 +65,8 @@ final class OfficialTouhouLittleMaidCompat {
             }
             Minecraft minecraft = Minecraft.getInstance();
             minecraft.setScreen(new ModernPlayerModelScreen(minecraft.screen,
-                    (modelId, texture) -> applyModel(maid, modelId, texture)));
+                    (modelId, texture) -> applyModel(maid, modelId, texture),
+                    "maid:" + maid.getUUID()));
         } catch (Throwable ignored) {
             // The event is optional and must never affect the maid screen.
         }

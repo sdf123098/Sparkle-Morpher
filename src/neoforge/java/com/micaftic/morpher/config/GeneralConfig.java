@@ -88,6 +88,7 @@ public class GeneralConfig {
     public static ModConfigSpec.IntValue AUDIO_CACHE_MAX_BYTES;
 
     public static ModConfigSpec.BooleanValue DISABLE_MODEL_GLOW_IN_SHADERPACK;
+    public static ModConfigSpec.BooleanValue DISABLE_MODEL_FACE_CULLING;
 
     public static ModConfigSpec.BooleanValue ANIMATION_DISTANCE_LOD;
 
@@ -183,6 +184,8 @@ public class GeneralConfig {
         NATIVE_SIMD_VALIDATION_MODE = builder.defineEnum("NativeSimdValidationMode", NativeSimdValidationMode.OFF);
         builder.comment("Render ysmGlow bones with normal entity lighting while a shader pack is active.");
         DISABLE_MODEL_GLOW_IN_SHADERPACK = builder.define("DisableModelGlowInShaderpack", true);
+        builder.comment("Disable the per-cube face cull baked into models. Turn this on if a model loses faces/parts at certain angles. Changing it reloads models.");
+        DISABLE_MODEL_FACE_CULLING = builder.define("DisableModelFaceCulling", false);
         ROULETTE_CONTENT_MODE = builder.defineEnum("RouletteContentMode", RouletteContentMode.ORIGINAL);
         builder.comment("The amount of volume when the animation is played.");
         SOUND_VOLUME = builder.defineInRange("SoundVolume", 100.0d, 0.0d, 100.0d);
