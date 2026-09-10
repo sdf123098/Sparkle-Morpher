@@ -46,6 +46,8 @@ public class GeneralConfig {
 
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue ANIMATION_DEBUG_LOG;
 
+    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue DEVELOPER_STATE_WRITEBACK;
+
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue ANIMATION_ROULETTE_DEBUG_LOG;
 
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue INPUT_STATE_DEBUG_LOG;
@@ -167,6 +169,8 @@ public class GeneralConfig {
         ANIMATION_FRAME_PROFILER = builder.define("AnimationFrameProfiler", false);
         builder.comment("Verbose per-evaluation [SM-ANIM] debug log. Very noisy, default off.");
         ANIMATION_DEBUG_LOG = builder.define("AnimationDebugLog", false);
+        builder.comment("Allow panel-state writeback in the developer group. Default off; enabling it lets a model author reproduce a captured panel state. Client-side only.");
+        DEVELOPER_STATE_WRITEBACK = builder.define("DeveloperStateWriteback", false);
         builder.comment("Print [SM-ROULETTE] diagnostics for animation roulette clicks, server resolution, and client playback resolution. Default off.");
         ANIMATION_ROULETTE_DEBUG_LOG = builder.define("AnimationRouletteDebugLog", false);
         builder.comment("Print [SM-INPUT] diagnostics for attack/use mouse clicks, key state, vanilla swing/use state, and local animation pulses.");

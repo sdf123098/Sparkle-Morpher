@@ -17,6 +17,11 @@ public final class ConfigPolicies {
         return bool(GeneralConfig.DISABLE_MODEL_FACE_CULLING, false);
     }
 
+    /** Developer-options panel-state writeback gate; default false keeps state immutable from the UI. */
+    public static boolean developerStateWriteback() {
+        return bool(GeneralConfig.DEVELOPER_STATE_WRITEBACK, false);
+    }
+
     public static MemoryPolicy memory() { return new MemoryPolicy(integer(GeneralConfig.AUDIO_CACHE_MAX_BYTES, 64 * 1024 * 1024), integer(GeneralConfig.MAX_CACHED_GPU_MODELS, 24), bool(GeneralConfig.LAZY_MODEL_LOADING, true), integer(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 64), integer(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300)); }
     public static DiagnosticsPolicy diagnostics() { return new DiagnosticsPolicy(bool(GeneralConfig.ANIMATION_FRAME_PROFILER, false), bool(GeneralConfig.ANIMATION_DEBUG_LOG, false), bool(GeneralConfig.WARN_REPEATED_ANIMATION_EVALUATION, true), bool(GeneralConfig.RESOURCE_STATION_MONITOR_LOG, false), bool(GeneralConfig.NETWORK_ONLINE_DEBUG_LOG, false), bool(GeneralConfig.MODEL_MEMORY_PROFILER, false), bool(GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG, false), bool(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)); }
     public static PrivacyPolicy privacy() { return new PrivacyPolicy(bool(GeneralConfig.PRIVACY_MODE, false)); }

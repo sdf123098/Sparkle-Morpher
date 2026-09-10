@@ -66,11 +66,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+import com.micaftic.morpher.core.config.ConfigPolicies;
 
 public class ModernPlayerModelScreen extends Screen {
     private static final java.util.Map<String, ModelPanelState> STATE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
     private static final int STATE_CACHE_LIMIT = 64;
     private final ModelPanelState STATE;
+    private final String stateKeyValue;
     private static final ResourceLocation MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
     private static final int BG = 0x90171A1D;
     private static final int PANEL = 0x4A34424A;
@@ -168,6 +170,7 @@ public class ModernPlayerModelScreen extends Screen {
         super(Component.translatable("key.sparkle_morpher.player_model.desc"));
         this.modelSelectionTarget = modelSelectionTarget;
         this.STATE = resolveState(stateKey);
+        this.stateKeyValue = stateKey == null || stateKey.isBlank() ? "self" : stateKey;
     }
 
     private static ModelPanelState resolveState(String stateKey) {
@@ -177,6 +180,19 @@ public class ModernPlayerModelScreen extends Screen {
         return STATE_CACHE.computeIfAbsent(stateKey == null || stateKey.isBlank() ? "self" : stateKey,
                 key -> new ModelPanelState());
     }
+
+        /**
+         * Developer-options: the context key this instance resolved its state from
+         * ("self", "maid:<uuid>", "resource").
+         */
+        public String stateKey() {
+            return this.stateKeyValue;
+        }
+
+        /** Developer-options: read-only snapshot of this panel's state. */
+        public java.util.Map<String, Object> stateSnapshot() {
+            return this.STATE.devSnapshot();
+        }
 
     public ModernPlayerModelScreen(ModelPanelState.Tab tab) {
         this((BiConsumer<String, String>) null, "self");
@@ -916,12 +932,16 @@ public class ModernPlayerModelScreen extends Screen {
             case RENDERING -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.rendering");
             case PERFORMANCE -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.performance");
             case CACHE -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.cache");
-            case DEBUG -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.debug");
+            case DEVELOPER -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.developer");
             case MISC -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.misc");
         };
     }
 
     private void renderSettingRow(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, SettingRow row) {
+        if (row.sectionKey() != null) {
+            drawSection(g, Component.translatable(row.sectionKey()), x + 6, y + 6);
+            return;
+        }
         fill(g, x, y, w, 19, 0x44202020);
         Component label = Component.translatable(row.labelKey());
         if (row.segmented() != null) {
@@ -1667,6 +1687,192 @@ public class ModernPlayerModelScreen extends Screen {
         });
     }
 
+        /** Developer-options: serialise this panel's state to JSON and copy it to the clipboard. */
+        private void dumpPanelState() {
+            String json = stateToJson(this.STATE.devSnapshot());
+            Minecraft.getInstance().keyboardHandler.setClipboard(json);
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.developer.action.dump_state.done"), ChatFormatting.GREEN);
+        }
+
+        /** Developer-options: drop every memoised panel state, keeping the developer group selected. */
+        private void resetPanelState() {
+            STATE_CACHE.clear();
+            this.STATE.settingGroup = ModelPanelState.SettingGroup.DEVELOPER;
+            this.STATE.settingsScroll = 0;
+            init();
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.developer.action.reset_state.done"), ChatFormatting.GREEN);
+        }
+
+        /** Developer-options (gated): read JSON from the clipboard and apply it all-or-nothing. */
+        private void applyStateFromClipboard() {
+            String raw = Minecraft.getInstance().keyboardHandler.getClipboard();
+            java.util.Map<String, String> parsed = parseStateJson(raw);
+            if (parsed == null) {
+                setStatus(Component.translatable("gui.sparkle_morpher.model_panel.developer.action.apply_state.invalid"), ChatFormatting.RED);
+                return;
+            }
+            java.util.List<String> errors = new java.util.ArrayList<>();
+            if (!this.STATE.applyDevState(parsed, errors)) {
+                setStatus(Component.literal("panel state rejected: " + String.join(", ", errors)), ChatFormatting.RED);
+                return;
+            }
+            init();
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.developer.action.apply_state.done"), ChatFormatting.GREEN);
+        }
+
+        /** Minimal flat JSON writer for the map produced by devSnapshot(). */
+        private static String stateToJson(java.util.Map<String, Object> map) {
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (java.util.Map.Entry<String, Object> e : map.entrySet()) {
+                if (!first) {
+                    sb.append(',');
+                }
+                first = false;
+                sb.append('"').append(e.getKey()).append("\":");
+                Object v = e.getValue();
+                if (v instanceof Boolean || v instanceof Number) {
+                    sb.append(v);
+                } else {
+                    sb.append('"').append(escapeJson(String.valueOf(v))).append('"');
+                }
+            }
+            return sb.append('}').toString();
+        }
+
+        private static String escapeJson(String s) {
+            StringBuilder sb = new StringBuilder(s.length() + 8);
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                switch (c) {
+                    case '"' -> sb.append("\\\"");
+                    case '\\' -> sb.append("\\\\");
+                    case '\n' -> sb.append("\\n");
+                    case '\r' -> sb.append("\\r");
+                    case '\t' -> sb.append("\\t");
+                    default -> {
+                        if (c < 0x20) {
+                            sb.append(String.format("\\u%04x", (int) c));
+                        } else {
+                            sb.append(c);
+                        }
+                    }
+                }
+            }
+            return sb.toString();
+        }
+
+        /** Parse the flat JSON written by stateToJson; null when malformed. */
+        private static java.util.Map<String, String> parseStateJson(String raw) {
+            if (raw == null) {
+                return null;
+            }
+            String s = raw.trim();
+            if (!s.startsWith("{") || !s.endsWith("}")) {
+                return null;
+            }
+            s = s.substring(1, s.length() - 1).trim();
+            java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+            if (s.isEmpty()) {
+                return out;
+            }
+            int i = 0;
+            while (i < s.length()) {
+                i = skipWs(s, i);
+                if (i >= s.length() || s.charAt(i) != '"') {
+                    return null;
+                }
+                int[] keyEnd = {-1};
+                String key = readJsonString(s, i, keyEnd);
+                if (key == null) {
+                    return null;
+                }
+                i = skipWs(s, keyEnd[0]);
+                if (i >= s.length() || s.charAt(i) != ':') {
+                    return null;
+                }
+                i = skipWs(s, i + 1);
+                String value;
+                if (i < s.length() && s.charAt(i) == '"') {
+                    int[] valEnd = {-1};
+                    value = readJsonString(s, i, valEnd);
+                    if (value == null) {
+                        return null;
+                    }
+                    i = valEnd[0];
+                } else {
+                    int j = i;
+                    while (j < s.length() && s.charAt(j) != ',') {
+                        j++;
+                    }
+                    value = s.substring(i, j).trim();
+                    i = j;
+                }
+                out.put(key, value);
+                i = skipWs(s, i);
+                if (i < s.length() && s.charAt(i) == ',') {
+                    i++;
+                    continue;
+                }
+                if (i < s.length()) {
+                    return null;
+                }
+            }
+            return out;
+        }
+
+        private static int skipWs(String s, int i) {
+            while (i < s.length() && Character.isWhitespace(s.charAt(i))) {
+                i++;
+            }
+            return i;
+        }
+
+        /** Reads a JSON string literal at the opening quote; writes the index past it. */
+        private static String readJsonString(String s, int start, int[] endOut) {
+            StringBuilder sb = new StringBuilder();
+            int i = start + 1;
+            while (i < s.length()) {
+                char c = s.charAt(i);
+                if (c == '"') {
+                    endOut[0] = i + 1;
+                    return sb.toString();
+                }
+                if (c == '\\') {
+                    if (i + 1 >= s.length()) {
+                        return null;
+                    }
+                    char n = s.charAt(i + 1);
+                    switch (n) {
+                        case 'n' -> sb.append('\n');
+                        case 'r' -> sb.append('\r');
+                        case 't' -> sb.append('\t');
+                        case '"' -> sb.append('"');
+                        case '\\' -> sb.append('\\');
+                        case 'u' -> {
+                            if (i + 5 >= s.length()) {
+                                return null;
+                            }
+                            try {
+                                sb.append((char) Integer.parseInt(s.substring(i + 2, i + 6), 16));
+                            } catch (NumberFormatException ex) {
+                                return null;
+                            }
+                            i += 4;
+                        }
+                        default -> {
+                            return null;
+                        }
+                    }
+                    i += 2;
+                    continue;
+                }
+                sb.append(c);
+                i++;
+            }
+            return null;
+        }
+
     private List<SettingRow> settingsRows() {
         List<SettingRow> rows = new ArrayList<>();
         rows.add(bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.model_panel.setting.sound_roulette_message", GeneralConfig.PRINT_ANIMATION_ROULETTE_MSG));
@@ -1696,13 +1902,27 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.enable_global_bandwidth_limit", ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT));
         rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.bandwidth_limit", ServerConfig.BANDWIDTH_LIMIT, 1, 999, 10, "Mbps"));
-        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.resource_monitor_log", GeneralConfig.RESOURCE_STATION_MONITOR_LOG));
-        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.model_memory_profiler", GeneralConfig.MODEL_MEMORY_PROFILER));
-        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.import_performance_log", GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG));
-        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.animation_frame_profiler", GeneralConfig.ANIMATION_FRAME_PROFILER));
-        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.animation_debug_log", GeneralConfig.ANIMATION_DEBUG_LOG));
-        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.animation_roulette_debug_log", GeneralConfig.ANIMATION_ROULETTE_DEBUG_LOG));
-        rows.add(bool(ModelPanelState.SettingGroup.DEBUG, "gui.sparkle_morpher.model_panel.setting.input_debug_log", GeneralConfig.INPUT_STATE_DEBUG_LOG));
+        // ---- Developer options: panel state ----
+        rows.add(section(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.section.panel_state"));
+        rows.add(actionRow(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.action.dump_state", this::dumpPanelState));
+        rows.add(actionRow(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.action.reset_state", this::resetPanelState));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.developer_state_writeback", GeneralConfig.DEVELOPER_STATE_WRITEBACK));
+        if (ConfigPolicies.developerStateWriteback()) {
+            rows.add(actionRow(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.action.apply_state", this::applyStateFromClipboard));
+        }
+        // ---- Developer options: logging ----
+        rows.add(section(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.section.logging"));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.resource_monitor_log", GeneralConfig.RESOURCE_STATION_MONITOR_LOG));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.animation_debug_log", GeneralConfig.ANIMATION_DEBUG_LOG));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.animation_roulette_debug_log", GeneralConfig.ANIMATION_ROULETTE_DEBUG_LOG));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.input_debug_log", GeneralConfig.INPUT_STATE_DEBUG_LOG));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.config.network_online_debug_log", GeneralConfig.NETWORK_ONLINE_DEBUG_LOG));
+        // ---- Developer options: profiling ----
+        rows.add(section(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.section.profiling"));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.model_memory_profiler", GeneralConfig.MODEL_MEMORY_PROFILER));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.import_performance_log", GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.animation_frame_profiler", GeneralConfig.ANIMATION_FRAME_PROFILER));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.config.warn_repeated_animation_evaluation", GeneralConfig.WARN_REPEATED_ANIMATION_EVALUATION));
         rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.show_model_id_first", GeneralConfig.SHOW_MODEL_ID_FIRST));
         rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_disabled", LoadingStateConfig.DISABLE_LOADING_STATE_SCREEN));
         rows.add(loadingPositionRow(ModelPanelState.SettingGroup.MISC));
@@ -1717,7 +1937,7 @@ public class ModernPlayerModelScreen extends Screen {
         return new SettingRow(group, labelKey, current, "", () -> {
             value.set(!safeBool(value));
             value.save();
-        }, null, null, null);
+        }, null, null, null, null);
     }
 
     private SettingRow invertedBool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value) {
@@ -1725,13 +1945,17 @@ public class ModernPlayerModelScreen extends Screen {
         return new SettingRow(group, labelKey, current, "", () -> {
             value.set(!safeBool(value));
             value.save();
-        }, null, null, null);
+        }, null, null, null, null);
     }
 
     private SettingRow actionRow(ModelPanelState.SettingGroup group, String labelKey, Runnable action) {
         return new SettingRow(group, labelKey, null,
                 Component.translatable("gui.sparkle_morpher.model_panel.setting.configure").getString(),
-                action, null, null, null);
+                action, null, null, null, null);
+    }
+
+    private SettingRow section(ModelPanelState.SettingGroup group, String sectionKey) {
+        return new SettingRow(group, sectionKey, null, "", null, null, null, null, sectionKey);
     }
 
     private SettingRow privacyModeRow(ModelPanelState.SettingGroup group) {
@@ -1741,7 +1965,7 @@ public class ModernPlayerModelScreen extends Screen {
             GeneralConfig.PRIVACY_MODE.set(enabled);
             GeneralConfig.PRIVACY_MODE.save();
             PrivacyMode.onConfigChanged(enabled);
-        }, null, null, null);
+        }, null, null, null, null);
     }
 
     private SettingRow intRow(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.IntValue value, int min, int max, int step, String suffix) {
@@ -1754,7 +1978,7 @@ public class ModernPlayerModelScreen extends Screen {
                 () -> {
                     value.set(clamp(current + step, min, max));
                     value.save();
-                }, null);
+                }, null, null);
     }
 
     private SettingRow doubleRow(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.DoubleValue value, double min, double max, double step, String suffix) {
@@ -1767,7 +1991,7 @@ public class ModernPlayerModelScreen extends Screen {
                 () -> {
                     value.set(Math.min(max, current + step));
                     value.save();
-                }, null);
+                }, null, null);
     }
 
     private SettingRow rendererModeRow(ModelPanelState.SettingGroup group) {
@@ -1785,7 +2009,7 @@ public class ModernPlayerModelScreen extends Screen {
                         gpuSelected,
                         () -> setRendererMode(true),
                         () -> setRendererMode(false)
-                ));
+                ), null);
     }
 
     private SettingRow loadingPositionRow(ModelPanelState.SettingGroup group) {
@@ -1808,7 +2032,7 @@ public class ModernPlayerModelScreen extends Screen {
                     LoadingStateConfig.Position next = values[(selected.ordinal() + 1) % values.length];
                     LoadingStateConfig.LOADING_STATE_POSITION.set(next);
                     LoadingStateConfig.LOADING_STATE_POSITION.save();
-                }, null);
+                }, null, null);
     }
 
     private void setRendererMode(boolean useGpuRenderer) {
@@ -2331,7 +2555,7 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
-    private record SettingRow(ModelPanelState.SettingGroup group, String labelKey, Boolean booleanValue, String valueText, Runnable action, Runnable decrement, Runnable increment, SegmentedSetting segmented) {
+    private record SettingRow(ModelPanelState.SettingGroup group, String labelKey, Boolean booleanValue, String valueText, Runnable action, Runnable decrement, Runnable increment, SegmentedSetting segmented, String sectionKey) {
     }
 
     private record SegmentedSetting(Component left, Component right, boolean leftSelected, Runnable leftAction, Runnable rightAction) {
