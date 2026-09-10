@@ -31,6 +31,11 @@ public final class ConfigPolicies {
         return bool(GeneralConfig.DISABLE_MODEL_FACE_CULLING, false);
     }
 
+    /** Developer-options panel-state writeback gate; default false keeps state immutable from the UI. */
+    public static boolean developerStateWriteback() {
+        return bool(GeneralConfig.DEVELOPER_STATE_WRITEBACK, false);
+    }
+
     public static MemoryPolicy memory() {
         return new MemoryPolicy(integer(GeneralConfig.AUDIO_CACHE_MAX_BYTES, 64 * 1024 * 1024),
                 integer(GeneralConfig.MAX_CACHED_GPU_MODELS, 0), bool(GeneralConfig.LAZY_MODEL_LOADING, true),
@@ -79,7 +84,7 @@ public final class ConfigPolicies {
         return new FeaturePolicy(
                 bool(GeneralConfig.EXPERIMENTAL_FALLBACK_ELYTRA_WITHOUT_LOCATOR, false),
                 bool(GeneralConfig.EXPERIMENTAL_ENABLE_ELYTRA_FOR_DEFAULT_AND_MISC_MODELS, false),
-                false, true, false);
+                false, true, bool(GeneralConfig.ANIMATION_ROULETTE_DEBUG_LOG, false));
     }
 
     private static NativeSimdPolicy nativeSimdPolicy(GeneralConfig.NativeSimdPolicy value) {
