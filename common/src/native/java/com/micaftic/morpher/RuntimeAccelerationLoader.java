@@ -66,10 +66,13 @@ public final class RuntimeAccelerationLoader {
             return;
         }
 
-        // 开发 override（§11.2）：跳过 manifest 信任链，但保留 ABI 校验。
+        // 开发 override（§11.2）：默认仍按 manifest 校验内容。native 只暴露 ABI，而剔除
+        // 语义修复（2026-07-01 移除无条件 det<=0 背面剔除）前后 ABI 同为 3，陈旧库无法靠
+        // ABI 识别，会被静默加载并带回「某些角度缺面」。确需加载自编译库时设置
+        // YSM_CORE_LIB_FORCE=1 显式跳过（该路径仍保留 ABI 校验）。
         String override = System.getenv("YSM_CORE_LIB");
         if (!StringUtil.isNullOrEmpty(override)) {
-            if (loadNativeLib(override)) {
+            if (verifyOverrideNative(override) && loadNativeLib(override)) {
                 loaded = true;
             }
             available = true;
@@ -81,6 +84,46 @@ public final class RuntimeAccelerationLoader {
             loaded = true;
         }
         available = true;
+    }
+
+    /**
+     * 校验 YSM_CORE_LIB override 是否为可信发行制品（fail-closed）。
+     *
+     * <p>内容哈希是唯一可靠的身份判据：ABI 在剔除修复前后同为 3，无法区分新旧 native。
+     * 默认要求 override 命中 native-manifest，不匹配即拒绝加载，避免一个陈旧库把已修复的
+     * 背面剔除缺陷静默带回来。确需加载自编译库时设置 {@code YSM_CORE_LIB_FORCE=1}。
+     */
+    private static boolean verifyOverrideNative(@NotNull String overridePath) {
+        if ("1".equals(System.getenv("YSM_CORE_LIB_FORCE"))) {
+            YesSteveModel.LOGGER.warn("YSM_CORE_LIB_FORCE=1: skipping manifest verification for native override {}", overridePath);
+            return true;
+        }
+        TargetPlatform platform = resolvePlatform();
+        NativeArtifact artifact = platform == null ? null : loadManifestArtifact(platform.resDir);
+        Path file = Path.of(overridePath);
+        if (artifact != null && NativeArtifactVerifier.verify(file, artifact)) {
+            YesSteveModel.LOGGER.info("Native override verified against native-manifest version={} platform={}",
+                    artifact.version(), platform.resDir);
+            return true;
+        }
+        String detail;
+        if (artifact == null) {
+            detail = "native-manifest unavailable for the current platform";
+        } else {
+            String actual;
+            try {
+                actual = Files.isRegularFile(file) ? NativeArtifactVerifier.sha256(file) : "<file not found>";
+            } catch (IOException e) {
+                actual = "<unreadable: " + e.getMessage() + ">";
+            }
+            detail = "expected sha256 " + artifact.sha256() + ", got " + actual;
+        }
+        String msg = "YSM_CORE_LIB override is not a trusted Sparkle Morpher native build (" + detail + "): "
+                + overridePath + ". Refusing to load a stale or unknown native library. "
+                + "Set YSM_CORE_LIB_FORCE=1 only if you built it yourself.";
+        YesSteveModel.LOGGER.error("Failed native trust chain: {}", msg);
+        setUnsatisfiedRuntimeError(msg);
+        return false;
     }
 
     private static @Nullable String extractAndGetLibPath() throws IOException {
@@ -108,7 +151,13 @@ public final class RuntimeAccelerationLoader {
 
         // 已安装且 digest 匹配 → 直接复用（不重写、不联网）。
         if (Files.isRegularFile(targetFile) && NativeArtifactVerifier.verify(targetFile, artifact)) {
+            YesSteveModel.LOGGER.info("Reusing cached native {} (manifest version={})", targetFile, artifact.version());
             return targetFile.toString();
+        }
+        if (Files.isRegularFile(targetFile)) {
+            // 陈旧/损坏的缓存：旧库可能仍带 2026-07-01 之前的无条件背面剔除，必须重装。
+            YesSteveModel.LOGGER.warn("Cached native at {} does not match the shipped manifest (version={}); re-installing to avoid loading a stale build",
+                    targetFile, artifact.version());
         }
 
         byte[] data = readResource(platform.getResourcePath());
