@@ -50,8 +50,9 @@ public final class RenderBackendDecision {
         if (backendMode == SmRenderBackendMode.DISABLED_GPU_ACCELERATION) {
             return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "raw OpenGL GPU acceleration disabled by backend mode");
         }
-        if (VersionAdapters.current().supportsBlaze3dGpuPipeline()
-                && isVulkanBlaze3DBackend(graphicsBackend) && Blaze3DRenderPath.isExperimentalEnabled()) {
+        if (supportsBlaze3DPortablePath(SmGraphicsCapabilities.current(),
+                        VersionAdapters.current().supportsBlaze3dGpuPipeline())
+                && Blaze3DRenderPath.isExperimentalEnabled()) {
             if (!allowDirectGpuRenderer) {
                 return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled by caller");
             }
@@ -61,9 +62,8 @@ public final class RenderBackendDecision {
             if (model.bakedBones == null || model.bakedBones.isEmpty()) {
                 return new RenderBackendDecision(Backend.JAVA, "java fallback: no baked bones");
             }
-            if (translucentTexture) {
-                return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU unsupported translucent texture");
-            }
+            // Blaze3D handles translucent models via TRANSLUCENT_PIPELINE (entity-translucent
+            // blend state), so translucent textures are no longer rejected here.
             if (disableGlow) {
                 return nativeOrJava(nativePolicy, conservativeRenderOnly, isPreview, firstPerson, translucentTexture, compatibilityRenderer, disableGlow, "Blaze3D GPU disabled by shaderpack glow compatibility");
             }
@@ -138,8 +138,18 @@ public final class RenderBackendDecision {
         return new RenderBackendDecision(Backend.GPU, OculusCompat.isShaderPackInUse() ? "gpu iris path" : "gpu direct path");
     }
 
-    static boolean isVulkanBlaze3DBackend(SmGraphicsBackend graphicsBackend) {
-        return graphicsBackend == SmGraphicsBackend.VULKAN;
+    /**
+     * RULE-GFX-5：按能力而非后端名字决定是否走 Blaze3D portable 路径。
+     *
+     * <p>条件是「本版本提供 Blaze3D 管线」+「设备支持 portable pipeline」+「当前无法使用
+     * raw OpenGL 直绘」。最后一项保证 OpenGL 后端继续走它更快的 raw GL 快路径，而
+     * Vulkan 等没有 raw GL 的后端改走 backend-neutral 的 Blaze3D——这正是历史
+     * {@code backend == VULKAN} 判断想表达的语义，但不依赖后端名字。</p>
+     */
+    static boolean supportsBlaze3DPortablePath(SmGraphicsCapabilities capabilities, boolean blaze3dVersionSupported) {
+        return blaze3dVersionSupported
+                && capabilities.supportsPortablePipeline()
+                && !capabilities.supportsRawOpenGl();
     }
 
     private static RenderBackendDecision nativeOrJava(

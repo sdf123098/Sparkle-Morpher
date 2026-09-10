@@ -5,6 +5,7 @@ import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
 import com.mojang.blaze3d.IndexType;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -73,9 +74,6 @@ public final class Blaze3DRenderPath {
         if (!isExperimentalEnabled()) {
             return false;
         }
-        if (translucentTexture) {
-            return false;
-        }
         if (!hasStableGraphicsApi()) {
             if (warnedIncompleteDrawPath.compareAndSet(false, true)) {
                 GpuDebugLog.warn("Blaze3D render path unavailable: stable 26.2 graphics API probe failed");
@@ -90,6 +88,9 @@ public final class Blaze3DRenderPath {
             if (mc == null || device == null || model.bakedBones == null || model.bakedBones.isEmpty()) {
                 return false;
             }
+
+            // Precompile both skinning pipelines once, off the first-draw hot path.
+            Blaze3DBoneSkinPipeline.precompile(device);
 
             Blaze3DModelMesh mesh = getOrBuildMesh(model);
             if (mesh == null) {
@@ -140,14 +141,22 @@ public final class Blaze3DRenderPath {
                     IDENTITY_MATRIX
             );
 
+            // Translucent models use the entity-translucent blend pipeline; the mesh and
+            // bone-buffer path are identical, only the blend state/shader differ.
+            RenderPipeline pipeline = translucentTexture
+                    ? Blaze3DBoneSkinPipeline.TRANSLUCENT_PIPELINE
+                    : Blaze3DBoneSkinPipeline.PIPELINE;
+
             try (RenderPass pass = encoder.createRenderPass(
-                    () -> "sparkle_morpher_blaze3d_model",
+                    () -> translucentTexture
+                            ? "sparkle_morpher_blaze3d_model_translucent"
+                            : "sparkle_morpher_blaze3d_model",
                     target.getColorTextureView(),
                     Optional.empty(),
                     target.getDepthTextureView(),
                     OptionalDouble.empty()
             )) {
-                pass.setPipeline(Blaze3DBoneSkinPipeline.PIPELINE);
+                pass.setPipeline(pipeline);
                 RenderSystem.bindDefaultUniforms(pass);
                 pass.setUniform("DynamicTransforms", dynamicTransforms);
                 pass.setUniform("BoneMatrices", mesh.boneMatrixSlice());
