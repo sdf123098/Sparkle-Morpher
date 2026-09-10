@@ -9,7 +9,13 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Regression contract: roulette geometry must be recorded by GuiGraphicsExtractor. */
+/**
+ * Regression contract: roulette geometry must be recorded by GuiGraphicsExtractor.
+ *
+ * <p>The legacy immediate-draw helpers ({@code PieShader}, {@code PiePortableRenderPath})
+ * were removed as dead code in 1.2.5, so this guard now only needs to catch a
+ * reintroduced raw OpenGL draw or a lost extractor-recorded fallback.</p>
+ */
 class RouletteRenderPathContractTest {
 
     @Test
@@ -18,10 +24,6 @@ class RouletteRenderPathContractTest {
                 Path.of("common", "src", "main", "java", "com", "micaftic", "morpher", "core", "gpu", "Pie.java"),
                 Path.of("src", "main", "java", "com", "micaftic", "morpher", "core", "gpu", "Pie.java")));
 
-        assertFalse(source.contains("PiePortableRenderPath.tryDraw"),
-                "Pie must not submit a direct Blaze3D pass from extractRenderState");
-        assertFalse(source.contains("PieShader.ensureCompiled"),
-                "Pie must not compile/use the immediate shader path from extractRenderState");
         assertFalse(source.contains("GL11.glDrawArrays"),
                 "Pie must not issue Raw OpenGL draw calls from extractRenderState");
         assertTrue(source.contains("drawFallback(graphics, centerX, centerY, innerRadius, outerRadius, startAngle, endAngle, rgba)"),
