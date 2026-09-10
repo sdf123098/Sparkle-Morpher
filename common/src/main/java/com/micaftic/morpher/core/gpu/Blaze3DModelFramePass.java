@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.render.RenderContext;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
@@ -61,6 +62,9 @@ public final class Blaze3DModelFramePass {
 
     private static final AtomicBoolean warnedSubmitFailure = new AtomicBoolean(false);
     private static final AtomicBoolean warnedRenderFailure = new AtomicBoolean(false);
+    /** 一次性状态日志标记：让用户在默认日志级别就能确认本通道是否真的生效（不受 gpuDebugLog 门控）。 */
+    private static final AtomicBoolean reportedFirstTakeover = new AtomicBoolean(false);
+    private static final AtomicBoolean reportedFirstDraw = new AtomicBoolean(false);
 
     private Blaze3DModelFramePass() {
     }
@@ -129,6 +133,10 @@ public final class Blaze3DModelFramePass {
                 return false;
             }
 
+            if (reportedFirstTakeover.compareAndSet(false, true)) {
+                YesSteveModel.LOGGER.info("[SM-BLAZE3D] in-pipeline GPU draw is ACTIVE (config EnableBlaze3DInPipelineDraw=on); draws are registered at submit time and executed by a {} pass. Deferred draws are not submitted to the collector, so glow/outline entities and transparent models still use the normal path.",
+                        PASS_NAME);
+            }
             PENDING.add(new Draw(
                     model,
                     pose.copy(),   // 提交阶段之后 Pose 会被复用，必须立即深拷贝
@@ -178,6 +186,9 @@ public final class Blaze3DModelFramePass {
     private static void renderAll() {
         if (PENDING.isEmpty()) {
             return;
+        }
+        if (reportedFirstDraw.compareAndSet(false, true)) {
+            YesSteveModel.LOGGER.info("[SM-BLAZE3D] in-pipeline pass executed: {} deferred draw(s) rendering via Blaze3DRenderPath", PENDING.size());
         }
         try {
             for (Draw draw : PENDING) {
