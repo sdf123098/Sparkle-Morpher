@@ -5,6 +5,7 @@ import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
+import com.micaftic.morpher.core.gpu.Blaze3DModelFramePass;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.util.Color;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
@@ -57,6 +58,19 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             ModelRendererBridge.BoneRenderPass basePass = splitEmissiveBones
                     ? ModelRendererBridge.BoneRenderPass.NON_GLOW
                     : ModelRendererBridge.BoneRenderPass.ALL;
+            // 1.2.5 §20 Level A：开启时把 GPU 蒙皮绘制登记为延迟绘制，由模组自己的 framegraph
+            // pass 在正确时机执行，而不是在提交阶段直接建 pass 画主目标。默认关闭（系统属性门控），
+            // 关闭时 tryDefer 恒 false，下面走原提交路径，行为不变。
+            // 要求非发光拆分（basePass=ALL）——GLOW/NON_GLOW 需要两趟 pass，首启不接管。
+            if (basePass == ModelRendererBridge.BoneRenderPass.ALL
+                    && Blaze3DModelFramePass.tryDefer(
+                            model.getGeoModel(), poseStack.last(), matrixData, absPivotData,
+                            i, 0, i2, i3, f2, f3, f4, f5, textureLocation,
+                            animatable.getEntity() instanceof net.minecraft.world.entity.Entity deferredEntity
+                                    && deferredEntity.isCurrentlyGlowing())) {
+                setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
+                return;
+            }
             collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) ->
                     renderSubmittedGeometry(collector, buffer, pose, model, matrixData, absPivotData, i, i2, i3,
                             f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode,
