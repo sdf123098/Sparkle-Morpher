@@ -8,10 +8,13 @@ import com.mojang.blaze3d.pipeline.ColorTargetState;
 import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class Blaze3DBoneSkinPipeline {
     static final Identifier SHADER = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "core/blaze3d_bone_skin");
@@ -26,6 +29,30 @@ public final class Blaze3DBoneSkinPipeline {
     public static final RenderPipeline TRANSLUCENT_PIPELINE = buildPipeline(
             com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/blaze3d_bone_skin_translucent"),
             TRANSLUCENT_SHADER, new ColorTargetState(BlendFunction.TRANSLUCENT));
+
+    private static final AtomicBoolean pipelinesPrecompiled = new AtomicBoolean(false);
+    private static final AtomicBoolean precompileWarned = new AtomicBoolean(false);
+
+    /**
+     * 预热两条骨骼皮肤管线，避免首次使用时在渲染热路径上编译。
+     *
+     * <p>必须在渲染线程调用（{@link GpuDevice} 已就绪）。失败不影响后续渲染——
+     * {@code setPipeline} 仍会惰性编译；失败时保留重试（成功前每帧重试，日志只打一次）。</p>
+     */
+    public static void precompile(GpuDevice device) {
+        if (device == null || pipelinesPrecompiled.get()) {
+            return;
+        }
+        try {
+            device.precompilePipeline(PIPELINE);
+            device.precompilePipeline(TRANSLUCENT_PIPELINE);
+            pipelinesPrecompiled.set(true);
+        } catch (Throwable t) {
+            if (precompileWarned.compareAndSet(false, true)) {
+                GpuDebugLog.warn("Blaze3D pipeline precompile failed (will retry lazily): {}", t.toString());
+            }
+        }
+    }
 
     private static RenderPipeline buildPipeline(Identifier location, Identifier fragmentShader,
                                                 ColorTargetState colorTargetState) {
