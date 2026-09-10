@@ -204,7 +204,6 @@ public class ModelRendererBridge {
         Matrix3f rootNormalMC = pose.normal();
         Matrix4f identityMat = scratch.identityMat.identity();
         Matrix4f globalBoneMat = scratch.globalBoneMat;
-        Matrix4f projBoneMat = scratch.projBoneMat;
         Matrix3f localNormalMat = scratch.localNormalMat;
         Matrix3f globalNormalMat = scratch.globalNormalMat;
         Vector4f tempPos = scratch.tempPos;
@@ -252,7 +251,6 @@ public class ModelRendererBridge {
 
             Matrix4f localBoneMat = boneLocalTransforms[i];
             globalBoneMat.set(rootPoseMat).mul(localBoneMat);
-            projBoneMat.identity().mul(globalBoneMat);
 
             // Compute global normal matrix.
             localBoneMat.normal(localNormalMat);
@@ -527,7 +525,6 @@ public class ModelRendererBridge {
     private static final class RenderScratch {
         final Matrix4f identityMat = new Matrix4f();
         final Matrix4f globalBoneMat = new Matrix4f();
-        final Matrix4f projBoneMat = new Matrix4f();
         final Matrix3f localNormalMat = new Matrix3f();
         final Matrix3f globalNormalMat = new Matrix3f();
         final Vector4f tempPos = new Vector4f();
