@@ -12,6 +12,7 @@ import com.micaftic.morpher.client.entity.PlayerEntityFrameState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
+import com.micaftic.morpher.client.render.PlayerFrameSnapshot;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
@@ -61,9 +62,9 @@ public final class PlayerCapability extends CustomPlayerEntity {
 
     private boolean pendingLocalSettingsRestore;
 
-    private volatile RenderStateSnapshot capturedRenderState;
+    private volatile PlayerFrameSnapshot capturedRenderState;
 
-    private final ThreadLocal<RenderStateSnapshot> activeRenderState = new ThreadLocal<>();
+    private final ThreadLocal<PlayerFrameSnapshot> activeRenderState = new ThreadLocal<>();
 
     public PlayerCapability(Player player) {
         super(player, player instanceof LocalPlayer, true);
@@ -104,8 +105,8 @@ public final class PlayerCapability extends CustomPlayerEntity {
      * World head yaw/pitch comes from mouse look and must not leak into this render state.
      */
     public void beginOldHudRenderState(float entityYaw, float partialTick) {
-        partialTick = sanitizePartialTick(partialTick);
-        this.activeRenderState.set(new RenderStateSnapshot(
+        partialTick = PlayerFrameSnapshot.sanitizePartialTick(partialTick);
+        this.activeRenderState.set(new PlayerFrameSnapshot(
                 this.entity.walkAnimation.speed(partialTick),
                 this.entity.walkAnimation.position(partialTick),
                 entityYaw,
@@ -115,7 +116,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
     }
 
     public void beginCapturedRenderState() {
-        RenderStateSnapshot snapshot = this.capturedRenderState;
+        PlayerFrameSnapshot snapshot = this.capturedRenderState;
         if (snapshot == null) {
             snapshot = createRenderState(Mth.rotLerp(0.0f, this.entity.yBodyRotO, this.entity.yBodyRot), 0.0f);
         }
@@ -131,33 +132,33 @@ public final class PlayerCapability extends CustomPlayerEntity {
     }
 
     public float getRenderStateWalkAnimationSpeed() {
-        RenderStateSnapshot snapshot = this.activeRenderState.get();
+        PlayerFrameSnapshot snapshot = this.activeRenderState.get();
         return snapshot == null ? 0.0f : snapshot.walkAnimationSpeed();
     }
 
     public float getRenderStateWalkAnimationPos() {
-        RenderStateSnapshot snapshot = this.activeRenderState.get();
+        PlayerFrameSnapshot snapshot = this.activeRenderState.get();
         return snapshot == null ? 0.0f : snapshot.walkAnimationPos();
     }
 
     public float getRenderStateBodyRot() {
-        RenderStateSnapshot snapshot = this.activeRenderState.get();
+        PlayerFrameSnapshot snapshot = this.activeRenderState.get();
         return snapshot == null ? 0.0f : snapshot.bodyRot();
     }
 
     public float getRenderStateNetHeadYaw() {
-        RenderStateSnapshot snapshot = this.activeRenderState.get();
+        PlayerFrameSnapshot snapshot = this.activeRenderState.get();
         return snapshot == null ? 0.0f : snapshot.netHeadYaw();
     }
 
     public float getRenderStateHeadPitch() {
-        RenderStateSnapshot snapshot = this.activeRenderState.get();
+        PlayerFrameSnapshot snapshot = this.activeRenderState.get();
         return snapshot == null ? 0.0f : snapshot.headPitch();
     }
 
-    private RenderStateSnapshot createRenderState(float entityYaw, float partialTick) {
-        partialTick = sanitizePartialTick(partialTick);
-        return new RenderStateSnapshot(
+    private PlayerFrameSnapshot createRenderState(float entityYaw, float partialTick) {
+        partialTick = PlayerFrameSnapshot.sanitizePartialTick(partialTick);
+        return new PlayerFrameSnapshot(
                 this.entity.walkAnimation.speed(partialTick),
                 this.entity.walkAnimation.position(partialTick),
                 entityYaw,
@@ -166,12 +167,6 @@ public final class PlayerCapability extends CustomPlayerEntity {
         );
     }
 
-    private static float sanitizePartialTick(float partialTick) {
-        if (!Float.isFinite(partialTick)) {
-            return 0.0f;
-        }
-        return Mth.clamp(partialTick, 0.0f, 1.0f);
-    }
 
     @Override
     public void onModelLoaded(ModelAssembly context) {
@@ -374,10 +369,4 @@ public final class PlayerCapability extends CustomPlayerEntity {
         }
     }
 
-    private record RenderStateSnapshot(float walkAnimationSpeed,
-                                       float walkAnimationPos,
-                                       float bodyRot,
-                                       float netHeadYaw,
-                                       float headPitch) {
-    }
 }

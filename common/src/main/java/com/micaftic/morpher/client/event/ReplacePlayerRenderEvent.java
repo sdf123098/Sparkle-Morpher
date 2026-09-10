@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.client.render.PlayerRenderPolicy;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.util.CameraUtil;
@@ -25,24 +26,26 @@ public class ReplacePlayerRenderEvent {
             return false;
         }
         LocalPlayer localPlayer = Minecraft.getInstance().player;
-        if (entity.equals(localPlayer) && ConfigPolicies.render().disableSelfModel()) {
-            return false;
-        }
-        if ((!entity.equals(localPlayer) && ConfigPolicies.render().disableOtherModel()) || entity.isSpectator()) {
-            return false;
-        }
         PlayerCapability cap = PlayerCapability.get(entity).orElse(null);
-        if (cap != null && cap.isModelActive()) {
-            if (!CameraUtil.isFirstPerson(cap)
+        boolean firstPersonSuppressionSatisfied = cap != null
+                && (!CameraUtil.isFirstPerson(cap)
                     || FirstPersonCompat.isFirstPersonActive()
                     || RealCameraCompat.isActive()
                     || ConfigPolicies.render().disableExternalFirstPersonAnimation()
-                    || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer)) {
-                float previewYaw = ModelPreviewRenderer.isInventoryPreviewFrontFacing() ? ModelPreviewRenderer.FRONT_FACING_YAW : entityYaw;
-                // Reuse the capability resolved for the render-pre check.
-                RendererManager.getPlayerRenderer().render(cap, previewYaw, partialTick, poseStack, bufferSource, packedLight);
-                return true;
-            }
+                    || !PlayerAnimatorCompat.isPlayerAnimated(localPlayer));
+        PlayerRenderPolicy.Decision decision = PlayerRenderPolicy.decide(new PlayerRenderPolicy.GateInputs(
+                true,
+                entity.equals(localPlayer),
+                ConfigPolicies.render().disableSelfModel(),
+                ConfigPolicies.render().disableOtherModel(),
+                entity.isSpectator(),
+                cap != null && cap.isModelActive(),
+                firstPersonSuppressionSatisfied
+        ));
+        if (decision == PlayerRenderPolicy.Decision.RENDER_CUSTOM) {
+            float previewYaw = ModelPreviewRenderer.isInventoryPreviewFrontFacing() ? ModelPreviewRenderer.FRONT_FACING_YAW : entityYaw;
+            RendererManager.getPlayerRenderer().render(cap, previewYaw, partialTick, poseStack, bufferSource, packedLight);
+            return true;
         }
         return false;
     }
