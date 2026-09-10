@@ -196,6 +196,14 @@ public final class SlashBladeBridge {
 
         SlashBladeBridge instance = INSTANCE;
         try (MSAutoCloser ignored = MSAutoCloser.pushMatrix(poseStack)) {
+            // Recreate the vanilla player-layer space this math was authored in.
+            // LivingEntityRenderer applies scale(-1,-1,1) then translate(0,-1.501,0)
+            // before the layer runs; the geo/YSM layer space has neither, so the
+            // blade (and its sheath) came out mirrored horizontally AND vertically
+            // (issue #25). ZP180 == diag(-1,-1,1); this matches the same compensation
+            // used by CustomPlayerElytraLayer / CustomPlayerParrotLayer.
+            poseStack.translate(0.0f, MOTION_Y_OFFSET, 0.0f);
+            poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
             float comboRot = UserPoseOverrider.getInterpolatedComboRotation(state, livingEntity, partialTick);
             if (comboRot != 0f) {
                 poseStack.mulPose(Axis.YP.rotationDegrees(comboRot));
@@ -237,6 +245,12 @@ public final class SlashBladeBridge {
             .getModel(state.getModel().orElse(DefaultResources.resourceDefaultModel));
 
         try (MSAutoCloser ignored = MSAutoCloser.pushMatrix(poseStack)) {
+            // Same vanilla-layer compensation as renderMainHandBlade: the waist
+            // carry offsets (e.g. +0.25X for DEFAULT/KATANA) were authored in the
+            // vanilla space with scale(-1,-1,1), which is what maps the sheath to
+            // the LEFT waist. Without it the sheath lands on the right (issue #25).
+            poseStack.translate(0.0f, MOTION_Y_OFFSET, 0.0f);
+            poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
             poseStack.translate(0, 1.5f, 0);
             CarryType carryType = state.getCarryType();
             Minecraft minecraft = Minecraft.getInstance();

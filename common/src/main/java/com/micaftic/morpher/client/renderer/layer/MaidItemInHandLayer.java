@@ -1,6 +1,8 @@
 package com.micaftic.morpher.client.renderer.layer;
 
 import com.micaftic.morpher.client.model.HandLocatorProfile;
+import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
+import com.micaftic.morpher.core.compat.slashblade.SlashBladeRenderer;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.geo.GeoLayerRenderer;
@@ -50,8 +52,20 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
 
         HandLocatorProfile profile = capability.getModelAssembly().getAnimationBundle().getHandLocatorProfile();
         HumanoidArm mainArm = entity.getMainArm();
-        renderHand(entity, model, profile, mainHand, mainArm, poseStack, bufferSource, packedLight);
-        renderHand(entity, model, profile, offHand, mainArm.getOpposite(), poseStack, bufferSource, packedLight);
+        // SlashBlade renders in entity space (MMD motion driven), not on a hand
+        // bone, and its sheath belongs at the waist. Mirror the player layer's
+        // slashblade branches so maids holding a morph-model blade render it too
+        // (issue #25). These must not be gated on a hand anchor.
+        if (SlashBladeCompat.isSlashBladeItem(mainHand)) {
+            SlashBladeRenderer.renderOnEntity(entity, model, poseStack, bufferSource, packedLight, mainHand, partialTick);
+        } else {
+            renderHand(entity, model, profile, mainHand, mainArm, poseStack, bufferSource, packedLight);
+        }
+        if (SlashBladeCompat.isSlashBladeItem(offHand)) {
+            SlashBladeRenderer.renderRightWaist(model, entity, poseStack, bufferSource, packedLight, offHand);
+        } else {
+            renderHand(entity, model, profile, offHand, mainArm.getOpposite(), poseStack, bufferSource, packedLight);
+        }
     }
 
     private void renderHand(LivingEntity entity, AnimatedGeoModel model, HandLocatorProfile profile,
