@@ -34,7 +34,7 @@ public final class RenderBackendDecision {
             Object textureLocation,
             NativeSimdPolicy nativePolicy
     ) {
-        boolean isPreview = com.micaftic.morpher.client.render.RenderContext.isModelPreview();
+        boolean isPreview = com.micaftic.morpher.client.render.RenderContext.isAnyPreview();
         boolean firstPerson = ModelPreviewRenderer.isFirstPerson();
         boolean worldRender = ModelPreviewRenderer.isWorldRender();
         boolean hasSubmitContext = VersionAdapters.current().supportsSubmitNodeCollector() && SubmitRenderContext.get() != null;
