@@ -64,7 +64,8 @@ final class OfficialTouhouLittleMaidCompat {
                 return;
             }
             InputUtil.setScreen(new ModernPlayerModelScreen(InputUtil.getCurrentScreen(),
-                    (modelId, texture) -> applyModel(maid, modelId, texture)));
+                    (modelId, texture) -> applyModel(maid, modelId, texture),
+                    "maid:" + maid.getUUID()));
         } catch (Throwable ignored) {
             // The event is optional and must never affect the maid screen.
         }
