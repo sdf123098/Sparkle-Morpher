@@ -74,8 +74,6 @@ public final class ModelPreviewRenderer {
 
     private static final double MODEL_PREVIEW_Z = 50.0d;
 
-    private static final ThreadLocal<Boolean> PREVIEW_MODE = ThreadLocal.withInitial(() -> false);
-
     // Animation evaluation runs on worker threads during a world render. Unlike the preview
     // modes, this frame-scoped flag must therefore be visible across threads.
     private static volatile boolean worldRenderMode;
@@ -120,11 +118,11 @@ public final class ModelPreviewRenderer {
     }
 
     public static void setPreviewMode(boolean previewMode) {
-        PREVIEW_MODE.set(previewMode);
+        RenderContext.setModelPreview(previewMode);
     }
 
     public static boolean isPreview() {
-        return PREVIEW_MODE.get();
+        return RenderContext.isModelPreview();
     }
 
     /** 兼容便捷方法：进入/退出额外玩家渲染阶段（内部走 RenderContext，替代 EXTRA_PLAYER_MODE ThreadLocal）。 */
