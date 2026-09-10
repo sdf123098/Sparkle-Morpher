@@ -81,8 +81,6 @@ public final class ModelPreviewRenderer {
     private static final ThreadLocal<Boolean> PREVIEW_MODE = ThreadLocal.withInitial(() -> false);
 
 
-    private static final ThreadLocal<Boolean> FIRST_PERSON_MODE = ThreadLocal.withInitial(() -> false);
-
     // Animation evaluation runs on worker threads during a world render. Unlike the preview
     // modes, this frame-scoped flag must therefore be visible across threads.
     private static volatile boolean worldRenderMode;
@@ -160,7 +158,11 @@ public final class ModelPreviewRenderer {
     }
 
     public static void setFirstPersonMode(boolean firstPersonMode) {
-        FIRST_PERSON_MODE.set(firstPersonMode);
+        if (firstPersonMode) {
+            RenderContext.enter(RenderPass.FIRST_PERSON);
+        } else {
+            RenderContext.restore(RenderPass.WORLD);
+        }
     }
 
     public static void setWorldRenderMode(boolean worldRenderMode) {
@@ -172,12 +174,12 @@ public final class ModelPreviewRenderer {
     }
 
     public static boolean isFirstPerson() {
-        return FIRST_PERSON_MODE.get() || OculusCompat.isPBRActive() || FirstPersonCompat.isFirstPersonActive();
+        return RenderContext.isFirstPerson() || OculusCompat.isPBRActive() || FirstPersonCompat.isFirstPersonActive();
     }
 
     public static boolean isFirstPersonOnRenderThread() {
         RenderSystem.assertOnRenderThread();
-        return FIRST_PERSON_MODE.get()
+        return RenderContext.isFirstPerson()
                 && Minecraft.getInstance().options.getCameraType().isFirstPerson()
                 && !FirstPersonCompat.isFirstPersonActive();
     }
