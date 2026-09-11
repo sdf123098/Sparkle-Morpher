@@ -48,8 +48,9 @@ final class ModelPanelLayout {
         int maxHeight = Math.max(1, screenHeight - marginY);
         int panelWidth = clamp(screenWidth - marginX, Math.min(520, maxWidth), Math.min(920, maxWidth));
         int panelHeight = clamp(screenHeight - marginY, Math.min(300, maxHeight), Math.min(540, maxHeight));
-        double guiScale = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScale();
-        boolean verticalTabs = guiScale >= 3.0 || screenHeight < 300 || screenWidth < 430;
+        // 竖排只由逻辑宽高决定：guiScale 是物理/逻辑比值，与可用逻辑空间无关，
+        // 用它当代理会让同一台显示器换个 GUI 缩放就突变布局。
+        boolean verticalTabs = screenHeight < 300 || screenWidth < 430;
         boolean tight = verticalTabs || screenHeight < 400 || screenWidth < 560;
         return new ModelPanelLayout((screenWidth - panelWidth) / 2, (screenHeight - panelHeight) / 2, panelWidth, panelHeight, tight, verticalTabs);
     }
