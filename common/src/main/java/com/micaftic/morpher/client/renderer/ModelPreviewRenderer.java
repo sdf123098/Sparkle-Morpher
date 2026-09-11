@@ -9,6 +9,7 @@ import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.client.animation.AnimationTracker;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.render.RenderContext;
+import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.client.render.RenderPass;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
@@ -659,6 +660,17 @@ public final class ModelPreviewRenderer {
     private static void renderOverlayModel(LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick, MultiBufferSource bufferSource) {
         RenderPass previousPass = RenderContext.enter(RenderPass.OLD_HUD);
         float previewYaw = FRONT_FACING_YAW;
+        // head mode（§22.2）：STRAIGHT（默认）偏移为 0，等价历史行为；FOLLOW 注入玩家真实头部偏移。
+        float headYawOffset = 0.0f;
+        float headYawOffsetO = 0.0f;
+        if (followPlayerHead()) {
+            headYawOffset = getExtraPlayerHeadYawOffset(localPlayer);
+            headYawOffsetO = getExtraPlayerHeadYawOffsetO(localPlayer);
+        }
+        float oldHeadRot = localPlayer.yHeadRot;
+        float oldHeadRotO = localPlayer.yHeadRotO;
+        localPlayer.yHeadRot = previewYaw + headYawOffset;
+        localPlayer.yHeadRotO = previewYaw + headYawOffsetO;
         PoseStack poseStack = new PoseStack();
         try {
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -669,6 +681,14 @@ public final class ModelPreviewRenderer {
             Quaternionf rotationY = Axis.YP.rotationDegrees(yawOffset - FRONT_FACING_YAW + 180.0f);
             rotationZ.mul(rotationY);
             poseStack.mulPose(rotationZ);
+            // 载具对齐（§22.2）：默认关闭（历史行为）；开启时随载具 yaw 对齐，head mode 偏移叠加其上。
+            Entity overlayVehicle = localPlayer.getVehicle();
+            if (overlayVehicle instanceof LivingEntity && alignWithVehicle()) {
+                float vehicleYaw = overlayVehicle.getYRot();
+                poseStack.mulPose(Axis.YP.rotationDegrees(vehicleYaw - previewYaw));
+                localPlayer.yHeadRot = vehicleYaw + headYawOffset;
+                localPlayer.yHeadRotO = vehicleYaw + headYawOffsetO;
+            }
 
             Lighting.setupForEntityInInventory();
             EntityRenderDispatcher entityRenderDispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
@@ -692,9 +712,30 @@ public final class ModelPreviewRenderer {
 
             entityRenderDispatcher.setRenderShadow(true);
         } finally {
+            localPlayer.yHeadRot = oldHeadRot;
+            localPlayer.yHeadRotO = oldHeadRotO;
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
             Lighting.setupFor3DItems();
             RenderContext.restore(previousPass);
+        }
+    }
+    /** head mode（§22.2）：配置未就绪时按默认 STRAIGHT（0 偏移）处理。 */
+    private static boolean followPlayerHead() {
+        try {
+            return ExtraPlayerRenderConfig.CLASSIC_HUD_HEAD_MODE != null
+                    && ExtraPlayerRenderConfig.CLASSIC_HUD_HEAD_MODE.get() == ExtraPlayerRenderConfig.HeadMode.FOLLOW;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /** 载具对齐（§22.2）：配置未就绪时按默认「不对齐」处理。 */
+    private static boolean alignWithVehicle() {
+        try {
+            return ExtraPlayerRenderConfig.CLASSIC_HUD_ALIGN_WITH_VEHICLE != null
+                    && ExtraPlayerRenderConfig.CLASSIC_HUD_ALIGN_WITH_VEHICLE.get();
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 }
