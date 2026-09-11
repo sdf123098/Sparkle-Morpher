@@ -51,6 +51,12 @@ final class ModelPanelState {
     int sitesScroll;
     int categoryScroll;
     boolean compactPreviewExpanded;
+    /**
+     * 模型选择页的展示偏好：AUTO 面积自适应 / CARDS 强制卡片 / LIST 强制文字网格。
+     * {@code pickerStylePinned} 表示用户已显式切换过，之后不再被配置默认值覆盖。
+     */
+    ModelPickerLayout.Style pickerStyle = ModelPickerLayout.Style.AUTO;
+    boolean pickerStylePinned;
     boolean resourceLoaded;
     boolean resourceLoading;
     int resourceRequestId;
@@ -83,6 +89,8 @@ final class ModelPanelState {
         out.put("sitesScroll", sitesScroll);
         out.put("categoryScroll", categoryScroll);
         out.put("compactPreviewExpanded", compactPreviewExpanded);
+        out.put("pickerStyle", pickerStyle.name());
+        out.put("pickerStylePinned", pickerStylePinned);
         out.put("resourceLoaded", resourceLoaded);
         out.put("resourceLoading", resourceLoading);
         out.put("resourceRequestId", resourceRequestId);
@@ -104,6 +112,7 @@ final class ModelPanelState {
             switch (k) {
                 case "activeTab" -> requireEnum(Tab.class, v, k, errors);
                 case "modelFilter" -> requireEnum(ModelFilter.class, v, k, errors);
+                case "pickerStyle" -> requireEnum(ModelPickerLayout.Style.class, v, k, errors);
                 case "settingGroup" -> requireEnum(SettingGroup.class, v, k, errors);
                 case "secondaryPanel" -> {
                     requireEnum(SecondaryPanel.class, v, k, errors);
@@ -112,7 +121,7 @@ final class ModelPanelState {
                     }
                 }
                 case "multiSelectMode", "resourceMultiSelectMode", "compactPreviewExpanded",
-                     "resourceLoaded", "resourceLoading" -> requireBool(v, k, errors);
+                     "pickerStylePinned", "resourceLoaded", "resourceLoading" -> requireBool(v, k, errors);
                 case "modelScroll", "resourceScroll", "settingsScroll", "sitesScroll",
                      "categoryScroll", "resourceRequestId" -> requireNonNegativeInt(v, k, errors);
                 case "modelSearchText", "resourceSearchText", "siteEditText", "categoryEditText",
@@ -144,6 +153,8 @@ final class ModelPanelState {
                 case "multiSelectMode" -> multiSelectMode = Boolean.parseBoolean(v);
                 case "resourceMultiSelectMode" -> resourceMultiSelectMode = Boolean.parseBoolean(v);
                 case "compactPreviewExpanded" -> compactPreviewExpanded = Boolean.parseBoolean(v);
+                case "pickerStyle" -> pickerStyle = ModelPickerLayout.Style.valueOf(v.toUpperCase(java.util.Locale.ROOT));
+                case "pickerStylePinned" -> pickerStylePinned = Boolean.parseBoolean(v);
                 case "resourceLoaded" -> resourceLoaded = Boolean.parseBoolean(v);
                 case "resourceLoading" -> resourceLoading = Boolean.parseBoolean(v);
                 case "modelScroll" -> modelScroll = Integer.parseInt(v);
