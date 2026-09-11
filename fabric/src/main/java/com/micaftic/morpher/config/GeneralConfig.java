@@ -27,6 +27,8 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue SHOW_MODEL_ID_FIRST;
 
+    public static ModConfigSpec.EnumValue<ModelPickerStyle> MODEL_PICKER_STYLE;
+
     public static ModConfigSpec.BooleanValue SOPHISTICATEDBACKPACK;
 
     public static ModConfigSpec.BooleanValue PARCOOL;
@@ -138,6 +140,18 @@ public class GeneralConfig {
         CRASH_TEST
     }
 
+    /**
+     * 模型选择页的展示偏好默认值（可用模型页工具栏按钮当场覆盖，覆盖后不再回读本项）。
+     * AUTO  - 列表区面积够就画 3D 卡片、不够自动回退图标+文字网格（默认）。
+     * CARDS - 强制卡片目录；面积不足时放宽到 1×1 并改用滚动，仅在完全放不下时回退。
+     * LIST  - 强制经典图标+文字网格（低配 / 怀旧）。
+     */
+    public enum ModelPickerStyle {
+        AUTO,
+        CARDS,
+        LIST
+    }
+
     public static boolean safeGet(ModConfigSpec.BooleanValue value) {
         return safeGet(value, false);
     }
@@ -207,6 +221,8 @@ public class GeneralConfig {
         SOUND_VOLUME = builder.defineInRange("SoundVolume", 100.0d, 0.0d, 100.0d);
         builder.comment("Whether to display model ID first in the model selection screen, instead of the model name filled in by the model author.");
         SHOW_MODEL_ID_FIRST = builder.define("ShowModelIdFirst", false);
+        builder.comment("Default presentation of the model selection grid. AUTO shows 3D cards when the list area is big enough and falls back to the classic icon+text grid otherwise. CARDS forces the card catalog (falls back only when not even one readable card fits). LIST forces the classic grid.");
+        MODEL_PICKER_STYLE = builder.defineEnum("ModelPickerStyle", ModelPickerStyle.AUTO);
         builder.pop();
         builder.push("Integration");
         SOPHISTICATEDBACKPACK = builder.define("SophisticatedBackpack", true);
