@@ -15,15 +15,24 @@ class ClassicHudInputDirectionContractTest {
 
     @Test
     void classicHudPreviewDoesNotReplaceEntityViewYawBeforeAnimationEvaluation() throws IOException {
-        Path source = Path.of("common/src/main/java/com/micaftic/morpher/client/renderer/ModelPreviewRenderer.java");
+        // 1.2.6 Slice C: the GUI/HUD preview draw moved out of ModelPreviewRenderer into
+        // GuiModelRenderer; scan the new owner, falling back to the old location for any
+        // branch that has not yet received the split.
+        Path source = Path.of("common/src/main/java/com/micaftic/morpher/client/renderer/preview/GuiModelRenderer.java");
+        if (!Files.isRegularFile(source)) {
+            source = Path.of("../common/src/main/java/com/micaftic/morpher/client/renderer/preview/GuiModelRenderer.java");
+        }
+        if (!Files.isRegularFile(source)) {
+            source = Path.of("src/main/java/com/micaftic/morpher/client/renderer/preview/GuiModelRenderer.java");
+        }
+        if (!Files.isRegularFile(source)) {
+            source = Path.of("common/src/main/java/com/micaftic/morpher/client/renderer/ModelPreviewRenderer.java");
+        }
         if (!Files.isRegularFile(source)) {
             source = Path.of("../common/src/main/java/com/micaftic/morpher/client/renderer/ModelPreviewRenderer.java");
         }
         if (!Files.isRegularFile(source)) {
             source = Path.of("src/main/java/com/micaftic/morpher/client/renderer/ModelPreviewRenderer.java");
-        }
-        if (!Files.isRegularFile(source)) {
-            source = Path.of("../src/main/java/com/micaftic/morpher/client/renderer/ModelPreviewRenderer.java");
         }
 
         String text = Files.readString(source, StandardCharsets.UTF_8);
@@ -33,13 +42,13 @@ class ClassicHudInputDirectionContractTest {
                 "classic HUD preview method must remain present");
 
         String method = text.substring(methodStart, methodEnd);
-        assertTrue(method.contains("livingEntity.yBodyRot = displayYaw"),
+        assertTrue(method.contains("livingEntity.yBodyRot = previewYaw"),
                 "classic HUD must keep its presentation body rotation");
         assertTrue(method.contains("renderer.renderEntity(animatable"),
                 "classic HUD must render the animated entity");
-        assertFalse(method.contains("livingEntity.setYRot(displayYaw)"),
+        assertFalse(method.contains("livingEntity.setYRot(previewYaw)"),
                 "classic HUD must not replace the entity view yaw used by input_vertical");
-        assertFalse(method.contains("livingEntity.yRotO = displayYaw"),
+        assertFalse(method.contains("livingEntity.yRotO = previewYaw"),
                 "classic HUD must not replace the previous entity view yaw used by input_vertical");
     }
 }
