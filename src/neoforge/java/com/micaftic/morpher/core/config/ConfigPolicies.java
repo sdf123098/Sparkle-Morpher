@@ -21,6 +21,14 @@ public final class ConfigPolicies {
     public static boolean developerStateWriteback() {
         return bool(GeneralConfig.DEVELOPER_STATE_WRITEBACK, false);
     }
+    /**
+     * Model picker presentation default. The model screen seeds its per-session style from this
+     * once and afterwards remembers the user's in-screen override.
+     */
+    public static GeneralConfig.ModelPickerStyle modelPickerStyle() {
+        GeneralConfig.ModelPickerStyle style = value(GeneralConfig.MODEL_PICKER_STYLE, GeneralConfig.ModelPickerStyle.AUTO);
+        return style == null ? GeneralConfig.ModelPickerStyle.AUTO : style;
+    }
 
     public static MemoryPolicy memory() { return new MemoryPolicy(integer(GeneralConfig.AUDIO_CACHE_MAX_BYTES, 64 * 1024 * 1024), integer(GeneralConfig.MAX_CACHED_GPU_MODELS, 24), bool(GeneralConfig.LAZY_MODEL_LOADING, true), integer(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 64), integer(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300)); }
     public static DiagnosticsPolicy diagnostics() { return new DiagnosticsPolicy(bool(GeneralConfig.ANIMATION_FRAME_PROFILER, false), bool(GeneralConfig.ANIMATION_DEBUG_LOG, false), bool(GeneralConfig.WARN_REPEATED_ANIMATION_EVALUATION, true), bool(GeneralConfig.RESOURCE_STATION_MONITOR_LOG, false), bool(GeneralConfig.NETWORK_ONLINE_DEBUG_LOG, false), bool(GeneralConfig.MODEL_MEMORY_PROFILER, false), bool(GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG, false), bool(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)); }

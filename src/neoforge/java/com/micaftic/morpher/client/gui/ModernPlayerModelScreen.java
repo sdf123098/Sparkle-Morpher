@@ -8,6 +8,7 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.util.SmExecutors;
 import com.micaftic.morpher.client.entity.PlayerPreviewEntity;
+import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
 import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
 import com.micaftic.morpher.client.gui.resource.ResourceDownloadManager;
@@ -15,8 +16,11 @@ import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
+import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
+import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.LoadingStateConfig;
@@ -38,6 +42,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
@@ -56,10 +61,12 @@ import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -90,6 +97,23 @@ public class ModernPlayerModelScreen extends Screen {
     private static final int MODEL_PAGE_BUTTON_WIDTH = 46;
     private static final int MODEL_PAGE_BUTTON_HEIGHT = 18;
     private static final int ICON = 18;
+
+    // ---- 目录卡片（3D 卡片网格）视觉常量 ----
+    private static final int CARD_BASE = 0xFF434242;
+    private static final int CARD_BASE_HOVER = 0xFF505755;
+    private static final int CARD_SELECT = 0xFF58636E;
+    private static final int CARD_FOLDER = 0xFF9B51E0;
+    private static final int CARD_FOLDER_HOVER = 0xFFB17BEA;
+    private static final int CARD_NAME_TEXT = 0xFFF3EFE0;
+    private static final int CARD_DIM = 0x9F222222;
+    private static final int CARD_NAME_BG = 0xC6000000;
+    private static final int CARD_COVER_SHADE = 0x8C000000;
+
+    /**
+     * 卡片封面贴图像素尺寸缓存。键为弱引用，贴图回收后随之失效；
+     * 仅渲染线程读写，用 synchronized 保护跨线程可见性。
+     */
+    private static final java.util.Map<AbstractTexture, int[]> COVER_DIMENSIONS = new WeakHashMap<>();
     private static final ExecutorService RESOURCE_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.MODEL_IO);
 
     private final List<Hit> hits = new ArrayList<>();
@@ -98,6 +122,19 @@ public class ModernPlayerModelScreen extends Screen {
     private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
     private final Queue<ModelImportFilePicker.PickedFile> pendingImports = new ArrayDeque<>();
     private final PlayerPreviewEntity previewEntity = new PlayerPreviewEntity();
+    /**
+     * 卡片网格的实时 3D 预览实体：只有两张——鼠标悬停的那张、当前选中的那张。
+     * 上限刻意压到 2：每张卡的实时预览都是一次完整的模型渲染 + 动画评估，
+     * 引擎没有跨预览批处理也没有共享快照，N 张就是 N 倍开销。
+     */
+    private final PlayerPreviewEntity hoverCardEntity = new PlayerPreviewEntity();
+    private final PlayerPreviewEntity selectedCardEntity = new PlayerPreviewEntity();
+    private String hoverCardModelId = "";
+    private String hoverCardTextureId = "";
+    private String selectedCardModelId = "";
+    private String selectedCardTextureId = "";
+    /** 上一帧实际生效的网格形态；形态变化时重置滚动量（页号与行号语义不通用）。 */
+    private ModelPickerLayout.GridMode lastGridMode;
     private final BiConsumer<String, String> modelSelectionTarget;
     private ModelPanelLayout layout;
     private EditBox modelSearchBox;
@@ -278,6 +315,16 @@ public class ModernPlayerModelScreen extends Screen {
         this.screenGeneration++;
         this.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
         ModelImportFilePicker.cancelPicking();
+        // 释放两张卡片预览实体持有的模型引用；本屏重开时会按需重建。
+        this.hoverCardModelId = "";
+        this.hoverCardTextureId = "";
+        this.selectedCardModelId = "";
+        this.selectedCardTextureId = "";
+        try {
+            this.hoverCardEntity.resetModel();
+            this.selectedCardEntity.resetModel();
+        } catch (Exception ignored) {
+        }
         super.removed();
     }
 
@@ -592,14 +639,81 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderModelGrid(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h) {
         glassPanel(g, x, y, w, h);
-        Set<String> starredModels = starModels();
         List<ModelEntry> entries = collectModelEntries();
-        ModelListMetrics metrics = modelListMetrics(w, h, entries.size());
-        STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
         if (entries.isEmpty()) {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.model_panel.no_models"), x + w / 2, y + h / 2 - 4, MUTED);
             return;
         }
+        ModelPickerLayout.GridMode mode = gridMode(w, h);
+        if (mode == ModelPickerLayout.GridMode.CARDS) {
+            renderModelCards(g, mouseX, mouseY, entries, x, y, w, h);
+            return;
+        }
+        renderModelTextGrid(g, mouseX, mouseY, entries, x, y, w, h);
+    }
+
+    /**
+     * 当前生效的网格形态。形态只在 {@code pickerStyle} 变化或窗口尺寸变化时改变，
+     * 因此在生效形态切换的那一帧重置 {@code modelScroll}——卡片模式下它是页号、
+     * 文字网格下是像素滚动量，二者语义不通用，混用会出现页数错位。
+     */
+    private ModelPickerLayout.GridMode gridMode(int w, int h) {
+        ModelPickerLayout.Style style = pickerStyle();
+        ModelPickerLayout.GridMode mode = ModelPickerLayout.resolve(style, w, h);
+        if (mode != this.lastGridMode) {
+            STATE.modelScroll = 0;
+            this.lastGridMode = mode;
+        }
+        return mode;
+    }
+
+    /** 展示偏好：用户在本屏切换过就以本屏为准，否则读配置默认值。 */
+    private ModelPickerLayout.Style pickerStyle() {
+        if (!STATE.pickerStylePinned) {
+            ModelPickerLayout.Style configured = configuredPickerStyle();
+            if (configured != null) {
+                STATE.pickerStyle = configured;
+                STATE.pickerStylePinned = true;
+            }
+        }
+        return STATE.pickerStyle;
+    }
+
+    private static ModelPickerLayout.Style configuredPickerStyle() {
+        try {
+            GeneralConfig.ModelPickerStyle style = com.micaftic.morpher.core.config.ConfigPolicies.modelPickerStyle();
+            return style == null ? null : ModelPickerLayout.Style.valueOf(style.name());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /** AUTO → CARDS → LIST 循环；切到 LIST 后再次点击回到 AUTO。 */
+    private void cyclePickerStyle() {
+        ModelPickerLayout.Style next = switch (pickerStyle()) {
+            case AUTO -> ModelPickerLayout.Style.CARDS;
+            case CARDS -> ModelPickerLayout.Style.LIST;
+            case LIST -> ModelPickerLayout.Style.AUTO;
+        };
+        STATE.pickerStyle = next;
+        STATE.pickerStylePinned = true;
+        STATE.modelScroll = 0;
+    }
+
+    private Component pickerStyleLabel(ModelPickerLayout.Style style) {
+        String key = switch (style) {
+            case AUTO -> "gui.sparkle_morpher.model_panel.picker.auto";
+            case CARDS -> "gui.sparkle_morpher.model_panel.picker.cards";
+            case LIST -> "gui.sparkle_morpher.model_panel.picker.list";
+        };
+        return Component.translatable(key);
+    }
+
+    /** 经典图标+文字网格（AUTO 面积不足时的降级路径，也是 LIST 强制形态）。 */
+    private void renderModelTextGrid(GuiGraphics g, int mouseX, int mouseY, List<ModelEntry> entries, int x, int y, int w, int h) {
+        Set<String> starredModels = starModels();
+        ModelListMetrics metrics = modelListMetrics(w, h, entries.size());
+        STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
         int start = STATE.modelScroll * metrics.cols();
         for (int i = 0; i < metrics.rows() * metrics.cols() && start + i < entries.size(); i++) {
             ModelEntry entry = entries.get(start + i);
@@ -631,6 +745,285 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
+    /**
+     * 目录卡片网格。整块按可用面积居中；卡片封面优先用文件夹/模型内嵌的 GUI 贴图，
+     * 缺封面时退回图标；实时 3D 小人只画鼠标悬停的那张与当前选中的那张（最多 2 个）。
+     */
+    private void renderModelCards(GuiGraphics g, int mouseX, int mouseY, List<ModelEntry> entries, int x, int y, int w, int h) {
+        ModelPickerLayout.Cards m = ModelPickerLayout.cards(w, h);
+        int pages = m.totalPages(entries.size());
+        STATE.modelScroll = clamp(STATE.modelScroll, 0, pages - 1);
+        int start = STATE.modelScroll * m.capacity();
+        int x0 = x + m.originX(w);
+        int y0 = y + m.originY(h);
+        Set<String> starred = starModels();
+        // 先定位悬停卡，使实时预览只在悬停/选中两张上发生。
+        int hoverIndex = -1;
+        for (int i = 0; i < m.capacity() && start + i < entries.size(); i++) {
+            int r = i / m.cols();
+            int c = i % m.cols();
+            int cx = x0 + c * (m.cellW() + ModelPickerLayout.CARD_GAP);
+            int cy = y0 + r * (m.cellH() + ModelPickerLayout.CARD_GAP);
+            if (inside(mouseX, mouseY, cx, cy, m.cellW(), m.cellH())) {
+                hoverIndex = start + i;
+                break;
+            }
+        }
+        for (int i = 0; i < m.capacity() && start + i < entries.size(); i++) {
+            int r = i / m.cols();
+            int c = i % m.cols();
+            int cx = x0 + c * (m.cellW() + ModelPickerLayout.CARD_GAP);
+            int cy = y0 + r * (m.cellH() + ModelPickerLayout.CARD_GAP);
+            boolean hover = start + i == hoverIndex;
+            renderModelCard(g, entries.get(start + i), cx, cy, m.cellW(), m.cellH(), hover, starred);
+        }
+    }
+
+    /** 单张卡：底 → 封面/实时小人 → 名字条 → 角标 → 描边 → 点击区。 */
+    private void renderModelCard(GuiGraphics g, ModelEntry entry, int cx, int cy, int cw, int ch, boolean hover, Set<String> starredModels) {
+        boolean folder = entry.folder();
+        boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
+        boolean multiSelected = !folder && !entry.modelId().equals(STATE.selectedModelId) && this.selectedModelIds.contains(entry.modelId());
+        boolean starred = !folder && starredModels.contains(entry.modelId());
+        boolean locked = !folder && entry.locked();
+        int nameH = ModelPickerLayout.nameBandH(ch);
+        int coverH = Math.max(1, ch - nameH);
+
+        if (folder) {
+            fill(g, cx, cy, cw, ch, hover ? CARD_FOLDER_HOVER : CARD_FOLDER);
+        } else {
+            fill(g, cx, cy, cw, ch, selected ? CARD_SELECT : hover ? CARD_BASE_HOVER : CARD_BASE);
+        }
+
+        if (folder) {
+            drawFolderCover(g, entry, cx + 1, cy + 1, cw - 2, coverH - 1);
+        } else if (locked) {
+            int size = Math.min(26, Math.min(cw - 8, coverH - 8));
+            drawIconScaled(g, IconGlyph.LOCK, cx + Math.max(0, (cw - size) / 2), cy + Math.max(1, (coverH - size) / 2), size);
+        } else {
+            ModelAssembly asm = residentAssembly(entry.modelId());
+            // 只有悬停卡与选中卡画实时 3D；其余卡画静态封面，避免每帧 N 次模型渲染。
+            if (hover) {
+                renderCardMonster(g, entry.modelId(), asm, cx, cy, cw, coverH);
+            } else if (selected) {
+                renderCardMonster(g, entry.modelId(), asm, cx, cy, cw, coverH);
+            } else if (!drawModelCover(g, asm, cx + 1, cy + 1, cw - 2, coverH - 1)) {
+                int size = Math.min(34, Math.min(cw - 8, coverH - 12));
+                drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
+            }
+        }
+
+        // 名字条压在封面之上，保证不被 3D 小人遮挡。
+        fill(g, cx, cy + coverH, cw, nameH, CARD_NAME_BG);
+        drawCardName(g, entry, cx, cy + coverH, cw, nameH, folder);
+
+        if (locked) {
+            fill(g, cx, cy, cw, ch, CARD_DIM);
+        } else if (!folder) {
+            if (multiSelected) {
+                drawIcon(g, IconGlyph.CHECK, cx + cw - 18, cy + 3);
+            } else if (starred) {
+                drawIcon(g, IconGlyph.STAR, cx + cw - 18, cy + 3);
+            }
+        }
+
+        border(g, cx, cy, cw, ch, selected ? RED : hover ? CARD_NAME_TEXT : 0x55FFFFFF);
+        hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> clickModelEntry(entry));
+    }
+
+    /** 卡片名字条：单行居中；卡够高且有条目副标题时排两行。超长省略，悬停 tooltip 给全名。 */
+    private void drawCardName(GuiGraphics g, ModelEntry entry, int bx, int by, int cw, int nameH, boolean folder) {
+        int w = Math.max(6, cw - 6);
+        String title = trim(entry.title(), w);
+        String sub = entry.subtitle();
+        boolean twoLine = !folder && nameH >= 28 && sub != null && !sub.isEmpty() && !"folder".equals(sub);
+        int tx = bx + 3;
+        if (twoLine) {
+            g.drawString(this.font, Component.literal(title), tx, by + 3, folder ? 0xFF2B2B2B : CARD_NAME_TEXT, false);
+            g.drawString(this.font, Component.literal(trim(sub, w)), tx, by + nameH - this.font.lineHeight - 3, MUTED, false);
+        } else {
+            g.drawString(this.font, Component.literal(title), tx, by + Math.max(2, (nameH - this.font.lineHeight) / 2), folder ? 0xFF2B2B2B : CARD_NAME_TEXT, false);
+        }
+    }
+
+    /** 文件夹卡封面：ysm_pack.json 里的贴图，缺省用内置默认图标。 */
+    private void drawFolderCover(GuiGraphics g, ModelEntry entry, int x, int y, int w, int h) {
+        AbstractTexture texture = null;
+        try {
+            var pack = ClientModelManager.getModelPackMap().get(entry.modelId());
+            texture = pack == null ? null : pack.getTexture();
+        } catch (Exception ignored) {
+        }
+        if (!drawCoverImage(g, texture, x, y, w, h)) {
+            int size = Math.min(30, Math.min(w - 6, h - 6));
+            drawIconScaled(g, IconGlyph.FOLDER, x + Math.max(0, (w - size) / 2), y + Math.max(1, (h - size) / 2), size);
+        }
+    }
+
+    /** 模型卡静态封面：内嵌 gui_background（缺则 gui_foreground）。未常驻时返回 false。 */
+    private boolean drawModelCover(GuiGraphics g, ModelAssembly asm, int x, int y, int w, int h) {
+        AbstractTexture cover = coverTextureOf(asm);
+        return cover != null && drawCoverImage(g, cover, x, y, w, h);
+    }
+
+    /**
+     * 卡片里的实时 3D 小人。走 {@link ModelPreviewRenderer#renderLivingEntityPreview} 的显式 yaw 重载
+     * （1.21.1 分支仍保留该重载），固定正面朝向。
+     */
+    private void renderCardMonster(GuiGraphics g, String modelId, ModelAssembly asm, int cx, int cy, int cw, int coverH) {
+        if (cw < 18 || coverH < 26) {
+            return;
+        }
+        // 先铺一层静态封面并压暗当底，悬浮时小人更有层次且读得清轮廓。
+        if (drawModelCover(g, asm, cx + 1, cy + 1, cw - 2, coverH - 1)) {
+            fill(g, cx + 1, cy + 1, cw - 2, coverH - 1, CARD_COVER_SHADE);
+        }
+        if (asm == null) {
+            // 未常驻：画加载提示，模型落地后自动升级为实时小人。
+            drawCardLoading(g, cx, cy, cw, coverH);
+            return;
+        }
+        if (asm.isGltf()) {
+            int size = Math.min(34, Math.min(cw - 8, coverH - 12));
+            drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
+            return;
+        }
+        try {
+            String textureId = selectedTextureOrDefault(asm);
+            boolean isSelected = modelId.equals(STATE.selectedModelId);
+            PlayerPreviewEntity entity = isSelected ? this.selectedCardEntity : this.hoverCardEntity;
+            String boundModel = isSelected ? this.selectedCardModelId : this.hoverCardModelId;
+            String boundTexture = isSelected ? this.selectedCardTextureId : this.hoverCardTextureId;
+            if (!modelId.equals(boundModel) || !Objects.equals(textureId, boundTexture)) {
+                entity.initModelWithTexture(modelId, textureId);
+                if (isSelected) {
+                    this.selectedCardModelId = modelId;
+                    this.selectedCardTextureId = textureId;
+                } else {
+                    this.hoverCardModelId = modelId;
+                    this.hoverCardTextureId = textureId;
+                }
+            }
+            ClientModelManager.markModelUsed(modelId);
+            if (!entity.isModelReady()) {
+                return;
+            }
+            boolean disableRotation;
+            try {
+                var props = asm.getModelData().getModelProperties();
+                disableRotation = props != null && props.isDisablePreviewRotation();
+            } catch (Exception ignored) {
+                disableRotation = false;
+            }
+            float scale = ModelPickerLayout.clamp(Math.round(coverH * 0.62f), 18, 160);
+            float yaw = disableRotation ? 180.0f : 176.0f;
+            int half = Math.max(12, Math.min(cw, coverH) / 2);
+            int centerX = cx + cw / 2;
+            int centerY = cy + coverH / 2;
+            ModelPreviewRenderer.renderLivingEntityPreview(cx + cw / 2.0f, cy + coverH - 3.0f, scale, 0.0f, entity,
+                    RendererManager.getPlayerRenderer(), disableRotation, true, yaw);
+        } catch (Exception ignored) {
+            int size = Math.min(26, Math.min(cw - 8, coverH - 10));
+            drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
+        }
+    }
+
+    private void drawCardLoading(GuiGraphics g, int cx, int cy, int cw, int coverH) {
+        String s = "…";
+        g.drawString(this.font, Component.literal(s), cx + (cw - this.font.width(s)) / 2, cy + Math.max(4, (coverH - this.font.lineHeight) / 2), CARD_NAME_TEXT, false);
+    }
+
+    /** 常驻（运行时已解析）的 assembly；懒占位/纯目录项返回 null。 */
+    private ModelAssembly residentAssembly(String modelId) {
+        if (modelId == null) {
+            return null;
+        }
+        ModelAssembly asm = ClientModelManager.getModelAssemblyMap().get(modelId);
+        return asm != null && asm.isRuntimeResident() ? asm : null;
+    }
+
+    /** 模型内嵌 GUI 封面：优先 gui_background，缺则 gui_foreground。 */
+    private AbstractTexture coverTextureOf(ModelAssembly asm) {
+        if (asm == null) {
+            return null;
+        }
+        ModelDisplayAssets assets = asm.getTextureRegistry();
+        if (assets == null) {
+            return null;
+        }
+        AbstractTexture background = assets.getGuiBackground();
+        return background != null ? background : assets.getGuiForeground();
+    }
+
+    /** 把封面等比 fit 进 (x,y,w,h)，居中不拉伸；拿不到资源/尺寸时返回 false。 */
+    private boolean drawCoverImage(GuiGraphics g, AbstractTexture tex, int x, int y, int w, int h) {
+        if (tex == null || w <= 0 || h <= 0) {
+            return false;
+        }
+        int[] dims = coverDimensions(tex);
+        if (dims == null) {
+            return false;
+        }
+        IResourceLocatable locatable = UploadManager.getOrCreateLocatable(tex, true);
+        if (locatable == null && tex instanceof OuterFileTexture) {
+            locatable = UploadManager.getOrCreateLocatableWithSize(tex, true, Math.max(64, dims[0]));
+        }
+        ResourceLocation loc = locatable == null ? null : locatable.getResourceLocationOrNull();
+        if (loc == null) {
+            return false;
+        }
+        int texW = dims[0];
+        int texH = dims[1];
+        double fit = Math.min((double) w / texW, (double) h / texH);
+        int dw = Math.max(1, (int) Math.floor(texW * fit));
+        int dh = Math.max(1, (int) Math.floor(texH * fit));
+        int dx = x + (w - dw) / 2;
+        int dy = y + (h - dh) / 2;
+        g.blit(loc, dx, dy, dw, dh, 0, 0, texW, texH, texW, texH);
+        return true;
+    }
+
+    /** 封面像素尺寸：GUI 图一定是 OuterFileTexture（构建链 toPng），直接读 PNG IHDR。 */
+    private int[] coverDimensions(AbstractTexture tex) {
+        if (!(tex instanceof OuterFileTexture outer)) {
+            return null;
+        }
+        synchronized (COVER_DIMENSIONS) {
+            int[] dims = COVER_DIMENSIONS.get(tex);
+            if (dims == null) {
+                dims = pngHeaderSize(outer.getResourceData());
+                if (dims != null) {
+                    COVER_DIMENSIONS.put(tex, dims);
+                }
+            }
+            return dims;
+        }
+    }
+
+    private static int[] pngHeaderSize(byte[] data) {
+        if (data == null || data.length < 24) {
+            return null;
+        }
+        if ((data[0] & 0xFF) != 0x89 || data[1] != 0x50 || data[2] != 0x4E || data[3] != 0x47) {
+            return null;
+        }
+        int w = readIntBE(data, 16);
+        int h = readIntBE(data, 20);
+        return w > 0 && h > 0 && w <= 16384 && h <= 16384 ? new int[]{w, h} : null;
+    }
+
+    private static int readIntBE(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 24) | ((data[offset + 1] & 0xFF) << 16) | ((data[offset + 2] & 0xFF) << 8) | (data[offset + 3] & 0xFF);
+    }
+
+    /** 图标纹理按 size 等比放大绘制（源是 16px 格）。 */
+    private void drawIconScaled(GuiGraphics g, IconGlyph icon, int x, int y, int size) {
+        if (size <= 0) {
+            return;
+        }
+        g.blit(MODEL_PANEL_ICONS, x, y, size, size, icon.u, icon.v, 16, 16, 128, 64);
+    }
+
     private ModelListMetrics modelListMetrics(int w, int h, int entryCount) {
         boolean dense = compactModelLayout() || h < 132;
         int targetW = dense ? 104 : 116;
@@ -646,7 +1039,17 @@ public class ModernPlayerModelScreen extends Screen {
 
     private List<ModelEntry> visibleModelEntries() {
         List<ModelEntry> entries = collectModelEntries();
-        ModelListMetrics metrics = modelListMetrics(modelListW(), currentModelGridH(), entries.size());
+        int listW = modelListW();
+        int listH = currentModelGridH();
+        if (gridMode(listW, listH) == ModelPickerLayout.GridMode.CARDS) {
+            ModelPickerLayout.Cards cards = ModelPickerLayout.cards(listW, listH);
+            int page = clamp(STATE.modelScroll, 0, cards.totalPages(entries.size()) - 1);
+            STATE.modelScroll = page;
+            int start = page * cards.capacity();
+            int end = Math.min(entries.size(), start + cards.capacity());
+            return start >= end ? List.of() : entries.subList(start, end);
+        }
+        ModelListMetrics metrics = modelListMetrics(listW, listH, entries.size());
         STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
         int start = STATE.modelScroll * metrics.cols();
         int end = Math.min(entries.size(), start + metrics.rows() * metrics.cols());
@@ -688,6 +1091,8 @@ public class ModernPlayerModelScreen extends Screen {
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.RELOAD, Component.translatable("gui.sparkle_morpher.model_panel.reload_models"), () -> ClientModelManager.reloadLocalModels(this::setStatus));
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.UP, getCustomFolderUploadTooltip(), this::openCustomFolderUpload);
+            bx += 24;
+            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MODE, pickerStyleLabel(pickerStyle()), this::cyclePickerStyle);
         }
         renderModelPageControls(g, mouseX, mouseY, x, y, w, gridH);
     }
@@ -697,14 +1102,37 @@ public class ModernPlayerModelScreen extends Screen {
         if (entries.isEmpty()) {
             return;
         }
+        int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
+        int prevX = nextX - MODEL_PAGE_BUTTON_WIDTH - 4;
+        if (gridMode(w, gridH) == ModelPickerLayout.GridMode.CARDS) {
+            // 卡片模式：滚动量是页号，整页前进/后退。
+            ModelPickerLayout.Cards cards = ModelPickerLayout.cards(w, gridH);
+            int pages = cards.totalPages(entries.size());
+            int page = clamp(STATE.modelScroll, 0, pages - 1);
+            STATE.modelScroll = page;
+            int start = page * cards.capacity();
+            int end = Math.min(entries.size(), start + cards.capacity());
+            Component range = Component.literal((start + 1) + "-" + end + "/" + entries.size());
+            int labelX = Math.max(x + 82, prevX - this.font.width(range) - 8);
+            drawMuted(g, range, labelX, y + 8);
+            renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.pre_page"), () -> {
+                if (page > 0) {
+                    STATE.modelScroll = page - 1;
+                }
+            });
+            renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.next_page"), () -> {
+                if (page < pages - 1) {
+                    STATE.modelScroll = page + 1;
+                }
+            });
+            return;
+        }
         ModelListMetrics metrics = modelListMetrics(w, gridH, entries.size());
         STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
         int visible = metrics.rows() * metrics.cols();
         int start = Math.min(entries.size(), STATE.modelScroll * metrics.cols());
         int end = Math.min(entries.size(), start + visible);
         Component range = Component.literal((start + 1) + "-" + end + "/" + entries.size());
-        int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
-        int prevX = nextX - MODEL_PAGE_BUTTON_WIDTH - 4;
         int labelX = Math.max(x + 82, prevX - this.font.width(range) - 8);
         drawMuted(g, range, labelX, y + 8);
         renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.pre_page"), () -> {
@@ -1181,7 +1609,16 @@ public class ModernPlayerModelScreen extends Screen {
             return true;
         }
         switch (STATE.activeTab) {
-            case MODEL -> STATE.modelScroll = Math.max(0, STATE.modelScroll + delta);
+            case MODEL -> {
+                if (gridMode(modelListW(), currentModelGridH()) == ModelPickerLayout.GridMode.CARDS) {
+                    List<ModelEntry> entries = collectModelEntries();
+                    int pages = entries.isEmpty() ? 1
+                            : ModelPickerLayout.cards(modelListW(), currentModelGridH()).totalPages(entries.size());
+                    STATE.modelScroll = clamp(STATE.modelScroll + delta, 0, pages - 1);
+                } else {
+                    STATE.modelScroll = Math.max(0, STATE.modelScroll + delta);
+                }
+            }
             case RESOURCE -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll + delta);
             case SETTINGS -> STATE.settingsScroll = Math.max(0, STATE.settingsScroll + delta);
         }
