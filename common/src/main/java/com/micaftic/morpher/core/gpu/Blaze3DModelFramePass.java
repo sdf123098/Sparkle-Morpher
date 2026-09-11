@@ -50,9 +50,21 @@ public final class Blaze3DModelFramePass {
      * 本通道是否启用。读取模组配置（{@code EnableBlaze3DInPipelineDraw}），默认关闭；
      * 配置未注册/不可读时按关闭处理（见 {@code ConfigPolicies.bool} 的 fallback），
      * 保证默认行为与未引入本通道时完全一致。
+     *
+     * <p>用户在游戏内把开关关掉再打开时重新武装（清除 {@link #autoDisabled}），
+     * 便于在不重启的情况下重试。</p>
      */
     public static boolean isEnabled() {
-        return com.micaftic.morpher.core.config.ConfigPolicies.graphics().blaze3dInPipelineDraw();
+        boolean enabled = com.micaftic.morpher.core.config.ConfigPolicies.graphics().blaze3dInPipelineDraw();
+        if (!enabled) {
+            // 开关关闭 = 明确重置自愈状态；下次打开即为全新尝试。
+            if (autoDisabled) {
+                autoDisabled = false;
+                reportedAutoDisable.set(false);
+            }
+            return false;
+        }
+        return true;
     }
 
     private static final String PASS_NAME = "sparkle_morpher_blaze3d_models";
@@ -65,18 +77,62 @@ public final class Blaze3DModelFramePass {
     /** 一次性状态日志标记：让用户在默认日志级别就能确认本通道是否真的生效（不受 gpuDebugLog 门控）。 */
     private static final AtomicBoolean reportedFirstTakeover = new AtomicBoolean(false);
     private static final AtomicBoolean reportedFirstDraw = new AtomicBoolean(false);
+    private static final AtomicBoolean reportedFirstRefused = new AtomicBoolean(false);
+
+    /**
+     * 自愈开关：若某帧登记了延迟绘制、但帧图 pass 没有执行（几何已从 collector 摘除 →
+     * 模型会不可见），立即永久停用本通道，让后续帧走既有提交路径，模型恢复可见。
+     *
+     * <p>2026-09-11 实测：某些环境下帧图 pass 未被执行，导致「大部分模型在世界内不渲染」。
+     * 该开关保证该缺陷最多影响一帧，且日志给出确切阶段，避免无声丢模型。
+     * 配置项由开→关再开时重新武装（见 {@link #isEnabled()}）。</p>
+     */
+    private static volatile boolean autoDisabled;
+    private static final AtomicBoolean reportedAutoDisable = new AtomicBoolean(false);
+
+    /** 本帧统计：登记数 / 是否成功挂入帧图 / pass 是否执行 / 实际画出数。 */
+    private static int deferredThisFrame;
+    private static boolean appendedThisFrame;
+    private static boolean executedThisFrame;
+    private static int renderedThisFrame;
 
     private Blaze3DModelFramePass() {
     }
 
-    /** 帧开始：清空上一帧残留。由 {@code WorldRendererMixin} 在 render HEAD 调用。 */
+    /** 帧开始：清空上一帧残留并重置本帧统计。由 {@code WorldRendererMixin} 在 render HEAD 调用。 */
     public static void beginFrame() {
         PENDING.clear();
+        deferredThisFrame = 0;
+        appendedThisFrame = false;
+        executedThisFrame = false;
+        renderedThisFrame = 0;
     }
 
-    /** 帧结束兜底清理。由 {@code WorldRendererMixin} 在 render RETURN 调用。 */
+    /**
+     * 帧结束兜底清理 + 自愈判定。由 {@code WorldRendererMixin} 在 render RETURN 调用。
+     *
+     * <p>若本帧登记了绘制却从未被画出（pass 未跑，或跑在几何被清空之后），说明几何已从
+     * collector 摘除但没画出来 → 模型不可见。此时永久停用本通道并打印一次明确告警，
+     * 让该缺陷最多影响一帧。</p>
+     */
     public static void endFrame() {
+        if (deferredThisFrame > 0 && renderedThisFrame < deferredThisFrame) {
+            autoDisabled = true;
+            if (reportedAutoDisable.compareAndSet(false, true)) {
+                YesSteveModel.LOGGER.warn(
+                        "[SM-BLAZE3D] in-pipeline draw LOST geometry this frame "
+                                + "(deferred={}, rendered={}, appendedToFrameGraph={}, passExecuted={}). "
+                                + "Models would have been invisible, so in-pipeline draw is now AUTO-DISABLED "
+                                + "for this session; rendering falls back to the normal submit path. "
+                                + "Toggle EnableBlaze3DInPipelineDraw off/on (or restart) to re-arm.",
+                        deferredThisFrame, renderedThisFrame, appendedThisFrame, executedThisFrame);
+            }
+        }
         PENDING.clear();
+        deferredThisFrame = 0;
+        appendedThisFrame = false;
+        executedThisFrame = false;
+        renderedThisFrame = 0;
     }
 
     /**
@@ -99,6 +155,10 @@ public final class Blaze3DModelFramePass {
             Identifier textureLocation,
             boolean entityGlowing) {
         if (!isEnabled()) {
+            return false;
+        }
+        // 自愈：一旦本通道被判定为「登记了但 pass 不执行」，立刻退回既有路径，避免持续丢模型。
+        if (autoDisabled) {
             return false;
         }
         try {
@@ -147,6 +207,7 @@ public final class Blaze3DModelFramePass {
                     packedOverlay,
                     red, green, blue, alpha,
                     textureLocation));
+            deferredThisFrame++;
             return true;
         } catch (Throwable t) {
             if (warnedSubmitFailure.compareAndSet(false, true)) {
@@ -173,10 +234,19 @@ public final class Blaze3DModelFramePass {
             ResourceHandle<RenderTarget> main = pass.readsAndWrites(targets.main);
             targets.main = main;
             pass.executes(Blaze3DModelFramePass::renderAll);
+            appendedThisFrame = true;
         } catch (Throwable t) {
             if (warnedRenderFailure.compareAndSet(false, true)) {
                 GpuDebugLog.warn("Blaze3D in-pipeline pass registration failed (dropping {} deferred draws): {}",
                         PENDING.size(), t.toString());
+            }
+            // 挂载失败 = 本帧这些绘制不会执行 → 立即自愈，避免下一帧继续丢模型。
+            autoDisabled = true;
+            if (reportedAutoDisable.compareAndSet(false, true)) {
+                YesSteveModel.LOGGER.warn(
+                        "[SM-BLAZE3D] could not register the in-pipeline frame pass ({}); AUTO-DISABLED for this "
+                                + "session, rendering falls back to the normal submit path.",
+                        t.toString());
             }
             PENDING.clear();
         }
@@ -184,25 +254,37 @@ public final class Blaze3DModelFramePass {
 
     /** framegraph pass 执行体：在正确时机调用既有 GPU 蒙皮绘制。 */
     private static void renderAll() {
+        executedThisFrame = true;
+        renderedThisFrame = PENDING.size();
         if (PENDING.isEmpty()) {
             return;
         }
         if (reportedFirstDraw.compareAndSet(false, true)) {
             YesSteveModel.LOGGER.info("[SM-BLAZE3D] in-pipeline pass executed: {} deferred draw(s) rendering via Blaze3DRenderPath", PENDING.size());
         }
+        int drawn = 0;
         try {
             for (Draw draw : PENDING) {
-                Blaze3DRenderPath.tryRender(
+                if (Blaze3DRenderPath.tryRender(
                         draw.model(), draw.pose(), draw.boneParams(), draw.stateBuffer(),
                         draw.renderPartMask(), draw.packedLight(), draw.packedOverlay(),
                         draw.red(), draw.green(), draw.blue(), draw.alpha(),
-                        draw.textureLocation(), false);
+                        draw.textureLocation(), false)) {
+                    drawn++;
+                }
             }
         } catch (Throwable t) {
             if (warnedRenderFailure.compareAndSet(false, true)) {
                 GpuDebugLog.warn("Blaze3D in-pipeline draw failed: {}", t.toString());
             }
         } finally {
+            if (drawn < PENDING.size() && reportedFirstRefused.compareAndSet(false, true)) {
+                YesSteveModel.LOGGER.warn(
+                        "[SM-BLAZE3D] in-pipeline pass drew only {}/{} deferred model(s); the rest were refused by "
+                                + "Blaze3DRenderPath. Enable GpuDebugLog for the per-draw reason. (Refused draws were "
+                                + "already removed from the collector, so those models will not appear this frame.)",
+                        drawn, PENDING.size());
+            }
             PENDING.clear();
         }
     }
