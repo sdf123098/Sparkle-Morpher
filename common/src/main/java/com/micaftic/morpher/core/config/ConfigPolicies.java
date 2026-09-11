@@ -42,6 +42,14 @@ public final class ConfigPolicies {
     public static boolean developerStateWriteback() {
         return bool(GeneralConfig.DEVELOPER_STATE_WRITEBACK, false);
     }
+    /**
+     * Model picker presentation default. The model screen seeds its per-session style from this
+     * once and afterwards remembers the user's in-screen override.
+     */
+    public static GeneralConfig.ModelPickerStyle modelPickerStyle() {
+        GeneralConfig.ModelPickerStyle style = value(GeneralConfig.MODEL_PICKER_STYLE, GeneralConfig.ModelPickerStyle.AUTO);
+        return style == null ? GeneralConfig.ModelPickerStyle.AUTO : style;
+    }
 
     public static FeaturePolicy features() {
         return new FeaturePolicy(false, false, false, true, bool(GeneralConfig.ANIMATION_ROULETTE_DEBUG_LOG, false));
