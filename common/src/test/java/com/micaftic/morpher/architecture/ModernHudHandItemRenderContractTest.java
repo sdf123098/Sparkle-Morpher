@@ -49,6 +49,24 @@ class ModernHudHandItemRenderContractTest {
         assertTrue(source.contains("PlayerPoseSnapshot snapshot = null; // ModernHudPoseStore.consume();"));
     }
 
+    @Test
+    void maidDirectEquipmentLocatorKeepsVanillaItemOrientation() throws IOException {
+        Path maidLayer = findRepoFile(Path.of("common", "src", "main", "java", "com", "micaftic", "morpher",
+                "client", "renderer", "layer", "MaidItemInHandLayer.java"));
+        String source = Files.readString(maidLayer);
+
+        assertTrue(source.contains("profile.usesVanillaUseOrientation()"));
+    }
+
+    @Test
+    void maidSittingStateDrivesAnimatedModelSittingPose() throws IOException {
+        Path animatableEntity = findRepoFile(Path.of("common", "src", "main", "java", "com", "micaftic", "morpher",
+                "geckolib3", "core", "AnimatableEntity.java"));
+        String source = Files.readString(animatableEntity);
+
+        assertTrue(source.contains("TouhouLittleMaidCompat.isMaidSitting(livingEntity)"));
+    }
+
     private static Path findRepoFile(Path... relativePaths) throws IOException {
         Path directory = Path.of("").toAbsolutePath();
         while (directory != null) {
