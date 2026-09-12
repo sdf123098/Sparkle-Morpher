@@ -127,16 +127,16 @@ public class ModernPlayerModelScreen extends Screen {
     private final Queue<ModelImportFilePicker.PickedFile> pendingImports = new ArrayDeque<>();
     private final PlayerPreviewEntity previewEntity = new PlayerPreviewEntity();
     /**
-     * 卡片网格的实时 3D 预览实体：只有两张——鼠标悬停的那张、当前选中的那张。
-     * 上限刻意压到 2：每张卡的实时预览都是一次完整的模型渲染 + 动画评估，
-     * 引擎没有跨预览批处理也没有共享快照，N 张就是 N 倍开销。
+     * 卡片网格的实时 3D 预览实体池，按「当前页内的槽位」索引。
+     *
+     * <p>每张可见卡都渲染实时小人——模型本身就是卡面（多数模型并不内嵌 gui_background
+     * 之类的静态卡图，只渲染悬停/选中两张会让其余卡面全空）。开销靠两处封顶：
+     * 池子大小 ≤ {@link ModelPickerLayout#MAX_COLS}×{@link ModelPickerLayout#MAX_ROWS}（每页容量），
+     * 翻页/改选时槽位按需换绑模型，不会随目录规模增长。</p>
      */
-    private final PlayerPreviewEntity hoverCardEntity = new PlayerPreviewEntity();
-    private final PlayerPreviewEntity selectedCardEntity = new PlayerPreviewEntity();
-    private String hoverCardModelId = "";
-    private String hoverCardTextureId = "";
-    private String selectedCardModelId = "";
-    private String selectedCardTextureId = "";
+    private final List<PlayerPreviewEntity> cardPreviews = new ArrayList<>();
+    private final List<String> cardPreviewModels = new ArrayList<>();
+    private final List<String> cardPreviewTextures = new ArrayList<>();
     /** 上一帧实际生效的网格形态；形态变化时重置滚动量（页号与行号语义不通用）。 */
     private ModelPickerLayout.GridMode lastGridMode;
     private final Screen parentScreen;
@@ -329,16 +329,16 @@ public class ModernPlayerModelScreen extends Screen {
         this.screenGeneration++;
         this.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
         ModelImportFilePicker.cancelPicking();
-        // 释放两张卡片预览实体持有的模型引用；本屏重开时会按需重建。
-        this.hoverCardModelId = "";
-        this.hoverCardTextureId = "";
-        this.selectedCardModelId = "";
-        this.selectedCardTextureId = "";
-        try {
-            this.hoverCardEntity.resetModel();
-            this.selectedCardEntity.resetModel();
-        } catch (Exception ignored) {
+        // 释放卡片预览实体池持有的模型引用；本屏重开时会按需重建。
+        this.cardPreviewModels.clear();
+        this.cardPreviewTextures.clear();
+        for (PlayerPreviewEntity entity : this.cardPreviews) {
+            try {
+                entity.resetModel();
+            } catch (Exception ignored) {
+            }
         }
+        this.cardPreviews.clear();
         super.removed();
     }
 
@@ -769,8 +769,8 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     /**
-     * 目录卡片网格。整块按可用面积居中；卡片封面优先用文件夹/模型内嵌的 GUI 贴图，
-     * 缺封面时退回图标；实时 3D 小人只画鼠标悬停的那张与当前选中的那张（最多 2 个）。
+     * 目录卡片网格。整块按可用面积居中；每张可见模型卡都渲染实时 3D 小人（模型即卡面），
+     * 未就绪的懒加载模型先显示加载提示并在后台拉起。
      */
     private void renderModelCards(GuiGraphicsExtractor g, int mouseX, int mouseY, List<ModelEntry> entries, int x, int y, int w, int h) {
         ModelPickerLayout.Cards m = ModelPickerLayout.cards(w, h);
@@ -780,7 +780,7 @@ public class ModernPlayerModelScreen extends Screen {
         int x0 = x + m.originX(w);
         int y0 = y + m.originY(h);
         Set<String> starred = starModels();
-        // 先定位悬停卡，使实时预览只在悬停/选中两张上发生。
+        ensureCardPool(m.capacity());
         int hoverIndex = -1;
         for (int i = 0; i < m.capacity() && start + i < entries.size(); i++) {
             int r = i / m.cols();
@@ -798,12 +798,39 @@ public class ModernPlayerModelScreen extends Screen {
             int cx = x0 + c * (m.cellW() + ModelPickerLayout.CARD_GAP);
             int cy = y0 + r * (m.cellH() + ModelPickerLayout.CARD_GAP);
             boolean hover = start + i == hoverIndex;
-            renderModelCard(g, entries.get(start + i), cx, cy, m.cellW(), m.cellH(), hover, starred);
+            renderModelCard(g, entries.get(start + i), i, cx, cy, m.cellW(), m.cellH(), hover, starred);
         }
     }
 
+    /** 把预览实体池扩到至少 size 个槽位；上限由每页容量常量决定，不会随目录规模增长。 */
+    private void ensureCardPool(int size) {
+        while (this.cardPreviews.size() < size) {
+            this.cardPreviews.add(new PlayerPreviewEntity());
+            this.cardPreviewModels.add("");
+            this.cardPreviewTextures.add("");
+        }
+    }
+
+    /** 取/换绑某槽位的预览实体；换模型或贴图时重初始化。失败返回 null（调用方回退图标）。 */
+    private PlayerPreviewEntity cardPreviewEntity(int slot, String modelId, String textureId) {
+        if (slot < 0 || slot >= this.cardPreviews.size()) {
+            return null;
+        }
+        PlayerPreviewEntity entity = this.cardPreviews.get(slot);
+        if (!modelId.equals(this.cardPreviewModels.get(slot)) || !Objects.equals(textureId, this.cardPreviewTextures.get(slot))) {
+            try {
+                entity.initModelWithTexture(modelId, textureId);
+            } catch (Exception e) {
+                return null;
+            }
+            this.cardPreviewModels.set(slot, modelId);
+            this.cardPreviewTextures.set(slot, textureId);
+        }
+        return entity;
+    }
+
     /** 单张卡：底 → 封面/实时小人 → 名字条 → 角标 → 描边 → 点击区。 */
-    private void renderModelCard(GuiGraphicsExtractor g, ModelEntry entry, int cx, int cy, int cw, int ch, boolean hover, Set<String> starredModels) {
+    private void renderModelCard(GuiGraphicsExtractor g, ModelEntry entry, int slot, int cx, int cy, int cw, int ch, boolean hover, Set<String> starredModels) {
         boolean folder = entry.folder();
         boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
         boolean multiSelected = !folder && !entry.modelId().equals(STATE.selectedModelId) && this.selectedModelIds.contains(entry.modelId());
@@ -824,16 +851,7 @@ public class ModernPlayerModelScreen extends Screen {
             int size = Math.min(26, Math.min(cw - 8, coverH - 8));
             drawIconScaled(g, IconGlyph.LOCK, cx + Math.max(0, (cw - size) / 2), cy + Math.max(1, (coverH - size) / 2), size);
         } else {
-            ModelAssembly asm = residentAssembly(entry.modelId());
-            // 只有悬停卡与选中卡画实时 3D；其余卡画静态封面，避免每帧 N 次模型渲染。
-            if (hover) {
-                renderCardMonster(g, entry.modelId(), asm, cx, cy, cw, coverH);
-            } else if (selected) {
-                renderCardMonster(g, entry.modelId(), asm, cx, cy, cw, coverH);
-            } else if (!drawModelCover(g, asm, cx + 1, cy + 1, cw - 2, coverH - 1)) {
-                int size = Math.min(34, Math.min(cw - 8, coverH - 12));
-                drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
-            }
+            renderCardMonster(g, slot, entry.modelId(), cx, cy, cw, coverH);
         }
 
         // 名字条压在封面之上，保证不被 3D 小人遮挡。
@@ -893,18 +911,20 @@ public class ModernPlayerModelScreen extends Screen {
      * 卡片里的实时 3D 小人。使用 {@link GuiModelRenderer#enqueueLivingPreview} 的显式 yaw 入口
      * （新的兼容 facade 已不再暴露 yaw 参数），固定正面朝向。
      */
-    private void renderCardMonster(GuiGraphicsExtractor g, String modelId, ModelAssembly asm, int cx, int cy, int cw, int coverH) {
+    private void renderCardMonster(GuiGraphicsExtractor g, int slot, String modelId, int cx, int cy, int cw, int coverH) {
         if (cw < 18 || coverH < 26) {
             return;
         }
-        // 先铺一层静态封面并压暗当底，悬浮时小人更有层次且读得清轮廓。
-        if (drawModelCover(g, asm, cx + 1, cy + 1, cw - 2, coverH - 1)) {
-            fill(g, cx + 1, cy + 1, cw - 2, coverH - 1, CARD_COVER_SHADE);
-        }
+        // getModelContext 对懒模型会调度后台加载并返回 empty——正好用来「请求加载」；
+        // 落地后下一帧这里就拿到常驻 assembly，卡片自动升级为实时小人。
+        ModelAssembly asm = ClientModelManager.getModelContext(modelId).orElse(null);
         if (asm == null) {
-            // 未常驻：画加载提示，模型落地后自动升级为实时小人。
             drawCardLoading(g, cx, cy, cw, coverH);
             return;
+        }
+        // 有内嵌 GUI 卡图的模型先铺一层并压暗当底，小人更有层次；没有则以卡底色为背景。
+        if (drawModelCover(g, asm, cx + 1, cy + 1, cw - 2, coverH - 1)) {
+            fill(g, cx + 1, cy + 1, cw - 2, coverH - 1, CARD_COVER_SHADE);
         }
         if (asm.isGltf()) {
             int size = Math.min(34, Math.min(cw - 8, coverH - 12));
@@ -913,19 +933,10 @@ public class ModernPlayerModelScreen extends Screen {
         }
         try {
             String textureId = selectedTextureOrDefault(asm);
-            boolean isSelected = modelId.equals(STATE.selectedModelId);
-            PlayerPreviewEntity entity = isSelected ? this.selectedCardEntity : this.hoverCardEntity;
-            String boundModel = isSelected ? this.selectedCardModelId : this.hoverCardModelId;
-            String boundTexture = isSelected ? this.selectedCardTextureId : this.hoverCardTextureId;
-            if (!modelId.equals(boundModel) || !Objects.equals(textureId, boundTexture)) {
-                entity.initModelWithTexture(modelId, textureId);
-                if (isSelected) {
-                    this.selectedCardModelId = modelId;
-                    this.selectedCardTextureId = textureId;
-                } else {
-                    this.hoverCardModelId = modelId;
-                    this.hoverCardTextureId = textureId;
-                }
+            PlayerPreviewEntity entity = cardPreviewEntity(slot, modelId, textureId);
+            if (entity == null) {
+                drawCardLoading(g, cx, cy, cw, coverH);
+                return;
             }
             ClientModelManager.markModelUsed(modelId);
             if (!entity.isModelReady()) {
@@ -955,15 +966,6 @@ public class ModernPlayerModelScreen extends Screen {
     private void drawCardLoading(GuiGraphicsExtractor g, int cx, int cy, int cw, int coverH) {
         String s = "…";
         g.text(this.font, Component.literal(s), cx + (cw - this.font.width(s)) / 2, cy + Math.max(4, (coverH - this.font.lineHeight) / 2), CARD_NAME_TEXT, false);
-    }
-
-    /** 常驻（运行时已解析）的 assembly；懒占位/纯目录项返回 null。 */
-    private ModelAssembly residentAssembly(String modelId) {
-        if (modelId == null) {
-            return null;
-        }
-        ModelAssembly asm = ClientModelManager.getModelAssemblyMap().get(modelId);
-        return asm != null && asm.isRuntimeResident() ? asm : null;
     }
 
     /** 模型内嵌 GUI 封面：优先 gui_background，缺则 gui_foreground。 */
