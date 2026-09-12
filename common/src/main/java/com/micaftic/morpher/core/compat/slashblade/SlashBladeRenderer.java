@@ -8,9 +8,9 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * Loader-neutral facade; see {@link SlashBladeCompat} for the gating scheme.
- * The {@code model} parameter is kept for signature compatibility with the
- * other hand-item render paths; the blade transform is entity-space, matching
- * where the caller invokes it.
+ * The {@code model} parameter supplies the model-relative blade and hand
+ * locators so the renderer follows the transformed model rather than the
+ * vanilla player-sized entity space.
  */
 public final class SlashBladeRenderer {
 
@@ -21,7 +21,7 @@ public final class SlashBladeRenderer {
         if (!SlashBladeModState.LOADED) {
             return;
         }
-        SlashBladeBridge.renderMainHandBlade(entity, stack, partialTick, poseStack, bufferSource, packedLight);
+        SlashBladeBridge.renderMainHandBlade(entity, model, stack, partialTick, poseStack, bufferSource, packedLight);
     }
 
     public static void renderRightWaist(AnimatedGeoModel model, LivingEntity entity, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack) {

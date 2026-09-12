@@ -83,7 +83,8 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
 
         if (hasDirectHandAnchor(model, arm)) {
             poseStack.pushPose();
-            if (!applyItemBoneTransform(arm, poseStack, model, item, profile)) {
+            boolean transformed = applyItemBoneTransform(arm, poseStack, model, item, profile);
+            if (!transformed || profile.usesVanillaUseOrientation()) {
                 applyFallbackHandTransform(poseStack);
             }
             itemRenderer.renderItem(entity, item, displayContext, leftHand,

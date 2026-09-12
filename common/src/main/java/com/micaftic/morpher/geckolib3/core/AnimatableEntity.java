@@ -15,6 +15,7 @@ import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.ExtraPlayerRenderProfiler;
 import com.micaftic.morpher.core.api.entity.EntityDataBridge;
+import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.molang.storage.IForeignVariableStorage;
@@ -278,7 +279,9 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                 ? ClientTickEvent.getTickCount()
                 : (capturedTickCount >= 0 ? capturedTickCount : entity.tickCount);
         float frameTime = partialTick;
-        boolean shouldSit = entity.isPassenger() && entity.getVehicle() != null && EntityDataBridge.shouldRiderSit(entity.getVehicle());
+        boolean shouldSit = (entity.isPassenger() && entity.getVehicle() != null
+                && EntityDataBridge.shouldRiderSit(entity.getVehicle()))
+                || (livingEntity != null && TouhouLittleMaidCompat.isMaidSitting(livingEntity));
         float limbSwingAmount = 0.0f;
         float limbSwing = 0.0f;
         if (!shouldSit && entity.isAlive() && livingEntity != null) {
