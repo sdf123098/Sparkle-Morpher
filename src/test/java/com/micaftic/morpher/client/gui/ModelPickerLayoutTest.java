@@ -190,6 +190,59 @@ class ModelPickerLayoutTest {
     }
 
     @Test
+    void cardAspectMatchesTheStandardCardArt() {
+        // 回归：YSM 卡面素材标准尺寸是 52x90（gui_background/gui_foreground，内置 default 亦然）。
+        // 卡比例必须与素材一致，否则卡图两侧会出现留白（空间利用率不足）。
+        assertEquals(90.0f / 52.0f, ModelPickerLayout.CARD_ASPECT, 1.0e-6f);
+        for (int w : new int[]{64, 80, 116, 168}) {
+            int h = ModelPickerLayout.cardH(w);
+            double aspect = (double) h / w;
+            assertTrue(Math.abs(aspect - 90.0 / 52.0) < 0.02, "card aspect must match 52:90 at w=" + w);
+        }
+    }
+
+    @Test
+    void figureScaleFitsInsideTheCover() {
+        // 回归：小人缩放偏大会让模型超出卡片上沿被裁（头部被遮挡）。
+        // 与右侧详情栏同比例（coverH * 0.43），且恒 <= 封面高。
+        assertTrue(ModelPickerLayout.CARD_FIGURE_SCALE > 0f && ModelPickerLayout.CARD_FIGURE_SCALE <= 0.5f,
+                "figure scale must be conservative enough to fit");
+        for (int ch = 1; ch <= 400; ch++) {
+            int cover = ModelPickerLayout.coverH(ch);
+            int fig = ModelPickerLayout.figureScale(cover);
+            assertTrue(fig >= 1, "fig>=1 for ch=" + ch);
+            assertTrue(fig <= cover, "fig " + fig + " must fit cover " + cover + " at ch=" + ch);
+        }
+    }
+
+    @Test
+    void layoutFillsTheAvailableArea() {
+        // 回归：原来只按最小卡宽推列数、并把行数压到 2，导致卡又小又只占一小块，
+        // 上下左右留下大片空白。现在应尽量吃满可用面积。
+        int[][] cases = {{592, 163}, {306, 294}, {347, 382}, {635, 187}, {284, 382}, {900, 420}};
+        for (int[] c : cases) {
+            int w = c[0], h = c[1];
+            ModelPickerLayout.Cards m = ModelPickerLayout.cards(w, h);
+            // 卡的横向铺开率：块宽应接近可用宽（或已到单卡宽度上限/列数上限）。
+            int usableW = w - 2 * ModelPickerLayout.CARD_MARGIN;
+            int usableH = h - 2 * ModelPickerLayout.CARD_MARGIN;
+            boolean widthCappedByMaxCard = m.cols() >= ModelPickerLayout.MAX_COLS
+                    || m.cellW() >= ModelPickerLayout.CARD_MAX_W;
+            if (!widthCappedByMaxCard) {
+                int slack = usableW - m.blockW();
+                assertTrue(slack < m.cellW() + ModelPickerLayout.CARD_GAP,
+                        "horizontal slack " + slack + " should be less than one card at " + w + "x" + h);
+            }
+            // 纵向同理：剩下的空档放不下再多一行。
+            if (m.rows() < ModelPickerLayout.MAX_ROWS) {
+                int slackV = usableH - m.blockH();
+                assertTrue(slackV < m.cellH() + ModelPickerLayout.CARD_GAP,
+                        "vertical slack " + slackV + " should be less than one row at " + w + "x" + h);
+            }
+        }
+    }
+
+    @Test
     void layoutInvariantsHoldAcrossSizeSweep() {
         for (int w = 1; w <= 900; w += 7) {
             for (int h = 1; h <= 520; h += 11) {
