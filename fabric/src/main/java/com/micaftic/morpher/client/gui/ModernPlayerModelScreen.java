@@ -141,6 +141,15 @@ public class ModernPlayerModelScreen extends Screen {
     private ModelPickerLayout.GridMode lastGridMode;
     private final Screen parentScreen;
     private final BiConsumer<String, String> modelSelectionTarget;
+    /**
+     * 本次选择是否写入「玩家自己的模型选择」（{@link ClientModelManager#rememberSelectedModel} →
+     * {@code LocalModelSelectionStore} 本地持久化）。
+     *
+     * <p>只有玩家自己的面板为 true。女仆 / NPC 等非玩家目标只改目标实体的模型，若也写进玩家选择，
+     * 下次玩家进服时 {@code restorePersistedModelSelection} 会把目标实体的模型自动套到玩家身上。
+     * 第三方整合（NPC 面板等）可用 {@link #setRememberPlayerSelection(boolean)} 精确覆写。</p>
+     */
+    private boolean rememberPlayerSelection;
     private ModelPanelLayout layout;
     private EditBox modelSearchBox;
     private EditBox resourceSearchBox;
@@ -216,8 +225,20 @@ public class ModernPlayerModelScreen extends Screen {
         super(Component.translatable("key.sparkle_morpher.player_model.desc"));
         this.parentScreen = parentScreen;
         this.modelSelectionTarget = modelSelectionTarget;
+        // 非玩家目标（女仆 / NPC）默认不写玩家选择，避免把目标实体的模型当成玩家自己的模型
+        this.rememberPlayerSelection = modelSelectionTarget == null;
         this.STATE = resolveState(stateKey);
         this.stateKeyValue = stateKey == null || stateKey.isBlank() ? "self" : stateKey;
+    }
+
+    /** 本次选择是否记忆为玩家自己的模型选择（默认：只有玩家自己的面板为 true）。 */
+    public boolean shouldRememberPlayerSelection() {
+        return this.rememberPlayerSelection;
+    }
+
+    /** 覆写本次选择是否记忆为玩家选择，供非玩家面板复用本界面时精确控制。 */
+    public void setRememberPlayerSelection(boolean value) {
+        this.rememberPlayerSelection = value;
     }
 
     private static ModelPanelState resolveState(String stateKey) {
@@ -1822,7 +1843,9 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void applyModelAndTexture(String modelId, String textureId, ModelAssembly assembly) {
         if (this.modelSelectionTarget != null) {
-            ClientModelManager.rememberSelectedModel(modelId, textureId);
+            if (this.rememberPlayerSelection) {
+                ClientModelManager.rememberSelectedModel(modelId, textureId);
+            }
             this.modelSelectionTarget.accept(modelId, textureId);
             setStatus(Component.translatable("gui.sparkle_morpher.model_panel.applied_model", modelId), ChatFormatting.GREEN);
             return;
@@ -1832,7 +1855,9 @@ public class ModernPlayerModelScreen extends Screen {
             return;
         }
         PlayerCapability.get(player).ifPresent(cap -> {
-            ClientModelManager.rememberSelectedModel(modelId, textureId);
+            if (this.rememberPlayerSelection) {
+                ClientModelManager.rememberSelectedModel(modelId, textureId);
+            }
             if (ClientModelManager.isLocalOnlyModel(modelId)) {
                 cap.initModelWithTexture(modelId, textureId);
             } else if (NetworkHandler.isClientConnected()) {
