@@ -26,24 +26,9 @@ public class BBToRawConverter {
 
     /** UV 褰掍竴鍖栨椂鐢ㄧ殑鏈€灏忓垎姣嶏紝閬垮厤闄ら浂銆?*/
     private static final float MIN_RESOLUTION = 1e-6f;
-    private static final float IMPORTED_PLAYER_SCALE = 1.0f;
     private static final int BEZIER_BAKE_SAMPLES_PER_SECOND = 24;
     private static final int BEZIER_BAKE_MAX_SEGMENT_SAMPLES = 24;
-    private static final String IMPORT_SOURCE_EXTRA = "sparkle_morpher:bbmodel_import";
-    private static final int IMPORT_FOOTER_VERSION = 32;
     private static final byte[] IMPORT_CACHE_VERSION = "sparkle_morpher:bbmodel_import:v14".getBytes(StandardCharsets.UTF_8);
-    private static final String ELYTRA_LOCATOR = "ElytraLocator";
-    private static final String LEFT_HAND_LOCATOR = "LeftHandLocator";
-    private static final String RIGHT_HAND_LOCATOR = "RightHandLocator";
-    private static final String[] ELYTRA_PARENT_CANDIDATES = {
-            "body", "torso", "chest", "upperbody", "vanillabody", "waist"
-    };
-    private static final String[] LEFT_HAND_PARENT_CANDIDATES = {
-            "lefthand", "leftpalm", "leftwrist", "leftforearm", "leftlowerarm", "leftarm"
-    };
-    private static final String[] RIGHT_HAND_PARENT_CANDIDATES = {
-            "righthand", "rightpalm", "rightwrist", "rightforearm", "rightlowerarm", "rightarm"
-    };
 
     private BBToRawConverter() {}
 
@@ -64,7 +49,7 @@ public class BBToRawConverter {
     }
 
     public static String importCacheIdentity() {
-        return new String(IMPORT_CACHE_VERSION, StandardCharsets.UTF_8) + "\nfooterVersion=" + IMPORT_FOOTER_VERSION;
+        return new String(IMPORT_CACHE_VERSION, StandardCharsets.UTF_8) + "\nfooterVersion=" + ImportedHumanoidNormalizer.IMPORT_FOOTER_VERSION;
     }
 
     /**
@@ -101,239 +86,21 @@ public class BBToRawConverter {
         convertTextures(bbmodel, raw, sideTextures);
 
         convertGeometry(bbmodel, raw, elementsById);
-        applyImportedPlayerDefaults(raw);
-        ensureElytraLocator(raw.mainEntity.mainModel);
-        ensureHandLocators(raw.mainEntity.mainModel);
+        ImportedHumanoidNormalizer.applyImportedPlayerDefaults(raw);
+        LocatorInference.ensureElytraLocator(raw.mainEntity.mainModel);
+        LocatorInference.ensureHandLocators(raw.mainEntity.mainModel);
 
         // 鍔ㄧ敾
         convertAnimations(bbmodel, raw);
-        ensureVanillaFallbackAnimations(raw);
-        applyImportedRouletteDefaults(raw);
+        ImportedActionPresetInstaller.ensureVanillaFallbackAnimations(raw);
+        ImportedHumanoidNormalizer.putImportedRouletteDefaults(raw);
 
         convertAnimationControllers(bbmodel, raw);
 
         return raw;
     }
 
-    private static void applyImportedPlayerDefaults(RawYsmModel raw) {
-        raw.properties.widthScale = IMPORTED_PLAYER_SCALE;
-        raw.properties.heightScale = IMPORTED_PLAYER_SCALE;
-        raw.footer.version = IMPORT_FOOTER_VERSION;
-        raw.footer.unkInt1 = 1;
-        raw.footer.extra = IMPORT_SOURCE_EXTRA;
-    }
 
-    // Default action-roulette entries for imported bbmodel/figura players.
-    // key = animation name (played by index), value = display label (fallback when the
-    // model has no localized "properties.extra_animation.<key>" entry).
-    // Kept in sync with the bbmodel emote preset (builtin/bbmodel/animations/extra.animation.json).
-    private static final String[][] IMPORTED_ROULETTE_ENTRIES = {
-            {"extra0", "Wave"},
-            {"extra1", "Sit"},
-            {"extra2", "Cheer"},
-            {"extra3", "Point"}
-    };
-
-    // Give imported models a default emote roulette so their builtin bbmodel emotes are
-    // reachable via the roulette / hotkeys. putIfAbsent keeps any model-authored entries.
-    private static void applyImportedRouletteDefaults(RawYsmModel raw) {
-        if (raw.properties == null || raw.properties.extraAnimations == null) {
-            return;
-        }
-        for (String[] entry : IMPORTED_ROULETTE_ENTRIES) {
-            raw.properties.extraAnimations.putIfAbsent(entry[0], entry[1]);
-        }
-    }
-
-    private static void ensureHandLocators(RawYsmModel.RawGeometry geometry) {
-        if (geometry == null || geometry.bones == null || geometry.bones.isEmpty()) {
-            return;
-        }
-        ensureHandLocator(geometry, LEFT_HAND_LOCATOR, LEFT_HAND_PARENT_CANDIDATES);
-        ensureHandLocator(geometry, RIGHT_HAND_LOCATOR, RIGHT_HAND_PARENT_CANDIDATES);
-    }
-
-    private static void ensureElytraLocator(RawYsmModel.RawGeometry geometry) {
-        if (geometry == null || geometry.bones == null || geometry.bones.isEmpty()) {
-            return;
-        }
-        if (findBoneByName(geometry.bones, ELYTRA_LOCATOR) != null) {
-            return;
-        }
-        RawYsmModel.RawBone parent = findPreferredParentBone(geometry.bones, ELYTRA_PARENT_CANDIDATES);
-        if (parent == null) {
-            return;
-        }
-
-        RawYsmModel.RawBone locator = new RawYsmModel.RawBone();
-        locator.name = ELYTRA_LOCATOR;
-        locator.parentName = parent.name == null ? "" : parent.name;
-        locator.pivot = estimateElytraLocatorPivot(parent);
-        locator.rotation = new float[]{0, 0, 0};
-        geometry.bones.add(locator);
-    }
-
-    private static void ensureHandLocator(RawYsmModel.RawGeometry geometry, String locatorName, String[] parentCandidates) {
-        if (findBoneByName(geometry.bones, locatorName) != null) {
-            return;
-        }
-        RawYsmModel.RawBone parent = findPreferredParentBone(geometry.bones, parentCandidates);
-        if (parent == null) {
-            return;
-        }
-
-        RawYsmModel.RawBone locator = new RawYsmModel.RawBone();
-        locator.name = locatorName;
-        locator.parentName = parent.name == null ? "" : parent.name;
-        locator.pivot = estimateLocatorPivot(parent);
-        locator.rotation = new float[]{0, 0, 0};
-        geometry.bones.add(locator);
-    }
-
-    private static RawYsmModel.RawBone findBoneByName(List<RawYsmModel.RawBone> bones, String name) {
-        for (RawYsmModel.RawBone bone : bones) {
-            if (name.equals(bone.name)) {
-                return bone;
-            }
-        }
-        return null;
-    }
-
-    private static RawYsmModel.RawBone findPreferredParentBone(List<RawYsmModel.RawBone> bones, String[] candidates) {
-        for (String candidate : candidates) {
-            for (RawYsmModel.RawBone bone : bones) {
-                if (candidate.equals(normalizeBoneName(bone.name))) {
-                    return bone;
-                }
-            }
-        }
-
-        RawYsmModel.RawBone best = null;
-        int bestScore = Integer.MIN_VALUE;
-        for (RawYsmModel.RawBone bone : bones) {
-            String normalized = normalizeBoneName(bone.name);
-            int score = handParentScore(normalized, candidates);
-            if (score > bestScore) {
-                bestScore = score;
-                best = bone;
-            }
-        }
-        return bestScore > 0 ? best : null;
-    }
-
-    private static int handParentScore(String normalizedName, String[] candidates) {
-        int score = 0;
-        for (int i = 0; i < candidates.length; i++) {
-            if (normalizedName.contains(candidates[i])) {
-                score = Math.max(score, 100 - i * 10);
-            }
-        }
-        if (score == 0) {
-            return 0;
-        }
-        if (normalizedName.contains("locator") || normalizedName.contains("cloth")
-                || normalizedName.contains("sleeve") || normalizedName.contains("item")) {
-            score -= 50;
-        }
-        return score;
-    }
-
-    private static float[] estimateElytraLocatorPivot(RawYsmModel.RawBone parent) {
-        Bounds bounds = Bounds.from(parent);
-        float[] pivot = parent.pivot == null ? new float[]{0, 24, 2} : parent.pivot.clone();
-        if (pivot.length < 3) {
-            pivot = new float[]{0, 24, 2};
-        }
-        // 鞘翅挂在躯干的“上背/肩颈”处，与原版一致：
-        //   X 取躯干水平中心；Y 取躯干顶部（肩线）——原版鞘翅模型自带向下延展的翼面，从肩线垂下才是正确观感；
-        //   Z 取躯干背面再略微后移，让翼面贴在背后。
-        // 旧实现此处用 pivot[1] - 6，会把挂点压到躯干中部，导致鞘翅整体偏低、像裙子一样垂到腿上。
-        if (bounds.valid) {
-            return new float[]{
-                    (bounds.minX + bounds.maxX) * 0.5f,
-                    bounds.maxY,
-                    bounds.maxZ + 1.5f
-            };
-        }
-        // 无几何包围盒时退回 body 骨骼 pivot：标准人形 body 的 pivot 位于颈部（上背），
-        // 直接使用该高度并略微后移即可，不再向下偏移。
-        pivot[2] += 1.5f;
-        return pivot;
-    }
-
-    private static String normalizeBoneName(String name) {
-        if (name == null || name.isEmpty()) {
-            return "";
-        }
-        StringBuilder out = new StringBuilder(name.length());
-        for (int i = 0; i < name.length(); i++) {
-            char c = Character.toLowerCase(name.charAt(i));
-            if (Character.isLetterOrDigit(c)) {
-                out.append(c);
-            }
-        }
-        return out.toString();
-    }
-
-    private static float[] estimateLocatorPivot(RawYsmModel.RawBone parent) {
-        Bounds bounds = Bounds.from(parent);
-        if (bounds.valid) {
-            String normalized = normalizeBoneName(parent.name);
-            boolean armBone = normalized.contains("arm") && !normalized.contains("hand")
-                    && !normalized.contains("palm") && !normalized.contains("wrist");
-            float y = armBone ? bounds.minY : (bounds.minY + bounds.maxY) * 0.5f;
-            return new float[]{
-                    (bounds.minX + bounds.maxX) * 0.5f,
-                    y,
-                    (bounds.minZ + bounds.maxZ) * 0.5f
-            };
-        }
-        return parent.pivot == null ? new float[]{0, 0, 0} : parent.pivot.clone();
-    }
-
-    private static final class Bounds {
-        private float minX = Float.POSITIVE_INFINITY;
-        private float minY = Float.POSITIVE_INFINITY;
-        private float minZ = Float.POSITIVE_INFINITY;
-        private float maxX = Float.NEGATIVE_INFINITY;
-        private float maxY = Float.NEGATIVE_INFINITY;
-        private float maxZ = Float.NEGATIVE_INFINITY;
-        private boolean valid;
-
-        private static Bounds from(RawYsmModel.RawBone bone) {
-            Bounds bounds = new Bounds();
-            if (bone == null || bone.cubes == null) {
-                return bounds;
-            }
-            for (RawYsmModel.RawCube cube : bone.cubes) {
-                if (cube == null || cube.faces == null) {
-                    continue;
-                }
-                for (RawYsmModel.RawFace face : cube.faces) {
-                    if (face == null || face.positions == null) {
-                        continue;
-                    }
-                    for (float[] position : face.positions) {
-                        if (position == null || position.length < 3) {
-                            continue;
-                        }
-                        bounds.include(position[0] * 16f, position[1] * 16f, position[2] * 16f);
-                    }
-                }
-            }
-            return bounds;
-        }
-
-        private void include(float x, float y, float z) {
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            minZ = Math.min(minZ, z);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
-            maxZ = Math.max(maxZ, z);
-            valid = true;
-        }
-    }
 
     // ============================================================
     // Textures
@@ -907,124 +674,6 @@ public class BBToRawConverter {
         raw.mainEntity.animationFiles.put("animation-main", animFile);
     }
 
-    private static void ensureVanillaFallbackAnimations(RawYsmModel raw) {
-        RawYsmModel.RawGeometry geometry = raw.mainEntity.mainModel;
-        if (geometry == null || geometry.bones == null || geometry.bones.isEmpty()) {
-            return;
-        }
-
-        RawYsmModel.RawAnimationFile animFile = raw.mainEntity.animationFiles.get("animation-main");
-        if (animFile == null) {
-            animFile = new RawYsmModel.RawAnimationFile();
-            animFile.animType = 1;
-            animFile.fileHash = UUID.randomUUID().toString();
-            raw.mainEntity.animationFiles.put("animation-main", animFile);
-        }
-
-        Map<String, String> bones = collectNormalizedBoneNames(geometry);
-        animFile.animations.putIfAbsent("idle", createVanillaFallbackAnimation("idle", bones, 0f, 0f));
-        animFile.animations.putIfAbsent("walk", createVanillaFallbackAnimation("walk", bones, 25f, 35f));
-        animFile.animations.putIfAbsent("run", createVanillaFallbackAnimation("run", bones, 35f, 45f));
-        // 补充 AnimationRegister 注册但 bbmodel 无自带动画的高频状态，
-        // 避免这些状态「无法正常播放 / 不齐全」。
-        animFile.animations.putIfAbsent("attacked", createFallbackShakeAnimation("attacked", bones, 20f, 12f));
-        animFile.animations.putIfAbsent("death", createFallbackPoseAnimation("death", bones, 90f, 90f));
-        animFile.animations.putIfAbsent("swim", createVanillaFallbackAnimation("swim", bones, 45f, 30f));
-        animFile.animations.putIfAbsent("climb", createVanillaFallbackAnimation("climb", bones, 35f, 40f));
-        animFile.animations.putIfAbsent("climbing", createVanillaFallbackAnimation("climbing", bones, 30f, 35f));
-        animFile.animations.putIfAbsent("sleep", createVanillaFallbackAnimation("sleep", bones, 8f, 8f));
-    }
-
-    private static Map<String, String> collectNormalizedBoneNames(RawYsmModel.RawGeometry geometry) {
-        Map<String, String> out = new HashMap<>();
-        for (RawYsmModel.RawBone bone : geometry.bones) {
-            String normalized = normalizeBoneName(bone.name);
-            if (!normalized.isEmpty()) {
-                out.putIfAbsent(normalized, bone.name);
-            }
-        }
-        return out;
-    }
-
-    private static RawYsmModel.RawAnimation createVanillaFallbackAnimation(String name, Map<String, String> bones,
-                                                                          float armAmplitude, float legAmplitude) {
-        RawYsmModel.RawAnimation anim = new RawYsmModel.RawAnimation();
-        anim.name = name;
-        anim.length = 1.0f;
-        anim.loopMode = 1;
-        addFallbackBoneAnimation(anim, firstBone(bones, "leftarm", "leftupperarm", "leftshoulder", "leftuparm", "leftbicep", "armleft"), swingExpression(armAmplitude, false));
-        addFallbackBoneAnimation(anim, firstBone(bones, "rightarm", "rightupperarm", "rightshoulder", "rightuparm", "rightbicep", "armright"), swingExpression(armAmplitude, true));
-        addFallbackBoneAnimation(anim, firstBone(bones, "leftleg", "leftupperleg", "leftthigh", "leftupleg", "legleft"), swingExpression(legAmplitude, true));
-        addFallbackBoneAnimation(anim, firstBone(bones, "rightleg", "rightupperleg", "rightthigh", "rightupleg", "legright"), swingExpression(legAmplitude, false));
-        return anim;
-    }
-
-    // 受击抖动：四肢快速小幅度高频摆动，配合 PLAY_ONCE 播放一次。
-    private static RawYsmModel.RawAnimation createFallbackShakeAnimation(String name, Map<String, String> bones,
-                                                                        float armAmplitude, float legAmplitude) {
-        RawYsmModel.RawAnimation anim = new RawYsmModel.RawAnimation();
-        anim.name = name;
-        anim.length = 1.0f;
-        anim.loopMode = 0; // once
-        addFallbackBoneAnimation(anim, firstBone(bones, "leftarm", "leftupperarm", "leftshoulder", "leftuparm", "leftbicep", "armleft"), shakeExpression(armAmplitude, false));
-        addFallbackBoneAnimation(anim, firstBone(bones, "rightarm", "rightupperarm", "rightshoulder", "rightuparm", "rightbicep", "armright"), shakeExpression(armAmplitude, true));
-        addFallbackBoneAnimation(anim, firstBone(bones, "leftleg", "leftupperleg", "leftthigh", "leftupleg", "legleft"), shakeExpression(legAmplitude, true));
-        addFallbackBoneAnimation(anim, firstBone(bones, "rightleg", "rightupperleg", "rightthigh", "rightupleg", "legright"), shakeExpression(legAmplitude, false));
-        return anim;
-    }
-
-    // 固定姿态（如死亡前倾）：绕 X 固定角度，播放一次后保持。
-    private static RawYsmModel.RawAnimation createFallbackPoseAnimation(String name, Map<String, String> bones,
-                                                                        float armXRot, float legXRot) {
-        RawYsmModel.RawAnimation anim = new RawYsmModel.RawAnimation();
-        anim.name = name;
-        anim.length = 1.0f;
-        anim.loopMode = 0; // once
-        addFallbackBoneAnimation(anim, firstBone(bones, "leftarm", "leftupperarm", "leftshoulder", "leftuparm", "leftbicep", "armleft"), armXRot);
-        addFallbackBoneAnimation(anim, firstBone(bones, "rightarm", "rightupperarm", "rightshoulder", "rightuparm", "rightbicep", "armright"), armXRot);
-        addFallbackBoneAnimation(anim, firstBone(bones, "leftleg", "leftupperleg", "leftthigh", "leftupleg", "legleft"), legXRot);
-        addFallbackBoneAnimation(anim, firstBone(bones, "rightleg", "rightupperleg", "rightthigh", "rightupleg", "legright"), legXRot);
-        return anim;
-    }
-
-    private static String firstBone(Map<String, String> bones, String... candidates) {
-        for (String candidate : candidates) {
-            String bone = bones.get(candidate);
-            if (bone != null) {
-                return bone;
-            }
-        }
-        return null;
-    }
-
-    private static String swingExpression(float amplitude, boolean oppositePhase) {
-        if (amplitude == 0f) {
-            return "0";
-        }
-        return "math.cos(query.anim_time * 360" + (oppositePhase ? " + 180" : "") + ") * " + amplitude;
-    }
-
-    // 受击抖动：更高频（4 倍速）的小幅摆动。
-    private static String shakeExpression(float amplitude, boolean oppositePhase) {
-        if (amplitude == 0f) {
-            return "0";
-        }
-        return "math.cos(query.anim_time * 1440" + (oppositePhase ? " + 180" : "") + ") * " + amplitude;
-    }
-
-    private static void addFallbackBoneAnimation(RawYsmModel.RawAnimation anim, String boneName, Object xRotation) {
-        if (boneName == null) {
-            return;
-        }
-        RawYsmModel.RawBoneAnimation boneAnim = new RawYsmModel.RawBoneAnimation();
-        boneAnim.boneName = boneName;
-        RawYsmModel.RawKeyframe keyframe = new RawYsmModel.RawKeyframe();
-        keyframe.timestamp = 0.0f;
-        keyframe.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
-        keyframe.postData = new Object[]{xRotation, 0f, 0f};
-        boneAnim.rotation.add(keyframe);
-        anim.boneAnimations.add(boneAnim);
-    }
 
     private static void collectGroupNames(BBOutlinerNode node, Map<String, String> out) {
         if (node == null || !node.isGroup()) return;
