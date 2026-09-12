@@ -107,7 +107,6 @@ public class ModernPlayerModelScreen extends Screen {
     private static final int CARD_NAME_TEXT = 0xFFF3EFE0;
     private static final int CARD_DIM = 0x9F222222;
     private static final int CARD_NAME_BG = 0xC6000000;
-    private static final int CARD_COVER_SHADE = 0x8C000000;
 
     /**
      * 卡片封面贴图像素尺寸缓存。键为弱引用，贴图回收后随之失效；
@@ -824,7 +823,7 @@ public class ModernPlayerModelScreen extends Screen {
             int size = Math.min(26, Math.min(cw - 8, coverH - 8));
             drawIconScaled(g, IconGlyph.LOCK, cx + Math.max(0, (cw - size) / 2), cy + Math.max(1, (coverH - size) / 2), size);
         } else {
-            renderCardMonster(g, slot, entry.modelId(), cx, cy, cw, coverH);
+            renderCardMonster(g, slot, entry.modelId(), cx, cy, cw, ch, coverH);
         }
 
         // 名字条压在封面之上，保证不被 3D 小人遮挡。
@@ -874,17 +873,11 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
-    /** 模型卡静态封面：内嵌 gui_background（缺则 gui_foreground）。未常驻时返回 false。 */
-    private boolean drawModelCover(GuiGraphics g, ModelAssembly asm, int x, int y, int w, int h) {
-        AbstractTexture cover = coverTextureOf(asm);
-        return cover != null && drawCoverImage(g, cover, x, y, w, h);
-    }
-
     /**
-     * 卡片里的实时 3D 小人。走 {@link ModelPreviewRenderer#renderLivingEntityPreview} 的显式 yaw 重载
-     * （1.21.1 分支仍保留该重载），固定正面朝向。
+     * 卡片里的实时 3D 小人：YSM 卡面三层构图（背景图 → 模型 → 前景边框）的中间层。
+     * 走 {@link ModelPreviewRenderer#renderLivingEntityPreview} 的显式 yaw 重载（1.21.1 分支仍保留）。
      */
-    private void renderCardMonster(GuiGraphics g, int slot, String modelId, int cx, int cy, int cw, int coverH) {
+    private void renderCardMonster(GuiGraphics g, int slot, String modelId, int cx, int cy, int cw, int ch, int coverH) {
         if (cw < 18 || coverH < 26) {
             return;
         }
@@ -895,25 +888,47 @@ public class ModernPlayerModelScreen extends Screen {
             drawCardLoading(g, cx, cy, cw, coverH);
             return;
         }
-        // 有内嵌 GUI 卡图的模型先铺一层并压暗当底，小人更有层次；没有则以卡底色为背景。
-        if (drawModelCover(g, asm, cx + 1, cy + 1, cw - 2, coverH - 1)) {
-            fill(g, cx + 1, cy + 1, cw - 2, coverH - 1, CARD_COVER_SHADE);
+        // YSM 卡面是三层构图：背景图 → 实时模型 → 前景边框。背景整幅铺在整张卡上
+        // （含名字条区域），前景边框最后叠回，模型的头/脚就落在边框留白里，不会被裁。
+        ModelDisplayAssets assets = asm.getTextureRegistry();
+        AbstractTexture background = assets == null ? null : assets.getGuiBackground();
+        AbstractTexture foreground = assets == null ? null : assets.getGuiForeground();
+        boolean hasBackground = drawCoverImage(g, background, cx, cy, cw, ch);
+        if (!hasBackground) {
+            // 无卡图：退回前景（可能也是边框）或纯卡底色即可，无需额外处理。
+            drawCoverImage(g, foreground, cx, cy, cw, ch);
         }
-        if (asm.isGltf()) {
+        boolean drewFigure = false;
+        if (!asm.isGltf()) {
+            drewFigure = renderCardFigure(g, slot, modelId, asm, cx, cy, cw, coverH);
+        }
+        // 前景边框叠在小人之上（其中心透明，正好露出小人）；未被当作背景用过才叠。
+        if (foreground != null && foreground != background) {
+            drawCoverImage(g, foreground, cx, cy, cw, ch);
+        }
+        if (!drewFigure && !hasBackground && foreground == null) {
             int size = Math.min(34, Math.min(cw - 8, coverH - 12));
             drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
-            return;
         }
+    }
+
+    /**
+     * 卡片内的实时小人。返回是否真的排了渲染。
+     *
+     * <p>缩放取「封面高 × {@link ModelPickerLayout#CARD_FIGURE_SCALE}」——与右侧详情栏同一比例，
+     * 保证整只模型落进卡面而不被上沿裁掉；预览盒用整块封面（而非居中正方形），
+     * 竖卡才不会在上下留出空档。</p>
+     */
+    private boolean renderCardFigure(GuiGraphics g, int slot, String modelId, ModelAssembly asm, int cx, int cy, int cw, int coverH) {
         try {
             String textureId = selectedTextureOrDefault(asm);
             PlayerPreviewEntity entity = cardPreviewEntity(slot, modelId, textureId);
             if (entity == null) {
-                drawCardLoading(g, cx, cy, cw, coverH);
-                return;
+                return false;
             }
             ClientModelManager.markModelUsed(modelId);
             if (!entity.isModelReady()) {
-                return;
+                return false;
             }
             boolean disableRotation;
             try {
@@ -922,35 +937,23 @@ public class ModernPlayerModelScreen extends Screen {
             } catch (Exception ignored) {
                 disableRotation = false;
             }
-            float scale = ModelPickerLayout.clamp(Math.round(coverH * 0.62f), 18, 160);
+            float scale = ModelPickerLayout.figureScale(coverH);
             float yaw = disableRotation ? 180.0f : 176.0f;
-            int half = Math.max(12, Math.min(cw, coverH) / 2);
-            int centerX = cx + cw / 2;
-            int centerY = cy + coverH / 2;
+            int left = cx + 1;
+            int top = cy + 1;
+            int right = cx + cw - 1;
+            int bottom = cy + coverH - 1;
             ModelPreviewRenderer.renderLivingEntityPreview(cx + cw / 2.0f, cy + coverH - 3.0f, scale, 0.0f, entity,
                     RendererManager.getPlayerRenderer(), disableRotation, true, yaw);
+            return true;
         } catch (Exception ignored) {
-            int size = Math.min(26, Math.min(cw - 8, coverH - 10));
-            drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
+            return false;
         }
     }
 
     private void drawCardLoading(GuiGraphics g, int cx, int cy, int cw, int coverH) {
         String s = "…";
         g.drawString(this.font, Component.literal(s), cx + (cw - this.font.width(s)) / 2, cy + Math.max(4, (coverH - this.font.lineHeight) / 2), CARD_NAME_TEXT, false);
-    }
-
-    /** 模型内嵌 GUI 封面：优先 gui_background，缺则 gui_foreground。 */
-    private AbstractTexture coverTextureOf(ModelAssembly asm) {
-        if (asm == null) {
-            return null;
-        }
-        ModelDisplayAssets assets = asm.getTextureRegistry();
-        if (assets == null) {
-            return null;
-        }
-        AbstractTexture background = assets.getGuiBackground();
-        return background != null ? background : assets.getGuiForeground();
     }
 
     /** 把封面等比 fit 进 (x,y,w,h)，居中不拉伸；拿不到资源/尺寸时返回 false。 */
