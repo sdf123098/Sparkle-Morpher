@@ -36,8 +36,14 @@ final class ModelPickerLayout {
     static final int CARD_MIN_W = 64;
     /** 卡片最大宽（避免大屏上单卡过大）。 */
     static final int CARD_MAX_W = 168;
-    /** 竖卡比例（高 = 宽 × 该值）。 */
-    static final float CARD_ASPECT = 1.62f;
+    /**
+     * 竖卡比例（高 = 宽 × 该值）。
+     *
+     * <p>{@code 90f / 52f}：YSM 卡面素材的标准尺寸就是 <b>52×90</b>（如 {@code gui_background}
+     * 的「背景图.png」与 {@code gui_foreground} 的「前景图.png」边框，内置 default 模型也是这一对）。
+     * 卡比例与素材一致，卡图才能整幅铺满、不出现两侧留白。</p>
+     */
+    static final float CARD_ASPECT = 90.0f / 52.0f;
     /** 名字条高度 = 卡高 × 该比例，并 clamp 到下面上下限。 */
     static final float CARD_NAME_RATIO = 0.24f;
     static final int CARD_NAME_MIN = 16;
@@ -45,6 +51,24 @@ final class ModelPickerLayout {
     /** 卡间距与列表区四周留白。 */
     static final int CARD_GAP = 4;
     static final int CARD_MARGIN = 5;
+    /**
+     * 卡片内实时小人缩放 = 封面高 × 该系数。
+     *
+     * <p>取值来自右侧详情栏长期验证过的比例（原 {@code Math.min(54, h * 0.43f)}）：
+     * 系数偏大会让模型超出卡片上沿被裁掉（表现为「头部被遮挡」），偏小则填不满卡面。</p>
+     */
+    static final float CARD_FIGURE_SCALE = 0.43f;
+    /** 小人缩放的下限（像素）。仅作为偏好下限，实际还会被封面高夹住。 */
+    static final int CARD_FIGURE_MIN = 16;
+    static final int CARD_FIGURE_MAX = 64;
+
+    /**
+     * 卡片内小人缩放（像素）。恒 ≤ 封面高：否则模型会超出卡面上沿被裁（头部被遮挡）。
+     */
+    static int figureScale(int coverH) {
+        int preferred = clamp(Math.round(coverH * CARD_FIGURE_SCALE), CARD_FIGURE_MIN, CARD_FIGURE_MAX);
+        return Math.max(1, Math.min(preferred, coverH));
+    }
     /** AUTO 判定：进入卡片模式所需的最小列表区尺寸。 */
     static final int CARDS_MIN_W = 150;
     static final int CARDS_MIN_H = 130;
@@ -52,12 +76,12 @@ final class ModelPickerLayout {
     static final int FORCED_MIN_CARD_W = 40;
     static final int FORCED_MIN_CARD_H = 48;
     /**
-     * 每页最多列/行。行数上限同时是「每帧实时 3D 预览数」的硬顶——
-     * 每张可见卡都渲染实时小人，COLS×ROWS ≤ 16 才能把开销压在合理区间
-     * （典型页面为 8~10 张，与原 5×2 目录方案的密度一致）。
+     * 每页最多列/行。行列上限与 {@link #cards} 的面积搜索共同决定每页容量，
+     * 也就是「每帧实时 3D 预览数」的硬顶；取 8×6 是为了让高瘦面板也能把纵向空间排满，
+     * 实际典型页面远小于此值。
      */
     static final int MAX_COLS = 8;
-    static final int MAX_ROWS = 2;
+    static final int MAX_ROWS = 6;
 
     private ModelPickerLayout() {
     }
@@ -83,23 +107,52 @@ final class ModelPickerLayout {
     }
 
     /**
-     * 卡片排版：列数由宽度推、行数由高度推，卡宽取宽高两方向都放得下的较小值，
-     * 再用实际卡宽回收碎边（多出来的空间够放一列就再放一列）。
+     * 卡片排版：在可用面积里选出最合适的列×行组合。
+     *
+     * <p>卡宽固定按 52:90 比例（与卡面素材一致），所以选定列数后行数由高度定死。
+     * 遍历列数（1..{@link #MAX_COLS}），**优先取每页张数最多**的排法（既不浪费空间、
+     * 也不至于只摆两张巨大卡），张数相同时取卡更大者，避免把卡压得过小。</p>
      */
     static Cards cards(int listW, int listH) {
         int usableW = Math.max(1, listW - 2 * CARD_MARGIN);
         int usableH = Math.max(1, listH - 2 * CARD_MARGIN);
-        int cols = clamp((usableW + CARD_GAP) / (CARD_MIN_W + CARD_GAP), 1, MAX_COLS);
-        int rows = clamp((usableH + CARD_GAP) / (cardH(CARD_MIN_W) + CARD_GAP), 1, MAX_ROWS);
-        int wFit = (usableW - (cols - 1) * CARD_GAP) / cols;
-        int hFit = (int) ((usableH - (rows - 1) * CARD_GAP) / (rows * CARD_ASPECT));
-        int cellW = clamp(Math.min(wFit, hFit), 1, CARD_MAX_W);
-        if (cellW >= CARD_MIN_W) {
-            cols = clamp((usableW + CARD_GAP) / (cellW + CARD_GAP), 1, cols);
-            rows = clamp((usableH + CARD_GAP) / (cardH(cellW) + CARD_GAP), 1, rows);
+        int bestCols = 0;
+        int bestRows = 0;
+        int bestW = 0;
+        int bestH = 0;
+        int bestCapacity = 0;
+        for (int cols = 1; cols <= MAX_COLS; cols++) {
+            int wFit = (usableW - (cols - 1) * CARD_GAP) / cols;
+            if (wFit < CARD_MIN_W) {
+                break; // 再往后的列数只会更窄
+            }
+            int cellW = Math.min(wFit, CARD_MAX_W);
+            int cellH = cardH(cellW);
+            int rows = (usableH + CARD_GAP) / (cellH + CARD_GAP);
+            if (rows < 1) {
+                continue;
+            }
+            rows = Math.min(rows, MAX_ROWS);
+            int capacity = cols * rows;
+            boolean better = capacity > bestCapacity
+                    || (capacity == bestCapacity && cellW > bestW);
+            if (better) {
+                bestCapacity = capacity;
+                bestCols = cols;
+                bestRows = rows;
+                bestW = cellW;
+                bestH = cellH;
+            }
         }
-        int cellH = cardH(cellW);
-        return new Cards(cols, rows, cellW, cellH, Math.max(1, cols * rows));
+        if (bestCols == 0) {
+            // 放不下任何最小可读卡：给出单张「宽高都放得下」的卡，
+            // 由调用方决定是否回退文字网格（此处不得超出可用区，否则排版会溢出）。
+            int byWidth = Math.min(usableW, CARD_MAX_W);
+            int byHeight = (int) Math.floor(usableH / CARD_ASPECT);
+            int cellW = Math.max(1, Math.min(byWidth, byHeight));
+            return new Cards(1, 1, cellW, Math.max(1, Math.min(cardH(cellW), usableH)), 1);
+        }
+        return new Cards(bestCols, bestRows, bestW, bestH, bestCapacity);
     }
 
     /** 卡高（含名字条）。 */
