@@ -16,6 +16,7 @@ import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import com.micaftic.morpher.client.animation.condition.ConditionVehicle;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.happyghast.HappyGhast;
 import net.minecraft.world.entity.animal.pig.Pig;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
@@ -74,6 +75,11 @@ public class LivingMovementAnimationPredicate implements IAnimationPredicate<Liv
         PlayState playState = TouhouLittleMaidClientCompat.handleMaidInteraction(event, livingEntity, vehicle);
         if (playState != null) {
             return playState;
+        }
+        // 乐魂（快乐恶魂）是坐上去的载具，不跨骑：必须显式识别，否则会被下面的 LivingEntity
+        // 兜底当成骑乘，套用马的骑乘姿势。
+        if (vehicle instanceof HappyGhast) {
+            return IAnimationPredicate.playAnimationWithLoop(event, "sit", ILoopType.EDefaultLoopTypes.LOOP);
         }
         if (vehicle instanceof LivingEntity) {
             return IAnimationPredicate.playAnimationWithLoop(event, "ride", ILoopType.EDefaultLoopTypes.LOOP);
