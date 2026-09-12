@@ -51,9 +51,13 @@ final class ModelPickerLayout {
     /** CARDS 强制的硬下限：低于此值卡片不可读，只能回退文字网格。 */
     static final int FORCED_MIN_CARD_W = 40;
     static final int FORCED_MIN_CARD_H = 48;
-    /** 每页最多列/行（实时预览余量与可读性）。 */
+    /**
+     * 每页最多列/行。行数上限同时是「每帧实时 3D 预览数」的硬顶——
+     * 每张可见卡都渲染实时小人，COLS×ROWS ≤ 16 才能把开销压在合理区间
+     * （典型页面为 8~10 张，与原 5×2 目录方案的密度一致）。
+     */
     static final int MAX_COLS = 8;
-    static final int MAX_ROWS = 4;
+    static final int MAX_ROWS = 2;
 
     private ModelPickerLayout() {
     }
