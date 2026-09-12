@@ -130,6 +130,19 @@ class ModelPickerLayoutTest {
     }
 
     @Test
+    void perPageCapacityIsBounded() {
+        // 每张可见卡都渲染实时 3D，故每页容量必须有硬顶（= 每帧预览数上限）。
+        int cap = ModelPickerLayout.MAX_COLS * ModelPickerLayout.MAX_ROWS;
+        for (int w : new int[]{300, 600, 1200, 4000}) {
+            for (int h : new int[]{200, 400, 800, 2000}) {
+                ModelPickerLayout.Cards m = ModelPickerLayout.cards(w, h);
+                assertTrue(m.capacity() <= cap,
+                        "capacity " + m.capacity() + " must not exceed " + cap + " at " + w + "x" + h);
+            }
+        }
+    }
+
+    @Test
     void totalPagesRoundsUpAndHandlesEmpty() {
         ModelPickerLayout.Cards m = ModelPickerLayout.cards(400, 300);
         assertEquals(1, m.totalPages(0), "empty list still has one page");
