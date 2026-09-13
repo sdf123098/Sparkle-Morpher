@@ -32,7 +32,10 @@ public class PlayerGeoEntity extends GeoEntity<LocalPlayer> {
 
     @Override
     public boolean shouldSkipAnimation(AnimationEvent<?> event) {
-        return true;
+        // First-person arms use their own animation controller. Its bone visibility
+        // tracks model features such as outfit and arm switches, so skipping this
+        // evaluation leaves every switchable part at its default visible state.
+        return false;
     }
 
     @Override
