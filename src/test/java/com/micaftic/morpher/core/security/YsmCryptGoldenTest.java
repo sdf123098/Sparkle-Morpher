@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 2) 非确定性路径（SecureRandom padding/key）round-trip characterization；
  * 3) server cache 头部 varint 结构 golden。
  *
- * 单测环境说明：无 Minecraft/mod 加载，getModelCacheIdentity() 的 modVersion 解析全部
- * 反射失败 → 固定为 "unknown"，因此 calculateModelHashes 是确定性的。
+ * 单测环境说明：ModDevGradle 会加载实际模组元数据；模型缓存身份刻意包含版本号，
+ * 因此每次正式版本升级都必须更新该版本的 golden 向量。
  */
 class YsmCryptGoldenTest {
 
@@ -48,7 +48,7 @@ class YsmCryptGoldenTest {
     void calculateModelHashes_isDeterministic() throws Exception {
         long[] a = YsmCrypt.calculateModelHashes("model-abc", SERVER_KEY);
         long[] b = YsmCrypt.calculateModelHashes("model-abc", SERVER_KEY);
-        assertArrayEquals(a, b, "calculateModelHashes 必须确定（单测环境 modVersion=unknown）");
+        assertArrayEquals(a, b, "calculateModelHashes 在同一模组版本内必须确定");
     }
 
     // ---------- round-trip characterization ----------
@@ -91,8 +91,8 @@ class YsmCryptGoldenTest {
 
     /** byte-for-byte 锁定：2026-08-10 记录的 packet 加密输出（appendNextKey=false，KEY_IV=0x5A×56，payload="Hello YSM golden protocol"）。 */
     private static final String GOLDEN_PACKET_B64 = "IGQSY+7MxH+8hYIYksrxJitS4H7573PCvSJGVr2FAuxO";
-    /** byte-for-byte 锁定：2026-08-10 记录的 calculateModelHashes("model-abc", SERVER_KEY)（单测环境 modVersion=unknown）。 */
-    private static final long[] GOLDEN_HASHES = {-8304608359687288056L, 2575551593107348603L};
+    /** byte-for-byte 锁定：1.2.7 ModDev 单测环境的 calculateModelHashes("model-abc", SERVER_KEY)。 */
+    private static final long[] GOLDEN_HASHES = {-3189657657089773134L, -20814358122263860L};
 
     @Test
     void packetEncrypt_goldenBytes() throws Exception {

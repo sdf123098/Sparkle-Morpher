@@ -59,6 +59,14 @@ neoForge {
             sourceSet sourceSets.main
         }
     }
+
+    // ModDevGradle must own the test classpath and the generated Minecraft
+    // artifacts.  A plain Gradle test source set otherwise compiles before
+    // createMinecraftArtifacts on a clean CI runner.
+    unitTest {
+        enable()
+        testedMod = mods."${mod_id}"
+    }
 }
 
 sourceSets.main.java {
@@ -93,37 +101,14 @@ dependencies {
     jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 
     // R0: JVM 单测（JUnit 5），测试代码在 src/test/java。
-    // moddev 将 MC 依赖链剥离出 test 运行时：neoforge + minecraft-dependencies（gson/joml/fastutil 等库）
-    // + moddev 生成的 MC 类 jar（接口签名引用 MC 类需要）。
+    // Minecraft / NeoForge 类路径由 neoForge.unitTest 统一管理，避免同时
+    // 注入普通和 merged 工件而在测试启动时产生重复类。
     testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-    testImplementation "net.neoforged:neoforge:$neoforge_version"
-    testImplementation "net.neoforged:minecraft-dependencies:$minecraft_version"
-    // ModDev generates the merged client/server classes during the build; include them
-    // explicitly so clean CI test runs can resolve client-only Minecraft classes.
-    def mergedNeoForgeTestJar = layout.buildDirectory.file(
-            "moddev/artifacts/neoforge-${neoforge_version}-merged.jar")
-    testRuntimeOnly files(mergedNeoForgeTestJar)
-    testRuntimeOnly files(fileTree("build/moddev/artifacts") {
-        include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
-    })
-    // MC classes are also needed on the test compile classpath so render-context
-    // tests can reference types such as net.minecraft.world.entity.Entity.
-    testCompileOnly files(fileTree("build/moddev/artifacts") {
-        include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
-    })
 }
 
 test {
     useJUnitPlatform()
-    dependsOn tasks.named('createMinecraftArtifacts')
-    doFirst {
-        // The generated merged jar is created during the build; attach it at execution
-        // time so a clean Linux CI checkout includes client-only Minecraft classes.
-        classpath += files(fileTree("build/moddev/artifacts") {
-            include "neoforge-*-merged.jar"
-        })
-    }
 }
 
 tasks.withType(JavaCompile).configureEach {
