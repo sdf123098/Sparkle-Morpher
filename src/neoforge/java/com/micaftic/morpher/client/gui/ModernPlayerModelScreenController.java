@@ -6,12 +6,12 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
 import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
-import com.micaftic.morpher.client.gui.resource.ResourceDownloadManager;
+import com.micaftic.morpher.client.gui.resource.download.DownloadQueue;
 import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
-import com.micaftic.morpher.client.upload.ModelImportFilePicker;
+import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.config.GeneralConfig;
@@ -105,7 +105,7 @@ public final class ModernPlayerModelScreenController {
     private ResourceStationConfig.State resourceConfig = ResourceStationConfig.load();
     private final List<ModelRepoEntry> resourceEntries = new ArrayList<>();
     private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
-    private final Queue<ModelImportFilePicker.PickedFile> pendingImports = new ArrayDeque<>();
+    private final Queue<FilePickerCoordinator.PickedFile> pendingImports = new ArrayDeque<>();
     private boolean localImportInProgress;
     private int screenGeneration;
 
@@ -303,59 +303,59 @@ public final class ModernPlayerModelScreenController {
 
     /** 入队单个资源；返回是否入队成功（原 {@code enqueueResource} 的判定部分）。 */
     public boolean enqueueResource(ModelRepoEntry entry) {
-        return ResourceDownloadManager.enqueue(entry, this.resourceConfig);
+        return DownloadQueue.enqueue(entry, this.resourceConfig);
     }
 
     /** 入队选中项（无选中则整页）；返回新增数量（原 {@code enqueueSelectedResources} 的判定部分）。 */
     public int enqueueSelectedResources() {
         List<ModelRepoEntry> selected = this.resourceEntries.stream().filter(e -> this.selectedResourceUrls.contains(e.url())).toList();
-        return ResourceDownloadManager.enqueueAll(selected.isEmpty() ? filteredResources() : selected, this.resourceConfig);
+        return DownloadQueue.enqueueAll(selected.isEmpty() ? filteredResources() : selected, this.resourceConfig);
     }
 
     public boolean isQueued(ModelRepoEntry entry) {
-        return ResourceDownloadManager.isQueued(entry);
+        return DownloadQueue.isQueued(entry);
     }
 
-    /** 驱动下载队列（原 {@code tick()} 中的 {@code ResourceDownloadManager.tick()}）。 */
+    /** 驱动下载队列。 */
     public void tickDownloads() {
-        ResourceDownloadManager.tick();
+        DownloadQueue.tick();
     }
 
     public void clearFinishedDownloads() {
-        ResourceDownloadManager.clearFinished();
+        DownloadQueue.clearFinished();
     }
 
     public void cancelCurrentDownload() {
-        ResourceDownloadManager.cancelCurrent();
+        DownloadQueue.cancelCurrent();
     }
 
     /** 队列视图：未完成在前、已完成最多 8 条（顺序与原渲染代码一致）。 */
     public List<TaskView> queueRows() {
-        ResourceDownloadManager.Snapshot snapshot = ResourceDownloadManager.snapshot();
+        DownloadQueue.Snapshot snapshot = DownloadQueue.snapshot();
         List<TaskView> rows = new ArrayList<>();
-        for (ResourceDownloadManager.TaskSnapshot task : snapshot.unfinishedTasks()) {
+        for (DownloadQueue.TaskSnapshot task : snapshot.unfinishedTasks()) {
             rows.add(toView(task));
         }
-        for (ResourceDownloadManager.TaskSnapshot task : snapshot.finishedTasks().stream().limit(8).toList()) {
+        for (DownloadQueue.TaskSnapshot task : snapshot.finishedTasks().stream().limit(8).toList()) {
             rows.add(toView(task));
         }
         return rows;
     }
 
     public Component queueStatus() {
-        return ResourceDownloadManager.snapshot().status();
+        return DownloadQueue.snapshot().status();
     }
 
     public ChatFormatting queueStatusColor() {
-        return ResourceDownloadManager.snapshot().statusColor();
+        return DownloadQueue.snapshot().statusColor();
     }
 
-    private static TaskView toView(ResourceDownloadManager.TaskSnapshot task) {
+    private static TaskView toView(DownloadQueue.TaskSnapshot task) {
         return new TaskView(task.name(), task.progress(), taskStateColor(task.state()));
     }
 
     /** 任务状态 → 进度条颜色（原 Screen 内 {@code stateColor}，数值不变）。 */
-    private static int taskStateColor(ResourceDownloadManager.TaskState state) {
+    private static int taskStateColor(DownloadQueue.TaskState state) {
         return switch (state) {
             case DONE -> 0xFF4CAF50;
             case FAILED -> 0xFFD23232;
@@ -379,21 +379,21 @@ public final class ModernPlayerModelScreenController {
 
     /** 取消系统文件选择框（原 {@code removed()} 中的 cancelPicking）。 */
     public void cancelPicking() {
-        ModelImportFilePicker.cancelPicking();
+        FilePickerCoordinator.cancelPicking();
     }
 
     /** 打开 .ysm 文件选择框；返回错误（无错误返回 null）。 */
     public Component pickYsmFile() {
-        return ModelImportFilePicker.pickYsmFile();
+        return FilePickerCoordinator.pickYsmFile();
     }
 
     /** 轮询已完成的选择 + 错误，并推进队列（原 {@code pollImports}）。 */
     public void pollImports() {
-        ModelImportFilePicker.PickedFile picked;
-        while ((picked = ModelImportFilePicker.pollCompleted()) != null) {
+        FilePickerCoordinator.PickedFile picked;
+        while ((picked = FilePickerCoordinator.pollCompleted()) != null) {
             this.pendingImports.add(picked);
         }
-        Component pickerError = ModelImportFilePicker.consumeLastError();
+        Component pickerError = FilePickerCoordinator.consumeLastError();
         if (!pickerError.getString().isEmpty()) {
             this.host.postStatus(pickerError, ChatFormatting.RED);
         }
@@ -404,9 +404,9 @@ public final class ModernPlayerModelScreenController {
     public void enqueueImportPath(Path path) {
         try {
             if (Files.isDirectory(path)) {
-                this.pendingImports.add(ModelImportFilePicker.packDirectory(path));
-            } else if (ModelImportFilePicker.isImportFileName(path.getFileName().toString())) {
-                this.pendingImports.add(new ModelImportFilePicker.PickedFile(path.getFileName().toString(), Files.readAllBytes(path)));
+                this.pendingImports.add(FilePickerCoordinator.packDirectory(path));
+            } else if (FilePickerCoordinator.isImportFileName(path.getFileName().toString())) {
+                this.pendingImports.add(new FilePickerCoordinator.PickedFile(path.getFileName().toString(), Files.readAllBytes(path)));
             }
         } catch (IOException e) {
             this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.error.read_file", e.getMessage()), ChatFormatting.RED);
@@ -422,7 +422,7 @@ public final class ModernPlayerModelScreenController {
         if (existing != null && !existing.isTerminal()) {
             return;
         }
-        ModelImportFilePicker.PickedFile file = this.pendingImports.poll();
+        FilePickerCoordinator.PickedFile file = this.pendingImports.poll();
         if (file == null) {
             return;
         }

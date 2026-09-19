@@ -23,7 +23,7 @@ import com.micaftic.morpher.network.message.S2CModelSyncPayload;
 import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
 import com.micaftic.morpher.resource.YSMBinaryDeserializer;
 import com.micaftic.morpher.resource.YSMBinarySerializer;
-import com.micaftic.morpher.resource.YSMClientMapper;
+import com.micaftic.morpher.resource.bundle.GuiConfigMapper;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.DigestUtil;
@@ -734,7 +734,7 @@ public final class ServerModelManager {
 
 
     private static ServerModelData mapToDataClass(String modelId, RawYsmModel raw, boolean isAuth, boolean isCustomSkinModel) {
-        ServerModelInfo serverModelInfo = YSMClientMapper.buildModelInfo(raw);
+        ServerModelInfo serverModelInfo = GuiConfigMapper.buildModelInfo(raw);
         // Animations
         Map<String, String[]> animMap = new HashMap<>();
         for (Map.Entry<String, RawYsmModel.RawAnimationFile> e : raw.mainEntity.animationFiles.entrySet()) {

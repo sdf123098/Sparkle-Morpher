@@ -11,14 +11,12 @@ import com.micaftic.morpher.client.entity.PlayerPreviewEntity;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
 import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
-import com.micaftic.morpher.client.gui.resource.ResourceDownloadManager;
 import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
-import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
@@ -823,12 +821,14 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     /** 取/换绑某槽位的预览实体；换模型或贴图时重初始化。失败返回 null（调用方回退图标）。 */
-    private PlayerPreviewEntity cardPreviewEntity(int slot, String modelId, String textureId) {
+    private PlayerPreviewEntity cardPreviewEntity(int slot, String modelId, String textureId, ModelAssembly asm) {
         if (slot < 0 || slot >= this.cardPreviews.size()) {
             return null;
         }
         PlayerPreviewEntity entity = this.cardPreviews.get(slot);
-        if (!modelId.equals(this.cardPreviewModels.get(slot)) || !Objects.equals(textureId, this.cardPreviewTextures.get(slot))) {
+        // A same-ID reload replaces the assembly; failed first bindings must also retry.
+        if (!modelId.equals(this.cardPreviewModels.get(slot)) || !Objects.equals(textureId, this.cardPreviewTextures.get(slot))
+                || entity.getModelAssembly() != asm || !entity.isModelReady()) {
             try {
                 entity.initModelWithTexture(modelId, textureId);
             } catch (Exception e) {
@@ -961,7 +961,7 @@ public class ModernPlayerModelScreen extends Screen {
     private boolean renderCardFigure(GuiGraphics g, int slot, String modelId, ModelAssembly asm, int cx, int cy, int cw, int coverH) {
         try {
             String textureId = selectedTextureOrDefault(asm);
-            PlayerPreviewEntity entity = cardPreviewEntity(slot, modelId, textureId);
+            PlayerPreviewEntity entity = cardPreviewEntity(slot, modelId, textureId, asm);
             if (entity == null) {
                 return false;
             }

@@ -37,7 +37,7 @@ import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SModelSyncPayload;
 import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
 import com.micaftic.morpher.resource.YSMBinaryDeserializer;
-import com.micaftic.morpher.resource.YSMClientMapper;
+import com.micaftic.morpher.resource.bundle.ClientModelBundleAssembler;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
 import com.micaftic.morpher.resource.gltf.GltfLoader;
 import com.micaftic.morpher.resource.gltf.GltfModel;
@@ -307,7 +307,7 @@ public class ClientModelManager {
             try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(defaultPath)) {
                 RawYsmModel rawModel = deserializer.deserialize();
 
-                ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, "default");
+                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, "default");
 
                 onModelDataReceived(parsedBundle, "default", true, false);
                 YesSteveModel.LOGGER.info("[SM] Successfully pushed Default Model to render queue.");
@@ -356,7 +356,7 @@ public class ClientModelManager {
 
                 // 组装到客户端模型
                 ModelMemoryProfiler.log("client-map-start", modelId);
-                ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, modelId);
+                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
                 ModelMemoryProfiler.log("client-map-finished", modelId);
                 onModelDataReceived(parsedBundle, modelId, false, isAuth);
             }
@@ -514,7 +514,14 @@ public class ClientModelManager {
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to reload resident model: {}", modelKey, e);
             } finally {
-                cpuReloadInFlight.remove(modelKey);
+                // Keep the request in flight until the render thread publishes the assembly.
+                Minecraft.getInstance().execute(() -> {
+                    try {
+                        flushPendingModels();
+                    } finally {
+                        cpuReloadInFlight.remove(modelKey);
+                    }
+                });
             }
         });
     }
@@ -854,7 +861,7 @@ public class ClientModelManager {
                 }
                 RawYsmModel rawModel = parseImportModel(fileName, importData);
                 ModelMemoryProfiler.log("local-import-parsed", modelKey);
-                ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, modelKey);
+                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
                 ModelMemoryProfiler.log("local-import-mapped", modelKey);
                 localOnlyModelIds.add(modelKey);
                 touchModel(modelKey);
@@ -1595,7 +1602,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         if (modelId == null || modelId.isBlank()) {
             return;
         }
-        ClientModelInfo parsedBundle = YSMClientMapper.buildParsedBundle(rawModel, modelId);
+        ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
         localOnlyModelIds.add(modelId);
         runPendingModelCallback();
         if (!processModelData(parsedBundle, modelId, false, isAuth)) {

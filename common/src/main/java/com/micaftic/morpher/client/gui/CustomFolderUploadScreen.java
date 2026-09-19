@@ -3,7 +3,7 @@ package com.micaftic.morpher.client.gui;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.gui.button.FlatColorButton;
 import com.micaftic.morpher.client.gui.button.IconButton;
-import com.micaftic.morpher.client.upload.ModelImportFilePicker;
+import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.model.ServerModelManager;
 import net.minecraft.ChatFormatting;
@@ -332,11 +332,11 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
         byte[] data;
         if (directory) {
             try {
-                ModelImportFilePicker.PickedFile packed = maxBytes > 0
-                        ? ModelImportFilePicker.packDirectory(path, maxBytes)
-                        : ModelImportFilePicker.packDirectory(path);
+                FilePickerCoordinator.PickedFile packed = maxBytes > 0
+                        ? FilePickerCoordinator.packDirectory(path, maxBytes)
+                        : FilePickerCoordinator.packDirectory(path);
                 data = packed.data();
-            } catch (ModelImportFilePicker.PackedSizeLimitExceededException e) {
+            } catch (FilePickerCoordinator.PackedSizeLimitExceededException e) {
                 throw new PreparationException(Component.translatable(
                         "gui.sparkle_morpher.import.error.server_limit",
                         ModelUploadSession.formatBytes(e.maxBytes())));

@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.animation.AnimationRegister;
+import com.micaftic.morpher.client.animation.AnimationManager;
 import com.micaftic.morpher.client.input.*;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.network.chat.Component;
@@ -16,10 +16,11 @@ import com.micaftic.morpher.core.api.PlatformAPI;
 @EventBusSubscriber(modid = YesSteveModel.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
 public final class ClientSetupEvent {
     private ClientSetupEvent() {}
-    @SubscribeEvent public static void onSetup(FMLClientSetupEvent event) { if (YesSteveModel.isAvailable()) AnimationRegister.registerAnimationState(); }
+    @SubscribeEvent public static void onSetup(FMLClientSetupEvent event) { if (YesSteveModel.isAvailable()) AnimationManager.registerDefaultStates(); }
     @SubscribeEvent public static void onKeys(RegisterKeyMappingsEvent event) { registerKeyMappings(event); }
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(PlayerModelToggleKey.KEY_MAPPING);
+        event.register(TargetActionWheelKey.KEY_MAPPING);
         event.register(AnimationRouletteKey.KEY_ROULETTE); event.register(AnimationRouletteKey.KEY_LOCK);
         event.register(DebugAnimationKey.KEY_MAPPING);
         for (KeyMapping m : ExtraAnimationKey.getKeyMappings()) event.register(m);

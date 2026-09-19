@@ -447,7 +447,7 @@ public class UnifiedRouletteScreen extends Screen {
     }
 
     private void renderCenter(GuiGraphics g) {
-        if (animatableModel.getEntity() instanceof Player) {
+        if (animatableModel.getEntity() == Minecraft.getInstance().player) {
             boolean locked = AnimationLockEvent.isLocked();
             // Tinted disc behind the white sprite gives a state-aware look without setColor().
             int tint = locked ? RouletteTheme.LOCK_TINT : RouletteTheme.UNLOCK_TINT;
@@ -600,7 +600,7 @@ public class UnifiedRouletteScreen extends Screen {
         double cdx = logicalMouseX(mouseX) - centerX;
         double cdy = logicalMouseY(mouseY) - centerY;
         if (cdx * cdx + cdy * cdy <= RouletteTheme.WHEEL_INNER_R * RouletteTheme.WHEEL_INNER_R) {
-            if (animatableModel.getEntity() instanceof Player) {
+            if (animatableModel.getEntity() == Minecraft.getInstance().player) {
                 AnimationLockEvent.toggleLock();
             } else {
                 NetworkHandler.sendToServer(C2SPlayAnimationPacket.createWithIndex(animatableModel.getEntity().getId()));
@@ -675,14 +675,14 @@ public class UnifiedRouletteScreen extends Screen {
                 String realCategory = customOriginalCategoryMap.getOrDefault(key, StringPool.EMPTY);
                 AnimationRouletteDebugLog.info("client send custom key={} index={} category={} entityId={}",
                         key, realIndex, realCategory, entity.getId());
-                if (entity instanceof Player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory, key));
+                if (entity == player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory, key));
                 else NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory, entity.getId(), key));
             } else {
                 Pair<String, Integer> last = navigationStack.peekLast();
                 String submenu = (last != null && StringUtils.isNotBlank(last.getLeft())) ? last.getLeft() : StringPool.EMPTY;
                 AnimationRouletteDebugLog.info("client send original key={} index={} category={} entityId={}",
                         key, hoveredIndex, submenu, entity.getId());
-                if (entity instanceof Player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu, key));
+                if (entity == player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu, key));
                 else NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu, entity.getId(), key));
             }
         } else if (player != null) {

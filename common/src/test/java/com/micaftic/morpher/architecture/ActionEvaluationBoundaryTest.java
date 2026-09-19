@@ -37,7 +37,6 @@ class ActionEvaluationBoundaryTest {
             "com/micaftic/morpher/client/animation/PlayerActionState",
             "com/micaftic/morpher/client/animation/PlayerActionSnapshot",
             "com/micaftic/morpher/client/animation/ControllerActionResolver",
-            "com/micaftic/morpher/client/animation/AnimationRegister",
             "com/micaftic/morpher/client/animation/AnimationManager",
             "com/micaftic/morpher/client/animation/AnimationState",
             "com/micaftic/morpher/client/animation/IAnimationPredicate",

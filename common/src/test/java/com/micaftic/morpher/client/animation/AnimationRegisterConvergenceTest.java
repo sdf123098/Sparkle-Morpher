@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 1.2.4（§14.1）：双轨收敛验证 —— {@link AnimationRegister} 声明集合必须与
+ * 1.2.4（§14.1）：双轨收敛验证 —— {@link AnimationManager} 声明集合必须与
  * {@link ControllerActionResolver} 可产出的基础动作集合完全一致，且每个已注册
  * 状态都能被快照映射命中（声明与判定不再各自独立推导）。
  */
@@ -45,7 +45,7 @@ class AnimationRegisterConvergenceTest {
 
     @Test
     void registrationCoversExactlyResolvableBaseStates() {
-        Set<PlayerActionState> registered = new HashSet<>(AnimationRegister.registeredStates());
+        Set<PlayerActionState> registered = new HashSet<>(AnimationManager.registeredStates());
         assertEquals(TRIGGERS.keySet(), registered, "注册集合必须与 resolver 可产出集合完全一致");
         assertFalse(registered.contains(PlayerActionState.NONE), "NONE 是占位状态，不应注册");
         assertFalse(registered.contains(PlayerActionState.RIDE), "RIDE 由骑乘守卫/ctrl.ride 处理，不应注册");
@@ -54,16 +54,16 @@ class AnimationRegisterConvergenceTest {
     @Test
     void registeredNamesAreUniqueAndRoundTrip() {
         Set<String> names = new HashSet<>();
-        for (PlayerActionState state : AnimationRegister.registeredStates()) {
+        for (PlayerActionState state : AnimationManager.registeredStates()) {
             assertTrue(names.add(state.animationName()), "重复注册: " + state.animationName());
             assertEquals(state, PlayerActionState.fromName(state.animationName()));
         }
-        assertEquals(AnimationRegister.registeredStates().size(), names.size());
+        assertEquals(AnimationManager.registeredStates().size(), names.size());
     }
 
     @Test
     void everyRegisteredStateIsReachableFromSnapshot() {
-        for (PlayerActionState state : AnimationRegister.registeredStates()) {
+        for (PlayerActionState state : AnimationManager.registeredStates()) {
             PlayerActionSnapshot trigger = TRIGGERS.get(state);
             assertEquals(state, ControllerActionResolver.resolveState(trigger),
                     "注册状态 " + state + " 必须能被快照映射命中");
@@ -74,7 +74,7 @@ class AnimationRegisterConvergenceTest {
     void registeredNamesMatchHistoricalAnimationNames() {
         // 动画名必须与历史一致，动画资源 / ctrl.* molang 变量才不中断。
         Set<String> names = new HashSet<>();
-        for (PlayerActionState state : AnimationRegister.registeredStates()) {
+        for (PlayerActionState state : AnimationManager.registeredStates()) {
             names.add(state.animationName());
         }
         for (String historical : new String[] { "death", "riptide", "sleep", "swim", "climb", "climbing",
