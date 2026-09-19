@@ -652,6 +652,7 @@
   "gui.sparkle_morpher.url.home": "主页",
   "key.category.sparkle_morpher": "花火火的变身器",
   "key.sparkle_morpher.animation_roulette.desc": "打开轮盘动画",
+  "key.sparkle_morpher.target_action_wheel.desc": "统一目标动作轮盘",
   "key.sparkle_morpher.debug_animation.desc": "打开动画调试",
   "key.sparkle_morpher.extra_animation.0.desc": "播放额外动画 0",
   "key.sparkle_morpher.extra_animation.1.desc": "播放额外动画 1",

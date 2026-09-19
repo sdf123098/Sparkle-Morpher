@@ -1,7 +1,6 @@
 package com.micaftic.morpher.client.upload.picker;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.util.PerformanceProfiler;
 import net.minecraft.network.chat.Component;
 
@@ -48,7 +47,7 @@ public final class FilePickerCoordinator {
     static final int MAX_FOLDER_DEPTH = 16;
     static final int MAX_FOLDER_FILE_COUNT = 4096;
     private static final long PICKER_REOPEN_GRACE_MS = 1_000L;
-    private static final Queue<ModelImportFilePicker.PickedFile> completed = new ArrayDeque<>();
+    private static final Queue<PickedFile> completed = new ArrayDeque<>();
     private static volatile boolean picking = false;
     static volatile Component lastError = Component.empty();
     private static volatile long pickerStartedMs = 0L;
@@ -68,7 +67,7 @@ public final class FilePickerCoordinator {
         return error;
     }
 
-    public static synchronized ModelImportFilePicker.PickedFile pollCompleted() {
+    public static synchronized PickedFile pollCompleted() {
         LauncherBridgeBackend.pollLauncherBridgeImports();
         return completed.poll();
     }
@@ -327,15 +326,15 @@ public final class FilePickerCoordinator {
             return;
         }
         try (InputStream in = new FileInputStream(selected)) {
-            complete(new ModelImportFilePicker.PickedFile(selected.getName(), readAllBytes(in)));
+            complete(new PickedFile(selected.getName(), readAllBytes(in)));
         }
     }
 
-    public static ModelImportFilePicker.PickedFile packDirectory(Path dir) throws IOException {
+    public static PickedFile packDirectory(Path dir) throws IOException {
         return packDirectory(dir, -1);
     }
 
-    public static ModelImportFilePicker.PickedFile packDirectory(Path dir, int maxPackedBytes) throws IOException {
+    public static PickedFile packDirectory(Path dir, int maxPackedBytes) throws IOException {
         if (dir == null || !Files.isDirectory(dir)) {
             throw new IOException("Not a directory: " + dir);
         }
@@ -369,12 +368,12 @@ public final class FilePickerCoordinator {
         checkPackedSize(out, maxPackedBytes);
         PerformanceProfiler.logElapsed("pack_directory", baseName, perfStart,
                 "files=" + count.get() + " bytes=" + out.size());
-        return new ModelImportFilePicker.PickedFile(baseName + ".zip", out.toByteArray());
+        return new PickedFile(baseName + ".zip", out.toByteArray());
     }
 
-    private static void checkPackedSize(ByteArrayOutputStream out, int maxPackedBytes) throws ModelImportFilePicker.PackedSizeLimitExceededException {
+    private static void checkPackedSize(ByteArrayOutputStream out, int maxPackedBytes) throws PackedSizeLimitExceededException {
         if (maxPackedBytes > 0 && out.size() > maxPackedBytes) {
-            throw new ModelImportFilePicker.PackedSizeLimitExceededException(maxPackedBytes);
+            throw new PackedSizeLimitExceededException(maxPackedBytes);
         }
     }
 
@@ -412,7 +411,7 @@ public final class FilePickerCoordinator {
         return System.nanoTime() / 1_000_000L;
     }
 
-    static synchronized void complete(ModelImportFilePicker.PickedFile file) {
+    static synchronized void complete(PickedFile file) {
         completed.add(file);
         picking = false;
     }
@@ -458,4 +457,20 @@ public final class FilePickerCoordinator {
 
     private FilePickerCoordinator() {
     }
+    public record PickedFile(String fileName, byte[] data) {
+    }
+
+    public static final class PackedSizeLimitExceededException extends IOException {
+        private final int maxBytes;
+
+        public PackedSizeLimitExceededException(int maxBytes) {
+            super("Packed model exceeds server limit: " + maxBytes + " bytes");
+            this.maxBytes = maxBytes;
+        }
+
+        public int maxBytes() {
+            return maxBytes;
+        }
+    }
+
 }

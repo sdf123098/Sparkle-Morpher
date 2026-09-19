@@ -17,6 +17,10 @@ public class InputUtil {
         return KeyMappingFactory.isMouseActiveAndMatches(keyMapping, button);
     }
 
+    public static void setScreen(net.minecraft.client.gui.screens.Screen screen) {
+        Minecraft.getInstance().setScreen(screen);
+    }
+
     public static boolean isPlayerReady() {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.getOverlay() != null || minecraft.screen != null || !minecraft.mouseHandler.isMouseGrabbed()) {

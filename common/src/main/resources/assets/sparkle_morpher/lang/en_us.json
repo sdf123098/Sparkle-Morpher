@@ -652,6 +652,7 @@
   "gui.sparkle_morpher.url.home": "Home Page",
   "key.category.sparkle_morpher": "Sparkle's Morpher",
   "key.sparkle_morpher.animation_roulette.desc": "Open Animation Roulette",
+  "key.sparkle_morpher.target_action_wheel.desc": "Unified Target Action Wheel",
   "key.sparkle_morpher.debug_animation.desc": "Open Animation Debug",
   "key.sparkle_morpher.extra_animation.0.desc": "Play Extra Animation 0",
   "key.sparkle_morpher.extra_animation.1.desc": "Play Extra Animation 1",

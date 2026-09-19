@@ -4,6 +4,7 @@ import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.resource.models.ModelProperties;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
+import com.micaftic.morpher.fakeplayer.FakePlayerTargetRules;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import net.minecraft.network.FriendlyByteBuf;
@@ -87,6 +88,10 @@ public class C2SPlayAnimationPacket {
                 TouhouMaidCompat.registerAnimationRoulette(entity, message.category, message.animationIndex);
                 return;
             }
+            if (entity instanceof ServerPlayer target && FakePlayerTargetRules.isFakePlayer(target)) {
+                handleFakePlayerTarget(message, target);
+                return;
+            }
             AnimationRouletteDebugLog.warn("server ignored non-maid target entityId={} entity={} index={} category={}",
                     message.entityId, entity == null ? "null" : entity.getType().toString(), message.animationIndex, message.category);
             return;
@@ -136,6 +141,32 @@ public class C2SPlayAnimationPacket {
                             message.category, message.animationKey);
                 });
             }
+        });
+    }
+
+    private static void handleFakePlayerTarget(C2SPlayAnimationPacket message, ServerPlayer target) {
+        ModelInfoCapability.get(target).ifPresent(modelInfoCap -> {
+            if (message.animationIndex == -1) {
+                modelInfoCap.stopAnimation(target);
+                return;
+            }
+            ServerModelManager.getModelDefinition(modelInfoCap.getModelId()).ifPresentOrElse(serverModelCap -> {
+                ModelProperties properties = serverModelCap.getLoadedModelData().getModelProperties();
+                Map<String, OrderedStringMap<String, String>> groups = properties.getExtraAnimationClassify();
+                boolean matched = StringUtils.isNotBlank(message.category) && groups.containsKey(message.category);
+                OrderedStringMap<String, String> animations = matched ? groups.get(message.category) : properties.getExtraAnimation();
+                String playKey = StringUtils.isNotBlank(message.animationKey)
+                        ? message.animationKey
+                        : (message.animationIndex >= 0 && animations.size() > message.animationIndex
+                            ? animations.getKeyAt(message.animationIndex) : null);
+                if (playKey != null) {
+                    modelInfoCap.playAnimation(target, playKey);
+                }
+            }, () -> {
+                if (StringUtils.isNotBlank(message.animationKey)) {
+                    modelInfoCap.playAnimation(target, message.animationKey);
+                }
+            });
         });
     }
 }

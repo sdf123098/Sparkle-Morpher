@@ -1,6 +1,9 @@
 package com.micaftic.morpher.core.compat.api;
 
+import com.micaftic.morpher.core.target.TargetCapability;
 import net.minecraft.world.entity.player.Player;
+
+import java.util.Set;
 
 /**
  * R11.1/R11.2 Compat API — 服务端模型目录 hook。
@@ -19,6 +22,16 @@ public interface MaidModelService {
 
     /** 解析模型默认纹理（请求纹理缺失时回退默认）；不可用时返回 null。 */
     String resolveTextureOrDefault(String modelId, String requestedTexture);
+
+    /** Whether the optional maid YSM appearance editor can be exposed. */
+    default boolean supportsYsmAppearanceEditor() {
+        return false;
+    }
+
+    /** Capabilities declared by the active maid adapter. */
+    default Set<TargetCapability> appearanceCapabilities() {
+        return Set.of();
+    }
 
     /** 未注册服务时的 no-op 默认（避免空指针）。 */
     MaidModelService NONE = new MaidModelService() {

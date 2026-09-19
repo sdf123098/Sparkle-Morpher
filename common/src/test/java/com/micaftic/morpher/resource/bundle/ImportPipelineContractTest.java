@@ -1,6 +1,5 @@
 package com.micaftic.morpher.resource.bundle;
 
-import com.micaftic.morpher.resource.YSMClientMapper;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import org.junit.jupiter.api.Test;
@@ -20,8 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 1.2.7 §24.1 契约测试（§4.3 Characterization Before Refactor / §10.5 ImportPipelineGoldenTest）。
  *
- * 锁定 {@code YSMClientMapper} 拆分后的行为等价与 facade 委派关系：
- *  - facade 与新的 {@code resource.bundle} 组件必须产出相同结果；
+ * 锁定 {@code resource.bundle} 组件的行为契约：
+ *  - 各职责组件必须产出稳定结果；
  *  - 贴图解码对非法/降级输入的既有行为（透明占位 PNG）必须保持；
  *  - 透明度分析对空贴图/不透明/半透明的判定语义必须保持。
  * 无第三方版权资产：全部样本现造。
@@ -39,14 +38,12 @@ class ImportPipelineContractTest {
         return baos.toByteArray();
     }
 
-    /** facade 必须把贴图解码委派给 TextureDecoder，且对合法 PNG 返回同一字节。 */
+    /** 贴图解码对合法 PNG 返回同一字节。 */
     @Test
     void facadeDelegatesTextureDecoding() throws Exception {
         byte[] src = pngOf(0xFF3366CC);
-        byte[] viaFacade = YSMClientMapper.toPng(src, 2, 1, 1);
-        byte[] viaComponent = TextureDecoder.toPng(src, 2, 1, 1);
-
-        assertArrayEquals(viaComponent, viaFacade, "facade 与 TextureDecoder 必须一致");
+        byte[] decodedBytes = TextureDecoder.toPng(src, 2, 1, 1);
+        assertArrayEquals(src, decodedBytes);
 
         BufferedImage decoded = TextureDecoder.decodeToImage(src, 2, 1, 1);
         assertNotNull(decoded, "合法 PNG 必须能解码");
@@ -112,21 +109,18 @@ class ImportPipelineContractTest {
         assertArrayEquals(new boolean[]{true}, analyzer.getResults(), "半透明彩色贴图必须记录进 results");
     }
 
-    /** 旧嵌套别名 TranslucencyScanner 必须与 TextureAlphaAnalyzer 行为一致（facade 委派）。 */
+    /** TextureAlphaAnalyzer 的透明度结果必须保持稳定。 */
     @Test
     void deprecatedScannerAliasBehavesIdentically() throws Exception {
         BufferedImage opaque = TextureDecoder.decodeToImage(pngOf(0xFFFFFFFF), 2, 1, 1);
         BufferedImage[] images = {opaque};
 
-        TextureAlphaAnalyzer component = new TextureAlphaAnalyzer(images, 1);
-        YSMClientMapper.TranslucencyScanner alias = new YSMClientMapper.TranslucencyScanner(images, 1);
-
-        assertNotSame(component, alias, "别名应为独立实例");
-        assertEquals(component.scan(face(0f, 1f)), alias.scan(face(0f, 1f)), "别名判定必须与组件一致");
-        assertArrayEquals(component.getResults(), alias.getResults(), "别名 results 必须与组件一致");
+        TextureAlphaAnalyzer analyzer = new TextureAlphaAnalyzer(images, 1);
+        assertEquals(TextureAlphaAnalyzer.STATE_OPAQUE, analyzer.scan(face(0f, 1f)));
+        assertArrayEquals(new boolean[]{false}, analyzer.getResults());
     }
 
-    /** facade 的几何构建必须与 GeometryBaker 委派一致。 */
+    /** 几何构建必须返回稳定的描述。 */
     @Test
     void facadeDelegatesGeometryConstruction() {
         RawYsmModel.RawGeometry geo = new RawYsmModel.RawGeometry();
@@ -134,11 +128,9 @@ class ImportPipelineContractTest {
         geo.textureWidth = 64;
         geo.textureHeight = 64;
 
-        GeometryDescription viaFacade = YSMClientMapper.buildContext(geo);
-        GeometryDescription viaComponent = GeometryBaker.buildContext(geo);
-
-        assertNotNull(viaFacade);
-        assertEquals(viaComponent.getIdentifier(), viaFacade.getIdentifier(), "facade buildContext 必须委派 GeometryBaker");
+        GeometryDescription context = GeometryBaker.buildContext(geo);
+        assertNotNull(context);
+        assertEquals(geo.identifier, context.getIdentifier());
     }
 
     /** 骨名归一化必须与既有语义一致（大小写/非字母数字忽略）。 */
