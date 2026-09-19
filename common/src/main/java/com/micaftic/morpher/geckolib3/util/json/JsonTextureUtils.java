@@ -2,7 +2,7 @@ package com.micaftic.morpher.geckolib3.util.json;
 
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
-import com.micaftic.morpher.resource.YSMClientMapper;
+import com.micaftic.morpher.resource.bundle.TextureDecoder;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -80,7 +80,7 @@ public class JsonTextureUtils {
 
     @Nullable
     private static OuterFileTexture createTexture(byte[] data) {
-        return data == null || data.length == 0 ? null : new OuterFileTexture(YSMClientMapper.toPng(data, 0, 0, 0));
+        return data == null || data.length == 0 ? null : new OuterFileTexture(TextureDecoder.toPng(data, 0, 0, 0));
     }
 
     private static String extractTextureName(String path) {

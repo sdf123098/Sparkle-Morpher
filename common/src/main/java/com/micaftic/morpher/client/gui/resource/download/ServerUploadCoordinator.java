@@ -1,6 +1,5 @@
 package com.micaftic.morpher.client.gui.resource.download;
 
-import com.micaftic.morpher.client.gui.resource.ResourceDownloadManager;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -23,16 +22,16 @@ public final class ServerUploadCoordinator {
         DownloadQueue.DownloadTask task;
         synchronized (DownloadQueue.LOCK) {
             task = DownloadQueue.currentTask;
-            if (task == null || task.state != ResourceDownloadManager.TaskState.UPLOADING) {
+            if (task == null || task.state != DownloadQueue.TaskState.UPLOADING) {
                 return;
             }
             updateCurrentTaskFromSessionLocked(task, session);
         }
         DownloadPresenter.notifyListeners();
         if (session.getState() == ModelUploadSession.State.COMPLETED) {
-            DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.done"));
+            DownloadQueue.finishTask(task, DownloadQueue.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.done"));
         } else if (session.getState() == ModelUploadSession.State.FAILED) {
-            DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.FAILED, session.getMessage());
+            DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, session.getMessage());
         }
     }
 
@@ -40,7 +39,7 @@ public final class ServerUploadCoordinator {
         DownloadQueue.DownloadTask task;
         synchronized (DownloadQueue.LOCK) {
             task = DownloadQueue.currentTask;
-            if (task == null || task.state != ResourceDownloadManager.TaskState.UPLOADING) {
+            if (task == null || task.state != DownloadQueue.TaskState.UPLOADING) {
                 return;
             }
         }
