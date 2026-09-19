@@ -820,12 +820,14 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     /** 取/换绑某槽位的预览实体；换模型或贴图时重初始化。失败返回 null（调用方回退图标）。 */
-    private PlayerPreviewEntity cardPreviewEntity(int slot, String modelId, String textureId) {
+    private PlayerPreviewEntity cardPreviewEntity(int slot, String modelId, String textureId, ModelAssembly asm) {
         if (slot < 0 || slot >= this.cardPreviews.size()) {
             return null;
         }
         PlayerPreviewEntity entity = this.cardPreviews.get(slot);
-        if (!modelId.equals(this.cardPreviewModels.get(slot)) || !Objects.equals(textureId, this.cardPreviewTextures.get(slot))) {
+        // A same-ID reload replaces the assembly; failed first bindings must also retry.
+        if (!modelId.equals(this.cardPreviewModels.get(slot)) || !Objects.equals(textureId, this.cardPreviewTextures.get(slot))
+                || entity.getModelAssembly() != asm || !entity.isModelReady()) {
             try {
                 entity.initModelWithTexture(modelId, textureId);
             } catch (Exception e) {
@@ -958,7 +960,7 @@ public class ModernPlayerModelScreen extends Screen {
     private boolean renderCardFigure(GuiGraphicsExtractor g, int slot, String modelId, ModelAssembly asm, int cx, int cy, int cw, int coverH) {
         try {
             String textureId = selectedTextureOrDefault(asm);
-            PlayerPreviewEntity entity = cardPreviewEntity(slot, modelId, textureId);
+            PlayerPreviewEntity entity = cardPreviewEntity(slot, modelId, textureId, asm);
             if (entity == null) {
                 return false;
             }

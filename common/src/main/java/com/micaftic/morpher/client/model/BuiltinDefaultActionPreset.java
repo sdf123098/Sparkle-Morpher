@@ -3,7 +3,7 @@ package com.micaftic.morpher.client.model;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.geckolib3.file.AnimationFile;
-import com.micaftic.morpher.resource.YSMClientMapper;
+import com.micaftic.morpher.resource.bundle.AnimationMapper;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceLinkedOpenHashMap;
@@ -69,7 +69,7 @@ public final class BuiltinDefaultActionPreset {
             }
             try {
                 RawYsmModel.RawAnimationFile rawFile = YSMFolderDeserializer.parseAnimationFile(data);
-                Map<String, Animation> animations = YSMClientMapper.buildAnimations(rawFile, false);
+                Map<String, Animation> animations = AnimationMapper.buildAnimations(rawFile, false);
                 animations.values().forEach(animation -> {
                     if (animation.sourceKey == null) {
                         animation.sourceKey = entry.getKey();

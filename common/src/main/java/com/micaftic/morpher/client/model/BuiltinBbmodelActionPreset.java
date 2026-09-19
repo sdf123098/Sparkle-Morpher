@@ -3,7 +3,7 @@ package com.micaftic.morpher.client.model;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.geckolib3.file.AnimationFile;
-import com.micaftic.morpher.resource.YSMClientMapper;
+import com.micaftic.morpher.resource.bundle.AnimationMapper;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceLinkedOpenHashMap;
@@ -83,7 +83,7 @@ public final class BuiltinBbmodelActionPreset {
                 // 预设动画的 rotation keyframe 是 Blockbench 原始欧拉角(THREE 'XYZ' 序)，
                 // 必须转换为 YSM 渲染端语义，否则多轴旋转动画镜像。
                 com.micaftic.morpher.resource.bbmodel.BbRotationCompat.convertRawAnimationFile(rawFile);
-                Map<String, Animation> animations = YSMClientMapper.buildAnimations(rawFile, false);
+                Map<String, Animation> animations = AnimationMapper.buildAnimations(rawFile, false);
                 animations.values().forEach(animation -> {
                     if (animation.sourceKey == null) {
                         animation.sourceKey = entry.getKey();

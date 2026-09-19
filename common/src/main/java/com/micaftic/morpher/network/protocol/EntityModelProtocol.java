@@ -17,6 +17,10 @@ public final class EntityModelProtocol {
     public static void register() {
         YSMChannel.register(4, S2CSetModelAndTexturePacket.class, S2CSetModelAndTexturePacket::encode, S2CSetModelAndTexturePacket::decode, S2CSetModelAndTexturePacket::handle, PacketDirection.PLAY_TO_CLIENT);
         YSMChannel.register(5, C2SRequestSwitchModelPacket.class, C2SRequestSwitchModelPacket::encode, C2SRequestSwitchModelPacket::decode, C2SRequestSwitchModelPacket::handle, PacketDirection.PLAY_TO_SERVER);
+        // 1.2.9: independent fake-player manager; target UUID is validated on the server.
+        YSMChannel.register(25, C2SRequestFakePlayerModelPacket.class, C2SRequestFakePlayerModelPacket::encode, C2SRequestFakePlayerModelPacket::decode, C2SRequestFakePlayerModelPacket::handle, PacketDirection.PLAY_TO_SERVER);
+        YSMChannel.register(26, C2SRequestFakePlayerListPacket.class, C2SRequestFakePlayerListPacket::encode, C2SRequestFakePlayerListPacket::decode, C2SRequestFakePlayerListPacket::handle, PacketDirection.PLAY_TO_SERVER);
+        YSMChannel.register(27, S2CFakePlayerListPacket.class, S2CFakePlayerListPacket::encode, S2CFakePlayerListPacket::decode, S2CFakePlayerListPacket::handle, PacketDirection.PLAY_TO_CLIENT);
         YSMChannel.register(16, S2CSyncProjectileModelPacket.class, S2CSyncProjectileModelPacket::encode, S2CSyncProjectileModelPacket::decode, S2CSyncProjectileModelPacket::handle, PacketDirection.PLAY_TO_CLIENT);
         YSMChannel.register(21, S2CSyncPlayerStatePacket.class, S2CSyncPlayerStatePacket::encode, S2CSyncPlayerStatePacket::decode, S2CSyncPlayerStatePacket::handle, PacketDirection.PLAY_TO_CLIENT);
         YSMChannel.register(22, S2CSyncVehicleModelPacket.class, S2CSyncVehicleModelPacket::encode, S2CSyncVehicleModelPacket::decode, S2CSyncVehicleModelPacket::handle, PacketDirection.PLAY_TO_CLIENT);

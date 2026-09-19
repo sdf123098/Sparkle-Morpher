@@ -1,7 +1,6 @@
 package com.micaftic.morpher.client.upload.picker;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import net.minecraft.network.chat.Component;
 
 import java.lang.reflect.Method;

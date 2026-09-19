@@ -2,7 +2,6 @@ package com.micaftic.morpher.client.gui.resource.download;
 
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
 import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
-import com.micaftic.morpher.client.gui.resource.ResourceDownloadManager;
 import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.util.SmExecutors;
@@ -20,17 +19,38 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 
 /**
- * 下载任务队列与下载执行内核（1.2.7 §24.5，自 {@code ResourceDownloadManager} 等价搬运）。
+ * 下载任务队列与下载执行内核（1.2.8，历史下载门面已移除）。
  *
  * <p>持有队列状态（当前任务、待处理队列、历史、重入锁）与下载执行流程；状态栏文案与监听器
  * 通知交给 {@link DownloadPresenter}，本地导入阶段交给
  * {@link ResourceImportCoordinator}，服务端上传阶段交给 {@link ServerUploadCoordinator}。
  * 行为与搬运前逐字等价：同一把锁、同一状态迁移、同一文案与异常。
  *
- * <p>公开类型（{@code ResourceDownloadManager.TaskState/TaskSnapshot/Snapshot}）仍由兼容
- * facade {@code ResourceDownloadManager} 持有，此处直接引用，以保证外部调用点类型不变。
+ * <p>任务状态与快照类型由本类直接持有，调用方统一通过本队列服务访问。
  */
 public final class DownloadQueue {
+    public enum TaskState {
+        QUEUED,
+        DOWNLOADING,
+        IMPORTING,
+        UPLOADING,
+        DONE,
+        FAILED,
+        CANCELLED
+    }
+
+    public record TaskSnapshot(String name, String fileName, TaskState state, float progress, Component message) {
+    }
+
+    public record Snapshot(TaskSnapshot currentTask, List<TaskSnapshot> unfinishedTasks, List<TaskSnapshot> finishedTasks,
+                           int queued, long done, long failed,
+                           Component status, ChatFormatting statusColor) {
+    }
+
+    static {
+        ModelUploadSession.addListener(ServerUploadCoordinator::onUploadSessionUpdate);
+    }
+
     static final int HISTORY_LIMIT = 128;
     static final ExecutorService DOWNLOAD_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.DOWNLOAD_IO);
     static final Object LOCK = new Object();
@@ -73,17 +93,17 @@ public final class DownloadQueue {
         }
     }
 
-    public static ResourceDownloadManager.Snapshot snapshot() {
+    public static Snapshot snapshot() {
         synchronized (LOCK) {
-            List<ResourceDownloadManager.TaskSnapshot> unfinishedTasks = new ArrayList<>();
+            List<TaskSnapshot> unfinishedTasks = new ArrayList<>();
             if (currentTask != null) {
                 unfinishedTasks.add(snapshot(currentTask));
             }
             unfinishedTasks.addAll(QUEUE.stream().map(DownloadQueue::snapshot).toList());
-            List<ResourceDownloadManager.TaskSnapshot> finishedTasks = HISTORY.stream().map(DownloadQueue::snapshot).toList();
-            long done = HISTORY.stream().filter(task -> task.state == ResourceDownloadManager.TaskState.DONE).count();
-            long failed = HISTORY.stream().filter(task -> task.state == ResourceDownloadManager.TaskState.FAILED).count();
-            return new ResourceDownloadManager.Snapshot(currentTask == null ? null : snapshot(currentTask), unfinishedTasks, finishedTasks,
+            List<TaskSnapshot> finishedTasks = HISTORY.stream().map(DownloadQueue::snapshot).toList();
+            long done = HISTORY.stream().filter(task -> task.state == TaskState.DONE).count();
+            long failed = HISTORY.stream().filter(task -> task.state == TaskState.FAILED).count();
+            return new Snapshot(currentTask == null ? null : snapshot(currentTask), unfinishedTasks, finishedTasks,
                     QUEUE.size(), done, failed, DownloadPresenter.status, DownloadPresenter.statusColor);
         }
     }
@@ -97,6 +117,11 @@ public final class DownloadQueue {
         DownloadPresenter.notifyListeners();
     }
 
+    public static void tick() {
+        ServerUploadCoordinator.syncCurrentUploadSession();
+        processNextDownload();
+    }
+
     public static void cancelCurrent() {
         DownloadTask cancelledTask;
         boolean cancelUpload;
@@ -106,10 +131,10 @@ public final class DownloadQueue {
                 return;
             }
             cancelledTask = currentTask;
-            cancelUpload = cancelledTask.state == ResourceDownloadManager.TaskState.UPLOADING;
-            waitForDownloader = cancelledTask.state == ResourceDownloadManager.TaskState.DOWNLOADING;
+            cancelUpload = cancelledTask.state == TaskState.UPLOADING;
+            waitForDownloader = cancelledTask.state == TaskState.DOWNLOADING;
             cancelledTask.cancelRequested = true;
-            currentTask.state = ResourceDownloadManager.TaskState.CANCELLED;
+            currentTask.state = TaskState.CANCELLED;
             currentTask.message = Component.translatable("gui.sparkle_morpher.resource_station.cancelled");
             DownloadPresenter.status = currentTask.message;
             DownloadPresenter.statusColor = ChatFormatting.GRAY;
@@ -170,7 +195,7 @@ public final class DownloadQueue {
             }
             currentTask = task;
             downloadLoading = true;
-            task.state = ResourceDownloadManager.TaskState.DOWNLOADING;
+            task.state = TaskState.DOWNLOADING;
             task.progress = 0f;
             task.message = Component.translatable("gui.sparkle_morpher.resource_station.downloading", task.entry.name());
             DownloadPresenter.status = task.message;
@@ -190,7 +215,7 @@ public final class DownloadQueue {
                     @Override
                     public boolean isCancelled() {
                         synchronized (LOCK) {
-                            return task.cancelRequested || currentTask != task || task.state == ResourceDownloadManager.TaskState.CANCELLED;
+                            return task.cancelRequested || currentTask != task || task.state == TaskState.CANCELLED;
                         }
                     }
 
@@ -199,7 +224,7 @@ public final class DownloadQueue {
                         ensureNotCancelled(task);
                         int progressTotal = progressTotal(total, task.entry.size());
                         synchronized (LOCK) {
-                            if (currentTask != task || task.state != ResourceDownloadManager.TaskState.DOWNLOADING) {
+                            if (currentTask != task || task.state != TaskState.DOWNLOADING) {
                                 return;
                             }
                             task.progress = progressTotal > 0 ? Math.min(1f, (float) downloaded / progressTotal) : task.progress;
@@ -215,7 +240,7 @@ public final class DownloadQueue {
                         ensureNotCancelled(task);
                         this.host = ModelRepoClient.hostName(url);
                         synchronized (LOCK) {
-                            if (currentTask != task || task.state != ResourceDownloadManager.TaskState.DOWNLOADING) {
+                            if (currentTask != task || task.state != TaskState.DOWNLOADING) {
                                 return;
                             }
                             task.message = DownloadPresenter.trySourceMessage(index, total, this.host);
@@ -232,16 +257,16 @@ public final class DownloadQueue {
                 ((Executor) Minecraft.getInstance()).execute(() -> ResourceImportCoordinator.onDownloadFinished(task, data, error)));
     }
 
-    static void finishTask(DownloadTask task, ResourceDownloadManager.TaskState state, Component message) {
+    static void finishTask(DownloadTask task, TaskState state, Component message) {
         synchronized (LOCK) {
             if (currentTask != task) {
                 return;
             }
             task.state = state;
             task.message = message;
-            task.progress = state == ResourceDownloadManager.TaskState.DONE ? 1f : task.progress;
+            task.progress = state == TaskState.DONE ? 1f : task.progress;
             DownloadPresenter.status = message;
-            DownloadPresenter.statusColor = state == ResourceDownloadManager.TaskState.DONE ? ChatFormatting.GREEN : state == ResourceDownloadManager.TaskState.CANCELLED ? ChatFormatting.GRAY : ChatFormatting.RED;
+            DownloadPresenter.statusColor = state == TaskState.DONE ? ChatFormatting.GREEN : state == TaskState.CANCELLED ? ChatFormatting.GRAY : ChatFormatting.RED;
             HISTORY.add(task);
             trimHistoryLocked();
             currentTask = null;
@@ -251,8 +276,8 @@ public final class DownloadQueue {
         processNextDownload();
     }
 
-    static ResourceDownloadManager.TaskSnapshot snapshot(DownloadTask task) {
-        return new ResourceDownloadManager.TaskSnapshot(task.entry.name(), task.entry.fileName(), task.state, task.progress, task.message);
+    static TaskSnapshot snapshot(DownloadTask task) {
+        return new TaskSnapshot(task.entry.name(), task.entry.fileName(), task.state, task.progress, task.message);
     }
 
     static int progressTotal(int contentLength, long entrySize) {
@@ -267,7 +292,7 @@ public final class DownloadQueue {
 
     static void ensureNotCancelled(DownloadTask task) {
         synchronized (LOCK) {
-            if (currentTask != task || task.cancelRequested || task.state == ResourceDownloadManager.TaskState.CANCELLED) {
+            if (currentTask != task || task.cancelRequested || task.state == TaskState.CANCELLED) {
                 throw new CancellationException("cancelled");
             }
         }
@@ -295,7 +320,7 @@ public final class DownloadQueue {
     static class DownloadTask {
         final ModelRepoEntry entry;
         final ResourceStationConfig.State config;
-        ResourceDownloadManager.TaskState state = ResourceDownloadManager.TaskState.QUEUED;
+        TaskState state = TaskState.QUEUED;
         float progress;
         Component message = Component.empty();
         boolean cancelRequested;
