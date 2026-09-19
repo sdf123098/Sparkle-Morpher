@@ -4,7 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.core.security.YSMByteBuf;
 import com.micaftic.morpher.core.security.YsmCrypt;
 import com.micaftic.morpher.resource.models.ModelPackData;
-import com.micaftic.morpher.resource.YSMClientMapper;
+import com.micaftic.morpher.resource.bundle.TextureDecoder;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.core.security.YSMClientCache;
 import com.micaftic.morpher.model.ServerModelManager;
@@ -154,7 +154,7 @@ public final class LegacyModelCacheClient {
                 int imageFormat = buf.readVarInt();
                 int unkImageData = buf.readVarInt();
 
-                byte[] png = YSMClientMapper.toPng(textureData, imageFormat, textureWidth, textureHeight);
+                byte[] png = TextureDecoder.toPng(textureData, imageFormat, textureWidth, textureHeight);
 
                 iconTexture = new OuterFileTexture(png);
             }

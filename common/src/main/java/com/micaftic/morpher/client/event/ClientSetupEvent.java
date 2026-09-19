@@ -2,11 +2,12 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.client.animation.AnimationRegister;
+import com.micaftic.morpher.client.animation.AnimationManager;
 import com.micaftic.morpher.client.input.AnimationRouletteKey;
 import com.micaftic.morpher.client.input.DebugAnimationKey;
 import com.micaftic.morpher.client.input.ExtraAnimationKey;
 import com.micaftic.morpher.client.input.PlayerModelToggleKey;
+import com.micaftic.morpher.client.input.TargetActionWheelKey;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
 import com.micaftic.morpher.core.architectury.registry.client.keymappings.KeyMappingRegistry;
 import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
@@ -24,7 +25,7 @@ public final class ClientSetupEvent {
     public static void register() {
         registerKeyMappings();
         if (YesSteveModel.isAvailable()) {
-            AnimationRegister.registerAnimationState();
+            AnimationManager.registerDefaultStates();
         }
         ClientLifecycleEvent.CLIENT_STARTED.register(client -> {
             if (!YesSteveModel.isAvailable()) {
@@ -38,6 +39,7 @@ public final class ClientSetupEvent {
 
     private static void registerKeyMappings() {
         KeyMappingRegistry.register(PlayerModelToggleKey.KEY_MAPPING);
+        KeyMappingRegistry.register(TargetActionWheelKey.KEY_MAPPING);
         if (!YesSteveModel.isAvailable()) {
             return;
         }

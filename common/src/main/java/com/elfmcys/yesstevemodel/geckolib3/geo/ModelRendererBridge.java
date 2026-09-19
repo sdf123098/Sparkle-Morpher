@@ -67,7 +67,7 @@ public class ModelRendererBridge {
             BoneRenderPass boneRenderPass) {
         OculusCompat.updatePBRState();
         projectionModelViewMatrix.identity();
-        boolean isPreview = ModelPreviewRenderer.isPreview();
+        boolean isPreview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
         boolean shaderPackInUse = OculusCompat.isShaderPackInUse() && !isPreview;
         boolean disableGlow = shouldDisableModelGlow(shaderPackInUse);
 

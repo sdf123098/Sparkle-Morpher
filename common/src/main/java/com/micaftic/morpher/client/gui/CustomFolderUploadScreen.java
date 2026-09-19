@@ -3,10 +3,11 @@ package com.micaftic.morpher.client.gui;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.gui.button.FlatColorButton;
 import com.micaftic.morpher.client.gui.button.IconButton;
-import com.micaftic.morpher.client.upload.ModelImportFilePicker;
+import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.util.ClientUiUtil;
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -86,7 +87,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
         addRenderableWidget(new IconButton(
                 toolbarX + 72, buttonY, 18, 18, 80, 32,
-                button -> com.micaftic.morpher.util.InputUtil.setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
+                button -> InputUtil.setScreen(this.parentScreen)).setTooltipText("gui.sparkle_morpher.model.return"));
 
         rebuildEntries();
         updateActionButtonsState();
@@ -111,7 +112,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
     @Override
     public void onClose() {
-        com.micaftic.morpher.util.InputUtil.setScreen(this.parentScreen);
+        InputUtil.setScreen(this.parentScreen);
     }
 
     @Override
@@ -333,11 +334,11 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
         byte[] data;
         if (directory) {
             try {
-                ModelImportFilePicker.PickedFile packed = maxBytes > 0
-                        ? ModelImportFilePicker.packDirectory(path, maxBytes)
-                        : ModelImportFilePicker.packDirectory(path);
+                FilePickerCoordinator.PickedFile packed = maxBytes > 0
+                        ? FilePickerCoordinator.packDirectory(path, maxBytes)
+                        : FilePickerCoordinator.packDirectory(path);
                 data = packed.data();
-            } catch (ModelImportFilePicker.PackedSizeLimitExceededException e) {
+            } catch (FilePickerCoordinator.PackedSizeLimitExceededException e) {
                 throw new PreparationException(Component.translatable(
                         "gui.sparkle_morpher.import.error.server_limit",
                         ModelUploadSession.formatBytes(e.maxBytes())));
