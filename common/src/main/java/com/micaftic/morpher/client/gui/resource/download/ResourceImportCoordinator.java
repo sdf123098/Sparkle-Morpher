@@ -2,7 +2,6 @@ package com.micaftic.morpher.client.gui.resource.download;
 
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
-import com.micaftic.morpher.client.gui.resource.ResourceDownloadManager;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
@@ -36,22 +35,22 @@ public final class ResourceImportCoordinator {
         }
         if (error != null) {
             if (DownloadQueue.isCancellation(error)) {
-                DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.CANCELLED, Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
+                DownloadQueue.finishTask(task, DownloadQueue.TaskState.CANCELLED, Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
                 return;
             }
-            DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.error", DownloadQueue.rootMessage(error)));
+                DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.error", DownloadQueue.rootMessage(error)));
             return;
         }
         String modelId = stripKnownImportExtension(ModelRepoClient.safeModelId(task.entry));
         synchronized (DownloadQueue.LOCK) {
-            if (task.cancelRequested || task.state == ResourceDownloadManager.TaskState.CANCELLED) {
-                DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.CANCELLED, Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
+            if (task.cancelRequested || task.state == DownloadQueue.TaskState.CANCELLED) {
+                DownloadQueue.finishTask(task, DownloadQueue.TaskState.CANCELLED, Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
                 return;
             }
             if (DownloadQueue.currentTask != task) {
                 return;
             }
-            task.state = ResourceDownloadManager.TaskState.IMPORTING;
+            task.state = DownloadQueue.TaskState.IMPORTING;
             task.progress = Math.max(task.progress, 1f);
             task.message = Component.translatable("gui.sparkle_morpher.import.state.local_importing", modelId);
             DownloadPresenter.status = task.message;
@@ -71,12 +70,12 @@ public final class ResourceImportCoordinator {
 
     static void onLocalSaveFinished(DownloadQueue.DownloadTask task, String modelId, byte[] data, Throwable saveError) {
         synchronized (DownloadQueue.LOCK) {
-            if (DownloadQueue.currentTask != task || task.cancelRequested || task.state == ResourceDownloadManager.TaskState.CANCELLED) {
+            if (DownloadQueue.currentTask != task || task.cancelRequested || task.state == DownloadQueue.TaskState.CANCELLED) {
                 return;
             }
         }
         if (saveError != null) {
-            DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.save_failed", DownloadQueue.rootMessage(saveError)));
+            DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.save_failed", DownloadQueue.rootMessage(saveError)));
             return;
         }
         ClientModelManager.importLocalModel(modelId, task.entry.fileName(), data, localError -> onLocalImportFinished(task, modelId, data, localError));
@@ -84,27 +83,27 @@ public final class ResourceImportCoordinator {
 
     static void onLocalImportFinished(DownloadQueue.DownloadTask task, String modelId, byte[] data, Component localError) {
         synchronized (DownloadQueue.LOCK) {
-            if (DownloadQueue.currentTask != task || task.cancelRequested || task.state == ResourceDownloadManager.TaskState.CANCELLED) {
+            if (DownloadQueue.currentTask != task || task.cancelRequested || task.state == DownloadQueue.TaskState.CANCELLED) {
                 return;
             }
         }
         if (localError != null) {
-            DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.FAILED, localError);
+            DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, localError);
             return;
         }
         if (!canUploadToServer()) {
-            DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
+            DownloadQueue.finishTask(task, DownloadQueue.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
             return;
         }
         if (ClientModelManager.isGltfFileName(task.entry.fileName())) {
-            DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
+            DownloadQueue.finishTask(task, DownloadQueue.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
             return;
         }
         synchronized (DownloadQueue.LOCK) {
-            if (DownloadQueue.currentTask != task || task.cancelRequested || task.state == ResourceDownloadManager.TaskState.CANCELLED) {
+            if (DownloadQueue.currentTask != task || task.cancelRequested || task.state == DownloadQueue.TaskState.CANCELLED) {
                 return;
             }
-            task.state = ResourceDownloadManager.TaskState.UPLOADING;
+            task.state = DownloadQueue.TaskState.UPLOADING;
             task.progress = 0f;
             task.uploadStartedAtMs = System.currentTimeMillis();
             task.lastUploadProgressAtMs = task.uploadStartedAtMs;
@@ -118,9 +117,9 @@ public final class ResourceImportCoordinator {
         Component startError = ModelUploadSession.start(modelId, task.entry.fileName(), data);
         if (startError != null) {
             if (!canUploadToServer()) {
-                DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
+                DownloadQueue.finishTask(task, DownloadQueue.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
             } else {
-                DownloadQueue.finishTask(task, ResourceDownloadManager.TaskState.FAILED, startError);
+                DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, startError);
             }
         }
     }

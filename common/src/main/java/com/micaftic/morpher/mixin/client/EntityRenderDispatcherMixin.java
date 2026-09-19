@@ -7,6 +7,7 @@ import com.micaftic.morpher.client.renderer.CustomVehicleRenderer;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.CustomProjectileRenderer;
 import com.micaftic.morpher.client.renderer.MaidEntityRenderer;
+import com.micaftic.morpher.client.renderer.SubmitMultiBufferSource;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
@@ -48,14 +49,10 @@ public class EntityRenderDispatcherMixin {
             Entity guiEntity = ModelPreviewRenderer.getAndClearGuiPreviewEntity();
             if (guiEntity != null && TouhouMaidCompat.isMaidEntity(guiEntity)) {
                 float guiYaw = state instanceof LivingEntityRenderState lrs ? lrs.yRot : guiEntity.getYRot();
-                MultiBufferSource.BufferSource guiBuffer = ModelPreviewRenderer.getLegacyBufferSourceOrNull();
-                if (guiBuffer == null) {
-                    return true;
-                }
+                MultiBufferSource guiBuffer = new SubmitMultiBufferSource(collector, poseStack);
                 boolean maidVanilla = MaidEntityRenderer.tryRender(guiEntity, guiYaw,
                         ModelPreviewRenderer.getGuiPreviewPartialTick(), poseStack, guiBuffer, collector, 0xF000F0);
                 if (!maidVanilla) {
-                    guiBuffer.endBatch();
                     return false;
                 }
             }
@@ -68,37 +65,24 @@ public class EntityRenderDispatcherMixin {
         float partialTick = captured.partialTick();
         float entityYaw = entity.getYRot();
         int packedLight = captured.packedLight();
-        MultiBufferSource.BufferSource bufferSource = ModelPreviewRenderer.getLegacyBufferSourceOrNull();
-        if (bufferSource == null) {
-            return true;
-        }
+        MultiBufferSource bufferSource = new SubmitMultiBufferSource(collector, poseStack);
         if (entity instanceof Projectile projectile) {
             if (!ConfigPolicies.render().disableProjectileModel()) {
                 if (projectile instanceof FishingHook fishingHook) {
                     boolean shouldRenderVanilla = CustomFishingHookRenderer.tryRenderCustomHook(fishingHook, entityYaw, partialTick, poseStack, bufferSource, packedLight);
-                    if (!shouldRenderVanilla) {
-                        bufferSource.endBatch();
-                    }
                     return shouldRenderVanilla;
                 }
                 boolean shouldRenderVanilla = CustomProjectileRenderer.renderProjectile(projectile, entityYaw, partialTick, poseStack, bufferSource, packedLight);
-                if (!shouldRenderVanilla) {
-                    bufferSource.endBatch();
-                }
                 return shouldRenderVanilla;
             }
         }
         boolean maidVanilla = MaidEntityRenderer.tryRender(entity, entityYaw, partialTick, poseStack, bufferSource, collector, packedLight);
         if (!maidVanilla) {
-            bufferSource.endBatch();
             return false;
         }
         if (!ConfigPolicies.render().disableVehicleModel()) {
             ModelPreviewRenderer.renderVehicleModel(entity, poseStack, partialTick);
             boolean shouldRenderVanilla = CustomVehicleRenderer.renderVehicle(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
-            if (!shouldRenderVanilla) {
-                bufferSource.endBatch();
-            }
             return shouldRenderVanilla;
         }
         return true;

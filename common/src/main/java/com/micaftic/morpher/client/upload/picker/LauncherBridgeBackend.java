@@ -1,7 +1,6 @@
 package com.micaftic.morpher.client.upload.picker;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 import com.micaftic.morpher.core.architectury.platform.Platform;
 import net.minecraft.network.chat.Component;
 
@@ -141,7 +140,7 @@ public final class LauncherBridgeBackend {
             try (InputStream in = Files.newInputStream(path)) {
                 data = FilePickerCoordinator.readAllBytes(in);
             }
-            FilePickerCoordinator.complete(new ModelImportFilePicker.PickedFile(path.getFileName().toString(), data));
+            FilePickerCoordinator.complete(new FilePickerCoordinator.PickedFile(path.getFileName().toString(), data));
             launcherBridgeBaseline.put(path, stamp);
             launcherBridgeCandidates.remove(path);
             deleteLauncherBridgeFile(path);
@@ -172,7 +171,7 @@ public final class LauncherBridgeBackend {
             if (now - candidate.firstSeenMs() < LAUNCHER_BRIDGE_STABLE_MS) {
                 return false;
             }
-            FilePickerCoordinator.complete(ModelImportFilePicker.packDirectory(path));
+            FilePickerCoordinator.complete(FilePickerCoordinator.packDirectory(path));
             launcherBridgeDirectoryBaseline.put(path, stamp);
             launcherBridgeDirectoryCandidates.remove(path);
             launcherBridgeImportedAny = true;

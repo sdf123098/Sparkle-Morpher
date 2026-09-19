@@ -1,7 +1,6 @@
 package com.micaftic.morpher.client.upload.picker;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.upload.ModelImportFilePicker;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -344,7 +343,7 @@ public final class AndroidDocumentPickerBackend {
         String fileName = getAndroidDisplayName(context, resolver, uri);
         try (InputStream in = input) {
             byte[] data = FilePickerCoordinator.readAllBytes(in);
-            FilePickerCoordinator.complete(new ModelImportFilePicker.PickedFile(fileName, data));
+            FilePickerCoordinator.complete(new FilePickerCoordinator.PickedFile(fileName, data));
         }
     }
 
@@ -356,7 +355,7 @@ public final class AndroidDocumentPickerBackend {
         }
         try (InputStream in = new FileInputStream(file)) {
             byte[] data = FilePickerCoordinator.readAllBytes(in);
-            FilePickerCoordinator.complete(new ModelImportFilePicker.PickedFile(fileName, data));
+            FilePickerCoordinator.complete(new FilePickerCoordinator.PickedFile(fileName, data));
         }
     }
     private static String getAndroidDisplayName(Object context, Object resolver, Object uri) {
