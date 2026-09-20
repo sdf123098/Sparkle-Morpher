@@ -1,6 +1,7 @@
 package com.micaftic.morpher.model;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.event.CapabilityEvent;
 import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.client.ExportResult;
@@ -1104,6 +1105,8 @@ public final class ServerModelManager {
             for (ServerPlayer player : players) {
                 PlayerModelSelectionStore.restore(player);
                 validatePlayerModel(player);
+                CapabilityEvent.syncPlayerModelToSelf(player);
+                CapabilityEvent.syncPlayerModelToTracking(player, false);
             }
             nativeSyncModels(players.stream().filter(NetworkHandler::isPlayerConnected).map(ServerPlayer::getUUID).toArray(UUID[]::new),
                     players.stream().filter(NetworkHandler::isPlayerConnected).map(ServerPlayer::getScoreboardName).toArray(String[]::new),

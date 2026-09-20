@@ -709,6 +709,8 @@
   "gui.sparkle_morpher.model_panel.filter.all": "ВСЕ",
   "gui.sparkle_morpher.model_panel.filter.auth": "АВТОРИЗАЦИЯ",
   "gui.sparkle_morpher.model_panel.filter.star": "STAR",
+  "gui.sparkle_morpher.model_panel.filter.server_available": "SERVER",
+  "gui.sparkle_morpher.model_panel.filter.local_only": "LOCAL",
   "gui.sparkle_morpher.model_panel.actions": "Действия",
   "gui.sparkle_morpher.model_panel.multi_select": "Множественный выбор",
   "gui.sparkle_morpher.model_panel.selected": "Выбрано",

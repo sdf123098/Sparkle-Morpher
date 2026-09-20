@@ -709,6 +709,8 @@
   "gui.sparkle_morpher.model_panel.filter.all": "ALL",
   "gui.sparkle_morpher.model_panel.filter.auth": "AUTH",
   "gui.sparkle_morpher.model_panel.filter.star": "STAR",
+  "gui.sparkle_morpher.model_panel.filter.server_available": "SERVER",
+  "gui.sparkle_morpher.model_panel.filter.local_only": "LOCAL",
   "gui.sparkle_morpher.model_panel.actions": "Commandes",
   "gui.sparkle_morpher.model_panel.multi_select": "Selection multiple",
   "gui.sparkle_morpher.model_panel.selected": "Selectionne",

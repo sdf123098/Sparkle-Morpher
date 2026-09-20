@@ -709,6 +709,8 @@
   "gui.sparkle_morpher.model_panel.filter.all": "TÜMÜ",
   "gui.sparkle_morpher.model_panel.filter.auth": "YETKİ",
   "gui.sparkle_morpher.model_panel.filter.star": "YILDIZ",
+  "gui.sparkle_morpher.model_panel.filter.server_available": "SUNUCU",
+  "gui.sparkle_morpher.model_panel.filter.local_only": "YEREL",
   "gui.sparkle_morpher.model_panel.actions": "Hareketler",
   "gui.sparkle_morpher.model_panel.multi_select": "Çoklu seçim",
   "gui.sparkle_morpher.model_panel.selected": "Seçildi",

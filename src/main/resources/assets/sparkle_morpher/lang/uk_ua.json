@@ -709,6 +709,8 @@
   "gui.sparkle_morpher.model_panel.filter.all": "ВСІ",
   "gui.sparkle_morpher.model_panel.filter.auth": "АВТ",
   "gui.sparkle_morpher.model_panel.filter.star": "ОБРАНІ",
+  "gui.sparkle_morpher.model_panel.filter.server_available": "СЕРВЕР",
+  "gui.sparkle_morpher.model_panel.filter.local_only": "ЛОКАЛЬНІ",
   "gui.sparkle_morpher.model_panel.actions": "Дії",
   "gui.sparkle_morpher.model_panel.multi_select": "Множинний вибір",
   "gui.sparkle_morpher.model_panel.selected": "Вибрано",
