@@ -124,6 +124,7 @@ public final class NeoForgeEventBridge {
         if (!com.micaftic.morpher.YesSteveModel.isAvailable()) return;
         net.minecraft.world.entity.Entity target = event.getTarget();
         if (!(event.getEntity() instanceof ServerPlayer tracker)) return;
+        com.micaftic.morpher.event.CapabilityEvent.syncVehicleModelToReceiver(target, tracker);
         if (target instanceof ServerPlayer tracked) {
             com.micaftic.morpher.event.CapabilityEvent.getModelInfoCap(tracked).ifPresent(c -> {
                 if (com.micaftic.morpher.network.NetworkHandler.isPlayerConnected(tracked) || c.isMandatory()) {

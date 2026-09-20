@@ -7,6 +7,7 @@ import com.micaftic.morpher.capability.ProjectileModelCapability;
 import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.capability.VehicleModelCapability;
 import com.micaftic.morpher.core.config.ConfigPolicies;
+import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidModelSync;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.core.api.network.YSMChannel;
 import com.micaftic.morpher.network.NetworkHandler;
@@ -41,6 +42,7 @@ import net.minecraft.world.level.Level;
 public final class CapabilityEvent {
 
     private static final ConcurrentMap<UUID, ConcurrentMap<UUID, String>> SYNCED_PLAYER_MODEL_STATES = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<UUID, Level> LAST_PLAYER_LEVELS = new ConcurrentHashMap<>();
 
     private CapabilityEvent() {
     }
@@ -80,6 +82,7 @@ public final class CapabilityEvent {
 
     private static void onPlayerQuit(ServerPlayer player) {
         UUID playerId = player.getUUID();
+        LAST_PLAYER_LEVELS.remove(playerId);
         SYNCED_PLAYER_MODEL_STATES.remove(playerId);
         SYNCED_PLAYER_MODEL_STATES.values().forEach(states -> states.remove(playerId));
     }
@@ -95,7 +98,11 @@ public final class CapabilityEvent {
         if (!level.isClientSide() && entity instanceof Projectile projectile && projectile.getOwner() instanceof ServerPlayer owner) {
             syncProjectileModel(projectile, owner);
         }
+        if (!level.isClientSide()) {
+            MaidModelSync.onEntityLoaded(entity);
+        }
         if (entity instanceof ServerPlayer player) {
+            LAST_PLAYER_LEVELS.put(player.getUUID(), player.level());
             getAuthModelsCap(player).ifPresent(authModelsCap -> {
                 for (String modelId : ServerModelManager.getAuthModels()) {
                     authModelsCap.addModel(modelId);
@@ -107,6 +114,9 @@ public final class CapabilityEvent {
             ServerModelManager.validatePlayerModel(player);
             syncPlayerModelToSelf(player);
             syncPlayerModelToTracking(player, false);
+            if (player.getVehicle() != null) {
+                syncVehicleModelToReceiver(player.getVehicle(), player);
+            }
             getStarModelsCap(player).ifPresent(starModelsCap -> NetworkHandler.sendToClientPlayer(new S2CSyncStarModelsPacket(starModelsCap.getStarModels()), player));
         }
         return EventResult.pass();
@@ -166,6 +176,12 @@ public final class CapabilityEvent {
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
         boolean bool = ConfigPolicies.network().lowBandwidthUsage();
         for (ServerPlayer serverPlayer : players) {
+            Level currentLevel = serverPlayer.level();
+            Level previousLevel = LAST_PLAYER_LEVELS.put(serverPlayer.getUUID(), currentLevel);
+            if (previousLevel != null && previousLevel != currentLevel) {
+                syncPlayerModelToSelf(serverPlayer);
+                syncPlayerModelToTracking(serverPlayer, false);
+            }
             getModelInfoCap(serverPlayer).ifPresent(cap -> {
                 if (!NetworkHandler.isPlayerConnected(serverPlayer) && !cap.isMandatory()) {
                     if (serverPlayer.tickCount == 200 || serverPlayer.tickCount == 600 || serverPlayer.tickCount == 1800) {
@@ -193,7 +209,11 @@ public final class CapabilityEvent {
 
     private static void syncTrackedPlayerModelState(ServerPlayer source, ModelInfoCapability cap) {
         String stateKey = buildModelStateKey(cap);
-        for (ServerPlayer receiver : source.level().getServer().getPlayerList().getPlayers()) {
+        MinecraftServer server = GameInstance.getServer();
+        if (server == null) {
+            return;
+        }
+        for (ServerPlayer receiver : server.getPlayerList().getPlayers()) {
             if (receiver == source) {
                 continue;
             }
@@ -220,7 +240,11 @@ public final class CapabilityEvent {
 
     private static void rememberTrackedPlayerModelState(ServerPlayer source, ModelInfoCapability cap) {
         String stateKey = buildModelStateKey(cap);
-        for (ServerPlayer receiver : source.level().getServer().getPlayerList().getPlayers()) {
+        MinecraftServer server = GameInstance.getServer();
+        if (server == null) {
+            return;
+        }
+        for (ServerPlayer receiver : server.getPlayerList().getPlayers()) {
             if (receiver == source) {
                 continue;
             }
@@ -260,9 +284,25 @@ public final class CapabilityEvent {
             }
             VehicleModelCapability.get(entity).ifPresent(vehicleModelCap -> modelInfoCap.getMolangVars().ifPresent(object2FloatOpenHashMap -> {
                 vehicleModelCap.setModel(modelInfoCap.getModelId(), object2FloatOpenHashMap);
-                NetworkHandler.sendToTrackingEntity(new S2CSyncVehicleModelPacket(entity.getId(), vehicleModelCap), entity);
+                S2CSyncVehicleModelPacket packet = new S2CSyncVehicleModelPacket(entity.getId(), vehicleModelCap);
+                NetworkHandler.sendToTrackingEntity(packet, entity);
+                NetworkHandler.sendToClientPlayer(packet, serverPlayer);
             }));
         });
+    }
+
+    /** Sends the persisted vehicle state to a client when it starts tracking the entity. */
+    public static void syncVehicleModelToReceiver(Entity entity, ServerPlayer receiver) {
+        if (!NetworkHandler.isPlayerConnected(receiver) || !YSMChannel.canSendToClient(receiver)) {
+            return;
+        }
+        VehicleModelCapability.get(entity).filter(VehicleModelCapability::isInitialized).ifPresent(vehicleModelCap ->
+                sendVehicleModelPacketToReceiver(entity, vehicleModelCap, receiver));
+    }
+
+    private static void sendVehicleModelPacketToReceiver(Entity entity, VehicleModelCapability vehicleModelCap, ServerPlayer receiver) {
+        S2CSyncVehicleModelPacket packet = new S2CSyncVehicleModelPacket(entity.getId(), vehicleModelCap);
+        NetworkHandler.sendToClientPlayer(packet, receiver);
     }
 
     public static Optional<ModelInfoCapability> getModelInfoCap(Player player) {

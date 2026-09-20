@@ -532,6 +532,7 @@ public class ClientModelManager {
     public static Set<String> getAvailableModelIds() {
         LinkedHashSet<String> ids = new LinkedHashSet<>(modelAssemblyMap.keySet());
         ids.addAll(lazyModelSources.keySet());
+        serverModels.values().forEach(context -> ids.add(context.modelKey));
         return Collections.unmodifiableSet(ids);
     }
 
