@@ -3,7 +3,9 @@ package com.micaftic.morpher.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.*;
 import com.micaftic.morpher.core.config.ConfigPolicies;
+import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidModelSync;
 import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.core.api.network.YSMChannel;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.*;
 import com.micaftic.morpher.util.*;
@@ -24,6 +26,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 public final class CapabilityEvent {
     private static final ConcurrentMap<UUID, ConcurrentMap<UUID, String>> SYNCED_PLAYER_MODEL_STATES = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<UUID, Level> LAST_PLAYER_LEVELS = new ConcurrentHashMap<>();
     private CapabilityEvent() {}
     public static void register() {
         NeoForge.EVENT_BUS.addListener(CapabilityEvent::onPlayerCloned);
@@ -44,6 +47,7 @@ public final class CapabilityEvent {
     }
     private static void onPlayerQuit(PlayerEvent.PlayerLoggedOutEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer p)) return;
+        LAST_PLAYER_LEVELS.remove(p.getUUID());
         SYNCED_PLAYER_MODEL_STATES.remove(p.getUUID());
         SYNCED_PLAYER_MODEL_STATES.values().forEach(s -> s.remove(p.getUUID()));
     }
@@ -52,12 +56,15 @@ public final class CapabilityEvent {
         Entity e = event.getEntity(); Level l = event.getLevel();
         if (!YesSteveModel.isAvailable()) return;
         if (!l.isClientSide() && e instanceof Projectile proj && proj.getOwner() instanceof ServerPlayer owner) syncProjectileModel(proj, owner);
+        if (!l.isClientSide()) MaidModelSync.onEntityLoaded(e);
         if (e instanceof ServerPlayer p) {
+            LAST_PLAYER_LEVELS.put(p.getUUID(), p.level());
             getAuthModelsCap(p).ifPresent(c -> { for (String m : ServerModelManager.getAuthModels()) c.addModel(m); NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(c.getAuthModels()), p); });
             PlayerStarModelsStore.restore(p);
             PlayerModelSelectionStore.restore(p);
             ServerModelManager.validatePlayerModel(p);
             syncPlayerModelToSelf(p); syncPlayerModelToTracking(p, false);
+            if (p.getVehicle() != null) syncVehicleModelToReceiver(p.getVehicle(), p);
             getStarModelsCap(p).ifPresent(c -> NetworkHandler.sendToClientPlayer(new S2CSyncStarModelsPacket(c.getStarModels()), p));
         }
     }
@@ -77,6 +84,12 @@ public final class CapabilityEvent {
         MinecraftServer s = event.getServer(); if (s == null) return;
         boolean low = ConfigPolicies.network().lowBandwidthUsage();
         for (ServerPlayer sp : s.getPlayerList().getPlayers()) {
+            Level currentLevel = sp.level();
+            Level previousLevel = LAST_PLAYER_LEVELS.put(sp.getUUID(), currentLevel);
+            if (previousLevel != null && previousLevel != currentLevel) {
+                syncPlayerModelToSelf(sp);
+                syncPlayerModelToTracking(sp, false);
+            }
             getModelInfoCap(sp).ifPresent(c -> {
                 if (!NetworkHandler.isPlayerConnected(sp) && !c.isMandatory()) { if (sp.tickCount == 200 || sp.tickCount == 600 || sp.tickCount == 1800) NetworkHandler.sendToClientPlayer(new S2CVersionCheckPacket(), sp); return; }
                 if (c.isDirty()) { c.getAnimSync().updateAndSync(sp, false, low); c.createSyncMessage(sp, true).ifPresent(m -> { c.clearDirty(); NetworkHandler.sendToTrackingEntityAndSelf(m, sp); rememberTrackedState(sp, c); if (sp.getVehicle() != null && sp.getVehicle().getFirstPassenger() == sp) syncVehicleModel(sp.getVehicle(), sp); }); }
@@ -93,6 +106,7 @@ public final class CapabilityEvent {
         if (!YesSteveModel.isAvailable()) return;
         Entity target = event.getTarget();
         if (!(event.getEntity() instanceof ServerPlayer tracker)) return;
+        syncVehicleModelToReceiver(target, tracker);
         if (target instanceof ServerPlayer tracked) {
             getModelInfoCap(tracked).ifPresent(c -> {
                 if (canSyncModel(tracked, c)) {
@@ -108,7 +122,15 @@ public final class CapabilityEvent {
         ModelInfoCapability.get(sp).ifPresent(c -> { if (!NetworkHandler.isPlayerConnected(sp) && !c.isMandatory()) return; ProjectileModelCapability.get(proj).ifPresent(pc -> c.withMolangVars(v -> { pc.setModel(c.getModelId(), v); S2CSyncProjectileModelPacket pkt = new S2CSyncProjectileModelPacket(proj.getId(), pc); NetworkHandler.sendToClientPlayer(pkt, sp); NetworkHandler.sendToTrackingEntity(pkt, proj); })); });
     }
     public static void syncVehicleModel(Entity e, ServerPlayer sp) {
-        ModelInfoCapability.get(sp).ifPresent(c -> { if (!NetworkHandler.isPlayerConnected(sp) && !c.isMandatory()) return; VehicleModelCapability.get(e).ifPresent(vc -> c.getMolangVars().ifPresent(v -> { vc.setModel(c.getModelId(), v); NetworkHandler.sendToTrackingEntity(new S2CSyncVehicleModelPacket(e.getId(), vc), e); })); });
+        ModelInfoCapability.get(sp).ifPresent(c -> { if (!NetworkHandler.isPlayerConnected(sp) && !c.isMandatory()) return; VehicleModelCapability.get(e).ifPresent(vc -> c.getMolangVars().ifPresent(v -> { vc.setModel(c.getModelId(), v); S2CSyncVehicleModelPacket packet = new S2CSyncVehicleModelPacket(e.getId(), vc); NetworkHandler.sendToTrackingEntity(packet, e); NetworkHandler.sendToClientPlayer(packet, sp); })); });
+    }
+
+    public static void syncVehicleModelToReceiver(Entity entity, ServerPlayer receiver) {
+        if (!NetworkHandler.isPlayerConnected(receiver) || !YSMChannel.canSendToClient(receiver)) return;
+        VehicleModelCapability.get(entity).filter(VehicleModelCapability::isInitialized).ifPresent(vc -> {
+            S2CSyncVehicleModelPacket packet = new S2CSyncVehicleModelPacket(entity.getId(), vc);
+            NetworkHandler.sendToClientPlayer(packet, receiver);
+        });
     }
     public static Optional<ModelInfoCapability> getModelInfoCap(Player p) { return ModelInfoCapability.get(p); }
     public static Optional<AuthModelsCapability> getAuthModelsCap(Player p) { return AuthModelsCapability.get(p); }

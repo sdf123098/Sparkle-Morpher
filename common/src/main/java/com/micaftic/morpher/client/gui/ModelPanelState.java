@@ -10,7 +10,17 @@ final class ModelPanelState {
     enum ModelFilter {
         ALL,
         AUTH,
-        STAR
+        STAR,
+        SERVER_AVAILABLE,
+        LOCAL_ONLY;
+
+        boolean matchesAvailability(boolean localOnly) {
+            return switch (this) {
+                case SERVER_AVAILABLE -> !localOnly;
+                case LOCAL_ONLY -> localOnly;
+                default -> true;
+            };
+        }
     }
 
     enum SecondaryPanel {

@@ -84,6 +84,12 @@ public final class BlurStack {
 
     public static void flush(GuiGraphics graphics) {
         if (regions.isEmpty()) return;
+        // ModernUI-MC 1.21.1 applies its own screen blur from renderTransparentBackground.
+        // Do not capture and blur the same frame a second time when that feature is active.
+        if (isModernUiBackgroundBlurActive()) {
+            regions.clear();
+            return;
+        }
         if (!BlurShader.ensureCompiled()) {
             // The custom blur shader could not compile (common on GL ES translation layers used
             // by mobile launchers). Fall back to a solid translucent backdrop so panels stay
@@ -149,6 +155,16 @@ public final class BlurStack {
         RenderSystem.disableBlend();
 
         regions.clear();
+    }
+
+    private static boolean isModernUiBackgroundBlurActive() {
+        try {
+            Class<?> blurHandler = Class.forName(
+                    "icyllis.modernui.mc.BlurHandler", false, BlurStack.class.getClassLoader());
+            return blurHandler.getField("sBlurEffect").getBoolean(null);
+        } catch (ReflectiveOperationException | SecurityException | LinkageError ignored) {
+            return false;
+        }
     }
 
     /**

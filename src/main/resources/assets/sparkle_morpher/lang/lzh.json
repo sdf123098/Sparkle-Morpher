@@ -713,6 +713,8 @@
   "gui.sparkle_morpher.model_panel.filter.all": "皆",
   "gui.sparkle_morpher.model_panel.filter.auth": "授",
   "gui.sparkle_morpher.model_panel.filter.star": "藏",
+  "gui.sparkle_morpher.model_panel.filter.server_available": "服",
+  "gui.sparkle_morpher.model_panel.filter.local_only": "本",
   "gui.sparkle_morpher.model_panel.actions": "行",
   "gui.sparkle_morpher.model_panel.multi_select": "多擇",
   "gui.sparkle_morpher.model_panel.selected": "今擇",
