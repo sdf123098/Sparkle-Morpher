@@ -532,6 +532,10 @@ public class ClientModelManager {
     public static Set<String> getAvailableModelIds() {
         LinkedHashSet<String> ids = new LinkedHashSet<>(modelAssemblyMap.keySet());
         ids.addAll(lazyModelSources.keySet());
+        // The server manifest is authoritative even while a cache file is still downloading.
+        // Keep those entries visible so the model browser can distinguish server models from
+        // local-only models during the join/sync window.
+        serverModels.values().forEach(context -> ids.add(context.modelKey));
         return Collections.unmodifiableSet(ids);
     }
 

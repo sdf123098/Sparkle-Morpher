@@ -715,6 +715,8 @@
   "gui.sparkle_morpher.model_panel.filter.all": "全部",
   "gui.sparkle_morpher.model_panel.filter.auth": "授权",
   "gui.sparkle_morpher.model_panel.filter.star": "收藏",
+  "gui.sparkle_morpher.model_panel.filter.server_available": "服务器可用",
+  "gui.sparkle_morpher.model_panel.filter.local_only": "仅本地",
   "gui.sparkle_morpher.model_panel.actions": "操作",
   "gui.sparkle_morpher.model_panel.multi_select": "多选",
   "gui.sparkle_morpher.model_panel.picker.auto": "视图：自动（放得下就卡片）",
