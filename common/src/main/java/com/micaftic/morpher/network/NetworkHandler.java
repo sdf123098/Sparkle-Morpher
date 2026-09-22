@@ -1,19 +1,14 @@
 package com.micaftic.morpher.network;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.mixin.ConnectionAccessor;
-import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
 import com.micaftic.morpher.network.message.*;
-import io.netty.channel.Channel;
-import io.netty.util.AttributeKey;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
-import com.micaftic.morpher.core.api.network.PacketDirection;
 import com.micaftic.morpher.core.api.network.YSMChannel;
 import com.micaftic.morpher.legacy.compat.LegacyCompatNetwork;
 import com.micaftic.morpher.legacy.compat.LegacyCompatState;
@@ -21,17 +16,25 @@ import com.micaftic.morpher.core.api.network.state.PrivacyState;
 import com.micaftic.morpher.network.protocol.*;
 import com.micaftic.morpher.network.state.MinecraftConnectionState;
 
+import java.util.Map;
+import java.util.WeakHashMap;
+
 public final class NetworkHandler {
 
     public static final String VERSION = "2.6.0";
 
-    public static final ResourceLocation CHANNEL_ID = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
+    public static final Identifier CHANNEL_ID = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
 
-    /** 服务端按连接记录的 SPM 协商版本（平台存储：netty Channel attribute，R9.2 保留在本层）。 */
-    private static final AttributeKey<String> CHANNEL_VERSION_KEY = AttributeKey.valueOf("sparkle_morpher_channel_version");
+    /** 服务端按连接记录的 SPM 协商版本（平台存储，R9.2 保留在本层）。 */
+    private static final Map<Connection, String> CHANNEL_VERSIONS = new WeakHashMap<>();
 
     public static boolean setChannelVersion(Connection connection, String str) {
-        return ((ConnectionAccessor) connection).ysm$getChannel().attr(CHANNEL_VERSION_KEY).compareAndSet(null, str);
+        if (connection == null || str == null) {
+            return false;
+        }
+        synchronized (CHANNEL_VERSIONS) {
+            return CHANNEL_VERSIONS.putIfAbsent(connection, str) == null;
+        }
     }
 
     public static void markClientHandshakeComplete() {
@@ -45,29 +48,22 @@ public final class NetworkHandler {
 
     public static boolean isPlayerConnected(ServerPlayer serverPlayer) {
         return MinecraftConnectionState.isPlayerConnected(serverPlayer)
-                && isConnectionValid(((ServerCommonPacketListenerImplAccessor) serverPlayer.connection).ysm$getConnection());
+                && isConnectionValid(serverPlayer.connection.getConnection());
     }
 
     public static boolean isClientConnected() {
-        // R9.2：只做组合——隐私未激活，且 legacy 会话活跃（握手完成或 MC 连接已协商 SPM channel）
+        // R9.2：只做组合——隐私未激活，且 legacy 会话活跃（握手完成或 MC 连接已协商）
         return PrivacyState.isInactive()
                 && LegacyCompatState.isClientSessionActive(MinecraftConnectionState.isClientConnected());
     }
 
     public static boolean isConnectionValid(@Nullable Connection connection) {
-        if (connection == null || !connection.isConnected()) {
+        if (connection == null) {
             return false;
         }
-        try {
-            Channel channel = ((ConnectionAccessor) connection).ysm$getChannel();
-            if (channel == null) {
-                return false;
-            }
-            String version = channel.attr(CHANNEL_VERSION_KEY).get();
-            return VERSION.equals(version);
-        } catch (Exception e) {
-            // Mixin may not apply in all contexts; fall back to connection state
-            return connection.isConnected();
+        synchronized (CHANNEL_VERSIONS) {
+            String channelVersion = CHANNEL_VERSIONS.get(connection);
+            return channelVersion == null || VERSION.equals(channelVersion);
         }
     }
 
@@ -77,7 +73,6 @@ public final class NetworkHandler {
         AnimationProtocol.register();
         EntityModelProtocol.register();
         ServerPolicyProtocol.register();
-        UploadProtocol.register();
     }
 
     public static void sendToServer(Object obj) {

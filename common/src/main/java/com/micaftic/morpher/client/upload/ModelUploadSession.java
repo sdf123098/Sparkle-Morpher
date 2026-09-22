@@ -1,117 +1,137 @@
 package com.micaftic.morpher.client.upload;
 
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.core.api.network.state.CloudState;
 import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
-import com.micaftic.morpher.legacy.compat.LegacyCompatUploadTransport;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.util.DigestUtil;
-import com.micaftic.morpher.util.PerformanceProfiler;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import com.micaftic.morpher.legacy.compat.LegacyCompatModelFormat;
+import com.micaftic.morpher.util.DigestUtil;
+import net.minecraft.network.chat.Component;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+/** One asynchronous upload to the configured SPM Cloud instance. */
 public final class ModelUploadSession {
     private static final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
-    /** R9.3：发包交给 transport；当前默认 legacy 服务器通道，行为与旧版本一致。 */
-    private static volatile ModelUploadTransport transport = LegacyCompatUploadTransport.INSTANCE;
     private static volatile ModelUploadSession instance;
-    private static volatile boolean serverLimitsKnown = false;
-    private static volatile int lastMaxTotalBytes = 16_777_216;
-    private static volatile int lastChunksPerTick = 4;
-
+    private static volatile int lastMaxTotalBytes = 128 * 1024 * 1024;
     private final String modelId;
     private final String fileName;
-    private final byte[] data;
-    private final String sha256;
-    private final boolean syncSelectionOnComplete;
+    private final Path source;
+    private final boolean deleteSourceOnCompletion;
+    private final AtomicBoolean cancelled = new AtomicBoolean();
     private volatile State state = State.STARTING;
-    private volatile long uploadId = 0L;
-    private volatile int chunkSize = 32_000;
-    private volatile int chunksPerTick = 4;
-    private volatile int nextOffset = 0;
-    private volatile Component message = Component.empty();
+    private volatile long sentBytes;
+    private volatile Component message = Component.translatable("gui.sparkle_morpher.import.state.importing");
 
-    private ModelUploadSession(String modelId, String fileName, byte[] data, boolean syncSelectionOnComplete) {
+    private ModelUploadSession(String modelId, String fileName, Path source,
+                               boolean deleteSourceOnCompletion) {
         this.modelId = modelId;
         this.fileName = fileName;
-        this.data = data;
-        this.sha256 = DigestUtil.sha256Hex(data);
-        this.syncSelectionOnComplete = syncSelectionOnComplete;
+        this.source = source;
+        this.deleteSourceOnCompletion = deleteSourceOnCompletion;
     }
 
     public static ModelUploadSession getInstance() {
         return instance;
     }
 
-    public static synchronized Component start(String modelId, byte[] data) {
-        return start(modelId, modelId + ".ysm", data);
-    }
-
+    /** Existing screens may pass bytes; the HTTP body is still streamed from a temporary file. */
     public static synchronized Component start(String modelId, String fileName, byte[] data) {
         return start(modelId, fileName, data, true);
     }
 
-    public static synchronized Component start(String modelId, String fileName, byte[] data, boolean syncSelectionOnComplete) {
+    public static synchronized Component start(String modelId, String fileName, byte[] data,
+                                               boolean syncSelectionOnComplete) {
+        if (data == null || data.length == 0) {
+            return Component.translatable("gui.sparkle_morpher.import.error.empty_file");
+        }
+        try {
+            Path temporary = Files.createTempFile("spm-cloud-upload-", extensionFor(fileName));
+            Files.write(temporary, data);
+            Component error = start(modelId, fileName, temporary, syncSelectionOnComplete, true);
+            if (error != null) Files.deleteIfExists(temporary);
+            return error;
+        } catch (IOException error) {
+            return Component.translatable("gui.sparkle_morpher.import.error.local_storage");
+        }
+    }
+
+    /** Starts a Cloud upload without materializing the source in memory. */
+    public static synchronized Component start(String modelId, String fileName, Path source,
+                                               boolean syncSelectionOnComplete) {
+        return start(modelId, fileName, source, syncSelectionOnComplete, false);
+    }
+
+    private static Component start(String modelId, String fileName, Path source,
+                                   boolean ignoredSyncSelectionOnComplete,
+                                   boolean deleteSourceOnCompletion) {
         if (instance != null && !instance.isTerminal()) {
             return Component.translatable("gui.sparkle_morpher.import.error.in_progress");
         }
-        if (data.length == 0) {
-            return Component.translatable("gui.sparkle_morpher.import.error.empty_file");
+        ModelUploadTransport uploadTransport = CloudUploadRuntime.transport();
+        if (uploadTransport == null || !CloudState.isAvailable()) {
+            return Component.translatable("gui.sparkle_morpher.import.error.cloud_unavailable");
         }
-        if (!NetworkHandler.isClientConnected() || !ClientModelManager.isOysmServer()) {
-            return Component.translatable("gui.sparkle_morpher.import.error.waiting_handshake");
+        if (modelId == null || modelId.isBlank() || fileName == null || fileName.isBlank()) {
+            return Component.translatable("gui.sparkle_morpher.import.error.invalid_model_id_or_hash");
         }
-        if (!ClientModelManager.isAllowUpload()) {
-            return Component.translatable("gui.sparkle_morpher.import.error.disabled_by_server");
+        final long totalBytes;
+        final String sha256;
+        try {
+            totalBytes = Files.size(source);
+            if (totalBytes <= 0 || totalBytes > Integer.MAX_VALUE) {
+                return Component.translatable("gui.sparkle_morpher.import.error.empty_file");
+            }
+            sha256 = DigestUtil.sha256Hex(source);
+        } catch (IOException error) {
+            return Component.translatable("gui.sparkle_morpher.import.error.local_storage");
         }
-        if (serverLimitsKnown && data.length > lastMaxTotalBytes) {
+        if (totalBytes > lastMaxTotalBytes) {
             return Component.translatable("gui.sparkle_morpher.import.error.server_limit", formatBytes(lastMaxTotalBytes));
         }
         ImportKind kind = ImportKind.fromFileName(fileName);
         if (kind == ImportKind.UNKNOWN) {
             return Component.translatable("gui.sparkle_morpher.import.error.invalid_extension");
         }
-        if (kind == ImportKind.YSM && !isYsmFile(data)) {
-            return Component.translatable("gui.sparkle_morpher.import.error.invalid_ysm");
+        try {
+            if (kind == ImportKind.YSM && LegacyCompatModelFormat.detectCryptoVersion(Files.readAllBytes(source)) == -1) {
+                return Component.translatable("gui.sparkle_morpher.import.error.invalid_ysm");
+            }
+        } catch (IOException error) {
+            return Component.translatable("gui.sparkle_morpher.import.error.local_storage");
         }
-        if (kind == ImportKind.ZIP && !isZipFile(data)) {
-            return Component.translatable("gui.sparkle_morpher.import.error.invalid_zip");
-        }
-        ModelUploadSession session = new ModelUploadSession(modelId, fileName, data, syncSelectionOnComplete);
+
+        ModelUploadSession session = new ModelUploadSession(modelId, fileName, source, deleteSourceOnCompletion);
         instance = session;
         notifyListeners();
-        transport.sendStart(modelId, fileName == null ? "" : fileName, data.length, session.sha256);
+        ModelUploadTransport.UploadMetadata metadata = new ModelUploadTransport.UploadMetadata(
+                modelId, fileName, kind.wireName, sha256, totalBytes);
+        uploadTransport.upload(metadata, source, session::onProgress, session.cancelled::get)
+                .whenComplete((result, error) -> session.complete(result, error));
         return null;
-    }
-
-    /** 切换上传传输实现；默认值由 legacy-compat 边界提供。 */
-    public static void setTransport(ModelUploadTransport transport) {
-        ModelUploadSession.transport = transport;
-    }
-
-    public static boolean hasServerLimits() {
-        return serverLimitsKnown;
     }
 
     public static int getLastMaxTotalBytes() {
         return lastMaxTotalBytes;
     }
 
+    public static boolean hasServerLimits() {
+        return false;
+    }
+
     public static int getLastChunksPerTick() {
-        return lastChunksPerTick;
+        return 0;
     }
 
     public static String formatBytes(int bytes) {
-        if (bytes < 1024) {
-            return bytes + " B";
-        }
-        if (bytes < 1024 * 1024) {
-            return String.format(Locale.ROOT, "%.1f KB", bytes / 1024.0);
-        }
-        return String.format(Locale.ROOT, "%.2f MB", bytes / (1024.0 * 1024.0));
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
+        return String.format("%.2f MB", bytes / (1024.0 * 1024.0));
     }
 
     public static synchronized void clearIfTerminal() {
@@ -129,159 +149,45 @@ public final class ModelUploadSession {
         listeners.remove(listener);
     }
 
-    public static synchronized void onStartAck(long uploadId, byte status, int chunkSize, int maxTotalBytes, int chunksPerTick, String message) {
-        if (maxTotalBytes > 0) {
-            lastMaxTotalBytes = maxTotalBytes;
-        }
-        if (chunksPerTick > 0) {
-            lastChunksPerTick = chunksPerTick;
-        }
-        serverLimitsKnown = true;
-        ModelUploadSession session = instance;
-        if (session == null || session.state != State.STARTING) {
-            return;
-        }
-        if (status != 0) {
-            session.fail(appendServerMessage(getRequestErrorText(status), message));
-            return;
-        }
-        session.uploadId = uploadId;
-        session.chunkSize = Math.max(1, chunkSize);
-        session.chunksPerTick = Math.max(1, chunksPerTick);
-        session.state = State.UPLOADING;
-        session.message = Component.translatable("gui.sparkle_morpher.import.state.server_uploading");
-        notifyListeners();
-    }
-
-    public static synchronized void onResult(long uploadId, byte status, String modelId, long h1, long h2, String message) {
-        ModelUploadSession session = instance;
-        if (session == null || session.uploadId != uploadId) {
-            return;
-        }
-        if (status == 0) {
-            session.state = State.COMPLETED;
-            session.message = Component.translatable("gui.sparkle_morpher.import.state.imported_as", modelId);
-            if (session.syncSelectionOnComplete) {
-                ClientModelManager.onUploadedModelAvailable(modelId);
-            } else {
-                ClientModelManager.onUploadedModelImported(modelId);
-            }
-        } else {
-            session.fail(appendServerMessage(getResponseErrorText(status), message));
-        }
-        notifyListeners();
-    }
-
-    public static void tickCurrent() {
-        ModelUploadSession session = instance;
-        if (session != null) {
-            session.tick();
-        }
-    }
-
     public static synchronized void failCurrent(Component reason) {
         ModelUploadSession session = instance;
-        if (session == null || session.isTerminal()) {
-            return;
-        }
+        if (session == null || session.isTerminal()) return;
+        session.cancelled.set(true);
         session.fail(reason);
         notifyListeners();
     }
 
     private static void notifyListeners() {
         ModelUploadSession session = instance;
-        for (Listener listener : listeners) {
-            listener.onSessionUpdate(session);
-        }
+        for (Listener listener : listeners) listener.onSessionUpdate(session);
     }
 
-    private static boolean isYsmFile(byte[] data) {
-        return LegacyCompatModelFormat.detectCryptoVersion(data) != -1;
-    }
-
-    private static boolean isZipFile(byte[] data) {
-        return data.length >= 4
-                && data[0] == 0x50
-                && data[1] == 0x4b
-                && (data[2] == 0x03 || data[2] == 0x05 || data[2] == 0x07)
-                && (data[3] == 0x04 || data[3] == 0x06 || data[3] == 0x08);
-    }
-
-    private static Component getRequestErrorText(byte status) {
-        return switch (status) {
-            case 1 -> Component.translatable("gui.sparkle_morpher.import.error.model_exists");
-            case 2 -> Component.translatable("gui.sparkle_morpher.import.error.file_exceeds_server_limit");
-            case 3 -> Component.translatable("gui.sparkle_morpher.import.error.no_permission");
-            case 4 -> Component.translatable("gui.sparkle_morpher.import.error.server_busy");
-            case 5 -> Component.translatable("gui.sparkle_morpher.import.error.invalid_model_id_or_hash");
-            case 6 -> Component.translatable("gui.sparkle_morpher.import.error.disabled_by_server");
-            default -> Component.translatable("gui.sparkle_morpher.import.error.status", status);
-        };
-    }
-
-    private static Component getResponseErrorText(byte status) {
-        return switch (status) {
-            case 1 -> Component.translatable("gui.sparkle_morpher.import.error.hash_mismatch");
-            case 2 -> Component.translatable("gui.sparkle_morpher.import.error.server_parse_failed");
-            case 3 -> Component.translatable("gui.sparkle_morpher.import.error.server_storage");
-            case 4 -> Component.translatable("gui.sparkle_morpher.import.error.session_expired");
-            case 5 -> Component.translatable("gui.sparkle_morpher.import.error.incomplete_upload");
-            case 6 -> Component.translatable("gui.sparkle_morpher.import.error.server_rejected_write");
-            case 8 -> Component.translatable("gui.sparkle_morpher.import.error.scan_not_visible");
-            default -> Component.translatable("gui.sparkle_morpher.import.error.status", status);
-        };
-    }
-
-    private static Component appendServerMessage(Component base, String serverMessage) {
-        if (serverMessage == null || serverMessage.isEmpty() || isKnownServerMessage(serverMessage)) {
-            return base;
-        }
-        MutableComponent result = base.copy();
-        result.append(Component.literal(": "));
-        result.append(Component.literal(serverMessage));
-        return result;
-    }
-
-    private static boolean isKnownServerMessage(String serverMessage) {
-        return switch (serverMessage.trim()) {
-            case "Model import disabled",
-                 "No import permission",
-                 "Invalid model id or hash",
-                 "File exceeds server limit",
-                 "Model ID already exists",
-                 "Session expired",
-                 "Incomplete upload",
-                 "Hash mismatch",
-                 "Server failed to cache model",
-                 "Server rejected write" -> true;
-            default -> false;
-        };
-    }
-
-    private synchronized void tick() {
-        if (state != State.UPLOADING) {
-            return;
-        }
-        long perfStart = PerformanceProfiler.start();
-        int budget = Math.max(1, chunksPerTick);
-        int chunks = 0;
-        int bytes = 0;
-        for (int i = 0; i < budget && nextOffset < data.length; i++) {
-            int end = Math.min(nextOffset + chunkSize, data.length);
-            int length = end - nextOffset;
-            transport.sendChunk(uploadId, nextOffset, data, nextOffset, length);
-            nextOffset = end;
-            chunks++;
-            bytes += length;
-        }
-        PerformanceProfiler.logElapsed("client_upload_tick", modelId, perfStart,
-                "chunks=" + chunks + " bytes=" + bytes + " sent=" + nextOffset + "/" + data.length);
-        if (nextOffset >= data.length) {
-            state = State.FINISHING;
-            message = Component.translatable("gui.sparkle_morpher.import.state.verifying");
-            transport.sendFinish(uploadId);
-        }
+    private void onProgress(long sent, long total) {
+        sentBytes = Math.min(Math.max(sent, 0), total);
+        state = State.UPLOADING;
+        message = Component.translatable("gui.sparkle_morpher.import.state.importing");
         notifyListeners();
+    }
+
+    private synchronized void complete(ModelUploadTransport.UploadResult result, Throwable error) {
+        try {
+            if (error != null) {
+                fail(Component.literal(rootMessage(error)));
+            } else if (cancelled.get()) {
+                fail(Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
+            } else {
+                sentBytes = result.byteLength();
+                state = State.COMPLETED;
+                message = Component.translatable("gui.sparkle_morpher.import.state.imported_as", result.assetId());
+                // Cloud assets are not selected through the legacy Minecraft packet channel.
+                ClientModelManager.onUploadedModelImported(result.assetId());
+            }
+        } finally {
+            if (deleteSourceOnCompletion) {
+                try { Files.deleteIfExists(source); } catch (IOException ignored) { }
+            }
+            notifyListeners();
+        }
     }
 
     private void fail(Component reason) {
@@ -289,69 +195,60 @@ public final class ModelUploadSession {
         message = reason;
     }
 
+    private static String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) current = current.getCause();
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
+
+    private static String extensionFor(String fileName) {
+        String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".zip")) return ".zip";
+        if (lower.endsWith(".bbmodel")) return ".bbmodel";
+        if (lower.endsWith(".gltf")) return ".gltf";
+        if (lower.endsWith(".glb")) return ".glb";
+        return ".ysm";
+    }
+
     public boolean isTerminal() {
         return state == State.COMPLETED || state == State.FAILED;
     }
 
-    public State getState() {
-        return state;
-    }
-
-    public String getModelId() {
-        return modelId;
-    }
-
-    public String getFileName() {
-        return fileName;
-    }
+    public State getState() { return state; }
+    public String getModelId() { return modelId; }
+    public String getFileName() { return fileName; }
 
     public int getTotalBytes() {
-        return data.length;
+        try { return (int) Math.min(Integer.MAX_VALUE, Files.size(source)); }
+        catch (IOException ignored) { return 0; }
     }
 
-    public int getSentBytes() {
-        return Math.min(nextOffset, data.length);
-    }
-
-    public Component getMessage() {
-        return message;
-    }
+    public int getSentBytes() { return (int) Math.min(Integer.MAX_VALUE, sentBytes); }
+    public Component getMessage() { return message; }
 
     public float getProgress() {
-        if (data.length == 0 || state == State.COMPLETED) {
-            return 1f;
-        }
-        return (float) getSentBytes() / data.length;
+        long total;
+        try { total = Files.size(source); } catch (IOException ignored) { return 0f; }
+        return total <= 0 ? 0f : Math.min(1f, (float) sentBytes / total);
     }
 
-    public enum State {STARTING, UPLOADING, FINISHING, COMPLETED, FAILED}
+    public enum State { STARTING, UPLOADING, FINISHING, COMPLETED, FAILED }
 
     private enum ImportKind {
-        YSM,
-        ZIP,
-        BBMODEL,
-        UNKNOWN;
-
+        YSM("ysm"), ZIP("zip"), BBMODEL("bbmodel"), GLTF("gltf"), GLB("glb"), UNKNOWN("");
+        private final String wireName;
+        ImportKind(String wireName) { this.wireName = wireName; }
         private static ImportKind fromFileName(String fileName) {
-            if (fileName == null) {
-                return UNKNOWN;
-            }
+            if (fileName == null) return UNKNOWN;
             String lower = fileName.toLowerCase(Locale.ROOT);
-            if (lower.endsWith(".ysm")) {
-                return YSM;
-            }
-            if (lower.endsWith(".zip")) {
-                return ZIP;
-            }
-            if (lower.endsWith(".bbmodel")) {
-                return BBMODEL;
-            }
+            if (lower.endsWith(".ysm")) return YSM;
+            if (lower.endsWith(".zip")) return ZIP;
+            if (lower.endsWith(".bbmodel")) return BBMODEL;
+            if (lower.endsWith(".gltf")) return GLTF;
+            if (lower.endsWith(".glb")) return GLB;
             return UNKNOWN;
         }
     }
 
-    public interface Listener {
-        void onSessionUpdate(ModelUploadSession session);
-    }
+    public interface Listener { void onSessionUpdate(ModelUploadSession session); }
 }
-

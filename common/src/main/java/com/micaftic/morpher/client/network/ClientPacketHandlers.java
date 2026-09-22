@@ -9,7 +9,6 @@ import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
-import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
@@ -21,8 +20,6 @@ import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
 import com.micaftic.morpher.network.message.C2SVersionCheckPacket;
 import com.micaftic.morpher.network.message.S2CExecuteMolangPacket;
 import com.micaftic.morpher.network.message.S2CModelSyncPayload;
-import com.micaftic.morpher.network.message.S2CModelUploadResultPacket;
-import com.micaftic.morpher.network.message.S2CModelUploadStartPacket;
 import com.micaftic.morpher.network.message.S2CSetModelAndTexturePacket;
 import com.micaftic.morpher.network.message.S2CSyncAnimationExpressionPacket;
 import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
@@ -60,16 +57,6 @@ public final class ClientPacketHandlers {
         S2CModelSyncPayload message = (S2CModelSyncPayload) obj;
         ByteBuffer data = message.getData();
         ClientModelManager.startSync(connection, data);
-    }
-
-    public static void handleModelUploadStart(Object obj) {
-        S2CModelUploadStartPacket message = (S2CModelUploadStartPacket) obj;
-        ModelUploadSession.onStartAck(message.uploadId(), message.status(), message.chunkSize(), message.maxTotalBytes(), message.chunksPerTick(), message.message());
-    }
-
-    public static void handleModelUploadResult(Object obj) {
-        S2CModelUploadResultPacket message = (S2CModelUploadResultPacket) obj;
-        ModelUploadSession.onResult(message.uploadId(), message.status(), message.modelId(), message.h1(), message.h2(), message.message());
     }
 
     public static void handleExecuteMolang(Object obj) {
