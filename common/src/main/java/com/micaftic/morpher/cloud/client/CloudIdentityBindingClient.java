@@ -41,8 +41,13 @@ public final class CloudIdentityBindingClient {
     }
 
     public CompletableFuture<CloudBinding> approve(String bindingId, String status) {
+        return approve(bindingId, status, 0L);
+    }
+
+    public CompletableFuture<CloudBinding> approve(String bindingId, String status, long expectedRevision) {
         JsonObject body = new JsonObject();
         body.addProperty("status", Objects.requireNonNull(status, "status"));
+        body.addProperty("expected_revision", expectedRevision);
         return http.putJson("/v1/scoped-identity-bindings/" + segment(bindingId), body.toString()).thenApply(CloudIdentityBindingClient::parseBinding);
     }
 
