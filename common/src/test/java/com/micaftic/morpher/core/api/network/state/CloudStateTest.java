@@ -1,33 +1,45 @@
 package com.micaftic.morpher.core.api.network.state;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * R9.2 CloudState 测试：云传输可用性接缝（R9.3 CloudUploadTransport 接入前默认不可用）。
- *
- * <p>现状无云传输通道，任何依赖云状态的调用必须按不可用处理；接入后由传输层置位。</p>
- */
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
 class CloudStateTest {
 
-    @BeforeEach
+    @AfterEach
     void resetState() {
-        CloudState.setTransportAvailable(false);
+        CloudState.reset();
     }
 
     @Test
-    void unavailableBeforeTransportWired() {
+    void initialStateIsDisconnectedWithoutError() {
+        CloudState.reset();
+
+        assertEquals(CloudConnectionStatus.DISCONNECTED, CloudState.snapshot().status());
+        assertEquals(CloudErrorCode.NONE, CloudState.snapshot().error());
         assertFalse(CloudState.isAvailable());
     }
 
     @Test
-    void transportAvailabilityRoundTrip() {
-        CloudState.setTransportAvailable(true);
+    void stateCarriesErrorAndGenerationWithoutLegacyFallback() {
+        CloudState.setStatus(CloudConnectionStatus.CONNECTING, CloudErrorCode.NONE, "local-dev");
+        long connectingGeneration = CloudState.snapshot().generation();
+
+        CloudState.setStatus(CloudConnectionStatus.DEGRADED, CloudErrorCode.SESSION_EXPIRED, "local-dev");
+
         assertTrue(CloudState.isAvailable());
-        CloudState.setTransportAvailable(false);
-        assertFalse(CloudState.isAvailable());
+        assertFalse(CloudState.snapshot().allowsMutations());
+        assertEquals(CloudErrorCode.SESSION_EXPIRED, CloudState.snapshot().error());
+        assertTrue(CloudState.snapshot().generation() > connectingGeneration);
+    }
+
+    @Test
+    void readyCannotCarryError() {
+        assertThrows(IllegalArgumentException.class, () ->
+                CloudState.setStatus(CloudConnectionStatus.READY, CloudErrorCode.INTERNAL, "local-dev"));
     }
 }
