@@ -1,24 +1,40 @@
 package com.micaftic.morpher.core.api.network.state;
 
-/**
- * 云传输状态（R9.2 预留接缝，R9.3 CloudUploadTransport 接入后驱动）。
- *
- * <p>当前模型引用层已支持 {@code cloud:<uuid>:<asset-id>}（见 {@code ModelSourceType.CLOUD}），
- * 但尚无云传输通道，因此默认不可用；R9.3 实现云上传传输层时通过 {@link #setTransportAvailable}
- * 置位。在接入前，所有依赖云状态的调用一律按不可用处理，与现状行为一致。
- */
+/** Shared Cloud connection state; it never selects the legacy Minecraft channel. */
 public final class CloudState {
 
-    private static volatile boolean transportAvailable = false;
+    private static volatile CloudConnectionSnapshot snapshot =
+            new CloudConnectionSnapshot(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.NONE, null, 0);
 
     private CloudState() {
     }
 
     public static boolean isAvailable() {
-        return transportAvailable;
+        return snapshot.isAvailable();
+    }
+
+    public static CloudConnectionSnapshot snapshot() {
+        return snapshot;
+    }
+
+    public static synchronized void setStatus(
+            CloudConnectionStatus status,
+            CloudErrorCode error,
+            String instanceId
+    ) {
+        snapshot = new CloudConnectionSnapshot(status, error, instanceId, snapshot.generation() + 1);
     }
 
     public static void setTransportAvailable(boolean value) {
-        transportAvailable = value;
+        CloudConnectionSnapshot current = snapshot;
+        setStatus(
+                value ? CloudConnectionStatus.READY : CloudConnectionStatus.DISCONNECTED,
+                CloudErrorCode.NONE,
+                value ? current.instanceId() : null
+        );
+    }
+
+    public static void reset() {
+        setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.NONE, null);
     }
 }
