@@ -30,14 +30,24 @@ public final class CloudHttpClient {
 
     private final CloudInstanceConfig instance;
     private final HttpClient httpClient;
+    private final String accessToken;
 
     public CloudHttpClient(CloudInstanceConfig instance) {
-        this(instance, HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build());
+        this(instance, HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build(), null);
     }
 
     CloudHttpClient(CloudInstanceConfig instance, HttpClient httpClient) {
+        this(instance, httpClient, null);
+    }
+
+    public CloudHttpClient(CloudInstanceConfig instance, String accessToken) {
+        this(instance, HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build(), accessToken);
+    }
+
+    CloudHttpClient(CloudInstanceConfig instance, HttpClient httpClient, String accessToken) {
         this.instance = Objects.requireNonNull(instance, "instance");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
+        this.accessToken = accessToken == null || accessToken.isBlank() ? null : accessToken;
     }
 
     public CloudInstanceConfig instance() {
@@ -46,7 +56,7 @@ public final class CloudHttpClient {
 
     public CompletableFuture<CloudInstanceInfo> discoverInstance() {
         CloudState.setStatus(CloudConnectionStatus.CONNECTING, CloudErrorCode.NONE, instance.instanceId());
-        HttpRequest request = HttpRequest.newBuilder(instance.apiUri("/v1/instance"))
+        HttpRequest request = requestBuilder("/v1/instance")
                 .timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json")
                 .GET()
@@ -70,6 +80,41 @@ public final class CloudHttpClient {
                         CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, errorCodeFrom(failure), instance.instanceId());
                     }
                 });
+    }
+
+    public CompletableFuture<String> getJson(String path) {
+        return getBytes(path, null, null).thenCompose(response -> {
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return CompletableFuture.failedFuture(httpFailure(response));
+            }
+            return CompletableFuture.completedFuture(new String(response.body(), java.nio.charset.StandardCharsets.UTF_8));
+        });
+    }
+
+    public CompletableFuture<HttpResponse<byte[]>> getBytes(String path, String range, String ifNoneMatch) {
+        HttpRequest.Builder builder = requestBuilder(path).timeout(REQUEST_TIMEOUT).header("Accept", "application/octet-stream");
+        if (range != null && !range.isBlank()) {
+            builder.header("Range", range);
+        }
+        if (ifNoneMatch != null && !ifNoneMatch.isBlank()) {
+            builder.header("If-None-Match", ifNoneMatch);
+        }
+        return httpClient.sendAsync(builder.GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    private HttpRequest.Builder requestBuilder(String path) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(instance.apiUri(path));
+        if (accessToken != null) {
+            builder.header("Authorization", "Bearer " + accessToken);
+        }
+        return builder;
+    }
+
+    private static CloudHttpException httpFailure(HttpResponse<?> response) {
+        String body = response.body() instanceof byte[] bytes
+                ? new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+                : String.valueOf(response.body());
+        return new CloudHttpException(response.statusCode(), errorCodeFrom(body), "Cloud HTTP request failed");
     }
 
     static CloudInstanceInfo parseInstanceResponse(CloudInstanceConfig expected, String body) {
