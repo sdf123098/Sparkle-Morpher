@@ -12,10 +12,17 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+
+import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 
 /**
  * Asynchronous HTTPS boundary for the selected Cloud instance.
@@ -123,6 +130,42 @@ public final class CloudHttpClient {
                 .header("X-Asset-Format", requiredHeader(assetFormat, "assetFormat"))
                 .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"));
         return httpClient.sendAsync(builder.POST(HttpRequest.BodyPublishers.ofByteArray(content)).build(), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    /** Streams a local file into the Cloud request; the file is never materialized as a byte array. */
+    public CompletableFuture<HttpResponse<byte[]>> uploadAsset(
+            Path source,
+            long totalBytes,
+            String assetId,
+            String assetName,
+            String assetFormat,
+            String rawSha256,
+            String requestId,
+            ModelUploadTransport.ProgressListener progress,
+            ModelUploadTransport.Cancellation cancellation) {
+        Objects.requireNonNull(source, "source");
+        if (totalBytes <= 0) {
+            throw new IllegalArgumentException("totalBytes must be positive");
+        }
+        Objects.requireNonNull(progress, "progress");
+        Objects.requireNonNull(cancellation, "cancellation");
+        HttpRequest.Builder builder = requestBuilder("/v1/assets")
+                .timeout(REQUEST_TIMEOUT)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/octet-stream")
+                .header("Idempotency-Key", requiredHeader(requestId, "requestId"))
+                .header("X-Asset-Id", requiredHeader(assetId, "assetId"))
+                .header("X-Asset-Name", requiredHeader(assetName, "assetName"))
+                .header("X-Asset-Format", requiredHeader(assetFormat, "assetFormat"))
+                .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"));
+        HttpRequest.BodyPublisher body = HttpRequest.BodyPublishers.ofInputStream(() -> {
+            try {
+                return new ProgressInputStream(Files.newInputStream(source), totalBytes, progress, cancellation);
+            } catch (IOException e) {
+                throw new IllegalStateException("Unable to open Cloud upload source", e);
+            }
+        });
+        return httpClient.sendAsync(builder.POST(body).build(), HttpResponse.BodyHandlers.ofByteArray());
     }
 
     public CompletableFuture<String> putJson(String path, String jsonBody) {
@@ -242,5 +285,52 @@ public final class CloudHttpClient {
             throw new IllegalArgumentException(name + " must be a non-empty single-line value");
         }
         return value;
+    }
+
+    private static final class ProgressInputStream extends FilterInputStream {
+        private final long totalBytes;
+        private final ModelUploadTransport.ProgressListener progress;
+        private final ModelUploadTransport.Cancellation cancellation;
+        private long sentBytes;
+
+        private ProgressInputStream(InputStream delegate, long totalBytes,
+                                    ModelUploadTransport.ProgressListener progress,
+                                    ModelUploadTransport.Cancellation cancellation) {
+            super(delegate);
+            this.totalBytes = totalBytes;
+            this.progress = progress;
+            this.cancellation = cancellation;
+        }
+
+        @Override
+        public int read() throws IOException {
+            checkCancelled();
+            int value = super.read();
+            if (value >= 0) {
+                report(1);
+            }
+            return value;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            checkCancelled();
+            int count = super.read(buffer, offset, length);
+            if (count > 0) {
+                report(count);
+            }
+            return count;
+        }
+
+        private void report(int count) {
+            sentBytes += count;
+            progress.onProgress(sentBytes, totalBytes);
+        }
+
+        private void checkCancelled() throws IOException {
+            if (cancellation.isCancelled()) {
+                throw new IOException("Cloud upload cancelled");
+            }
+        }
     }
 }
