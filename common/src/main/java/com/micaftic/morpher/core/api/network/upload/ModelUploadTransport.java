@@ -12,14 +12,11 @@ import java.util.concurrent.CompletableFuture;
  */
 public interface ModelUploadTransport {
 
-    default CompletableFuture<UploadResult> upload(
+    CompletableFuture<UploadResult> upload(
             UploadMetadata metadata,
             Path source,
             ProgressListener progress,
-            Cancellation cancellation) {
-        return CompletableFuture.failedFuture(new UnsupportedOperationException(
-                "This transport still belongs to the legacy packet compatibility path"));
-    }
+            Cancellation cancellation);
 
     /** Immutable upload metadata sent alongside the object stream. */
     record UploadMetadata(
@@ -69,30 +66,4 @@ public interface ModelUploadTransport {
         boolean isCancelled();
     }
 
-    /**
-     * Compatibility hook for the still-being-removed legacy packet path.
-     * New Cloud callers must use {@link #upload}.
-     */
-    @Deprecated
-    default boolean isAvailable() {
-        return true;
-    }
-
-    /** @deprecated legacy packet uploads are not part of the Cloud contract. */
-    @Deprecated
-    default void sendStart(String modelId, String fileName, int dataLength, String sha256) {
-        throw new UnsupportedOperationException("Legacy start/chunk/finish upload is not a Cloud operation");
-    }
-
-    /** @deprecated legacy packet uploads are not part of the Cloud contract. */
-    @Deprecated
-    default void sendChunk(long uploadId, int nextOffset, byte[] data, int dataOffset, int length) {
-        throw new UnsupportedOperationException("Legacy start/chunk/finish upload is not a Cloud operation");
-    }
-
-    /** @deprecated legacy packet uploads are not part of the Cloud contract. */
-    @Deprecated
-    default void sendFinish(long uploadId) {
-        throw new UnsupportedOperationException("Legacy start/chunk/finish upload is not a Cloud operation");
-    }
 }

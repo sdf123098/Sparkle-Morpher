@@ -70,7 +70,6 @@ public final class NetworkHandler {
         AnimationProtocol.register();
         EntityModelProtocol.register();
         ServerPolicyProtocol.register();
-        UploadProtocol.register();
         CompatProtocol.register();
     }
 

@@ -29,6 +29,7 @@ import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
+import com.micaftic.morpher.client.upload.CloudUploadRuntime;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.model.catalog.LocalModelCatalog;
 import com.micaftic.morpher.model.ServerModelManager;
@@ -991,11 +992,11 @@ public class ClientModelManager {
     }
 
     public static boolean isAllowUpload() {
-        return LegacyCompatState.isAllowUpload();
+        return CloudUploadRuntime.isConfigured();
     }
 
     public static boolean isOysmServer() {
-        return LegacyCompatState.isOysmServer();
+        return CloudUploadRuntime.isConfigured();
     }
 
     // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
