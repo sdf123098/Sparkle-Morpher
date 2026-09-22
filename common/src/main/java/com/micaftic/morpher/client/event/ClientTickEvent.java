@@ -26,7 +26,7 @@ public final class ClientTickEvent {
     }
 
     public static void register() {
-        com.micaftic.morpher.core.architectury.event.events.client.ClientTickEvent.CLIENT_PRE.register(ClientTickEvent::onClientPreTick);
+        dev.architectury.event.events.client.ClientTickEvent.CLIENT_PRE.register(ClientTickEvent::onClientPreTick);
     }
 
     private static void onClientPreTick(Minecraft client) {

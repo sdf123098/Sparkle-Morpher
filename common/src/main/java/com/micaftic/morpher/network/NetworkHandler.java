@@ -7,7 +7,7 @@ import com.micaftic.morpher.network.message.*;
 import io.netty.util.AttributeKey;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -24,7 +24,7 @@ public final class NetworkHandler {
 
     public static final String VERSION = "2.6.0";
 
-    public static final Identifier CHANNEL_ID = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
+    public static final ResourceLocation CHANNEL_ID = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
 
     /** 服务端按连接记录的 SPM 协商版本（平台存储：netty Channel attribute，R9.2 保留在本层）。 */
     private static final AttributeKey<String> CHANNEL_VERSION_KEY = AttributeKey.valueOf("sparkle_morpher_channel_version");
@@ -70,7 +70,6 @@ public final class NetworkHandler {
         AnimationProtocol.register();
         EntityModelProtocol.register();
         ServerPolicyProtocol.register();
-        CompatProtocol.register();
     }
 
     public static void sendToServer(Object obj) {
