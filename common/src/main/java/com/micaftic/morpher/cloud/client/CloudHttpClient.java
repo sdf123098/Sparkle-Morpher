@@ -107,6 +107,22 @@ public final class CloudHttpClient {
                 });
     }
 
+    public CompletableFuture<String> putJson(String path, String jsonBody) {
+        HttpRequest.Builder builder = requestBuilder(path)
+                .timeout(REQUEST_TIMEOUT)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json");
+        return httpClient.sendAsync(
+                        builder.PUT(HttpRequest.BodyPublishers.ofString(jsonBody)).build(),
+                        HttpResponse.BodyHandlers.ofByteArray())
+                .thenCompose(response -> {
+                    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                        return CompletableFuture.failedFuture(httpFailure(response));
+                    }
+                    return CompletableFuture.completedFuture(new String(response.body(), java.nio.charset.StandardCharsets.UTF_8));
+                });
+    }
+
     public CompletableFuture<HttpResponse<byte[]>> getBytes(String path, String range, String ifNoneMatch) {
         HttpRequest.Builder builder = requestBuilder(path).timeout(REQUEST_TIMEOUT).header("Accept", "application/octet-stream");
         if (range != null && !range.isBlank()) {
