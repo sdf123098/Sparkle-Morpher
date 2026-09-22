@@ -30,6 +30,19 @@ public final class CloudAssetClient {
         return http.getBytes(ref.contentPath(), range, ifNoneMatch);
     }
 
+    public CompletableFuture<CloudAssetSummary> upload(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256) {
+        return http.uploadAsset(content, assetId, assetName, assetFormat, rawSha256).thenCompose(response -> {
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.INTERNAL, "Cloud asset upload failed"));
+            }
+            try {
+                return CompletableFuture.completedFuture(parseSummary(JsonParser.parseString(new String(response.body(), StandardCharsets.UTF_8)).getAsJsonObject()));
+            } catch (RuntimeException failure) {
+                return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud asset upload response"));
+            }
+        });
+    }
+
     private List<CloudAssetSummary> parseList(String body) {
         try {
             JsonElement root = JsonParser.parseString(body);
@@ -57,5 +70,9 @@ public final class CloudAssetClient {
             throw new CloudHttpException(200, com.micaftic.morpher.core.api.network.state.CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud asset catalog");
         }
     }
-}
 
+    private CloudAssetSummary parseSummary(com.google.gson.JsonObject object) {
+        CloudAssetRef ref = new CloudAssetRef(object.get("asset_id").getAsString(), object.get("revision").getAsLong(), object.get("raw_sha256").getAsString());
+        return new CloudAssetSummary(ref, object.get("name").getAsString(), object.get("format").getAsString(), object.get("byte_length").getAsLong());
+    }
+}
