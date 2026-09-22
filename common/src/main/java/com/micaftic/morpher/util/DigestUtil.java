@@ -3,6 +3,10 @@ package com.micaftic.morpher.util;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class DigestUtil {
     private static final ThreadLocal<MessageDigest> MD5_TL = ThreadLocal.withInitial(() -> {
@@ -51,5 +55,17 @@ public class DigestUtil {
 
     public static String sha256Hex(byte[] input) {
         return HexFormat.of().formatHex(sha256(input));
+    }
+
+    public static String sha256Hex(Path input) throws IOException {
+        MessageDigest digest = sha256Digest();
+        try (InputStream stream = Files.newInputStream(input)) {
+            byte[] buffer = new byte[1024 * 1024];
+            int read;
+            while ((read = stream.read(buffer)) >= 0) {
+                if (read > 0) digest.update(buffer, 0, read);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
 }

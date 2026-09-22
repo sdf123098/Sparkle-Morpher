@@ -9,7 +9,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
-import com.micaftic.morpher.core.api.network.PacketDirection;
 import com.micaftic.morpher.core.api.network.YSMChannel;
 import com.micaftic.morpher.legacy.compat.LegacyCompatNetwork;
 import com.micaftic.morpher.legacy.compat.LegacyCompatState;
@@ -74,7 +73,6 @@ public final class NetworkHandler {
         AnimationProtocol.register();
         EntityModelProtocol.register();
         ServerPolicyProtocol.register();
-        UploadProtocol.register();
     }
 
     public static void sendToServer(Object obj) {
