@@ -25,4 +25,11 @@ class CloudScopeClientTest {
         assertEquals("event-1", recovery.events().getFirst().eventId());
         assertEquals(2, recovery.events().getFirst().appearance().revision());
     }
+
+    @Test
+    void parsesEntityBindingObservationState() {
+        var bindings = CloudScopeClient.parseBindingsForTest("[{\"binding_id\":\"binding-1\",\"scope_id\":\"scope-1\",\"world_epoch\":\"epoch-1\",\"entity_uuid\":\"12345678-1234-1234-1234-1234567890ab\",\"entity_kind\":\"PLAYER\",\"target_id\":\"target-1\",\"observation_state\":\"ACTIVE\",\"last_seen_at\":\"2026-09-22T00:00:00Z\",\"revision\":2}]");
+        assertEquals("ACTIVE", bindings.getFirst().observationState());
+        assertEquals(2, bindings.getFirst().revision());
+    }
 }
