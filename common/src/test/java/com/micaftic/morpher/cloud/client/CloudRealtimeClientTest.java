@@ -7,7 +7,9 @@ import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CloudRealtimeClientTest {
 
@@ -37,5 +39,43 @@ class CloudRealtimeClientTest {
     void realtimeClientDerivesTrustedWebsocketEndpoint() {
         CloudInstanceConfig config = CloudInstanceConfig.v1("local", URI.create("https://cloud.example.org"));
         assertEquals("wss://cloud.example.org/v1/realtime", config.websocketUri().toString());
+    }
+
+    @Test
+    void decodesTargetSnapshotPayload() {
+        CloudRealtimeClient.CloudRealtimeMessage message = new CloudRealtimeClient.CloudRealtimeMessage(
+                CloudInstanceConfig.PROTOCOL_V1,
+                "TargetSnapshot",
+                "request",
+                "",
+                "scope",
+                CloudRealtimeClient.targetSnapshotPayloadForTest("snapshot", "target", "PLAYER", "Player", 4));
+
+        CloudRealtimeClient.CloudRealtimeEvent event = CloudRealtimeClient.decodeEventForTest(message);
+
+        assertEquals("snapshot", event.snapshotId());
+        assertEquals(1, event.targets().size());
+        assertEquals("target", event.targets().get(0).targetId());
+        assertEquals(4, event.targets().get(0).revision());
+    }
+
+    @Test
+    void decodesAppearancePayloadAndRetainsEventIdentity() {
+        CloudRealtimeClient.CloudRealtimeMessage message = new CloudRealtimeClient.CloudRealtimeMessage(
+                CloudInstanceConfig.PROTOCOL_V1,
+                "AppearanceState",
+                "",
+                "event-1",
+                "scope",
+                CloudRealtimeClient.appearanceStatePayloadForTest("target", 7, "texture", 1.25F, true));
+
+        CloudRealtimeClient.CloudRealtimeEvent event = CloudRealtimeClient.decodeEventForTest(message);
+
+        assertEquals("event-1", event.eventId());
+        assertNotNull(event.appearance());
+        assertEquals(7, event.appearance().revision());
+        assertEquals("texture", event.appearance().textureId());
+        assertEquals(1.25F, event.appearance().scale());
+        assertTrue(event.appearance().disabled());
     }
 }
