@@ -108,11 +108,16 @@ public final class CloudHttpClient {
     }
 
     public CompletableFuture<HttpResponse<byte[]>> uploadAsset(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256) {
+        return uploadAsset(content, assetId, assetName, assetFormat, rawSha256, java.util.UUID.randomUUID().toString());
+    }
+
+    public CompletableFuture<HttpResponse<byte[]>> uploadAsset(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256, String requestId) {
         Objects.requireNonNull(content, "content");
         HttpRequest.Builder builder = requestBuilder("/v1/assets")
                 .timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/octet-stream")
+                .header("Idempotency-Key", requiredHeader(requestId, "requestId"))
                 .header("X-Asset-Id", requiredHeader(assetId, "assetId"))
                 .header("X-Asset-Name", requiredHeader(assetName, "assetName"))
                 .header("X-Asset-Format", requiredHeader(assetFormat, "assetFormat"))
