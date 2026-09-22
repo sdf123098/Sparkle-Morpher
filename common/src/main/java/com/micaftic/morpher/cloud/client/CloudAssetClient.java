@@ -4,10 +4,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+
+import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 
 /** Typed P1 directory and original-byte operations. */
 public final class CloudAssetClient {
@@ -45,6 +49,36 @@ public final class CloudAssetClient {
                 return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud asset upload response"));
             }
         });
+    }
+
+    public CompletableFuture<CloudAssetSummary> upload(
+            Path source,
+            String assetId,
+            String assetName,
+            String assetFormat,
+            String rawSha256,
+            String requestId,
+            ModelUploadTransport.ProgressListener progress,
+            ModelUploadTransport.Cancellation cancellation) {
+        final long length;
+        try {
+            length = Files.size(source);
+        } catch (java.io.IOException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+        return http.uploadAsset(source, length, assetId, assetName, assetFormat, rawSha256, requestId, progress, cancellation)
+                .thenCompose(this::parseUploadResponse);
+    }
+
+    private CompletableFuture<CloudAssetSummary> parseUploadResponse(HttpResponse<byte[]> response) {
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.INTERNAL, "Cloud asset upload failed"));
+        }
+        try {
+            return CompletableFuture.completedFuture(parseSummary(JsonParser.parseString(new String(response.body(), StandardCharsets.UTF_8)).getAsJsonObject()));
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud asset upload response"));
+        }
     }
 
     private List<CloudAssetSummary> parseList(String body) {
