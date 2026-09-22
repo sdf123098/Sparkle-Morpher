@@ -40,6 +40,12 @@ public final class CloudIdentityBindingClient {
         return http.postJson("/v1/claim-codes/redeem", body.toString()).thenApply(CloudIdentityBindingClient::parseBinding);
     }
 
+    public CompletableFuture<Void> revokeClaimCode(String code) {
+        JsonObject body = new JsonObject();
+        body.addProperty("code", Objects.requireNonNull(code, "code"));
+        return http.postJson("/v1/claim-codes/revoke", body.toString()).thenApply(ignored -> null);
+    }
+
     public CompletableFuture<CloudBinding> approve(String bindingId, String status) {
         return approve(bindingId, status, 0L);
     }
