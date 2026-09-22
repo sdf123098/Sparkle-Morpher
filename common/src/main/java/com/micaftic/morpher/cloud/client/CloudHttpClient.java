@@ -107,6 +107,19 @@ public final class CloudHttpClient {
                 });
     }
 
+    public CompletableFuture<HttpResponse<byte[]>> uploadAsset(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256) {
+        Objects.requireNonNull(content, "content");
+        HttpRequest.Builder builder = requestBuilder("/v1/assets")
+                .timeout(REQUEST_TIMEOUT)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/octet-stream")
+                .header("X-Asset-Id", requiredHeader(assetId, "assetId"))
+                .header("X-Asset-Name", requiredHeader(assetName, "assetName"))
+                .header("X-Asset-Format", requiredHeader(assetFormat, "assetFormat"))
+                .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"));
+        return httpClient.sendAsync(builder.POST(HttpRequest.BodyPublishers.ofByteArray(content)).build(), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
     public CompletableFuture<String> putJson(String path, String jsonBody) {
         HttpRequest.Builder builder = requestBuilder(path)
                 .timeout(REQUEST_TIMEOUT)
@@ -217,5 +230,12 @@ public final class CloudHttpClient {
         } catch (RuntimeException ignored) {
             return CloudErrorCode.INTERNAL;
         }
+    }
+
+    private static String requiredHeader(String value, String name) {
+        if (value == null || value.isBlank() || value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException(name + " must be a non-empty single-line value");
+        }
+        return value;
     }
 }
