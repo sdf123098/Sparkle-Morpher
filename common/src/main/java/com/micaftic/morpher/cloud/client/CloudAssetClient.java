@@ -31,7 +31,11 @@ public final class CloudAssetClient {
     }
 
     public CompletableFuture<CloudAssetSummary> upload(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256) {
-        return http.uploadAsset(content, assetId, assetName, assetFormat, rawSha256).thenCompose(response -> {
+        return upload(content, assetId, assetName, assetFormat, rawSha256, java.util.UUID.randomUUID().toString());
+    }
+
+    public CompletableFuture<CloudAssetSummary> upload(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256, String requestId) {
+        return http.uploadAsset(content, assetId, assetName, assetFormat, rawSha256, requestId).thenCompose(response -> {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.INTERNAL, "Cloud asset upload failed"));
             }
