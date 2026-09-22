@@ -17,4 +17,12 @@ class CloudScopeClientTest {
     void rejectsPathTraversalSegments() {
         assertThrows(IllegalArgumentException.class, () -> CloudScopeClient.segment("../targets"));
     }
+
+    @Test
+    void parsesDurableEventRecoveryCursorAndPayload() {
+        var recovery = CloudScopeClient.parseRecoveryForTest("{\"scope_id\":\"scope-1\",\"from_cursor\":3,\"to_cursor\":4,\"has_more\":false,\"entries\":[{\"sequence\":4,\"event_id\":\"event-1\",\"kind\":\"APPEARANCE_UPDATED\",\"payload\":{\"target_id\":\"target\",\"revision\":2,\"texture_id\":\"tex\",\"disabled\":false}}]}");
+        assertEquals(4, recovery.toCursor());
+        assertEquals("event-1", recovery.events().getFirst().eventId());
+        assertEquals(2, recovery.events().getFirst().appearance().revision());
+    }
 }
