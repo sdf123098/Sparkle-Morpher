@@ -29,6 +29,28 @@ public final class CloudScopeClient {
         return http.getJson("/v1/scopes/" + segment(scopeId) + "/targets").thenApply(CloudScopeClient::parseTargets);
     }
 
+    public CompletableFuture<List<CloudEntityBinding>> listBindings(String scopeId) {
+        return http.getJson("/v1/scopes/" + segment(scopeId) + "/bindings").thenApply(CloudScopeClient::parseBindings);
+    }
+
+    public CompletableFuture<CloudEntityBinding> registerBinding(String scopeId, CloudBindingRegistration registration) {
+        Objects.requireNonNull(registration, "registration");
+        JsonObject body = new JsonObject();
+        body.addProperty("world_epoch", registration.worldEpoch());
+        body.addProperty("entity_uuid", registration.entityUuid());
+        body.addProperty("entity_kind", registration.entityKind());
+        body.addProperty("target_id", registration.targetId());
+        return http.postJson("/v1/scopes/" + segment(scopeId) + "/bindings", body.toString()).thenApply(CloudScopeClient::parseBinding);
+    }
+
+    public CompletableFuture<CloudEntityBinding> observeBinding(String bindingId, CloudBindingObservation observation) {
+        Objects.requireNonNull(observation, "observation");
+        JsonObject body = new JsonObject();
+        body.addProperty("world_epoch", observation.worldEpoch());
+        body.addProperty("observation_state", observation.observationState());
+        return http.putJson("/v1/bindings/" + segment(bindingId) + "/observation", body.toString()).thenApply(CloudScopeClient::parseBinding);
+    }
+
     public CompletableFuture<CloudEventRecovery> recoverEvents(String scopeId, long after, int limit) {
         if (after < 0) throw new IllegalArgumentException("after must not be negative");
         if (limit < 1 || limit > 256) throw new IllegalArgumentException("limit must be between 1 and 256");
@@ -57,6 +79,8 @@ public final class CloudScopeClient {
     static List<CloudScope> parseScopesForTest(String body) { return parseScopes(body); }
 
     static CloudEventRecovery parseRecoveryForTest(String body) { return parseRecovery(body); }
+
+    static List<CloudEntityBinding> parseBindingsForTest(String body) { return parseBindings(body); }
 
     static String segment(String value) {
         if (value == null || value.isBlank() || value.length() > 128 || !value.matches("[A-Za-z0-9][A-Za-z0-9._-]*")) {
@@ -93,6 +117,27 @@ public final class CloudScopeClient {
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud target catalog");
         }
+    }
+
+    private static List<CloudEntityBinding> parseBindings(String body) {
+        try {
+            JsonElement root = JsonParser.parseString(body);
+            if (!root.isJsonArray()) throw new IllegalArgumentException("binding catalog must be an array");
+            List<CloudEntityBinding> result = new ArrayList<>();
+            for (JsonElement element : root.getAsJsonArray()) result.add(parseBinding(object(element)));
+            return List.copyOf(result);
+        } catch (RuntimeException e) {
+            throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud binding catalog");
+        }
+    }
+
+    private static CloudEntityBinding parseBinding(String body) {
+        try { return parseBinding(JsonParser.parseString(body).getAsJsonObject()); }
+        catch (RuntimeException e) { throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud entity binding"); }
+    }
+
+    private static CloudEntityBinding parseBinding(JsonObject object) {
+        return new CloudEntityBinding(string(object, "binding_id"), string(object, "scope_id"), string(object, "world_epoch"), string(object, "entity_uuid"), string(object, "entity_kind"), string(object, "target_id"), string(object, "observation_state"), nullableString(object, "last_seen_at"), object.get("revision").getAsLong());
     }
 
     private static CloudAppearance parseAppearance(String body) {
@@ -138,6 +183,9 @@ public final class CloudScopeClient {
 
     public record CloudScope(String scopeId, String tenantId, String name, String worldEpoch) {}
     public record CloudTarget(String targetId, String scopeId, String kind, String displayName, long revision) {}
+    public record CloudEntityBinding(String bindingId, String scopeId, String worldEpoch, String entityUuid, String entityKind, String targetId, String observationState, String lastSeenAt, long revision) {}
+    public record CloudBindingRegistration(String worldEpoch, String entityUuid, String entityKind, String targetId) {}
+    public record CloudBindingObservation(String worldEpoch, String observationState) {}
     public record CloudAppearance(String targetId, long revision, String assetId, Long assetRevision, String rawSha256, String textureId, Float scale, boolean disabled) {}
     public record CloudEventRecovery(long fromCursor, long toCursor, boolean hasMore, List<CloudRecoveredEvent> events) {
         public CloudEventRecovery {
