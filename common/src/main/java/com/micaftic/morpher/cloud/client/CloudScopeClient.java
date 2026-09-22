@@ -29,6 +29,13 @@ public final class CloudScopeClient {
         return http.getJson("/v1/scopes/" + segment(scopeId) + "/targets").thenApply(CloudScopeClient::parseTargets);
     }
 
+    public CompletableFuture<CloudEventRecovery> recoverEvents(String scopeId, long after, int limit) {
+        if (after < 0) throw new IllegalArgumentException("after must not be negative");
+        if (limit < 1 || limit > 256) throw new IllegalArgumentException("limit must be between 1 and 256");
+        return http.getJson("/v1/scopes/" + segment(scopeId) + "/events/recovery?after=" + after + "&limit=" + limit)
+                .thenApply(CloudScopeClient::parseRecovery);
+    }
+
     public CompletableFuture<CloudAppearance> getAppearance(String targetId) {
         return http.getJson("/v1/targets/" + segment(targetId) + "/appearance").thenApply(CloudScopeClient::parseAppearance);
     }
@@ -48,6 +55,8 @@ public final class CloudScopeClient {
     }
 
     static List<CloudScope> parseScopesForTest(String body) { return parseScopes(body); }
+
+    static CloudEventRecovery parseRecoveryForTest(String body) { return parseRecovery(body); }
 
     static String segment(String value) {
         if (value == null || value.isBlank() || value.length() > 128 || !value.matches("[A-Za-z0-9][A-Za-z0-9._-]*")) {
@@ -88,10 +97,29 @@ public final class CloudScopeClient {
 
     private static CloudAppearance parseAppearance(String body) {
         try {
-            JsonObject object = JsonParser.parseString(body).getAsJsonObject();
-            return new CloudAppearance(string(object, "target_id"), object.get("revision").getAsLong(), nullableString(object, "asset_id"), nullableLong(object, "asset_revision"), nullableString(object, "raw_sha256"), nullableString(object, "texture_id"), object.has("scale") && !object.get("scale").isJsonNull() ? object.get("scale").getAsFloat() : null, object.get("disabled").getAsBoolean());
+            return parseAppearance(JsonParser.parseString(body).getAsJsonObject());
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud appearance");
+        }
+    }
+
+    private static CloudAppearance parseAppearance(JsonObject object) {
+        return new CloudAppearance(string(object, "target_id"), object.get("revision").getAsLong(), nullableString(object, "asset_id"), nullableLong(object, "asset_revision"), nullableString(object, "raw_sha256"), nullableString(object, "texture_id"), object.has("scale") && !object.get("scale").isJsonNull() ? object.get("scale").getAsFloat() : null, object.get("disabled").getAsBoolean());
+    }
+
+    private static CloudEventRecovery parseRecovery(String body) {
+        try {
+            JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+            JsonArray entries = root.getAsJsonArray("entries");
+            if (entries == null) throw new IllegalArgumentException("recovery entries are missing");
+            List<CloudRecoveredEvent> result = new ArrayList<>();
+            for (JsonElement element : entries) {
+                JsonObject object = object(element);
+                result.add(new CloudRecoveredEvent(object.get("sequence").getAsLong(), string(object, "event_id"), string(object, "kind"), parseAppearance(object.getAsJsonObject("payload"))));
+            }
+            return new CloudEventRecovery(root.get("from_cursor").getAsLong(), root.get("to_cursor").getAsLong(), root.get("has_more").getAsBoolean(), result);
+        } catch (RuntimeException e) {
+            throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud event recovery response");
         }
     }
 
@@ -111,6 +139,13 @@ public final class CloudScopeClient {
     public record CloudScope(String scopeId, String tenantId, String name, String worldEpoch) {}
     public record CloudTarget(String targetId, String scopeId, String kind, String displayName, long revision) {}
     public record CloudAppearance(String targetId, long revision, String assetId, Long assetRevision, String rawSha256, String textureId, Float scale, boolean disabled) {}
+    public record CloudEventRecovery(long fromCursor, long toCursor, boolean hasMore, List<CloudRecoveredEvent> events) {
+        public CloudEventRecovery {
+            if (fromCursor < 0 || toCursor < fromCursor) throw new IllegalArgumentException("invalid Cloud recovery cursor");
+            events = events == null ? List.of() : List.copyOf(events);
+        }
+    }
+    public record CloudRecoveredEvent(long sequence, String eventId, String kind, CloudAppearance appearance) {}
     public record CloudAppearanceUpdate(String requestId, long expectedRevision, String assetId, Long assetRevision, String rawSha256, String textureId, Float scale, boolean disabled) {
         public CloudAppearanceUpdate {
             if (requestId == null || requestId.isBlank()) requestId = UUID.randomUUID().toString();
