@@ -1,42 +1,26 @@
 package com.micaftic.morpher.client.upload;
 
-import com.micaftic.morpher.core.api.network.state.CloudState;
-import org.junit.jupiter.api.AfterEach;
+import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * R9.3 CloudUploadTransport 测试：云传输占位——云后端接入前不可用，
- * 可用性跟随 CloudState；未接线时发包抛 UnsupportedOperationException。
- */
 class CloudUploadTransportTest {
-
-    @AfterEach
-    void resetState() {
-        CloudState.setTransportAvailable(false);
+    @Test
+    void uploadMetadataRejectsInvalidLengthAndHeaderValues() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ModelUploadTransport.UploadMetadata("asset", "model.ysm", "ysm", "hash", 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ModelUploadTransport.UploadMetadata("asset\n", "model.ysm", "ysm", "hash", 1));
     }
 
     @Test
-    void unavailableBeforeCloudWired() {
-        assertFalse(CloudUploadTransport.INSTANCE.isAvailable());
-    }
-
-    @Test
-    void availabilityFollowsCloudState() {
-        CloudState.setTransportAvailable(true);
-        assertTrue(CloudUploadTransport.INSTANCE.isAvailable());
-        CloudState.setTransportAvailable(false);
-        assertFalse(CloudUploadTransport.INSTANCE.isAvailable());
-    }
-
-    @Test
-    void sendMethodsThrowWhenNotWired() {
-        CloudUploadTransport t = CloudUploadTransport.INSTANCE;
-        assertThrows(UnsupportedOperationException.class, () -> t.sendStart("m", "f.ysm", 1, "h"));
-        assertThrows(UnsupportedOperationException.class, () -> t.sendChunk(1L, 0, new byte[1], 0, 1));
-        assertThrows(UnsupportedOperationException.class, () -> t.sendFinish(1L));
+    void uploadResultKeepsCommittedRevisionIdentity() {
+        var result = new ModelUploadTransport.UploadResult("asset", 3, "hash", 12);
+        assertEquals("asset", result.assetId());
+        assertEquals(3, result.revision());
+        assertEquals(12, result.byteLength());
     }
 }
+

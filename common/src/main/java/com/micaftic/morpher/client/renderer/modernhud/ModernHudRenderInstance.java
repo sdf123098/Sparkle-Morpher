@@ -215,12 +215,16 @@ public final class ModernHudRenderInstance {
             if (BoneSkinShader.locAlphaMode() >= 0) GL20.glUniform1i(BoneSkinShader.locAlphaMode(), 1);
             drawMesh(mesh);
             if (geoModel.isTranslucentTexture(0)) {
+                // Match vanilla entity-translucent state: translucent pixels test against
+                // opaque depth, but must not write depth and hide the model's later layers.
+                GlStateManager._depthMask(false);
                 GlStateManager._enableBlend();
                 GlStateManager._blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA,
-                        GL11.GL_ONE, GL11.GL_ZERO);
+                        GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
                 if (BoneSkinShader.locAlphaMode() >= 0) GL20.glUniform1i(BoneSkinShader.locAlphaMode(), 2);
                 drawMesh(mesh);
                 GlStateManager._disableBlend();
+                GlStateManager._depthMask(true);
             }
             return true;
             }
