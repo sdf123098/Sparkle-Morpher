@@ -1,9 +1,11 @@
 package com.micaftic.morpher.cloud.identity;
 
+import com.micaftic.morpher.cloud.CloudInstanceConfig;
 import com.micaftic.morpher.cloud.scope.CloudScopeRef;
 import com.micaftic.morpher.cloud.scope.CloudTargetRef;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,5 +47,17 @@ class CloudIdentityRefTest {
                 () -> new CloudScopeRef("instance", "tenant", "scope/other", "epoch-2"));
         assertThrows(NullPointerException.class,
                 () -> new CloudTargetRef("instance", "tenant", null));
+    }
+
+    @Test
+    void instanceConfigKeepsApiAndRealtimeOnTheTrustedOrigin() {
+        CloudInstanceConfig config = CloudInstanceConfig.v1("Official", URI.create("https://cloud.example.org/"));
+        assertEquals("official", config.instanceId());
+        assertEquals("wss://cloud.example.org/v1/realtime", config.websocketUri().toString());
+        assertEquals("https://cloud.example.org/v1/instance", config.apiUri("/v1/instance").toString());
+        assertThrows(IllegalArgumentException.class,
+                () -> CloudInstanceConfig.v1("cloud", URI.create("https://cloud.example.org/api")));
+        assertThrows(IllegalArgumentException.class,
+                () -> config.apiUri("https://other.example/"));
     }
 }
