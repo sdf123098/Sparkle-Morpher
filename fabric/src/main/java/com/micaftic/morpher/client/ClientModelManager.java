@@ -6,7 +6,6 @@ import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
 import com.micaftic.morpher.capability.ModelInfoCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.EntityRenderCache;
-import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.gui.IGuiWidget;
 import com.micaftic.morpher.client.gui.GuiWidgetRegistry;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
@@ -26,9 +25,11 @@ import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
 import com.micaftic.morpher.client.model.VehicleModelBundle;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
+import com.micaftic.morpher.client.upload.CloudUploadRuntime;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.model.catalog.LocalModelCatalog;
 import com.micaftic.morpher.model.ServerModelManager;
@@ -532,6 +533,9 @@ public class ClientModelManager {
     public static Set<String> getAvailableModelIds() {
         LinkedHashSet<String> ids = new LinkedHashSet<>(modelAssemblyMap.keySet());
         ids.addAll(lazyModelSources.keySet());
+        // The server manifest is authoritative even while a cache file is still downloading.
+        // Keep those entries visible so the model browser can distinguish server models from
+        // local-only models during the join/sync window.
         serverModels.values().forEach(context -> ids.add(context.modelKey));
         return Collections.unmodifiableSet(ids);
     }
@@ -726,8 +730,7 @@ public class ClientModelManager {
             return;
         }
         onUploadedModelImported(modelId);
-        Minecraft minecraft = Minecraft.getInstance();
-        LocalPlayer player = minecraft.player;
+        LocalPlayer player = Minecraft.getInstance().player;
         if (player != null) {
             PlayerCapability.get(player).ifPresent(cap -> {
                 if (sameRuntimeModelId(modelId, cap.getModelId())) {
@@ -989,11 +992,11 @@ public class ClientModelManager {
     }
 
     public static boolean isAllowUpload() {
-        return LegacyCompatState.isAllowUpload();
+        return CloudUploadRuntime.isConfigured();
     }
 
     public static boolean isOysmServer() {
-        return LegacyCompatState.isOysmServer();
+        return CloudUploadRuntime.isConfigured();
     }
 
     // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
@@ -1400,7 +1403,7 @@ public class ClientModelManager {
         return base.isEmpty() ? null : base;
     }
 
-private static RawYsmModel parseBbModelImport(byte[] data, String source) throws Exception {
+    private static RawYsmModel parseBbModelImport(byte[] data, String source) throws Exception {
         try {
             String json = new String(data, java.nio.charset.StandardCharsets.UTF_8);
             com.micaftic.morpher.resource.bbmodel.BBModelFile bbmodel = com.micaftic.morpher.resource.bbmodel.BBModelParser.parse(json);
@@ -1738,14 +1741,14 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                 if (previous != null && previous != pairPoll.getLeft()) {
                     releaseModelAssembly(modelKey, previous);
                 }
-            } else {
-                modelAssemblyMap = object2ReferenceOpenHashMap;
+           } else {
+               modelAssemblyMap = object2ReferenceOpenHashMap;
                 trimUnusedCpuModels();
-                forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(object2ReferenceOpenHashMap));
-                return;
-            }
-        }
-    }
+               forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(object2ReferenceOpenHashMap));
+               return;
+           }
+       }
+   }
 
     private static void releaseModelAssembly(ModelAssembly assembly) {
         releaseModelAssembly(null, assembly);
@@ -1786,25 +1789,25 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         trimUnusedCpuModels();
         int maxCachedGpuModels = ConfigPolicies.memory().maxCachedGpuModels();
         if (maxCachedGpuModels <= 0) {
-            return;
-        }
-        Minecraft minecraft = Minecraft.getInstance();
+           return;
+       }
+       Minecraft minecraft = Minecraft.getInstance();
         long residentGpuModels = modelAssemblyMap.values().stream()
                 .filter(Objects::nonNull)
                 .filter(ModelAssembly::isRuntimeResident)
                 .count();
         if (residentGpuModels <= maxCachedGpuModels) {
-            return;
-        }
+           return;
+       }
         long now = System.currentTimeMillis();
         long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
-        modelAssemblyMap.entrySet().stream()
+       modelAssemblyMap.entrySet().stream()
                 .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
-                .filter(entry -> canTrimGpuCache(entry.getKey(), protectedModels, now, ttlMillis))
-                .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
+               .filter(entry -> canTrimGpuCache(entry.getKey(), protectedModels, now, ttlMillis))
+               .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
                 .limit(Math.max(1L, residentGpuModels - maxCachedGpuModels))
-                .forEach(entry -> trimGpuCache(entry.getKey(), entry.getValue()));
+               .forEach(entry -> trimGpuCache(entry.getKey(), entry.getValue()));
     }
 
     private static void trimUnusedCpuModels() {
@@ -1923,40 +1926,16 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
 
     private static void trimGpuCache(String modelId, ModelAssembly assembly) {
         if (assembly == null || !assembly.isRuntimeResident() || !gpuCacheTrimmedModels.add(modelId)) {
-            return;
-        }
+           return;
+       }
         if (!RenderSystem.isOnRenderThread()) {
             ((Executor) Minecraft.getInstance()).execute(() -> trimGpuCache(modelId, assembly));
             return;
         }
-        int releasedMeshes = 0;
-        if (assembly.getProjectileModels() != null) {
-            for (Map.Entry<Identifier, ProjectileModelBundle> entry : assembly.getProjectileModels().entrySet()) {
-                if (entry.getValue().getModel().freeGpuCache()) {
-                    releasedMeshes++;
-                }
-            }
-        }
-        if (assembly.getVehicleModels() != null) {
-            for (Map.Entry<Identifier, VehicleModelBundle> entry : assembly.getVehicleModels().entrySet()) {
-                if (entry.getValue().getModel().freeGpuCache()) {
-                    releasedMeshes++;
-                }
-            }
-        }
-        if (assembly.getAnimationBundle() != null) {
-            if (assembly.getAnimationBundle().getMainModel().freeGpuCache()) {
-                releasedMeshes++;
-            }
-            if (assembly.getAnimationBundle().getArmModel().freeGpuCache()) {
-                releasedMeshes++;
-            }
-        }
-        if (releasedMeshes > 0) {
-            ModelMemoryProfiler.log("gpu-cache-trimmed meshes=" + releasedMeshes
-                    + " liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
-                    + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelId);
-        }
+        // R10.4：仅释放 GPU mesh（native 缓存保留，模型可立即重渲染），收拢到装配自身。
+        assembly.releaseGpuMeshes();
+        ModelMemoryProfiler.log("gpu-cache-trimmed liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
+                + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelId);
     }
 
     private static void touchModel(String modelId) {
