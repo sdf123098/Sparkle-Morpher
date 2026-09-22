@@ -7,7 +7,6 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.gui.resource.download.DownloadQueue;
 import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
-import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.client.upload.UploadManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -27,7 +26,7 @@ public final class ClientTickEvent {
     }
 
     public static void register() {
-        dev.architectury.event.events.client.ClientTickEvent.CLIENT_PRE.register(ClientTickEvent::onClientPreTick);
+        com.micaftic.morpher.core.architectury.event.events.client.ClientTickEvent.CLIENT_PRE.register(ClientTickEvent::onClientPreTick);
     }
 
     private static void onClientPreTick(Minecraft client) {
@@ -39,21 +38,23 @@ public final class ClientTickEvent {
         UploadManager.processPendingUploads();
         ClientRenderCompatibilityRegistry.tick();
         DownloadQueue.tick();
-        ModelUploadSession.tickCurrent();
         ClientModelManager.flushPendingModels();
         ClientModelManager.tickSyncWatchdog();
-        ClientModelManager.restorePersistedModelSelectionOnVanillaServer();
-        ClientModelManager.trimUnusedGpuCaches();
+        if ((tickCount & 63) == 0) {
+            ClientModelManager.trimUnusedGpuCaches();
+        }
         if (tickCount % OBJECT_POOL_CLEANUP_INTERVAL_TICKS == 0) {
             ObjectPool.cleanup();
         }
         if (tickCount % REFRESH_RATE_UPDATE_INTERVAL_TICKS == 0) {
-            refreshRate = client.getWindow().getRefreshRate();
+            refreshRate = Math.max(60, client.getWindow().getRefreshRate());
         }
         LocalPlayer localPlayer = client.player;
         if (localPlayer != null) {
             PlayerCapability.get(localPlayer).ifPresent(cap -> cap.tickAnimations());
         }
+        // 在无模组服务器上，自动恢复之前持久化的模型选择
+        ClientModelManager.restorePersistedModelSelectionOnVanillaServer();
     }
 
     public static int getTickCount() {
