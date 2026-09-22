@@ -1,5 +1,7 @@
 package com.micaftic.morpher.cloud.identity;
 
+import com.micaftic.morpher.cloud.scope.CloudScopeRef;
+import com.micaftic.morpher.cloud.scope.CloudTargetRef;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -31,5 +33,17 @@ class CloudIdentityRefTest {
                 () -> CloudIdentityRef.parse("yggdrasil:bad provider:" + UUID_VALUE));
         assertThrows(IllegalArgumentException.class,
                 () -> CloudIdentityRef.parse("official:!" + UUID_VALUE));
+    }
+
+    @Test
+    void targetAndScopeReferencesKeepInstanceAndTenantBoundaries() {
+        assertEquals("instance:tenant:target-1",
+                new CloudTargetRef("instance", "tenant", "target-1").toWireString());
+        assertEquals("instance:tenant:scope-1:epoch-2",
+                new CloudScopeRef("instance", "tenant", "scope-1", "epoch-2").toWireString());
+        assertThrows(IllegalArgumentException.class,
+                () -> new CloudScopeRef("instance", "tenant", "scope/other", "epoch-2"));
+        assertThrows(NullPointerException.class,
+                () -> new CloudTargetRef("instance", "tenant", null));
     }
 }
