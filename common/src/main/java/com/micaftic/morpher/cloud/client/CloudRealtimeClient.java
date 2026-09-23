@@ -22,6 +22,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Small Java-only v1 realtime boundary. Minecraft server networking is not
@@ -39,8 +40,10 @@ public final class CloudRealtimeClient implements AutoCloseable {
     private final Map<String, Long> targetRevisions = new ConcurrentHashMap<>();
     private final Set<String> seenEventIds = ConcurrentHashMap.newKeySet();
     private final HttpClient httpClient;
+    private final Supplier<CompletableFuture<WebSocket>> webSocketConnector;
     private volatile WebSocket socket;
     private volatile boolean closed;
+    private CompletableFuture<CloudRealtimeClient> connectionAttempt;
 
     public CloudRealtimeClient(
             CloudInstanceConfig instance,
@@ -87,28 +90,56 @@ public final class CloudRealtimeClient implements AutoCloseable {
         this.messageConsumer = Objects.requireNonNull(messageConsumer, "messageConsumer");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.eventConsumer = Objects.requireNonNull(eventConsumer, "eventConsumer");
+        this.webSocketConnector = () -> httpClient.newWebSocketBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .header("Authorization", "Bearer " + accessToken)
+                .buildAsync(instance.websocketUri(), new Listener());
+    }
+
+    CloudRealtimeClient(
+            CloudInstanceConfig instance,
+            String accessToken,
+            String clientVersion,
+            Consumer<CloudRealtimeMessage> messageConsumer,
+            Supplier<CompletableFuture<WebSocket>> webSocketConnector
+    ) {
+        this.instance = Objects.requireNonNull(instance, "instance");
+        this.accessToken = requireToken(accessToken);
+        this.clientVersion = requireText(clientVersion, "clientVersion");
+        this.messageConsumer = Objects.requireNonNull(messageConsumer, "messageConsumer");
+        this.eventConsumer = ignored -> { };
+        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
+        this.webSocketConnector = Objects.requireNonNull(webSocketConnector, "webSocketConnector");
     }
 
     public CloudInstanceConfig instance() {
         return instance;
     }
 
-    public CompletableFuture<CloudRealtimeClient> connect() {
+    public synchronized CompletableFuture<CloudRealtimeClient> connect() {
         if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Cloud realtime client is closed"));
+        if (socket != null) return CompletableFuture.completedFuture(this);
+        if (connectionAttempt != null) return connectionAttempt;
         CloudState.setStatus(CloudConnectionStatus.CONNECTING, CloudErrorCode.NONE, instance.instanceId());
-        WebSocket.Builder builder = httpClient.newWebSocketBuilder()
-                .connectTimeout(Duration.ofSeconds(15))
-                .header("Authorization", "Bearer " + accessToken);
-        return builder.buildAsync(instance.websocketUri(), new Listener())
+        CompletableFuture<CloudRealtimeClient> attempt = webSocketConnector.get()
                 .thenApply(webSocket -> {
-                    socket = webSocket;
-                    return this;
-                })
-                .whenComplete((ignored, failure) -> {
-                    if (failure != null && !closed) {
-                        CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.INTERNAL, instance.instanceId());
+                    if (closed) {
+                        webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "client closed during connect");
+                    } else {
+                        socket = webSocket;
                     }
+                    return this;
                 });
+        connectionAttempt = attempt;
+        attempt.whenComplete((ignored, failure) -> {
+            synchronized (CloudRealtimeClient.this) {
+                if (connectionAttempt == attempt) connectionAttempt = null;
+                if (failure != null && !closed) {
+                    CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.INTERNAL, instance.instanceId());
+                }
+            }
+        });
+        return attempt;
     }
 
     public CompletableFuture<Void> joinScope(String scopeId, String worldEpoch) {
@@ -152,8 +183,9 @@ public final class CloudRealtimeClient implements AutoCloseable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         closed = true;
+        connectionAttempt = null;
         WebSocket current = socket;
         socket = null;
         if (current != null) {
@@ -265,13 +297,19 @@ public final class CloudRealtimeClient implements AutoCloseable {
 
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-            if (!closed) CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.NONE, instance.instanceId());
+            synchronized (CloudRealtimeClient.this) {
+                if (socket == webSocket) socket = null;
+                if (!closed) CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.NONE, instance.instanceId());
+            }
             return CompletableFuture.completedFuture(null);
         }
 
         @Override
         public void onError(WebSocket webSocket, Throwable error) {
-            if (!closed) CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.INTERNAL, instance.instanceId());
+            synchronized (CloudRealtimeClient.this) {
+                if (socket == webSocket) socket = null;
+                if (!closed) CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.INTERNAL, instance.instanceId());
+            }
         }
     }
 
