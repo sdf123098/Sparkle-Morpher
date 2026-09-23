@@ -8,9 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class CloudScopeClientTest {
     @Test
     void parsesScopeCatalogAndKeepsScopeFieldsSeparate() {
-        var scopes = CloudScopeClient.parseScopesForTest("[{\"scope_id\":\"scope-1\",\"tenant_id\":\"tenant\",\"name\":\"World\",\"world_epoch\":\"epoch-1\"}]");
+        var scopes = CloudScopeClient.parseScopesForTest("[{\"scope_id\":\"scope-1\",\"tenant_id\":\"tenant\",\"name\":\"World\",\"world_epoch\":\"epoch-1\",\"offline_policy\":\"CLAIM_CODE\"}]");
         assertEquals("scope-1", scopes.getFirst().scopeId());
         assertEquals("epoch-1", scopes.getFirst().worldEpoch());
+        assertEquals("CLAIM_CODE", scopes.getFirst().offlinePolicy());
     }
 
     @Test
@@ -37,5 +38,18 @@ class CloudScopeClientTest {
         var bindings = CloudScopeClient.parseBindingsForTest("[{\"binding_id\":\"binding-1\",\"scope_id\":\"scope-1\",\"world_epoch\":\"epoch-1\",\"entity_uuid\":\"12345678-1234-1234-1234-1234567890ab\",\"entity_kind\":\"PLAYER\",\"target_id\":\"target-1\",\"observation_state\":\"ACTIVE\",\"last_seen_at\":\"2026-09-22T00:00:00Z\",\"revision\":2}]");
         assertEquals("ACTIVE", bindings.getFirst().observationState());
         assertEquals(2, bindings.getFirst().revision());
+    }
+
+    @Test
+    void parsesTargetAndAclManagementResponses() {
+        var target = CloudScopeClient.parseTargetForTest("{\"target_id\":\"target-1\",\"scope_id\":\"scope-1\",\"kind\":\"PLAYER\",\"display_name\":\"Player\",\"revision\":3}");
+        var acl = CloudScopeClient.parseAclForTest("[{\"account_id\":\"account-1\",\"role\":\"editor\"}]");
+        assertEquals("PLAYER", target.kind());
+        assertEquals("editor", acl.getFirst().role());
+    }
+
+    @Test
+    void validatesManagementRequestText() {
+        assertThrows(IllegalArgumentException.class, () -> CloudScopeClient.segment("scope\n"));
     }
 }
