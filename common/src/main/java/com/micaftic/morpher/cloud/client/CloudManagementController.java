@@ -46,6 +46,15 @@ public final class CloudManagementController {
         return registry;
     }
 
+    public synchronized CloudInstanceRegistry.CloudInstanceProfile selectInstance(String instanceId) {
+        CloudInstanceRegistry.CloudInstanceProfile next = registry.find(instanceId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown Cloud instance: " + instanceId));
+        CloudInstanceRegistry.CloudInstanceProfile active = connection.profile();
+        if (active != null && !active.instanceId().equals(next.instanceId())) logout();
+        registry.select(next.instanceId());
+        return next;
+    }
+
     public CompletableFuture<CloudSession> login(String accountId, String password) {
         CloudInstanceRegistry.CloudInstanceProfile profile = registry.selected()
                 .orElseThrow(() -> new IllegalStateException("No Cloud instance is selected"));

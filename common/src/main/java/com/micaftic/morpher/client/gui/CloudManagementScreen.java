@@ -80,7 +80,9 @@ public final class CloudManagementScreen extends Screen {
         var snapshot = management().snapshot();
         String state = snapshot.authenticated() ? "Connected" : "Disconnected";
         this.statusButton = addRenderableWidget(Button.builder(Component.literal(state), button -> { })
-                .bounds(left, 103, Math.max(110, this.width - left * 2), 20).build());
+                .bounds(left, 103, Math.max(90, this.width - left * 2 - 104), 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Next instance"), button -> switchInstance())
+                .bounds(this.width - left - 100, 103, 100, 20).build());
         management().registry().selected().ifPresent(profile -> {
             this.instanceId.setValue(profile.instanceId());
             this.instanceName.setValue(profile.name());
@@ -146,9 +148,31 @@ public final class CloudManagementScreen extends Screen {
             CloudInstanceRegistry.CloudInstanceProfile profile = new CloudInstanceRegistry.CloudInstanceProfile(
                     config, instanceName.getValue().isBlank() ? config.instanceId() : instanceName.getValue().trim());
             management().registry().addOrReplace(profile);
-            management().registry().select(config.instanceId());
+            management().selectInstance(config.instanceId());
             management().saveInstances();
             setStatus("Saved " + config.instanceId());
+        } catch (IOException | RuntimeException failure) {
+            setStatus(errorText(failure));
+        }
+    }
+
+    private void switchInstance() {
+        try {
+            var profiles = management().registry().profiles();
+            if (profiles.isEmpty()) {
+                setStatus("No saved Cloud instances");
+                return;
+            }
+            String selected = management().registry().selected().map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse(null);
+            int current = -1;
+            for (int i = 0; i < profiles.size(); i++) {
+                if (profiles.get(i).instanceId().equals(selected)) current = i;
+            }
+            var next = profiles.get((current + 1) % profiles.size());
+            management().selectInstance(next.instanceId());
+            management().saveInstances();
+            init();
+            setStatus("Selected " + next.name());
         } catch (IOException | RuntimeException failure) {
             setStatus(errorText(failure));
         }
