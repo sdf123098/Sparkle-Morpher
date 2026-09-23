@@ -21,6 +21,7 @@ import java.util.function.Consumer;
  */
 public final class CloudClientRuntime {
     private static volatile RuntimeState current;
+    private static final CloudWorldSession WORLD_SESSION = new CloudWorldSession();
 
     private CloudClientRuntime() {
     }
@@ -108,7 +109,31 @@ public final class CloudClientRuntime {
         return requireState().realtime().connect();
     }
 
-    public static CompletableFuture<Void> joinScope(String scopeId, String worldEpoch) {
+    public static synchronized long onWorldJoined(Object connectionToken) {
+        long previousGeneration = WORLD_SESSION.isActive() ? WORLD_SESSION.currentGeneration() : -1L;
+        long nextGeneration = WORLD_SESSION.enter(connectionToken);
+        if (previousGeneration >= 0L && nextGeneration != previousGeneration) leaveScope();
+        return nextGeneration;
+    }
+
+    public static synchronized void onWorldLeft(Object connectionToken) {
+        if (WORLD_SESSION.leave(connectionToken)) leaveScope();
+    }
+
+    public static synchronized void onWorldDisconnected() {
+        if (WORLD_SESSION.leaveCurrent()) leaveScope();
+    }
+
+    public static long currentWorldGeneration() {
+        return WORLD_SESSION.currentGeneration();
+    }
+
+    public static boolean isCurrentWorldGeneration(long expectedGeneration) {
+        return WORLD_SESSION.isCurrent(expectedGeneration);
+    }
+
+    public static synchronized CompletableFuture<Void> joinScope(String scopeId, String worldEpoch) {
+        WORLD_SESSION.currentGeneration();
         RuntimeState state = requireState();
         state.bindingResolver().clear();
         state.observations().enter(scopeId, worldEpoch);
