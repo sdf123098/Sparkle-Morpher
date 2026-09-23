@@ -1,6 +1,9 @@
 package com.micaftic.morpher.cloud.client;
 
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /** Tracks the current client connection without treating server/world names as identity. */
 public final class CloudWorldSession {
@@ -42,5 +45,21 @@ public final class CloudWorldSession {
 
     public synchronized boolean isCurrent(long expectedGeneration) {
         return connectionToken != null && generation == expectedGeneration;
+    }
+
+    public <T> CompletableFuture<T> guard(
+            long expectedGeneration,
+            CompletableFuture<T> response,
+            Consumer<T> applyIfCurrent
+    ) {
+        Objects.requireNonNull(response, "response");
+        Objects.requireNonNull(applyIfCurrent, "applyIfCurrent");
+        return response.thenApply(value -> {
+            if (!isCurrent(expectedGeneration)) {
+                throw new CancellationException("Minecraft world changed before the Cloud response completed");
+            }
+            applyIfCurrent.accept(value);
+            return value;
+        });
     }
 }

@@ -2,6 +2,11 @@ package com.micaftic.morpher.cloud.client;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,5 +42,21 @@ class CloudWorldSessionTest {
         assertTrue(session.currentGeneration() == first);
         session.leave(connection);
         assertThrows(IllegalStateException.class, session::currentGeneration);
+    }
+
+    @Test
+    void delayedWorldResponseIsCancelledBeforeApplyingItsResult() {
+        CloudWorldSession session = new CloudWorldSession();
+        long generation = session.enter(new Object());
+        CompletableFuture<String> response = new CompletableFuture<>();
+        AtomicReference<String> applied = new AtomicReference<>();
+
+        CompletableFuture<String> guarded = session.guard(generation, response, applied::set);
+        session.leaveCurrent();
+        response.complete("old-world-result");
+
+        CompletionException failure = assertThrows(CompletionException.class, guarded::join);
+        assertTrue(failure.getCause() instanceof CancellationException);
+        assertTrue(applied.get() == null);
     }
 }
