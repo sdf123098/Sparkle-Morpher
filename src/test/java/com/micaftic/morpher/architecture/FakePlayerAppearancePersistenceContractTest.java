@@ -26,7 +26,7 @@ class FakePlayerAppearancePersistenceContractTest {
     void levelChangeResynchronizesThePlayerAppearance() throws IOException {
         Path repository = locateRepository();
         String capabilityEvent = Files.readString(
-                repository.resolve("common/src/main/java/com/micaftic/morpher/event/CapabilityEvent.java"),
+                repository.resolve("src/neoforge/java/com/micaftic/morpher/event/CapabilityEvent.java"),
                 StandardCharsets.UTF_8);
         assertTrue(capabilityEvent.contains("LAST_PLAYER_LEVELS"));
         assertTrue(capabilityEvent.contains("LAST_PLAYER_LEVELS.remove("));
