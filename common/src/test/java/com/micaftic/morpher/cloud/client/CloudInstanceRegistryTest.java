@@ -12,6 +12,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CloudInstanceRegistryTest {
     @Test
+    void missingRegistrySeedsOfficialCloud() throws Exception {
+        var registry = new CloudInstanceRegistry(Files.createTempDirectory("spm-cloud-registry").resolve("instances.json"));
+
+        registry.load();
+
+        var official = registry.selected().orElseThrow();
+        assertEquals("official", official.instanceId());
+        assertEquals("Official Cloud", official.name());
+        assertEquals("https://spm-cloud-official.robinson171.workers.dev", official.instance().origin().toString());
+    }
+
+    @Test
     void persistsOnlyInstanceMetadataAndSelection() throws Exception {
         var directory = Files.createTempDirectory("spm-cloud-registry");
         var file = directory.resolve("instances.json");
