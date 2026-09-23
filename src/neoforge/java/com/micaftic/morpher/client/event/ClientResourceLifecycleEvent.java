@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.core.gpu.BlurStack;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import net.neoforged.api.distmarker.Dist;
@@ -23,6 +24,7 @@ public final class ClientResourceLifecycleEvent {
     }
 
     private static void cleanup(String reason) {
+        CloudClientRuntime.clear();
         ClientModelManager.releaseServerSyncedModels(reason);
         GpuRenderPath.disposeAllMeshes(reason);
         AudioStreamCache.clearAll(reason);
