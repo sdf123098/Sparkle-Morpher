@@ -24,8 +24,13 @@ public interface ModelUploadTransport {
             String fileName,
             String format,
             String rawSha256,
-            long totalBytes
+            long totalBytes,
+            String visibility
     ) {
+        public UploadMetadata(String assetId, String fileName, String format, String rawSha256, long totalBytes) {
+            this(assetId, fileName, format, rawSha256, totalBytes, "PRIVATE");
+        }
+
         public UploadMetadata {
             assetId = required(assetId, "assetId");
             fileName = required(fileName, "fileName");
@@ -33,6 +38,10 @@ public interface ModelUploadTransport {
             rawSha256 = required(rawSha256, "rawSha256");
             if (totalBytes <= 0) {
                 throw new IllegalArgumentException("totalBytes must be positive");
+            }
+            visibility = visibility == null || visibility.isBlank() ? "PRIVATE" : visibility.trim().toUpperCase(java.util.Locale.ROOT);
+            if (!visibility.equals("PRIVATE") && !visibility.equals("PUBLIC")) {
+                throw new IllegalArgumentException("visibility must be PRIVATE or PUBLIC");
             }
         }
 
