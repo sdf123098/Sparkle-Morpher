@@ -367,7 +367,7 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     public void onClose() {
         if (this.parentScreen != null && this.minecraft != null) {
-            this.minecraft.setScreen(this.parentScreen);
+            InputUtil.setScreen(this.parentScreen);
         } else if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
             super.onClose();
         }
@@ -803,21 +803,22 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void clickCloudAsset(CloudAssetSummary summary) {
-        STATE.selectedModelId = summary.ref().assetId();
+        String cloudModelId = this.controller.cloudModelId(summary);
+        STATE.selectedModelId = cloudModelId;
         STATE.selectedTextureId = "";
-        ModelAssembly assembly = this.controller.assemblyOrNull(summary.ref().assetId());
+        ModelAssembly assembly = this.controller.assemblyOrNull(cloudModelId);
         if (assembly == null) {
             this.controller.importCloudAsset(summary, error -> {
                 if (error != null && !error.getString().isBlank()) { setStatus(error, ChatFormatting.RED); return; }
                 this.controller.markCloudApplied(summary);
-                this.pendingModelApplyId = summary.ref().assetId();
+                this.pendingModelApplyId = cloudModelId;
                 setStatus(Component.translatable("gui.sparkle_morpher.cloud.imported", summary.name()), ChatFormatting.GREEN);
             });
             return;
         }
         this.controller.markCloudApplied(summary);
         STATE.selectedTextureId = selectedTextureOrDefault(assembly);
-        applyModelAndTexture(summary.ref().assetId(), STATE.selectedTextureId, assembly);
+        applyModelAndTexture(cloudModelId, STATE.selectedTextureId, assembly);
     }
     private void renderCurrentModelSummary(GuiGraphicsExtractor g, int x, int y, int w) {
         LocalPlayer player = Minecraft.getInstance().player;
@@ -1763,8 +1764,23 @@ public class ModernPlayerModelScreen extends Screen {
         fill(g, this.layout.left, this.layout.footerTop, this.layout.width, 1, 0x55303030);
         Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatus() : this.status;
         ChatFormatting color = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatusColor() : this.statusColor;
-        int c = color.getColor() == null ? MUTED : 0xFF000000 | color.getColor();
+        int c = chatColor(color);
         g.text(this.font, trim(line.getString(), this.layout.width - 20), this.layout.left + 10, this.layout.footerTop + 8, c, false);
+    }
+
+    private int chatColor(ChatFormatting color) {
+        if (color == null) {
+            return MUTED;
+        }
+        return switch (color) {
+            case RED, DARK_RED -> 0xFFE05252;
+            case YELLOW, GOLD -> 0xFFFFC857;
+            case GREEN, DARK_GREEN -> 0xFF4CAF50;
+            case AQUA, DARK_AQUA, BLUE, DARK_BLUE -> 0xFF5ECAE8;
+            case WHITE -> 0xFFFFFFFF;
+            case BLACK, DARK_GRAY -> 0xFF6F757A;
+            default -> MUTED;
+        };
     }
 
     private void renderTooltip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -2190,7 +2206,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void openCustomFolderUpload() {
-        Minecraft.getInstance().setScreen(new CustomFolderUploadScreen(this));
+        InputUtil.setScreen(new CustomFolderUploadScreen(this));
     }
 
     private void openCloudUpload() {
@@ -2237,7 +2253,7 @@ public class ModernPlayerModelScreen extends Screen {
             String modelId = cap.getModelId();
             ModelAssembly modelAssembly = cap.getModelAssembly();
             if (modelAssembly != null && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
-                minecraft.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
+                InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
             }
         });
     }
