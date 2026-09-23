@@ -6,6 +6,7 @@ import com.micaftic.morpher.core.api.network.state.CloudState;
 import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -57,6 +58,7 @@ public final class CloudClientRuntime {
         CloudHttpClient http = new CloudAuthClient(new CloudHttpClient(instance)).authenticated(session);
         CloudAssetClient assets = new CloudAssetClient(http);
         CloudAppearanceStore appearances = new CloudAppearanceStore();
+        CloudEntityBindingResolver bindingResolver = new CloudEntityBindingResolver();
         CloudRealtimeClient realtime = new CloudRealtimeClient(
                 instance,
                 session.accessToken(),
@@ -76,6 +78,7 @@ public final class CloudClientRuntime {
                 new CloudIdentityClient(http),
                 new CloudIdentityBindingClient(http),
                 appearances,
+                bindingResolver,
                 realtime,
                 cacheRoot.toAbsolutePath().normalize());
         current = next;
@@ -117,6 +120,14 @@ public final class CloudClientRuntime {
         });
     }
 
+    public static CompletableFuture<List<CloudScopeClient.CloudEntityBinding>> refreshBindings(String scopeId, String worldEpoch) {
+        RuntimeState state = requireState();
+        return state.scopes().listBindings(scopeId).thenApply(bindings -> {
+            state.bindingResolver().replace(scopeId, worldEpoch, bindings);
+            return bindings;
+        });
+    }
+
     public static synchronized void clear() {
         clearCurrent();
         CloudState.reset();
@@ -148,6 +159,7 @@ public final class CloudClientRuntime {
         private final CloudIdentityClient identities;
         private final CloudIdentityBindingClient identityBindings;
         private final CloudAppearanceStore appearances;
+        private final CloudEntityBindingResolver bindingResolver;
         private final CloudRealtimeClient realtime;
         private final Path cacheRoot;
         private volatile CloudInstanceInfo instanceInfo;
@@ -162,6 +174,7 @@ public final class CloudClientRuntime {
                 CloudIdentityClient identities,
                 CloudIdentityBindingClient identityBindings,
                 CloudAppearanceStore appearances,
+                CloudEntityBindingResolver bindingResolver,
                 CloudRealtimeClient realtime,
                 Path cacheRoot
         ) {
@@ -174,6 +187,7 @@ public final class CloudClientRuntime {
             this.identities = identities;
             this.identityBindings = identityBindings;
             this.appearances = appearances;
+            this.bindingResolver = bindingResolver;
             this.realtime = realtime;
             this.cacheRoot = cacheRoot;
         }
@@ -187,6 +201,7 @@ public final class CloudClientRuntime {
         public CloudIdentityClient identities() { return identities; }
         public CloudIdentityBindingClient identityBindings() { return identityBindings; }
         public CloudAppearanceStore appearances() { return appearances; }
+        public CloudEntityBindingResolver bindingResolver() { return bindingResolver; }
         public CloudRealtimeClient realtime() { return realtime; }
         public Path cacheRoot() { return cacheRoot; }
         public CloudInstanceInfo instanceInfo() { return instanceInfo; }
