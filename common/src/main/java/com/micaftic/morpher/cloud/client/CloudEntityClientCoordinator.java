@@ -2,9 +2,11 @@ package com.micaftic.morpher.cloud.client;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,6 +26,7 @@ public final class CloudEntityClientCoordinator {
     private final CloudAppearanceStore appearances;
     private final LongSupplier currentWorldGeneration;
     private final Consumer<Runnable> clientExecutor;
+    private final CloudEntityObservationTracker observationTracker = new CloudEntityObservationTracker();
     private final Map<CloudEntityProvider.Kind, CopyOnWriteArrayList<CloudEntityProvider>> providers =
             new EnumMap<>(CloudEntityProvider.Kind.class);
 
@@ -53,6 +56,7 @@ public final class CloudEntityClientCoordinator {
 
     public synchronized void deactivate() {
         activeContext = null;
+        observationTracker.clear();
     }
 
     private void onAppearanceChanged(String scopeId, CloudScopeClient.CloudAppearance appearance) {
@@ -128,6 +132,36 @@ public final class CloudEntityClientCoordinator {
     public List<CloudEntityProvider> providers(CloudEntityProvider.Kind kind) {
         Objects.requireNonNull(kind, "kind");
         return List.copyOf(new ArrayList<>(providers.get(kind)));
+    }
+
+    /**
+     * Converts the current explicit binding snapshot into edge-triggered
+     * observations. The caller is responsible for submitting the returned
+     * observations through the Cloud observation coordinator.
+     */
+    public List<CloudEntityObservationTracker.Observation> collectObservations() {
+        Context context = activeContext;
+        if (context == null) return List.of();
+
+        List<CloudScopeClient.CloudEntityBinding> snapshot = bindings.snapshot(context.scopeId(), context.worldEpoch());
+        Set<String> available = new HashSet<>();
+        for (CloudScopeClient.CloudEntityBinding binding : snapshot) {
+            CloudEntityProvider.Kind kind;
+            UUID entityUuid;
+            try {
+                kind = CloudEntityProvider.Kind.fromWireValue(binding.entityKind());
+                entityUuid = UUID.fromString(binding.entityUuid());
+            } catch (IllegalArgumentException ignored) {
+                continue;
+            }
+            for (CloudEntityProvider provider : providers.get(kind)) {
+                if (provider.isAvailable(entityUuid)) {
+                    available.add(binding.bindingId());
+                    break;
+                }
+            }
+        }
+        return observationTracker.update(snapshot, available);
     }
 
     private static String requireText(String value, String name) {
