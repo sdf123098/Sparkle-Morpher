@@ -21,10 +21,34 @@ class CloudScopeClientTest {
 
     @Test
     void parsesDurableEventRecoveryCursorAndPayload() {
-        var recovery = CloudScopeClient.parseRecoveryForTest("{\"scope_id\":\"scope-1\",\"from_cursor\":3,\"to_cursor\":4,\"has_more\":false,\"entries\":[{\"sequence\":4,\"event_id\":\"event-1\",\"kind\":\"APPEARANCE_UPDATED\",\"payload\":{\"target_id\":\"target\",\"revision\":2,\"texture_id\":\"tex\",\"disabled\":false}}]}");
+        var recovery = CloudScopeClient.parseRecoveryForTest("{" +
+                "\"scope_id\":\"scope-1\",\"from_cursor\":3,\"to_cursor\":4,\"has_more\":false," +
+                "\"entries\":[{" +
+                "\"sequence\":4,\"event_id\":\"event-1\",\"kind\":\"APPEARANCE_UPDATED\"," +
+                "\"payload\":{\"target_id\":\"target\",\"revision\":2,\"texture_id\":\"tex\",\"disabled\":false}" +
+                "}]} ");
+
         assertEquals(4, recovery.toCursor());
         assertEquals("event-1", recovery.events().getFirst().eventId());
         assertEquals(2, recovery.events().getFirst().appearance().revision());
+    }
+
+    @Test
+    void parsesAnimationSnapshotsFromRecoveryEvents() {
+        long expiresAt = System.currentTimeMillis() + 5_000;
+        var recovery = CloudScopeClient.parseRecoveryForTest("{" +
+                "\"from_cursor\":7,\"to_cursor\":8,\"has_more\":false," +
+                "\"entries\":[{" +
+                "\"sequence\":8,\"event_id\":\"animation-1\",\"kind\":\"AnimationState\"," +
+                "\"payload\":{\"target_id\":\"target\",\"revision\":4,\"channel\":\"body\",\"action\":\"PLAY\",\"animation_key\":\"run\",\"expires_at_unix_ms\":" + expiresAt + "}" +
+                "}]} ");
+
+        var animation = recovery.events().getFirst().animation();
+        assertEquals("target", animation.targetId());
+        assertEquals(4, animation.revision());
+        assertEquals("body", animation.channel());
+        assertEquals("run", animation.animationKey());
+        assertEquals(expiresAt, animation.expiresAtUnixMs());
     }
 
     @Test

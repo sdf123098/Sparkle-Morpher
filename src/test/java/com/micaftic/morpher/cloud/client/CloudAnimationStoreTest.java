@@ -6,6 +6,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CloudAnimationStoreTest {
     @Test
+    void appliesAnimationSnapshotsFromRecoveryMonotonically() {
+        CloudAnimationStore store = new CloudAnimationStore();
+        long expiresAt = System.currentTimeMillis() + 5_000;
+        CloudScopeClient.CloudRecoveredEvent recovered = new CloudScopeClient.CloudRecoveredEvent(
+                8, "event", "AnimationState", null,
+                new CloudAnimationState("target", 4, "body", "PLAY", "run", expiresAt));
+
+        assertEquals(1, store.applyRecovery("scope", java.util.List.of(recovered)));
+        assertEquals("run", store.get("scope", "target", "body").animationKey());
+        assertEquals(0, store.applyRecovery("scope", java.util.List.of(recovered)));
+    }
+
+    @Test
     void acceptsMonotonicAnimationRevisionsAndDropsExpiredState() {
         CloudAnimationStore store = new CloudAnimationStore();
         CloudAnimationState first = new CloudAnimationState(
