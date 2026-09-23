@@ -729,6 +729,8 @@
   "gui.sparkle_morpher.model_panel.use_texture": "Use selected texture",
   "gui.sparkle_morpher.model_panel.toggle_favorite": "Toggle favorite",
   "gui.sparkle_morpher.model_panel.reload_models": "Reload local models",
+  "gui.sparkle_morpher.model_panel.upload_cloud": "Upload selected local models to SPM Cloud",
+  "gui.sparkle_morpher.model_panel.upload_cloud.empty": "Select at least one local-only model first",
   "gui.sparkle_morpher.model_panel.selected_count": "%s selected",
   "gui.sparkle_morpher.model_panel.details": "Details",
   "gui.sparkle_morpher.model_panel.select_model": "Select a model",

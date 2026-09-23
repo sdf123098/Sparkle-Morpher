@@ -729,6 +729,8 @@
   "gui.sparkle_morpher.model_panel.use_texture": "使用选中材质",
   "gui.sparkle_morpher.model_panel.toggle_favorite": "切换收藏",
   "gui.sparkle_morpher.model_panel.reload_models": "重载本地模型",
+  "gui.sparkle_morpher.model_panel.upload_cloud": "将选中的本地模型上传到 SPM Cloud",
+  "gui.sparkle_morpher.model_panel.upload_cloud.empty": "请先选择至少一个仅本地模型",
   "gui.sparkle_morpher.model_panel.selected_count": "已选择 %s 个",
   "gui.sparkle_morpher.model_panel.details": "详情",
   "gui.sparkle_morpher.model_panel.select_model": "选择一个模型",
