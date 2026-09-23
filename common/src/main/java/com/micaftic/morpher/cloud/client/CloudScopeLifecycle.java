@@ -178,7 +178,10 @@ public final class CloudScopeLifecycle implements AutoCloseable {
         cancel(reconnectTask);
         heartbeatTask = null;
         reconnectTask = null;
-        if (previous != null) appearances.clearScope(previous.scopeId());
+        if (previous != null) {
+            realtime.leaveScope(previous.scopeId());
+            appearances.clearScope(previous.scopeId());
+        }
     }
 
     private boolean isCurrent(ScopeContext context) {
