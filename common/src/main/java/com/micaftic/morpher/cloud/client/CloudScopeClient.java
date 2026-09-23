@@ -25,8 +25,40 @@ public final class CloudScopeClient {
         return http.getJson("/v1/scopes").thenApply(CloudScopeClient::parseScopes);
     }
 
+    public CompletableFuture<CloudScope> createScope(CloudScopeCreate create) {
+        Objects.requireNonNull(create, "create");
+        JsonObject body = new JsonObject();
+        body.addProperty("scope_id", segment(create.scopeId()));
+        body.addProperty("name", requiredText(create.name(), "name"));
+        body.addProperty("world_epoch", segment(create.worldEpoch()));
+        if (create.offlinePolicy() == null) body.add("offline_policy", com.google.gson.JsonNull.INSTANCE);
+        else body.addProperty("offline_policy", requiredText(create.offlinePolicy(), "offlinePolicy"));
+        return http.postJson("/v1/scopes", body.toString()).thenApply(CloudScopeClient::parseScope);
+    }
+
     public CompletableFuture<List<CloudTarget>> listTargets(String scopeId) {
         return http.getJson("/v1/scopes/" + segment(scopeId) + "/targets").thenApply(CloudScopeClient::parseTargets);
+    }
+
+    public CompletableFuture<CloudTarget> createTarget(CloudTargetCreate create) {
+        Objects.requireNonNull(create, "create");
+        JsonObject body = new JsonObject();
+        body.addProperty("scope_id", segment(create.scopeId()));
+        if (create.targetId() == null) body.add("target_id", com.google.gson.JsonNull.INSTANCE);
+        else body.addProperty("target_id", segment(create.targetId()));
+        body.addProperty("kind", requiredText(create.kind(), "kind"));
+        body.addProperty("display_name", requiredText(create.displayName(), "displayName"));
+        return http.postJson("/v1/targets", body.toString()).thenApply(CloudScopeClient::parseTarget);
+    }
+
+    public CompletableFuture<List<CloudAclEntry>> listScopeAcl(String scopeId) {
+        return http.getJson("/v1/scopes/" + segment(scopeId) + "/acl").thenApply(CloudScopeClient::parseAcl);
+    }
+
+    public CompletableFuture<CloudAclEntry> setScopeAcl(String scopeId, CloudAclUpdate update) {
+        Objects.requireNonNull(update, "update");
+        return http.putJson("/v1/scopes/" + segment(scopeId) + "/acl", aclBody(update).toString())
+                .thenApply(CloudScopeClient::parseAclEntry);
     }
 
     public CompletableFuture<List<CloudEntityBinding>> listBindings(String scopeId) {
@@ -76,7 +108,23 @@ public final class CloudScopeClient {
         return http.putJson("/v1/targets/" + segment(targetId) + "/appearance", body.toString()).thenApply(CloudScopeClient::parseAppearance);
     }
 
+    public CompletableFuture<List<CloudAclEntry>> listTargetAcl(String targetId) {
+        return http.getJson("/v1/targets/" + segment(targetId) + "/acl").thenApply(CloudScopeClient::parseAcl);
+    }
+
+    public CompletableFuture<CloudAclEntry> setTargetAcl(String targetId, CloudAclUpdate update) {
+        Objects.requireNonNull(update, "update");
+        return http.putJson("/v1/targets/" + segment(targetId) + "/acl", aclBody(update).toString())
+                .thenApply(CloudScopeClient::parseAclEntry);
+    }
+
     static List<CloudScope> parseScopesForTest(String body) { return parseScopes(body); }
+
+    static CloudScope parseScopeForTest(String body) { return parseScope(body); }
+
+    static CloudTarget parseTargetForTest(String body) { return parseTarget(body); }
+
+    static List<CloudAclEntry> parseAclForTest(String body) { return parseAcl(body); }
 
     static CloudEventRecovery parseRecoveryForTest(String body) { return parseRecovery(body); }
 
@@ -89,19 +137,34 @@ public final class CloudScopeClient {
         return value;
     }
 
+    private static String requiredText(String value, String name) {
+        if (value == null || value.isBlank() || value.length() > 256 || value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException(name + " must be a non-empty single-line value");
+        }
+        return value;
+    }
+
     private static List<CloudScope> parseScopes(String body) {
         try {
             JsonElement root = JsonParser.parseString(body);
             if (!root.isJsonArray()) throw new IllegalArgumentException("scope catalog must be an array");
             List<CloudScope> result = new ArrayList<>();
             for (JsonElement element : root.getAsJsonArray()) {
-                JsonObject object = object(element);
-                result.add(new CloudScope(string(object, "scope_id"), string(object, "tenant_id"), string(object, "name"), string(object, "world_epoch")));
+                result.add(parseScope(object(element)));
             }
             return List.copyOf(result);
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud scope catalog");
         }
+    }
+
+    private static CloudScope parseScope(String body) {
+        try { return parseScope(JsonParser.parseString(body).getAsJsonObject()); }
+        catch (RuntimeException e) { throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud scope"); }
+    }
+
+    private static CloudScope parseScope(JsonObject object) {
+        return new CloudScope(string(object, "scope_id"), string(object, "tenant_id"), string(object, "name"), string(object, "world_epoch"), nullableString(object, "offline_policy"));
     }
 
     private static List<CloudTarget> parseTargets(String body) {
@@ -110,13 +173,49 @@ public final class CloudScopeClient {
             if (!root.isJsonArray()) throw new IllegalArgumentException("target catalog must be an array");
             List<CloudTarget> result = new ArrayList<>();
             for (JsonElement element : root.getAsJsonArray()) {
-                JsonObject object = object(element);
-                result.add(new CloudTarget(string(object, "target_id"), string(object, "scope_id"), string(object, "kind"), string(object, "display_name"), object.get("revision").getAsLong()));
+                result.add(parseTarget(object(element)));
             }
             return List.copyOf(result);
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud target catalog");
         }
+    }
+
+    private static CloudTarget parseTarget(String body) {
+        try { return parseTarget(JsonParser.parseString(body).getAsJsonObject()); }
+        catch (RuntimeException e) { throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud target"); }
+    }
+
+    private static CloudTarget parseTarget(JsonObject object) {
+        return new CloudTarget(string(object, "target_id"), string(object, "scope_id"), string(object, "kind"), string(object, "display_name"), object.get("revision").getAsLong());
+    }
+
+    private static List<CloudAclEntry> parseAcl(String body) {
+        try {
+            JsonElement root = JsonParser.parseString(body);
+            if (!root.isJsonArray()) throw new IllegalArgumentException("ACL must be an array");
+            List<CloudAclEntry> result = new ArrayList<>();
+            for (JsonElement element : root.getAsJsonArray()) result.add(parseAclEntry(object(element)));
+            return List.copyOf(result);
+        } catch (RuntimeException e) {
+            throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud ACL");
+        }
+    }
+
+    private static CloudAclEntry parseAclEntry(String body) {
+        try { return parseAclEntry(JsonParser.parseString(body).getAsJsonObject()); }
+        catch (RuntimeException e) { throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud ACL entry"); }
+    }
+
+    private static CloudAclEntry parseAclEntry(JsonObject object) {
+        return new CloudAclEntry(string(object, "account_id"), string(object, "role"));
+    }
+
+    private static JsonObject aclBody(CloudAclUpdate update) {
+        JsonObject body = new JsonObject();
+        body.addProperty("account_id", requiredText(update.accountId(), "accountId"));
+        body.addProperty("role", requiredText(update.role(), "role"));
+        return body;
     }
 
     private static List<CloudEntityBinding> parseBindings(String body) {
@@ -181,7 +280,11 @@ public final class CloudScopeClient {
     private static String nullableString(JsonObject object, String name) { return object.has(name) && !object.get(name).isJsonNull() ? object.get(name).getAsString() : null; }
     private static Long nullableLong(JsonObject object, String name) { return object.has(name) && !object.get(name).isJsonNull() ? object.get(name).getAsLong() : null; }
 
-    public record CloudScope(String scopeId, String tenantId, String name, String worldEpoch) {}
+    public record CloudScope(String scopeId, String tenantId, String name, String worldEpoch, String offlinePolicy) {
+        public CloudScope(String scopeId, String tenantId, String name, String worldEpoch) {
+            this(scopeId, tenantId, name, worldEpoch, "STRICT_APPROVAL");
+        }
+    }
     public record CloudTarget(String targetId, String scopeId, String kind, String displayName, long revision) {}
     public record CloudEntityBinding(String bindingId, String scopeId, String worldEpoch, String entityUuid, String entityKind, String targetId, String observationState, String lastSeenAt, long revision) {}
     public record CloudBindingRegistration(String worldEpoch, String entityUuid, String entityKind, String targetId) {}
@@ -200,4 +303,8 @@ public final class CloudScopeClient {
             if (expectedRevision < 0) throw new IllegalArgumentException("expectedRevision must not be negative");
         }
     }
+    public record CloudScopeCreate(String scopeId, String name, String worldEpoch, String offlinePolicy) {}
+    public record CloudTargetCreate(String scopeId, String targetId, String kind, String displayName) {}
+    public record CloudAclEntry(String accountId, String role) {}
+    public record CloudAclUpdate(String accountId, String role) {}
 }
