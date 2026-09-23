@@ -32,7 +32,7 @@ public class PauseScreenButtonBuilder {
     @Nullable
     public static List<Button> createButtons(PauseScreen pauseScreen) {
         Minecraft minecraft = Minecraft.getInstance();
-        Button cloudButton = Button.builder(Component.literal("SPM Cloud"), button -> CloudManagementScreen.open())
+        Button cloudButton = Button.builder(Component.literal("SPM Cloud"), button -> CloudManagementScreen.open(pauseScreen))
                 .bounds(Math.max(SCREEN_MARGIN, pauseScreen.width - 100), SCREEN_MARGIN, 90, BUTTON_HEIGHT).build();
         cloudButton.setTooltip(Tooltip.create(Component.literal("Connect to official or community SPM Cloud")));
         if (!isServerConnected()) return List.of(cloudButton);

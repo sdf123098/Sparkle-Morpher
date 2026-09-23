@@ -21,6 +21,8 @@ public final class CloudTargetManagementScreen extends Screen {
     private EditBox accountId;
     private EditBox role;
     private Button statusButton;
+    private boolean active;
+    private long lifecycleGeneration;
 
     CloudTargetManagementScreen(Screen parent, CloudManagementController management) {
         super(Component.literal("SPM Cloud targets and ACL"));
@@ -30,6 +32,7 @@ public final class CloudTargetManagementScreen extends Screen {
 
     @Override
     protected void init() {
+        this.active = true;
         clearWidgets();
         int left = Math.max(8, (this.width - 332) / 2);
         int width = Math.min(104, (this.width - 24) / 3);
@@ -122,12 +125,19 @@ public final class CloudTargetManagementScreen extends Screen {
     }
 
     private void run(CompletableFuture<?> future, String success) {
+        long expectedGeneration = this.lifecycleGeneration;
         setStatus("Working...");
         future.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
-            if (InputUtil.getCurrentScreen() != this) return;
+            if (!this.active || expectedGeneration != this.lifecycleGeneration) return;
             setStatus(failure == null ? success : CloudManagementScreen.errorText(failure));
             if (failure == null) init();
         }));
+    }
+
+    @Override
+    public void removed() {
+        this.active = false;
+        this.lifecycleGeneration++;
     }
 
     private void setStatus(String message) {

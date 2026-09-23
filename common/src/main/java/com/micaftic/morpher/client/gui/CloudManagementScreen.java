@@ -32,14 +32,16 @@ public final class CloudManagementScreen extends Screen {
     private EditBox scopeName;
     private EditBox worldEpoch;
     private Button statusButton;
+    private boolean active;
+    private long lifecycleGeneration;
 
     public CloudManagementScreen(Screen parent) {
         super(Component.literal("SPM Cloud"));
         this.parent = parent;
     }
 
-    public static void open() {
-        InputUtil.setScreen(new CloudManagementScreen(InputUtil.getCurrentScreen()));
+    public static void open(Screen parent) {
+        InputUtil.setScreen(new CloudManagementScreen(parent));
     }
 
     static synchronized CloudManagementController management() {
@@ -60,6 +62,7 @@ public final class CloudManagementScreen extends Screen {
 
     @Override
     protected void init() {
+        this.active = true;
         clearWidgets();
         int left = Math.max(8, (this.width - 332) / 2);
         int width = Math.min(104, (this.width - 24) / 3);
@@ -74,8 +77,15 @@ public final class CloudManagementScreen extends Screen {
         this.scopeName = field(left + width + 6, 76, width, "Scope name");
         this.worldEpoch = field(left + (width + 6) * 2, 76, width, "World epoch");
 
-        this.statusButton = addRenderableWidget(Button.builder(Component.literal("Disconnected"), button -> { })
+        var snapshot = management().snapshot();
+        String state = snapshot.authenticated() ? "Connected" : "Disconnected";
+        this.statusButton = addRenderableWidget(Button.builder(Component.literal(state), button -> { })
                 .bounds(left, 103, Math.max(110, this.width - left * 2), 20).build());
+        management().registry().selected().ifPresent(profile -> {
+            this.instanceId.setValue(profile.instanceId());
+            this.instanceName.setValue(profile.name());
+            this.origin.setValue(profile.instance().origin().toString());
+        });
         addRenderableWidget(Button.builder(Component.literal("Save instance"), button -> saveInstance())
                 .bounds(left, 127, width, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Login / refresh"), button -> login())
@@ -89,7 +99,11 @@ public final class CloudManagementScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("Join selected"), button -> joinScope())
                 .bounds(left + (width + 6) * 2, 151, width, 20).build());
 
-        CloudManagementController.CloudManagementSnapshot snapshot = management().snapshot();
+        if (snapshot.selectedScope() != null) {
+            this.scopeId.setValue(snapshot.selectedScope().scopeId());
+            this.scopeName.setValue(snapshot.selectedScope().name());
+            this.worldEpoch.setValue(snapshot.selectedScope().worldEpoch());
+        }
         int row = 0;
         for (var scope : snapshot.scopes().stream().limit(5).toList()) {
             final String id = scope.scopeId();
@@ -142,7 +156,9 @@ public final class CloudManagementScreen extends Screen {
 
     private void login() {
         try {
-            run(management().login(accountId.getValue(), password.getValue()), "Cloud login succeeded");
+            String secret = password.getValue();
+            password.setValue("");
+            run(management().login(accountId.getValue(), secret), "Cloud login succeeded");
         } catch (RuntimeException failure) {
             setStatus(errorText(failure));
         }
@@ -182,12 +198,19 @@ public final class CloudManagementScreen extends Screen {
     }
 
     private void run(CompletableFuture<?> future, String success) {
+        long expectedGeneration = this.lifecycleGeneration;
         setStatus("Working...");
         future.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
-            if (InputUtil.getCurrentScreen() != this) return;
+            if (!this.active || expectedGeneration != this.lifecycleGeneration) return;
             setStatus(failure == null ? success : errorText(failure));
             if (failure == null) init();
         }));
+    }
+
+    @Override
+    public void removed() {
+        this.active = false;
+        this.lifecycleGeneration++;
     }
 
     private void setStatus(String message) {
