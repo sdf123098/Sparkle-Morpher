@@ -44,6 +44,31 @@ public final class CloudConnectionController {
         });
     }
 
+    public CompletableFuture<CloudSession> register(
+            CloudInstanceRegistry.CloudInstanceProfile profile,
+            String accountId,
+            String password,
+            Path cacheRoot,
+            String clientVersion
+    ) {
+        Objects.requireNonNull(profile, "profile");
+        Objects.requireNonNull(cacheRoot, "cacheRoot");
+        requireText(clientVersion, "clientVersion");
+        long generation = requestGeneration.incrementAndGet();
+        CloudAuthClient auth = new CloudAuthClient(new CloudHttpClient(profile.instance()));
+        return auth.register(accountId, password)
+                .thenCompose(ignored -> auth.login(accountId.trim(), password))
+                .thenApply(nextSession -> {
+                    if (requestGeneration.get() != generation) {
+                        throw new IllegalStateException("Cloud registration result is stale");
+                    }
+                    this.profile = profile;
+                    this.session = nextSession;
+                    CloudClientRuntime.configure(profile.instance(), nextSession, cacheRoot, clientVersion);
+                    return nextSession;
+                });
+    }
+
     public CompletableFuture<CloudSession> refresh(Path cacheRoot, String clientVersion) {
         CloudInstanceRegistry.CloudInstanceProfile currentProfile = profile;
         CloudSession currentSession = session;

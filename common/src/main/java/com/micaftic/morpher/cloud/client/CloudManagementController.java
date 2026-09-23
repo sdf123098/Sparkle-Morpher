@@ -64,6 +64,13 @@ public final class CloudManagementController {
                 .thenCompose(session -> refreshScopes().thenApply(ignored -> session));
     }
 
+    public CompletableFuture<CloudSession> register(String accountId, String password) {
+        CloudInstanceRegistry.CloudInstanceProfile profile = registry.selected()
+                .orElseThrow(() -> new IllegalStateException("No Cloud instance is selected"));
+        return connection.register(profile, accountId, password, cacheRoot, clientVersion)
+                .thenCompose(session -> refreshScopes().thenApply(ignored -> session));
+    }
+
     public CompletableFuture<CloudSession> refreshSession() {
         return connection.refresh(cacheRoot, clientVersion);
     }
