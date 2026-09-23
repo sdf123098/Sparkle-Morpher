@@ -1142,6 +1142,8 @@ public class ModernPlayerModelScreen extends Screen {
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.CHECK, Component.translatable("gui.sparkle_morpher.model_select.tooltip.select_all"), this::selectAllVisibleModels);
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.CLEAR, Component.translatable("gui.sparkle_morpher.model_panel.clear_selection"), this::clearModelSelection);
+            bx += 24;
+            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
             Component msg = Component.translatable("gui.sparkle_morpher.model_panel.selected_count", this.selectedModelIds.size());
             drawMuted(g, msg, Math.min(x + w - this.font.width(msg) - 8, bx + 30), y + 8);
         } else {
@@ -1150,6 +1152,8 @@ public class ModernPlayerModelScreen extends Screen {
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.STAR, Component.translatable("gui.sparkle_morpher.model_panel.toggle_favorite"), this::toggleSelectedStar);
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.RELOAD, Component.translatable("gui.sparkle_morpher.model_panel.reload_models"), () -> this.controller.reloadLocalModels(this::setStatus));
+            bx += 24;
+            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.UP, getCustomFolderUploadTooltip(), this::openCustomFolderUpload);
             bx += 24;
@@ -1995,6 +1999,18 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void openCustomFolderUpload() {
         Minecraft.getInstance().setScreen(new CustomFolderUploadScreen(this));
+    }
+
+    private void openCloudUpload() {
+        Collection<String> candidates = this.selectedModelIds.isEmpty() && STATE.selectedModelId != null && !STATE.selectedModelId.isBlank()
+                ? List.of(STATE.selectedModelId)
+                : new LinkedHashSet<>(this.selectedModelIds);
+        List<String> localModels = candidates.stream().filter(ClientModelManager::isLocalOnlyModel).toList();
+        if (localModels.isEmpty()) {
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud.empty"), ChatFormatting.YELLOW);
+            return;
+        }
+        Minecraft.getInstance().setScreen(new ModelUploadScreen(this, localModels));
     }
 
     private Component getCustomFolderUploadTooltip() {
