@@ -3,6 +3,8 @@ package com.micaftic.morpher.cloud.client;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiConsumer;
 
 /**
  * Latest Cloud appearance snapshot for the currently observed scopes.
@@ -14,6 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class CloudAppearanceStore {
     private final Map<String, Map<String, CloudScopeClient.CloudAppearance>> byScope = new ConcurrentHashMap<>();
+    private final CopyOnWriteArrayList<BiConsumer<String, CloudScopeClient.CloudAppearance>> listeners =
+            new CopyOnWriteArrayList<>();
 
     public boolean apply(CloudRealtimeClient.CloudRealtimeEvent event) {
         Objects.requireNonNull(event, "event");
@@ -34,7 +38,20 @@ public final class CloudAppearanceStore {
             accepted[0] = true;
             return appearance;
         });
+        if (accepted[0]) {
+            for (BiConsumer<String, CloudScopeClient.CloudAppearance> listener : listeners) {
+                listener.accept(scopeId, appearance);
+            }
+        }
         return accepted[0];
+    }
+
+    public void addListener(BiConsumer<String, CloudScopeClient.CloudAppearance> listener) {
+        listeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    public void removeListener(BiConsumer<String, CloudScopeClient.CloudAppearance> listener) {
+        if (listener != null) listeners.remove(listener);
     }
 
     public void applyRecovery(String scopeId, CloudScopeClient.CloudEventRecovery recovery) {
@@ -60,5 +77,6 @@ public final class CloudAppearanceStore {
 
     public void clear() {
         byScope.clear();
+        listeners.clear();
     }
 }

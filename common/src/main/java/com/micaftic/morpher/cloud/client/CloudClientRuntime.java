@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
 /**
@@ -22,6 +23,7 @@ import java.util.function.Consumer;
 public final class CloudClientRuntime {
     private static volatile RuntimeState current;
     private static final CloudWorldSession WORLD_SESSION = new CloudWorldSession();
+    private static final ConcurrentLinkedQueue<Runnable> CLIENT_TASKS = new ConcurrentLinkedQueue<>();
 
     private CloudClientRuntime() {
     }
@@ -60,13 +62,24 @@ public final class CloudClientRuntime {
         CloudAssetClient assets = new CloudAssetClient(http);
         CloudAppearanceStore appearances = new CloudAppearanceStore();
         CloudEntityBindingResolver bindingResolver = new CloudEntityBindingResolver();
+        CloudEntityClientCoordinator entityCoordinator = new CloudEntityClientCoordinator(
+                bindingResolver, appearances, WORLD_SESSION::currentGeneration, CloudClientRuntime::enqueueClientTask);
         CloudRealtimeClient realtime = new CloudRealtimeClient(
                 instance,
                 session.accessToken(),
                 clientVersion,
                 messageConsumer,
                 event -> {
-                    appearances.apply(event);
+                    boolean accepted = appearances.apply(event);
+                    RuntimeState active = current;
+                    if (accepted && active != null && active.appearances() == appearances) {
+                        String scopeId = active.scopeLifecycle().activeScopeId();
+                        String worldEpoch = active.scopeLifecycle().activeWorldEpoch();
+                        if (scopeId != null && worldEpoch != null) {
+                            entityCoordinator.applyAppearance(scopeId, worldEpoch,
+                                    WORLD_SESSION.currentGeneration(), event.appearance().targetId());
+                        }
+                    }
                     eventConsumer.accept(event);
                 });
         RuntimeState next = new RuntimeState(
@@ -80,6 +93,7 @@ public final class CloudClientRuntime {
                 new CloudIdentityBindingClient(http),
                 appearances,
                 bindingResolver,
+                entityCoordinator,
                 realtime,
                 cacheRoot.toAbsolutePath().normalize());
         current = next;
@@ -136,6 +150,7 @@ public final class CloudClientRuntime {
         WORLD_SESSION.currentGeneration();
         RuntimeState state = requireState();
         state.bindingResolver().clear();
+        state.entityCoordinator().activate(scopeId, worldEpoch, WORLD_SESSION.currentGeneration());
         state.observations().enter(scopeId, worldEpoch);
         return state.scopeLifecycle().enter(scopeId, worldEpoch);
     }
@@ -145,6 +160,7 @@ public final class CloudClientRuntime {
         if (state != null) {
             state.observations().leave();
             state.bindingResolver().clear();
+            state.entityCoordinator().deactivate();
             state.scopeLifecycle().leave();
         }
     }
@@ -155,6 +171,24 @@ public final class CloudClientRuntime {
             CloudEntityObservationCoordinator.ObservationState state
     ) {
         return requireState().observations().report(entityUuid, entityKind, state);
+    }
+
+    public static CompletableFuture<CloudEntityObservationCoordinator.ObservationResult> reportEntityObservation(
+            java.util.UUID entityUuid,
+            CloudEntityProvider.Kind kind,
+            CloudEntityObservationCoordinator.ObservationState state
+    ) {
+        Objects.requireNonNull(kind, "kind");
+        return reportObservation(entityUuid, kind.wireValue(), state);
+    }
+
+    public static void registerEntityProvider(CloudEntityProvider provider) {
+        requireState().entityCoordinator().register(provider);
+    }
+
+    public static void unregisterEntityProvider(CloudEntityProvider provider) {
+        RuntimeState state = current;
+        if (state != null) state.entityCoordinator().unregister(provider);
     }
 
     public static CompletableFuture<CloudScopeClient.CloudEventRecovery> recoverScope(String scopeId, long after, int limit) {
@@ -197,6 +231,21 @@ public final class CloudClientRuntime {
         return state.assetCache().downloadAndStore(state.assets(), ref, state.cacheRoot());
     }
 
+    /** Runs queued network-to-client work from the client tick. */
+    public static int drainClientTasks() {
+        int drained = 0;
+        Runnable task;
+        while ((task = CLIENT_TASKS.poll()) != null) {
+            task.run();
+            drained++;
+        }
+        return drained;
+    }
+
+    private static void enqueueClientTask(Runnable task) {
+        CLIENT_TASKS.add(Objects.requireNonNull(task, "task"));
+    }
+
     public static synchronized void clear() {
         clearCurrent();
         CloudState.reset();
@@ -215,6 +264,7 @@ public final class CloudClientRuntime {
         current = null;
         if (previous != null) {
             previous.assetCatalog().clear();
+            previous.entityCoordinator().deactivate();
             previous.observations().close();
             previous.scopeLifecycle().close();
             previous.realtime().close();
@@ -233,6 +283,7 @@ public final class CloudClientRuntime {
         private final CloudIdentityBindingClient identityBindings;
         private final CloudAppearanceStore appearances;
         private final CloudEntityBindingResolver bindingResolver;
+        private final CloudEntityClientCoordinator entityCoordinator;
         private final CloudRealtimeClient realtime;
         private final CloudScopeLifecycle scopeLifecycle;
         private final CloudEntityObservationCoordinator observations;
@@ -250,6 +301,7 @@ public final class CloudClientRuntime {
                 CloudIdentityBindingClient identityBindings,
                 CloudAppearanceStore appearances,
                 CloudEntityBindingResolver bindingResolver,
+                CloudEntityClientCoordinator entityCoordinator,
                 CloudRealtimeClient realtime,
                 Path cacheRoot
         ) {
@@ -264,6 +316,7 @@ public final class CloudClientRuntime {
             this.identityBindings = identityBindings;
             this.appearances = appearances;
             this.bindingResolver = bindingResolver;
+            this.entityCoordinator = entityCoordinator;
             this.realtime = realtime;
             this.scopeLifecycle = new CloudScopeLifecycle(scopes, realtime, appearances);
             this.observations = new CloudEntityObservationCoordinator(scopes, bindingResolver);
@@ -281,6 +334,7 @@ public final class CloudClientRuntime {
         public CloudIdentityBindingClient identityBindings() { return identityBindings; }
         public CloudAppearanceStore appearances() { return appearances; }
         public CloudEntityBindingResolver bindingResolver() { return bindingResolver; }
+        public CloudEntityClientCoordinator entityCoordinator() { return entityCoordinator; }
         public CloudRealtimeClient realtime() { return realtime; }
         public CloudScopeLifecycle scopeLifecycle() { return scopeLifecycle; }
         public CloudEntityObservationCoordinator observations() { return observations; }
