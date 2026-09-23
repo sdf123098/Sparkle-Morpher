@@ -243,6 +243,11 @@ public final class CloudClientRuntime {
         return state.assetCache().downloadAndStore(state.assets(), ref, state.cacheRoot());
     }
 
+    /** Ensures a catalog-approved asset revision is downloaded exactly once per runtime. */
+    public static CompletableFuture<Path> materializeAsset(CloudAssetRef ref) {
+        return requireState().assetMaterialization().ensure(ref);
+    }
+
     /** Runs queued network-to-client work from the client tick. */
     public static int drainClientTasks() {
         int drained = 0;
@@ -289,6 +294,7 @@ public final class CloudClientRuntime {
         private final CloudHttpClient http;
         private final CloudAssetClient assets;
         private final CloudAssetCache assetCache;
+        private final CloudAssetMaterializationCoordinator assetMaterialization;
         private final CloudAssetCatalogStore assetCatalog;
         private final CloudScopeClient scopes;
         private final CloudIdentityClient identities;
@@ -323,6 +329,8 @@ public final class CloudClientRuntime {
             this.assets = assets;
             this.assetCache = assetCache;
             this.assetCatalog = new CloudAssetCatalogStore();
+            this.assetMaterialization = new CloudAssetMaterializationCoordinator(
+                    assetCatalog, ref -> assetCache.downloadAndStore(assets, ref, cacheRoot));
             this.scopes = scopes;
             this.identities = identities;
             this.identityBindings = identityBindings;
@@ -340,6 +348,7 @@ public final class CloudClientRuntime {
         public CloudHttpClient http() { return http; }
         public CloudAssetClient assets() { return assets; }
         public CloudAssetCache assetCache() { return assetCache; }
+        public CloudAssetMaterializationCoordinator assetMaterialization() { return assetMaterialization; }
         public CloudAssetCatalogStore assetCatalog() { return assetCatalog; }
         public CloudScopeClient scopes() { return scopes; }
         public CloudIdentityClient identities() { return identities; }
