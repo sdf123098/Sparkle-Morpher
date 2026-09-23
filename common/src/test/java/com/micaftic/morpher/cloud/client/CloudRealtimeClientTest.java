@@ -78,4 +78,11 @@ class CloudRealtimeClientTest {
         assertEquals(1.25F, event.appearance().scale());
         assertTrue(event.appearance().disabled());
     }
+
+    @Test
+    void leaveScopePayloadCarriesOnlyTheScopeId() {
+        assertArrayEquals(
+                new byte[]{0x0A, 0x07, 's', 'c', 'o', 'p', 'e', '-', 'a'},
+                CloudRealtimeClient.leaveScopePayloadForTest("scope-a"));
+    }
 }
