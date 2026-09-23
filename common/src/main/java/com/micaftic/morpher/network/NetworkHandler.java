@@ -14,7 +14,6 @@ import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 import com.micaftic.morpher.core.api.network.PacketDirection;
 import com.micaftic.morpher.core.api.network.YSMChannel;
-import com.micaftic.morpher.legacy.compat.LegacyCompatNetwork;
 import com.micaftic.morpher.legacy.compat.LegacyCompatState;
 import com.micaftic.morpher.core.api.network.state.PrivacyState;
 import com.micaftic.morpher.network.protocol.*;
@@ -66,7 +65,6 @@ public final class NetworkHandler {
 
     public static void init() {
         YSMChannel.init(CHANNEL_ID, VERSION);
-        LegacyCompatNetwork.register();
         AnimationProtocol.register();
         EntityModelProtocol.register();
         ServerPolicyProtocol.register();
