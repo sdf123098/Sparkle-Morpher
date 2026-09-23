@@ -31,8 +31,11 @@ public class PauseScreenButtonBuilder {
 
     @Nullable
     public static List<Button> createButtons(PauseScreen pauseScreen) {
-        if (!isServerConnected()) return null;
         Minecraft minecraft = Minecraft.getInstance();
+        Button cloudButton = Button.builder(Component.literal("SPM Cloud"), button -> CloudManagementScreen.open())
+                .bounds(Math.max(SCREEN_MARGIN, pauseScreen.width - 100), SCREEN_MARGIN, 90, BUTTON_HEIGHT).build();
+        cloudButton.setTooltip(Tooltip.create(Component.literal("Connect to official or community SPM Cloud")));
+        if (!isServerConnected()) return List.of(cloudButton);
         Component skinLabel = Component.translatable("gui.sparkle_morpher.skin");
         Component rouletteLabel = Component.translatable("gui.sparkle_morpher.config.roulette_mode");
         Component configLabel = Component.translatable("gui.sparkle_morpher.config");
@@ -84,7 +87,7 @@ public class PauseScreenButtonBuilder {
         }).bounds(configX, controlY, configWidth, BUTTON_HEIGHT).build();
         configBtn.setTooltip(Tooltip.create(Component.translatable("gui.sparkle_morpher.config")));
 
-        return List.of(skinBtn, rouletteBtn, configBtn);
+        return List.of(cloudButton, skinBtn, rouletteBtn, configBtn);
     }
 
     private static int buttonWidth(Minecraft minecraft, Component label, int minWidth, int maxWidth) {
