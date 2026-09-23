@@ -15,6 +15,7 @@ public final class CloudManagementController {
     private final CloudConnectionController connection;
     private final Path cacheRoot;
     private final String clientVersion;
+    private final CloudRequestGeneration requestGeneration = new CloudRequestGeneration();
     private volatile List<CloudScopeClient.CloudScope> scopes = List.of();
     private volatile List<CloudScopeClient.CloudTarget> targets = List.of();
     private volatile List<CloudScopeClient.CloudAclEntry> acl = List.of();
@@ -51,6 +52,7 @@ public final class CloudManagementController {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown Cloud instance: " + instanceId));
         CloudInstanceRegistry.CloudInstanceProfile active = connection.profile();
         if (active != null && !active.instanceId().equals(next.instanceId())) logout();
+        else requestGeneration.advance();
         registry.select(next.instanceId());
         return next;
     }
@@ -67,6 +69,7 @@ public final class CloudManagementController {
     }
 
     public void logout() {
+        requestGeneration.advance();
         connection.logout();
         scopes = List.of();
         targets = List.of();
@@ -76,14 +79,15 @@ public final class CloudManagementController {
     }
 
     public CompletableFuture<List<CloudScopeClient.CloudScope>> refreshScopes() {
-        return requireRuntime().scopes().listScopes().thenApply(next -> {
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().scopes().listScopes(), next -> {
             scopes = List.copyOf(next);
             if (selectedScope != null) selectedScope = findScope(selectedScope.scopeId()).orElse(null);
-            return scopes;
         });
     }
 
     public void selectScope(String scopeId) {
+        requestGeneration.advance();
         selectedScope = findScope(scopeId).orElseThrow(() -> new IllegalArgumentException("Unknown Cloud scope: " + scopeId));
         selectedTarget = null;
         targets = List.of();
@@ -91,43 +95,51 @@ public final class CloudManagementController {
     }
 
     public CompletableFuture<CloudScopeClient.CloudScope> createScope(CloudScopeClient.CloudScopeCreate create) {
-        return requireRuntime().scopes().createScope(create).thenCompose(created -> refreshScopes().thenApply(ignored -> {
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().scopes().createScope(create), created -> {
             selectedScope = created;
-            return created;
-        }));
+            targets = List.of();
+            acl = List.of();
+        }).thenCompose(created -> refreshScopes().thenApply(ignored -> created));
     }
 
     public CompletableFuture<List<CloudScopeClient.CloudTarget>> refreshTargets() {
         CloudScopeClient.CloudScope scope = requireSelectedScope();
-        return requireRuntime().scopes().listTargets(scope.scopeId()).thenApply(next -> {
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().scopes().listTargets(scope.scopeId()), next -> {
             targets = List.copyOf(next);
             if (selectedTarget != null) selectedTarget = findTarget(selectedTarget.targetId()).orElse(null);
-            return targets;
         });
     }
 
     public void selectTarget(String targetId) {
+        requestGeneration.advance();
         selectedTarget = findTarget(targetId).orElseThrow(() -> new IllegalArgumentException("Unknown Cloud target: " + targetId));
     }
 
     public CompletableFuture<CloudScopeClient.CloudTarget> createTarget(CloudScopeClient.CloudTargetCreate create) {
-        return requireRuntime().scopes().createTarget(create).thenCompose(created -> refreshTargets().thenApply(ignored -> {
+        long generation = requestGeneration.current();
+        String scopeId = requireSelectedScope().scopeId();
+        if (!scopeId.equals(create.scopeId())) return CompletableFuture.failedFuture(
+                new IllegalArgumentException("Target scope does not match the selected Cloud scope"));
+        return requestGeneration.guard(generation, requireRuntime().scopes().createTarget(create), created -> {
             selectedTarget = created;
-            return created;
-        }));
+        }).thenCompose(created -> refreshTargets().thenApply(ignored -> created));
     }
 
     public CompletableFuture<List<CloudScopeClient.CloudAclEntry>> refreshScopeAcl() {
-        return requireRuntime().scopes().listScopeAcl(requireSelectedScope().scopeId()).thenApply(next -> {
+        String scopeId = requireSelectedScope().scopeId();
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().scopes().listScopeAcl(scopeId), next -> {
             acl = List.copyOf(next);
-            return acl;
         });
     }
 
     public CompletableFuture<List<CloudScopeClient.CloudAclEntry>> refreshTargetAcl() {
-        return requireRuntime().scopes().listTargetAcl(requireSelectedTarget().targetId()).thenApply(next -> {
+        String targetId = requireSelectedTarget().targetId();
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().scopes().listTargetAcl(targetId), next -> {
             acl = List.copyOf(next);
-            return acl;
         });
     }
 
@@ -142,6 +154,58 @@ public final class CloudManagementController {
     public CompletableFuture<Void> enterSelectedScope() {
         CloudScopeClient.CloudScope scope = requireSelectedScope();
         return CloudClientRuntime.joinScope(scope.scopeId(), scope.worldEpoch());
+    }
+
+    public CompletableFuture<List<CloudIdentityClient.IdentityProvider>> identityProviders() {
+        return requireRuntime().identities().listProviders();
+    }
+
+    public CompletableFuture<List<CloudIdentityClient.CloudIdentity>> identities() {
+        return requireRuntime().identities().listIdentities();
+    }
+
+    public CompletableFuture<CloudIdentityClient.CloudIdentity> registerOfflineIdentity(
+            java.util.UUID profileUuid, String displayName) {
+        return requireRuntime().identities().registerOfflineIdentity(
+                requireSelectedScope().scopeId(), profileUuid, displayName);
+    }
+
+    public CompletableFuture<CloudIdentityBindingClient.CloudBinding> requestOfflineApproval(
+            String identityId, String targetId) {
+        CloudScopeClient.CloudScope scope = requireSelectedScope();
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().identityBindings().requestApproval(
+                identityId, scope.scopeId(), scope.worldEpoch(), targetId), ignored -> { });
+    }
+
+    public CompletableFuture<List<CloudIdentityBindingClient.CloudBinding>> offlineBindings() {
+        CloudScopeClient.CloudScope scope = requireSelectedScope();
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation,
+                requireRuntime().identityBindings().listScopeBindings(scope.scopeId()), ignored -> { });
+    }
+
+    public CompletableFuture<CloudIdentityBindingClient.CloudClaimCode> createClaimCode(
+            String targetId, String entityUuid, Long expiresInSeconds) {
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().identityBindings().createClaimCode(
+                targetId, requireSelectedScope().worldEpoch(), entityUuid, expiresInSeconds), ignored -> { });
+    }
+
+    public CompletableFuture<CloudIdentityBindingClient.CloudBinding> redeemClaimCode(String code, String identityId) {
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().identityBindings().redeemClaimCode(code, identityId), ignored -> { });
+    }
+
+    public CompletableFuture<Void> revokeClaimCode(String code) {
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation, requireRuntime().identityBindings().revokeClaimCode(code), ignored -> { });
+    }
+
+    public CompletableFuture<CloudIdentityBindingClient.CloudBinding> approveBinding(String bindingId, long revision) {
+        long generation = requestGeneration.current();
+        return requestGeneration.guard(generation,
+                requireRuntime().identityBindings().approve(bindingId, "APPROVED", revision), ignored -> { });
     }
 
     public CloudManagementSnapshot snapshot() {

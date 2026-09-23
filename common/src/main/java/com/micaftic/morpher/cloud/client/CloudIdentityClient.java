@@ -30,6 +30,11 @@ public final class CloudIdentityClient {
         return http.getJson("/v1/identities").thenApply(CloudIdentityClient::parseIdentities);
     }
 
+    /** Returns only providers explicitly enabled by the selected Cloud operator. */
+    public CompletableFuture<List<IdentityProvider>> listProviders() {
+        return http.getJson("/v1/identity-providers").thenApply(CloudIdentityClient::parseProviders);
+    }
+
     /** Registers only a scope-local offline identity; it is not verified or globally trusted. */
     public CompletableFuture<CloudIdentity> registerOfflineIdentity(
             String scopeId,
@@ -72,6 +77,8 @@ public final class CloudIdentityClient {
 
     static List<CloudIdentity> parseIdentitiesForTest(String body) { return parseIdentities(body); }
 
+    static List<IdentityProvider> parseProvidersForTest(String body) { return parseProviders(body); }
+
     static String offlineIdentityRequestForTest(String scopeId, UUID profileUuid, String displayName) {
         return offlineIdentityRequest(scopeId, profileUuid, displayName);
     }
@@ -101,6 +108,23 @@ public final class CloudIdentityClient {
             return List.copyOf(identities);
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud identity catalog");
+        }
+    }
+
+    private static List<IdentityProvider> parseProviders(String body) {
+        try {
+            JsonElement root = JsonParser.parseString(body);
+            if (!root.isJsonArray()) throw new IllegalArgumentException("Cloud identity providers must be an array");
+            List<IdentityProvider> providers = new ArrayList<>();
+            for (JsonElement element : root.getAsJsonArray()) {
+                if (!element.isJsonObject()) throw new IllegalArgumentException("Cloud identity provider must be an object");
+                JsonObject object = element.getAsJsonObject();
+                if (!object.has("enabled") || !object.get("enabled").getAsBoolean()) continue;
+                providers.add(new IdentityProvider(required(object, "provider_id"), required(object, "display_name")));
+            }
+            return List.copyOf(providers);
+        } catch (RuntimeException e) {
+            throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud identity provider catalog");
         }
     }
 
@@ -158,6 +182,15 @@ public final class CloudIdentityClient {
 
         public CloudIdentityRef identityRef() {
             return CloudIdentityRef.parse(identity);
+        }
+    }
+
+    public record IdentityProvider(String providerId, String displayName) {
+        public IdentityProvider {
+            CloudScopeClient.segment(providerId);
+            if (displayName == null || displayName.isBlank() || displayName.length() > 256) {
+                throw new IllegalArgumentException("invalid Cloud identity provider");
+            }
         }
     }
 }
