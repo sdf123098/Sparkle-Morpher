@@ -42,18 +42,23 @@ public final class ModelUploadSession {
 
     /** Existing screens may pass bytes; the HTTP body is still streamed from a temporary file. */
     public static synchronized Component start(String modelId, String fileName, byte[] data) {
-        return start(modelId, fileName, data, true);
+        return start(modelId, fileName, data, true, "PRIVATE");
     }
 
     public static synchronized Component start(String modelId, String fileName, byte[] data,
                                                boolean syncSelectionOnComplete) {
+        return start(modelId, fileName, data, syncSelectionOnComplete, "PRIVATE");
+    }
+
+    public static synchronized Component start(String modelId, String fileName, byte[] data,
+                                               boolean syncSelectionOnComplete, String visibility) {
         if (data == null || data.length == 0) {
             return Component.translatable("gui.sparkle_morpher.import.error.empty_file");
         }
         try {
             Path temporary = Files.createTempFile("spm-cloud-upload-", extensionFor(fileName));
             Files.write(temporary, data);
-            Component error = start(modelId, fileName, temporary, syncSelectionOnComplete, true);
+            Component error = start(modelId, fileName, temporary, syncSelectionOnComplete, visibility, true);
             if (error != null) Files.deleteIfExists(temporary);
             return error;
         } catch (IOException error) {
@@ -64,11 +69,12 @@ public final class ModelUploadSession {
     /** Starts a Cloud upload without materializing the source in memory. */
     public static synchronized Component start(String modelId, String fileName, Path source,
                                                boolean syncSelectionOnComplete) {
-        return start(modelId, fileName, source, syncSelectionOnComplete, false);
+        return start(modelId, fileName, source, syncSelectionOnComplete, "PRIVATE", false);
     }
 
     private static Component start(String modelId, String fileName, Path source,
                                    boolean ignoredSyncSelectionOnComplete,
+                                   String visibility,
                                    boolean deleteSourceOnCompletion) {
         if (instance != null && !instance.isTerminal()) {
             return Component.translatable("gui.sparkle_morpher.import.error.in_progress");
@@ -110,7 +116,7 @@ public final class ModelUploadSession {
         instance = session;
         notifyListeners();
         ModelUploadTransport.UploadMetadata metadata = new ModelUploadTransport.UploadMetadata(
-                modelId, fileName, kind.wireName, sha256, totalBytes);
+                modelId, fileName, kind.wireName, sha256, totalBytes, visibility);
         uploadTransport.upload(metadata, source, session::onProgress, session.cancelled::get)
                 .whenComplete((result, error) -> session.complete(result, error));
         return null;

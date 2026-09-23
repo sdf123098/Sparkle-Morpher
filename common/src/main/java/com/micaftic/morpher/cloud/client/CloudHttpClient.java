@@ -119,6 +119,10 @@ public final class CloudHttpClient {
     }
 
     public CompletableFuture<HttpResponse<byte[]>> uploadAsset(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256, String requestId) {
+        return uploadAsset(content, assetId, assetName, assetFormat, rawSha256, requestId, "PRIVATE");
+    }
+
+    public CompletableFuture<HttpResponse<byte[]>> uploadAsset(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256, String requestId, String visibility) {
         Objects.requireNonNull(content, "content");
         HttpRequest.Builder builder = requestBuilder("/v1/assets")
                 .timeout(REQUEST_TIMEOUT)
@@ -128,7 +132,8 @@ public final class CloudHttpClient {
                 .header("X-Asset-Id", requiredHeader(assetId, "assetId"))
                 .header("X-Asset-Name", requiredHeader(assetName, "assetName"))
                 .header("X-Asset-Format", requiredHeader(assetFormat, "assetFormat"))
-                .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"));
+                .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"))
+                .header("X-Asset-Visibility", requiredHeader(visibility, "visibility"));
         return httpClient.sendAsync(builder.POST(HttpRequest.BodyPublishers.ofByteArray(content)).build(), HttpResponse.BodyHandlers.ofByteArray());
     }
 
@@ -141,6 +146,20 @@ public final class CloudHttpClient {
             String assetFormat,
             String rawSha256,
             String requestId,
+            ModelUploadTransport.ProgressListener progress,
+            ModelUploadTransport.Cancellation cancellation) {
+        return uploadAsset(source, totalBytes, assetId, assetName, assetFormat, rawSha256, requestId, "PRIVATE", progress, cancellation);
+    }
+
+    public CompletableFuture<HttpResponse<byte[]>> uploadAsset(
+            Path source,
+            long totalBytes,
+            String assetId,
+            String assetName,
+            String assetFormat,
+            String rawSha256,
+            String requestId,
+            String visibility,
             ModelUploadTransport.ProgressListener progress,
             ModelUploadTransport.Cancellation cancellation) {
         Objects.requireNonNull(source, "source");
@@ -157,7 +176,8 @@ public final class CloudHttpClient {
                 .header("X-Asset-Id", requiredHeader(assetId, "assetId"))
                 .header("X-Asset-Name", requiredHeader(assetName, "assetName"))
                 .header("X-Asset-Format", requiredHeader(assetFormat, "assetFormat"))
-                .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"));
+                .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"))
+                .header("X-Asset-Visibility", requiredHeader(visibility, "visibility"));
         HttpRequest.BodyPublisher body = HttpRequest.BodyPublishers.ofInputStream(() -> {
             try {
                 return new ProgressInputStream(Files.newInputStream(source), totalBytes, progress, cancellation);

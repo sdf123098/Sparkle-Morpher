@@ -1,6 +1,8 @@
 package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.cloud.client.CloudAssetPage;
+import com.micaftic.morpher.cloud.client.CloudAssetSummary;
 import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.capability.StarModelsCapability;
@@ -135,6 +137,8 @@ public class ModernPlayerModelScreen extends Screen {
     private boolean rememberPlayerSelection;
     private ModelPanelLayout layout;
     private EditBox modelSearchBox;
+    private EditBox cloudSearchBox;
+    private long cloudRequestGeneration;
     private EditBox resourceSearchBox;
     private EditBox siteEditBox;
     private EditBox categoryEditBox;
@@ -307,15 +311,25 @@ public class ModernPlayerModelScreen extends Screen {
         clearWidgets();
         this.layout = ModelPanelLayout.create(this.width, this.height);
         this.modelSearchBox = null;
+        this.cloudSearchBox = null;
         this.resourceSearchBox = null;
         this.siteEditBox = null;
         this.categoryEditBox = null;
         if (STATE.activeTab == ModelPanelState.Tab.MODEL) {
-            this.modelSearchBox = new EditBox(this.font, modelListX(), this.layout.contentTop + 8, modelListW(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
-            this.modelSearchBox.setMaxLength(256);
-            this.modelSearchBox.setValue(STATE.modelSearchText);
-            this.modelSearchBox.setTextColor(TEXT);
-            addWidget(this.modelSearchBox);
+            if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
+                this.modelSearchBox = new EditBox(this.font, modelListX(), this.layout.contentTop + 30, modelListW(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
+                this.modelSearchBox.setMaxLength(256);
+                this.modelSearchBox.setValue(STATE.modelSearchText);
+                this.modelSearchBox.setTextColor(TEXT);
+                addWidget(this.modelSearchBox);
+            } else {
+                this.cloudSearchBox = new EditBox(this.font, modelListX(), this.layout.contentTop + 30, modelListW(), 16, Component.translatable("gui.sparkle_morpher.model_source.search"));
+                this.cloudSearchBox.setMaxLength(128);
+                this.cloudSearchBox.setValue(STATE.cloudSearchText);
+                this.cloudSearchBox.setTextColor(TEXT);
+                addWidget(this.cloudSearchBox);
+                ensureCloudPageLoaded();
+            }
         } else if (STATE.activeTab == ModelPanelState.Tab.RESOURCE) {
             this.resourceSearchBox = new EditBox(this.font, resourceListX(), this.layout.contentTop + 8, resourceSearchW(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
             this.resourceSearchBox.setMaxLength(256);
@@ -369,7 +383,7 @@ public class ModernPlayerModelScreen extends Screen {
     public void onClose() {
         if (this.parentScreen != null && this.minecraft != null) {
             com.micaftic.morpher.util.InputUtil.setScreen(this.parentScreen);
-        } else {
+        } else if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
             super.onClose();
         }
     }
@@ -392,6 +406,10 @@ public class ModernPlayerModelScreen extends Screen {
         if (this.modelSearchBox != null && !Objects.equals(STATE.modelSearchText, this.modelSearchBox.getValue())) {
             STATE.modelSearchText = this.modelSearchBox.getValue();
             STATE.modelScroll = 0;
+        }
+        if (this.cloudSearchBox != null && !Objects.equals(STATE.cloudSearchText, this.cloudSearchBox.getValue())) {
+            STATE.cloudSearchText = this.cloudSearchBox.getValue();
+            resetCloudPage();
         }
         if (this.resourceSearchBox != null && !Objects.equals(STATE.resourceSearchText, this.resourceSearchBox.getValue())) {
             STATE.resourceSearchText = this.resourceSearchBox.getValue();
@@ -595,15 +613,16 @@ public class ModernPlayerModelScreen extends Screen {
         int detailX = listX + listW + 10;
         int contentBottom = this.layout.footerTop - 6;
 
-        if (compact) {
-            int filtersY = y + 24;
+        renderModelSourceTabs(g, mouseX, mouseY, listX, y, listW);
+        if (compact && STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
+            int filtersY = y + 44;
             renderChip(g, listX, filtersY, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.all"), STATE.modelFilter == ModelPanelState.ModelFilter.ALL, () -> setModelFilter(ModelPanelState.ModelFilter.ALL));
             renderChip(g, listX + 42, filtersY, 42, Component.translatable("gui.sparkle_morpher.model_panel.filter.auth"), STATE.modelFilter == ModelPanelState.ModelFilter.AUTH, () -> setModelFilter(ModelPanelState.ModelFilter.AUTH));
             renderChip(g, listX + 88, filtersY, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.star"), STATE.modelFilter == ModelPanelState.ModelFilter.STAR, () -> setModelFilter(ModelPanelState.ModelFilter.STAR));
             renderChip(g, listX + 130, filtersY, 68, Component.translatable("gui.sparkle_morpher.model_panel.filter.server_available"), STATE.modelFilter == ModelPanelState.ModelFilter.SERVER_AVAILABLE, () -> setModelFilter(ModelPanelState.ModelFilter.SERVER_AVAILABLE));
             renderChip(g, listX + 202, filtersY, 56, Component.translatable("gui.sparkle_morpher.model_panel.filter.local_only"), STATE.modelFilter == ModelPanelState.ModelFilter.LOCAL_ONLY, () -> setModelFilter(ModelPanelState.ModelFilter.LOCAL_ONLY));
             int actionsX = listX;
-            int actionsY = y + 42;
+            int actionsY = y + 62;
             renderIconButton(g, mouseX, mouseY, actionsX, actionsY, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.tooltip"), () -> openImportPanel());
             renderIconButton(g, mouseX, mouseY, actionsX + 24, actionsY, IconGlyph.FOLDER, Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
             renderIconButton(g, mouseX, mouseY, actionsX + 48, actionsY, IconGlyph.ROULETTE, Component.translatable("key.sparkle_morpher.animation_roulette.desc"), this::openRoulette);
@@ -612,7 +631,7 @@ public class ModernPlayerModelScreen extends Screen {
                 STATE.multiSelectMode = !STATE.multiSelectMode;
                 this.selectedModelIds.clear();
             });
-        } else {
+        } else if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
             glassPanel(g, x, y, leftW, contentBottom - y);
             drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.model"), x + 8, y + 8);
             renderCurrentModelSummary(g, x + 8, y + 26, leftW - 16);
@@ -636,23 +655,185 @@ public class ModernPlayerModelScreen extends Screen {
         if (this.modelSearchBox != null) {
             this.modelSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
         }
-        int pathY = compact ? y + 68 : y + 30;
-        renderPathBar(g, listX, pathY, listW);
+        if (this.cloudSearchBox != null) this.cloudSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        int pathY = compact ? y + 88 : y + 52;
+        if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) renderPathBar(g, listX, pathY, listW);
+        else renderCloudViewTabs(g, mouseX, mouseY, listX, pathY, listW);
         int gridY = pathY + 20;
         int actionsBandY = contentBottom - 28;
         int detailStripH = compactDetailStripH();
         int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
         int gridH = Math.max(compact ? 34 : 50, actionsBandY - 4 - reserve - gridY);
-        renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
+        if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
+        else renderCloudGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
         if (detailStripH > 0) {
             renderCompactDetail(g, mouseX, mouseY, listX, gridY + gridH + 3, listW, detailStripH, partialTick);
         }
         renderModelBottomActions(g, mouseX, mouseY, listX, actionsBandY, listW, gridH);
-        if (!compact) {
+        if (!compact && STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
             renderModelDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
         }
     }
 
+    private void renderModelSourceTabs(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
+        int tabW = Math.max(1, w / 3);
+        renderTextButton(g, mouseX, mouseY, x, y, tabW, 18, Component.translatable("gui.sparkle_morpher.model_source.local"), () -> switchModelSource(ModelPanelState.ModelSource.LOCAL));
+        renderTextButton(g, mouseX, mouseY, x + tabW, y, tabW, 18, Component.translatable("gui.sparkle_morpher.model_source.spm_cloud"), () -> switchModelSource(ModelPanelState.ModelSource.SPM_CLOUD));
+        renderTextButton(g, mouseX, mouseY, x + tabW * 2, y, w - tabW * 2, 18, Component.translatable("gui.sparkle_morpher.model_source.community_cloud"), () -> switchModelSource(ModelPanelState.ModelSource.COMMUNITY_CLOUD));
+    }
+
+    private void switchModelSource(ModelPanelState.ModelSource source) {
+        if (STATE.modelSource == source) return;
+        STATE.modelSource = source;
+        STATE.currentPath = "";
+        STATE.modelScroll = 0;
+        resetCloudPage();
+        init();
+    }
+
+    private void resetCloudPage() {
+        this.cloudRequestGeneration++;
+        STATE.cloudEntries.clear();
+        STATE.cloudCursor = "";
+        STATE.cloudLoadedKey = "";
+        STATE.cloudLoaded = false;
+        STATE.cloudLoading = false;
+        STATE.cloudHasMore = false;
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) ensureCloudPageLoaded();
+    }
+
+    private String cloudPageKey() {
+        return STATE.modelSource.name() + "|" + STATE.cloudView.name() + "|" + STATE.cloudSearchText.trim().toLowerCase(Locale.ROOT) + "|" + this.controller.cloudInstanceId();
+    }
+
+    private void ensureCloudPageLoaded() {
+        if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL || STATE.cloudLoading) return;
+        String key = cloudPageKey();
+        if (key.equals(STATE.cloudLoadedKey) && STATE.cloudLoaded) return;
+        String instanceId = this.controller.cloudInstanceId();
+        if (!this.controller.cloudAvailable()) {
+            STATE.cloudEntries.clear();
+            STATE.cloudLoadedKey = key;
+            STATE.cloudLoaded = true;
+            setStatus(Component.translatable("gui.sparkle_morpher.cloud.disconnected"), ChatFormatting.YELLOW);
+            return;
+        }
+        if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && !"official".equalsIgnoreCase(instanceId)) {
+            STATE.cloudEntries.clear();
+            STATE.cloudLoadedKey = key;
+            STATE.cloudLoaded = true;
+            setStatus(Component.translatable("gui.sparkle_morpher.model_source.official_required"), ChatFormatting.YELLOW);
+            return;
+        }
+        if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && (STATE.cloudView == ModelPanelState.CloudView.RECENT || STATE.cloudView == ModelPanelState.CloudView.FAVORITES)) {
+            STATE.cloudEntries.clear();
+            STATE.cloudEntries.addAll(STATE.cloudView == ModelPanelState.CloudView.RECENT ? this.controller.recentCloudAssets() : this.controller.favoriteCloudAssets());
+            STATE.cloudLoadedKey = key;
+            STATE.cloudLoaded = true;
+            return;
+        }
+        if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && STATE.cloudView == ModelPanelState.CloudView.PUBLIC && STATE.cloudSearchText.trim().isBlank()) {
+            STATE.cloudEntries.clear();
+            STATE.cloudLoadedKey = key;
+            STATE.cloudLoaded = true;
+            return;
+        }
+        requestCloudPage(false);
+    }
+
+    private void requestCloudPage(boolean append) {
+        if (STATE.cloudLoading) return;
+        String key = cloudPageKey();
+        long generation = ++this.cloudRequestGeneration;
+        String query = STATE.cloudSearchText.trim();
+        String scope = STATE.modelSource == ModelPanelState.ModelSource.COMMUNITY_CLOUD ? "accessible" : STATE.cloudView == ModelPanelState.CloudView.MINE ? "mine" : "public";
+        String cursor = append && !STATE.cloudCursor.isBlank() ? STATE.cloudCursor : null;
+        STATE.cloudLoading = true;
+        this.controller.listCloudAssets(scope, query, cursor, 40).whenComplete((page, failure) -> Minecraft.getInstance().execute(() -> {
+            if (generation != this.cloudRequestGeneration || !key.equals(cloudPageKey())) return;
+            STATE.cloudLoading = false;
+            STATE.cloudLoaded = true;
+            STATE.cloudLoadedKey = key;
+            if (failure != null) {
+                STATE.cloudEntries.clear();
+                STATE.cloudCursor = "";
+                STATE.cloudHasMore = false;
+                setStatus(Component.translatable("gui.sparkle_morpher.cloud.search_failed", rootMessage(failure)), ChatFormatting.RED);
+                return;
+            }
+            if (!append) STATE.cloudEntries.clear();
+            STATE.cloudEntries.addAll(page.entries());
+            STATE.cloudCursor = page.nextCursor() == null ? "" : page.nextCursor();
+            STATE.cloudHasMore = page.hasMore();
+        }));
+    }
+
+    private void renderCloudViewTabs(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
+        if (STATE.modelSource == ModelPanelState.ModelSource.COMMUNITY_CLOUD) {
+            renderChip(g, x, y, Math.min(86, w), Component.translatable("gui.sparkle_morpher.model_source.all_models"), true, this::ensureCloudPageLoaded);
+            return;
+        }
+        int chipW = Math.max(48, (w - 12) / 4);
+        renderChip(g, x, y, chipW, Component.translatable("gui.sparkle_morpher.model_source.recent"), STATE.cloudView == ModelPanelState.CloudView.RECENT, () -> switchCloudView(ModelPanelState.CloudView.RECENT));
+        renderChip(g, x + chipW + 4, y, chipW, Component.translatable("gui.sparkle_morpher.model_source.favorites"), STATE.cloudView == ModelPanelState.CloudView.FAVORITES, () -> switchCloudView(ModelPanelState.CloudView.FAVORITES));
+        renderChip(g, x + (chipW + 4) * 2, y, chipW, Component.translatable("gui.sparkle_morpher.model_source.mine"), STATE.cloudView == ModelPanelState.CloudView.MINE, () -> switchCloudView(ModelPanelState.CloudView.MINE));
+        renderChip(g, x + (chipW + 4) * 3, y, w - (chipW + 4) * 3, Component.translatable("gui.sparkle_morpher.model_source.public"), STATE.cloudView == ModelPanelState.CloudView.PUBLIC, () -> switchCloudView(ModelPanelState.CloudView.PUBLIC));
+    }
+
+    private void switchCloudView(ModelPanelState.CloudView view) {
+        if (STATE.cloudView == view) return;
+        STATE.cloudView = view;
+        resetCloudPage();
+    }
+
+    private void renderCloudGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
+        glassPanel(g, x, y, w, h);
+        if (STATE.cloudLoading && STATE.cloudEntries.isEmpty()) {
+            drawCentered(g, Component.translatable("gui.sparkle_morpher.cloud.loading"), x + w / 2, y + h / 2 - 4, MUTED);
+            return;
+        }
+        if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && STATE.cloudView == ModelPanelState.CloudView.PUBLIC && STATE.cloudSearchText.trim().isBlank()) {
+            drawCentered(g, Component.translatable("gui.sparkle_morpher.model_source.public_search_required"), x + w / 2, y + h / 2 - 4, MUTED);
+            return;
+        }
+        if (STATE.cloudEntries.isEmpty()) {
+            drawCentered(g, Component.translatable("gui.sparkle_morpher.cloud.no_models"), x + w / 2, y + h / 2 - 4, MUTED);
+            return;
+        }
+        int rowH = 36;
+        int maxRows = Math.max(1, (h - 8) / rowH);
+        for (int i = 0; i < STATE.cloudEntries.size() && i < maxRows; i++) {
+            CloudAssetSummary entry = STATE.cloudEntries.get(i);
+            int rowY = y + 4 + i * rowH;
+            boolean selected = entry.ref().assetId().equals(STATE.selectedModelId);
+            boolean hover = inside(mouseX, mouseY, x + 4, rowY, w - 8, rowH - 2);
+            fill(g, x + 4, rowY, w - 8, rowH - 2, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x55303030);
+            String name = entry.name().isBlank() ? entry.ref().assetId() : entry.name();
+            drawText(g, Component.literal(trim(name, w - 54)), x + 10, rowY + 5);
+            String detail = entry.ref().assetId() + " · " + entry.format() + " · " + (entry.isPublic() ? "PUBLIC" : "PRIVATE");
+            drawMuted(g, Component.literal(trim(detail, w - 54)), x + 10, rowY + 19);
+            if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && this.controller.isCloudFavorite(entry)) drawText(g, Component.literal("★"), x + w - 24, rowY + 10);
+            hit(x + 4, rowY, w - 8, rowH - 2, Component.literal(name), () -> clickCloudAsset(entry));
+        }
+    }
+
+    private void clickCloudAsset(CloudAssetSummary summary) {
+        STATE.selectedModelId = summary.ref().assetId();
+        STATE.selectedTextureId = "";
+        ModelAssembly assembly = this.controller.assemblyOrNull(summary.ref().assetId());
+        if (assembly == null) {
+            this.controller.importCloudAsset(summary, error -> {
+                if (error != null && !error.getString().isBlank()) { setStatus(error, ChatFormatting.RED); return; }
+                this.controller.markCloudApplied(summary);
+                this.pendingModelApplyId = summary.ref().assetId();
+                setStatus(Component.translatable("gui.sparkle_morpher.cloud.imported", summary.name()), ChatFormatting.GREEN);
+            });
+            return;
+        }
+        this.controller.markCloudApplied(summary);
+        STATE.selectedTextureId = selectedTextureOrDefault(assembly);
+        applyModelAndTexture(summary.ref().assetId(), STATE.selectedTextureId, assembly);
+    }
     private void renderCurrentModelSummary(GuiGraphicsExtractor g, int x, int y, int w) {
         LocalPlayer player = Minecraft.getInstance().player;
         String model = "default";
@@ -1112,7 +1293,7 @@ public class ModernPlayerModelScreen extends Screen {
         int y = this.layout.contentTop + 8;
         int contentBottom = this.layout.footerTop - 6;
         boolean compact = compactModelLayout();
-        int pathY = compact ? y + 68 : y + 30;
+        int pathY = compact ? y + 88 : y + 52;
         int gridY = pathY + 20;
         int detailStripH = compactDetailStripH();
         int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
@@ -1136,7 +1317,7 @@ public class ModernPlayerModelScreen extends Screen {
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
             Component msg = Component.translatable("gui.sparkle_morpher.model_panel.selected_count", this.selectedModelIds.size());
             drawMuted(g, msg, Math.min(x + w - this.font.width(msg) - 8, bx + 30), y + 8);
-        } else {
+        } else if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.TEXTURE, Component.translatable("gui.sparkle_morpher.model_panel.use_texture"), this::applySelectedTexture);
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.STAR, Component.translatable("gui.sparkle_morpher.model_panel.toggle_favorite"), this::toggleSelectedStar);
@@ -1148,11 +1329,26 @@ public class ModernPlayerModelScreen extends Screen {
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.UP, getCustomFolderUploadTooltip(), this::openCustomFolderUpload);
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MODE, pickerStyleLabel(pickerStyle()), this::cyclePickerStyle);
+        } else {
+            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.STAR, Component.translatable("gui.sparkle_morpher.model_panel.toggle_favorite"), this::toggleSelectedStar);
+            bx += 24;
+            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.RELOAD, Component.translatable("gui.sparkle_morpher.model_panel.reload_models"), this::resetCloudPage);
         }
         renderModelPageControls(g, mouseX, mouseY, x, y, w, gridH);
     }
 
     private void renderModelPageControls(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int gridH) {
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
+            if (!STATE.cloudEntries.isEmpty()) {
+                Component range = Component.literal("1-" + STATE.cloudEntries.size());
+                int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
+                drawMuted(g, range, Math.max(x + 82, nextX - this.font.width(range) - 8), y + 8);
+                if (STATE.cloudHasMore && !STATE.cloudLoading) {
+                    renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.next_page"), () -> requestCloudPage(true));
+                }
+            }
+            return;
+        }
         List<ModelEntry> entries = collectModelEntries();
         if (entries.isEmpty()) {
             return;
@@ -1636,6 +1832,10 @@ public class ModernPlayerModelScreen extends Screen {
             setFocused(this.modelSearchBox);
             return true;
         }
+        if (this.cloudSearchBox != null && this.cloudSearchBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudSearchBox);
+            return true;
+        }
         if (this.resourceSearchBox != null && this.resourceSearchBox.mouseClicked(event, flag)) {
             setFocused(this.resourceSearchBox);
             return true;
@@ -1672,6 +1872,7 @@ public class ModernPlayerModelScreen extends Screen {
         }
         switch (STATE.activeTab) {
             case MODEL -> {
+                if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) return true;
                 if (gridMode(modelListW(), currentModelGridH()) == ModelPickerLayout.GridMode.CARDS) {
                     List<ModelEntry> entries = collectModelEntries();
                     int pages = entries.isEmpty() ? 1
@@ -1705,6 +1906,9 @@ public class ModernPlayerModelScreen extends Screen {
             // without ysm-pack.json entries. Otherwise those models are loaded but
             // cannot be reached through the model browser path navigation.
             for (String modelId : this.controller.availableModelIds()) {
+                if (this.controller.isServerModel(modelId)) {
+                    continue;
+                }
                 if (!modelId.startsWith(STATE.currentPath)) {
                     continue;
                 }
@@ -1725,6 +1929,7 @@ public class ModernPlayerModelScreen extends Screen {
         Map<String, ModelAssembly> assemblyMap = this.controller.modelAssemblyMap();
         for (var entry : assemblyMap.entrySet()) {
             String modelId = entry.getKey();
+            if (this.controller.isServerModel(modelId)) continue;
             ModelAssembly assembly = entry.getValue();
             if (!searching && !isDirectModel(STATE.currentPath, modelId)) {
                 continue;
@@ -1740,6 +1945,7 @@ public class ModernPlayerModelScreen extends Screen {
         }
         for (String modelId : this.controller.availableModelIds()) {
             if (assemblyMap.containsKey(modelId)) continue;
+            if (this.controller.isServerModel(modelId)) continue;
             if (!searching && !isDirectModel(STATE.currentPath, modelId)) continue;
             if (!STATE.modelFilter.matchesAvailability(this.controller.isLocalOnlyModel(modelId))) continue;
             boolean authModel = this.controller.isAuthModel(modelId);
@@ -1858,6 +2064,17 @@ public class ModernPlayerModelScreen extends Screen {
 
     /** §24.7：转发到 Service（保留本方法名，行为不变）。 */
     private void toggleSelectedStar() {
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
+            for (CloudAssetSummary entry : STATE.cloudEntries) {
+                if (entry.ref().assetId().equals(STATE.selectedModelId)) {
+                    boolean favorite = this.controller.toggleCloudFavorite(entry);
+                    setStatus(Component.translatable(favorite ? "gui.sparkle_morpher.model_source.favorite_added" : "gui.sparkle_morpher.model_source.favorite_removed"), ChatFormatting.GREEN);
+                    if (STATE.cloudView == ModelPanelState.CloudView.FAVORITES && !favorite) resetCloudPage();
+                    return;
+                }
+            }
+            return;
+        }
         this.controller.toggleStar(STATE.selectedModelId);
     }
 
