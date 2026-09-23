@@ -23,6 +23,7 @@ public final class CloudScopeLifecycle implements AutoCloseable {
     private final CloudScopeClient scopes;
     private final CloudRealtimeClient realtime;
     private final CloudAppearanceStore appearances;
+    private final CloudAnimationStore animations;
     private final ScheduledExecutorService scheduler;
     private final boolean ownsScheduler;
     private final AtomicLong generations = new AtomicLong();
@@ -37,7 +38,16 @@ public final class CloudScopeLifecycle implements AutoCloseable {
             CloudRealtimeClient realtime,
             CloudAppearanceStore appearances
     ) {
-        this(scopes, realtime, appearances, Executors.newSingleThreadScheduledExecutor(runnable -> {
+        this(scopes, realtime, appearances, (CloudAnimationStore) null);
+    }
+
+    public CloudScopeLifecycle(
+            CloudScopeClient scopes,
+            CloudRealtimeClient realtime,
+            CloudAppearanceStore appearances,
+            CloudAnimationStore animations
+    ) {
+        this(scopes, realtime, appearances, animations, Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "spm-cloud-scope");
             thread.setDaemon(true);
             return thread;
@@ -50,19 +60,21 @@ public final class CloudScopeLifecycle implements AutoCloseable {
             CloudAppearanceStore appearances,
             ScheduledExecutorService scheduler
     ) {
-        this(scopes, realtime, appearances, scheduler, false);
+        this(scopes, realtime, appearances, null, scheduler, false);
     }
 
     private CloudScopeLifecycle(
             CloudScopeClient scopes,
             CloudRealtimeClient realtime,
             CloudAppearanceStore appearances,
+            CloudAnimationStore animations,
             ScheduledExecutorService scheduler,
             boolean ownsScheduler
     ) {
         this.scopes = Objects.requireNonNull(scopes, "scopes");
         this.realtime = Objects.requireNonNull(realtime, "realtime");
         this.appearances = Objects.requireNonNull(appearances, "appearances");
+        this.animations = animations;
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.ownsScheduler = ownsScheduler;
     }
@@ -122,6 +134,7 @@ public final class CloudScopeLifecycle implements AutoCloseable {
                 return CompletableFuture.failedFuture(new IllegalStateException("Cloud scope is no longer active"));
             }
             appearances.applyRecovery(context.scopeId(), recovery);
+            if (animations != null) animations.applyRecovery(context.scopeId(), recovery.events());
             long next = after;
             for (CloudScopeClient.CloudRecoveredEvent event : recovery.events()) {
                 if (event.sequence() < next) {
@@ -181,6 +194,7 @@ public final class CloudScopeLifecycle implements AutoCloseable {
         if (previous != null) {
             realtime.leaveScope(previous.scopeId());
             appearances.clearScope(previous.scopeId());
+            if (animations != null) animations.clearScope(previous.scopeId());
         }
     }
 

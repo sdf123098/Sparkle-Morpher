@@ -57,7 +57,7 @@ public final class CloudAppearanceStore {
     public void applyRecovery(String scopeId, CloudScopeClient.CloudEventRecovery recovery) {
         Objects.requireNonNull(recovery, "recovery");
         for (CloudScopeClient.CloudRecoveredEvent event : recovery.events()) {
-            apply(scopeId, event.appearance());
+            if (event.appearance() != null) apply(scopeId, event.appearance());
         }
     }
 

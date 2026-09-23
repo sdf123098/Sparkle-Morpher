@@ -34,6 +34,24 @@ class CloudScopeClientTest {
     }
 
     @Test
+    void parsesAnimationSnapshotsFromRecoveryEvents() {
+        long expiresAt = System.currentTimeMillis() + 5_000;
+        var recovery = CloudScopeClient.parseRecoveryForTest("{" +
+                "\"from_cursor\":7,\"to_cursor\":8,\"has_more\":false," +
+                "\"entries\":[{" +
+                "\"sequence\":8,\"event_id\":\"animation-1\",\"kind\":\"AnimationState\"," +
+                "\"payload\":{\"target_id\":\"target\",\"revision\":4,\"channel\":\"body\",\"action\":\"PLAY\",\"animation_key\":\"run\",\"expires_at_unix_ms\":" + expiresAt + "}" +
+                "}]} ");
+
+        var animation = recovery.events().getFirst().animation();
+        assertEquals("target", animation.targetId());
+        assertEquals(4, animation.revision());
+        assertEquals("body", animation.channel());
+        assertEquals("run", animation.animationKey());
+        assertEquals(expiresAt, animation.expiresAtUnixMs());
+    }
+
+    @Test
     void parsesEntityBindingObservationState() {
         var bindings = CloudScopeClient.parseBindingsForTest("[{\"binding_id\":\"binding-1\",\"scope_id\":\"scope-1\",\"world_epoch\":\"epoch-1\",\"entity_uuid\":\"12345678-1234-1234-1234-1234567890ab\",\"entity_kind\":\"PLAYER\",\"target_id\":\"target-1\",\"observation_state\":\"ACTIVE\",\"last_seen_at\":\"2026-09-22T00:00:00Z\",\"revision\":2}]");
         assertEquals("ACTIVE", bindings.getFirst().observationState());
