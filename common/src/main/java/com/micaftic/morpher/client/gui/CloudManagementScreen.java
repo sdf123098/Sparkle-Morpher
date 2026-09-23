@@ -32,6 +32,8 @@ public final class CloudManagementScreen extends Screen {
     private EditBox scopeName;
     private EditBox worldEpoch;
     private Button statusButton;
+    private int scopePage;
+    private String statusMessage;
     private boolean active;
     private long lifecycleGeneration;
 
@@ -78,11 +80,22 @@ public final class CloudManagementScreen extends Screen {
         this.worldEpoch = field(left + (width + 6) * 2, 76, width, "World epoch");
 
         var snapshot = management().snapshot();
-        String state = snapshot.authenticated() ? "Connected" : "Disconnected";
+        String state = this.statusMessage != null ? this.statusMessage
+                : snapshot.authenticated() ? "Connected" : "Disconnected";
+        int switchX = this.width - left - 100;
+        int statusWidth = Math.max(64, switchX - left - 52);
         this.statusButton = addRenderableWidget(Button.builder(Component.literal(state), button -> { })
-                .bounds(left, 103, Math.max(90, this.width - left * 2 - 104), 20).build());
+                .bounds(left, 103, statusWidth, 20).build());
+        Button previousScopePage = addRenderableWidget(Button.builder(Component.literal("<"), button -> {
+            this.scopePage--;
+            init();
+        }).bounds(left + statusWidth + 2, 103, 24, 20).build());
+        Button nextScopePage = addRenderableWidget(Button.builder(Component.literal(">"), button -> {
+            this.scopePage++;
+            init();
+        }).bounds(left + statusWidth + 28, 103, 24, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Next instance"), button -> switchInstance())
-                .bounds(this.width - left - 100, 103, 100, 20).build());
+                .bounds(switchX, 103, 100, 20).build());
         management().registry().selected().ifPresent(profile -> {
             this.instanceId.setValue(profile.instanceId());
             this.instanceName.setValue(profile.name());
@@ -106,8 +119,13 @@ public final class CloudManagementScreen extends Screen {
             this.scopeName.setValue(snapshot.selectedScope().name());
             this.worldEpoch.setValue(snapshot.selectedScope().worldEpoch());
         }
+        int rowsVisible = Math.max(1, (this.height - 32 - 177) / 22);
+        var scopeRange = CloudScreenPagination.range(snapshot.scopes().size(), rowsVisible, this.scopePage);
+        this.scopePage = scopeRange.page();
+        previousScopePage.active = scopeRange.page() > 0;
+        nextScopePage.active = scopeRange.page() + 1 < scopeRange.pageCount();
         int row = 0;
-        for (var scope : snapshot.scopes().stream().limit(5).toList()) {
+        for (var scope : snapshot.scopes().subList(scopeRange.startInclusive(), scopeRange.endExclusive())) {
             final String id = scope.scopeId();
             int y = 177 + row++ * 22;
             addRenderableWidget(Button.builder(Component.literal(scope.name() + "  [" + id + "]"), button -> {
@@ -238,6 +256,7 @@ public final class CloudManagementScreen extends Screen {
     }
 
     private void setStatus(String message) {
+        this.statusMessage = message;
         if (this.statusButton != null) this.statusButton.setMessage(Component.literal(message));
     }
 
