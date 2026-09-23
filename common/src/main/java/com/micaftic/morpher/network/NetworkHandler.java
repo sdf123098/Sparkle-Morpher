@@ -1,7 +1,10 @@
 package com.micaftic.morpher.network;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.mixin.ConnectionAccessor;
+import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
 import com.micaftic.morpher.network.message.*;
+import io.netty.util.AttributeKey;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.resources.Identifier;
@@ -9,15 +12,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
+import com.micaftic.morpher.core.api.network.PacketDirection;
 import com.micaftic.morpher.core.api.network.YSMChannel;
-import com.micaftic.morpher.legacy.compat.LegacyCompatNetwork;
 import com.micaftic.morpher.legacy.compat.LegacyCompatState;
 import com.micaftic.morpher.core.api.network.state.PrivacyState;
 import com.micaftic.morpher.network.protocol.*;
 import com.micaftic.morpher.network.state.MinecraftConnectionState;
-
-import java.util.Map;
-import java.util.WeakHashMap;
 
 public final class NetworkHandler {
 
@@ -25,16 +25,11 @@ public final class NetworkHandler {
 
     public static final Identifier CHANNEL_ID = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, VERSION.replace('.', '_'));
 
-    /** 服务端按连接记录的 SPM 协商版本（平台存储，R9.2 保留在本层）。 */
-    private static final Map<Connection, String> CHANNEL_VERSIONS = new WeakHashMap<>();
+    /** 服务端按连接记录的 SPM 协商版本（平台存储：netty Channel attribute，R9.2 保留在本层）。 */
+    private static final AttributeKey<String> CHANNEL_VERSION_KEY = AttributeKey.valueOf("sparkle_morpher_channel_version");
 
     public static boolean setChannelVersion(Connection connection, String str) {
-        if (connection == null || str == null) {
-            return false;
-        }
-        synchronized (CHANNEL_VERSIONS) {
-            return CHANNEL_VERSIONS.putIfAbsent(connection, str) == null;
-        }
+        return ((ConnectionAccessor) connection).ysm$getChannel().attr(CHANNEL_VERSION_KEY).compareAndSet(null, str);
     }
 
     public static void markClientHandshakeComplete() {
@@ -48,28 +43,28 @@ public final class NetworkHandler {
 
     public static boolean isPlayerConnected(ServerPlayer serverPlayer) {
         return MinecraftConnectionState.isPlayerConnected(serverPlayer)
-                && isConnectionValid(serverPlayer.connection.getConnection());
+                && isConnectionValid(((ServerCommonPacketListenerImplAccessor) serverPlayer.connection).ysm$getConnection());
     }
 
     public static boolean isClientConnected() {
-        // R9.2：只做组合——隐私未激活，且 legacy 会话活跃（握手完成或 MC 连接已协商）
+        // R9.2：隐私未激活 + legacy 会话活跃（握手完成，或当前 MC 连接已协商 SPM channel）
         return PrivacyState.isInactive()
-                && LegacyCompatState.isClientSessionActive(MinecraftConnectionState.isClientConnected());
+                && LegacyCompatState.isClientSessionActive(clientChannelNegotiated());
+    }
+
+    private static boolean clientChannelNegotiated() {
+        if (!MinecraftConnectionState.isClientConnected()) {
+            return false;
+        }
+        return MinecraftConnectionState.isClientConnected();
     }
 
     public static boolean isConnectionValid(@Nullable Connection connection) {
-        if (connection == null) {
-            return false;
-        }
-        synchronized (CHANNEL_VERSIONS) {
-            String channelVersion = CHANNEL_VERSIONS.get(connection);
-            return channelVersion == null || VERSION.equals(channelVersion);
-        }
+        return connection != null && ((ConnectionAccessor) connection).ysm$getChannel() != null && VERSION.equals(((ConnectionAccessor) connection).ysm$getChannel().attr(CHANNEL_VERSION_KEY).get());
     }
 
     public static void init() {
         YSMChannel.init(CHANNEL_ID, VERSION);
-        LegacyCompatNetwork.register();
         AnimationProtocol.register();
         EntityModelProtocol.register();
         ServerPolicyProtocol.register();

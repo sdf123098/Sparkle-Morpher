@@ -17,7 +17,6 @@ public final class PlayerLogoutEvent {
             if (!YesSteveModel.isAvailable()) {
                 return;
             }
-            ServerModelManager.clearPlayerSyncState(player.getUUID());
             ModelInfoCapability.get(player).ifPresent(cap -> PlayerModelSelectionStore.saveCurrentSelection(player, cap));
             PlayerDataSaveBridge.save(player);
         });
