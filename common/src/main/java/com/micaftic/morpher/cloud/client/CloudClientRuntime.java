@@ -109,7 +109,12 @@ public final class CloudClientRuntime {
     }
 
     public static CompletableFuture<Void> joinScope(String scopeId, String worldEpoch) {
-        return requireState().realtime().joinScope(scopeId, worldEpoch);
+        return requireState().scopeLifecycle().enter(scopeId, worldEpoch);
+    }
+
+    public static void leaveScope() {
+        RuntimeState state = current;
+        if (state != null) state.scopeLifecycle().leave();
     }
 
     public static CompletableFuture<CloudScopeClient.CloudEventRecovery> recoverScope(String scopeId, long after, int limit) {
@@ -145,6 +150,7 @@ public final class CloudClientRuntime {
         RuntimeState previous = current;
         current = null;
         if (previous != null) {
+            previous.scopeLifecycle().close();
             previous.realtime().close();
         }
     }
@@ -161,6 +167,7 @@ public final class CloudClientRuntime {
         private final CloudAppearanceStore appearances;
         private final CloudEntityBindingResolver bindingResolver;
         private final CloudRealtimeClient realtime;
+        private final CloudScopeLifecycle scopeLifecycle;
         private final Path cacheRoot;
         private volatile CloudInstanceInfo instanceInfo;
 
@@ -189,6 +196,7 @@ public final class CloudClientRuntime {
             this.appearances = appearances;
             this.bindingResolver = bindingResolver;
             this.realtime = realtime;
+            this.scopeLifecycle = new CloudScopeLifecycle(scopes, realtime, appearances);
             this.cacheRoot = cacheRoot;
         }
 
@@ -203,6 +211,7 @@ public final class CloudClientRuntime {
         public CloudAppearanceStore appearances() { return appearances; }
         public CloudEntityBindingResolver bindingResolver() { return bindingResolver; }
         public CloudRealtimeClient realtime() { return realtime; }
+        public CloudScopeLifecycle scopeLifecycle() { return scopeLifecycle; }
         public Path cacheRoot() { return cacheRoot; }
         public CloudInstanceInfo instanceInfo() { return instanceInfo; }
 
