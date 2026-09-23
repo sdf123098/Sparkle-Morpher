@@ -1,13 +1,12 @@
 package com.micaftic.morpher.client.upload;
 
 import com.micaftic.morpher.cloud.CloudInstanceConfig;
-import com.micaftic.morpher.cloud.client.CloudAssetClient;
-import com.micaftic.morpher.cloud.client.CloudAuthClient;
-import com.micaftic.morpher.cloud.client.CloudHttpClient;
+import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudSession;
 import com.micaftic.morpher.core.api.network.state.CloudState;
 import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 
+import java.nio.file.Path;
 import java.util.Objects;
 
 /** Process-local Cloud client wiring; credentials remain in memory only. */
@@ -18,11 +17,19 @@ public final class CloudUploadRuntime {
     }
 
     public static synchronized void configure(CloudInstanceConfig instance, CloudSession session) {
+        configure(instance, session, CloudClientRuntime.defaultCacheRoot(), "2.0.0");
+    }
+
+    public static synchronized void configure(
+            CloudInstanceConfig instance,
+            CloudSession session,
+            Path cacheRoot,
+            String clientVersion
+    ) {
         Objects.requireNonNull(instance, "instance");
         Objects.requireNonNull(session, "session");
-        CloudHttpClient http = new CloudAuthClient(new CloudHttpClient(instance)).authenticated(session);
-        transport = new CloudUploadTransport(new CloudAssetClient(http));
-        http.discoverInstance();
+        CloudClientRuntime.configure(instance, session, cacheRoot, clientVersion);
+        transport = CloudClientRuntime.uploadTransport();
     }
 
     public static ModelUploadTransport transport() {
@@ -35,6 +42,6 @@ public final class CloudUploadRuntime {
 
     public static synchronized void clear() {
         transport = null;
-        CloudState.reset();
+        CloudClientRuntime.clear();
     }
 }
