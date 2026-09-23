@@ -3,6 +3,7 @@ package com.micaftic.morpher.cloud.client;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -51,6 +52,26 @@ class CloudEntityClientCoordinatorTest {
         assertTrue(maid.applied.isEmpty());
     }
 
+    @Test
+    void observesOnlyExplicitBindingsAndOnlyWhenAvailabilityChanges() {
+        CloudEntityBindingResolver resolver = new CloudEntityBindingResolver();
+        resolver.replace("scope", "epoch", List.of(binding(1L)));
+        CloudEntityClientCoordinator coordinator = new CloudEntityClientCoordinator(
+                resolver, new CloudAppearanceStore(), () -> 1L, Runnable::run);
+        RecordingProvider provider = new RecordingProvider(CloudEntityProvider.Kind.PLAYER);
+        provider.available = true;
+        coordinator.register(provider);
+        coordinator.activate("scope", "epoch", 1L);
+
+        assertEquals(CloudEntityObservationCoordinator.ObservationState.VISIBLE,
+                coordinator.collectObservations().get(0).state());
+        assertTrue(coordinator.collectObservations().isEmpty());
+
+        provider.available = false;
+        assertEquals(CloudEntityObservationCoordinator.ObservationState.NOT_VISIBLE,
+                coordinator.collectObservations().get(0).state());
+    }
+
     private static CloudScopeClient.CloudEntityBinding binding(long revision) {
         return new CloudScopeClient.CloudEntityBinding(
                 "binding", "scope", "epoch", ENTITY.toString(), "PLAYER", "target", "VISIBLE", null, revision);
@@ -63,6 +84,7 @@ class CloudEntityClientCoordinatorTest {
     private static final class RecordingProvider implements CloudEntityProvider {
         private final Kind kind;
         private final java.util.ArrayList<AppliedAppearance> applied = new java.util.ArrayList<>();
+        private boolean available;
 
         private RecordingProvider(Kind kind) {
             this.kind = kind;
@@ -76,6 +98,11 @@ class CloudEntityClientCoordinatorTest {
         @Override
         public void applyAppearance(UUID entityUuid, CloudScopeClient.CloudAppearance appearance, long bindingRevision) {
             applied.add(new AppliedAppearance(entityUuid, appearance, bindingRevision));
+        }
+
+        @Override
+        public boolean isAvailable(UUID entityUuid) {
+            return available;
         }
     }
 

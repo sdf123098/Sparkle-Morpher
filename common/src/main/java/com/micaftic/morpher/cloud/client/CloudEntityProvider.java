@@ -14,6 +14,15 @@ public interface CloudEntityProvider {
 
     void applyAppearance(UUID entityUuid, CloudScopeClient.CloudAppearance appearance, long bindingRevision);
 
+    /**
+     * Returns whether this adapter currently has the explicitly bound entity
+     * loaded on the client. Providers must not use this method to discover or
+     * create a Cloud binding.
+     */
+    default boolean isAvailable(UUID entityUuid) {
+        return false;
+    }
+
     enum Kind {
         PLAYER("PLAYER"),
         FAKE_PLAYER("FAKE_PLAYER"),
