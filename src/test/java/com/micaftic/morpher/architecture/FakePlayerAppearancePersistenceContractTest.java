@@ -6,14 +6,16 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FakePlayerAppearancePersistenceContractTest {
     @Test
     void modelCatalogReloadDoesNotReintroduceServerModelSync() throws IOException {
+        Path repository = locateRepository();
         String manager = Files.readString(
-                Path.of("src/neoforge/java/com/micaftic/morpher/model/ServerModelManager.java"),
+                repository.resolve("src/neoforge/java/com/micaftic/morpher/model/ServerModelManager.java"),
                 StandardCharsets.UTF_8);
         assertTrue(manager.contains("loadModels("));
         assertTrue(!manager.contains("nativeSyncModels"));
@@ -22,12 +24,22 @@ class FakePlayerAppearancePersistenceContractTest {
 
     @Test
     void levelChangeResynchronizesThePlayerAppearance() throws IOException {
+        Path repository = locateRepository();
         String capabilityEvent = Files.readString(
-                Path.of("common/src/main/java/com/micaftic/morpher/event/CapabilityEvent.java"),
+                repository.resolve("common/src/main/java/com/micaftic/morpher/event/CapabilityEvent.java"),
                 StandardCharsets.UTF_8);
         assertTrue(capabilityEvent.contains("LAST_PLAYER_LEVELS"));
         assertTrue(capabilityEvent.contains("LAST_PLAYER_LEVELS.remove("));
         assertTrue(capabilityEvent.contains("syncPlayerModelToSelf(serverPlayer)"));
         assertTrue(capabilityEvent.contains("syncPlayerModelToTracking(serverPlayer, false)"));
+    }
+
+    private static Path locateRepository() {
+        Path current = Paths.get("").toAbsolutePath();
+        while (current != null && !Files.isRegularFile(current.resolve(".github/workflows/ci.yml"))) {
+            current = current.getParent();
+        }
+        if (current == null) throw new IllegalStateException("Could not locate repository root");
+        return current;
     }
 }
