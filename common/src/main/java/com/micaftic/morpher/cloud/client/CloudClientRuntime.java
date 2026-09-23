@@ -216,6 +216,7 @@ public final class CloudClientRuntime {
                 throw new java.util.concurrent.CancellationException("Cloud scope changed before recovery completed");
             }
             state.appearances().applyRecovery(scopeId, recovery);
+            state.animations().applyRecovery(scopeId, recovery.events());
         });
     }
 
@@ -361,7 +362,7 @@ public final class CloudClientRuntime {
             this.bindingResolver = bindingResolver;
             this.entityCoordinator = entityCoordinator;
             this.realtime = realtime;
-            this.scopeLifecycle = new CloudScopeLifecycle(scopes, realtime, appearances);
+            this.scopeLifecycle = new CloudScopeLifecycle(scopes, realtime, appearances, animations);
             this.observations = new CloudEntityObservationCoordinator(scopes, bindingResolver);
             this.cacheRoot = cacheRoot;
         }
