@@ -45,6 +45,10 @@ public record CloudAssetIdentity(String instance, String tenant, String assetId,
         }
     }
 
+    public static boolean isRuntimeModelId(String modelId) {
+        return modelId != null && modelId.matches("cloud_[0-9a-f]{64}");
+    }
+
     private static String segment(String value, String name) {
         String normalized = Objects.requireNonNull(value, name).trim();
         if (normalized.isEmpty() || normalized.indexOf(':') >= 0 || normalized.indexOf('/') >= 0) {
