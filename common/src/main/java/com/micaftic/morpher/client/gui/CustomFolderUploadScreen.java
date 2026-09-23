@@ -44,6 +44,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
     private final Queue<Entry> pendingUploads = new ArrayDeque<>();
 
     private FlatColorButton uploadAllButton;
+    private FlatColorButton visibilityButton;
     private FlatColorButton refreshButton;
     private CompletableFuture<PreparedUpload> preparingUpload;
     private Entry preparingEntry;
@@ -54,6 +55,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
     private boolean refreshInProgress;
     private int scrollOffset;
+    private boolean publishToCommunity;
 
     public CustomFolderUploadScreen(Screen parent) {
         super(Component.translatable("gui.sparkle_morpher.upload_custom_folder.title"));
@@ -67,6 +69,12 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
 
         int buttonY = 10;
         int toolbarX = Math.max(10, this.width - 100);
+        this.visibilityButton = new FlatColorButton(10, buttonY, 118, 18, visibilityLabel(), button -> {
+            this.publishToCommunity = !this.publishToCommunity;
+            this.visibilityButton.setMessage(visibilityLabel());
+        });
+        this.visibilityButton.setTooltipText("gui.sparkle_morpher.import.visibility.tooltip");
+        addRenderableWidget(this.visibilityButton);
         this.refreshButton = new IconButton(
                 toolbarX, buttonY, 18, 18, 96, 16,
                 button -> refreshList(true));
@@ -356,7 +364,7 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
         if (entry == null || prepared == null || entry.completed) {
             return;
         }
-        Component uploadError = ModelUploadSession.start(prepared.modelId(), prepared.fileName(), prepared.data(), false);
+        Component uploadError = ModelUploadSession.start(prepared.modelId(), prepared.fileName(), prepared.data(), false, cloudVisibility());
         if (uploadError != null) {
             failEntry(entry, uploadError);
             return;
@@ -652,6 +660,16 @@ public class CustomFolderUploadScreen extends Screen implements ModelUploadSessi
         g.fill(x1, y2 - w, x2, y2, color);
         g.fill(x1, y1, x1 + w, y2, color);
         g.fill(x2 - w, y1, x2, y2, color);
+    }
+
+    private String cloudVisibility() {
+        return this.publishToCommunity ? "PUBLIC" : "PRIVATE";
+    }
+
+    private Component visibilityLabel() {
+        return Component.translatable(this.publishToCommunity
+                ? "gui.sparkle_morpher.import.visibility.public"
+                : "gui.sparkle_morpher.import.visibility.private");
     }
 
     private static final class Entry {

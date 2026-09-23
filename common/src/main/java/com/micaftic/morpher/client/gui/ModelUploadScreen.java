@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.gui.button.FlatColorButton;
 import com.micaftic.morpher.client.gui.button.IconButton;
 import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
@@ -47,6 +48,8 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
     private long lastModelFolderStamp = Long.MIN_VALUE;
     private float displayedProgress = 0f;
     private float prevProgressTarget = -1f;
+    private boolean publishToCommunity;
+    private FlatColorButton visibilityButton;
 
     public ModelUploadScreen(Screen parent) {
         super(Component.translatable("gui.sparkle_morpher.import.title"));
@@ -70,6 +73,12 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         clearWidgets();
         ModelUploadSession.addListener(this);
         int buttonY = 10;
+        this.visibilityButton = new FlatColorButton(10, buttonY, 118, 18, visibilityLabel(), button -> {
+            this.publishToCommunity = !this.publishToCommunity;
+            this.visibilityButton.setMessage(visibilityLabel());
+        });
+        this.visibilityButton.setTooltipText("gui.sparkle_morpher.import.visibility.tooltip");
+        addRenderableWidget(this.visibilityButton);
         int toolbarX = Math.max(10, this.width - 76);
         addRenderableWidget(new IconButton(toolbarX, buttonY, 18, 18, 48, 0, button -> openFilePicker()).setTooltipText("gui.sparkle_morpher.import.choose_file"));
         addRenderableWidget(new IconButton(toolbarX + 24, buttonY, 18, 18, 64, 0, button -> openModelFolder()).setTooltipText("gui.sparkle_morpher.open_model_folder.open"));
@@ -193,7 +202,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         }
         this.localStatus = Component.translatable("gui.sparkle_morpher.import.state.local_upload_ready", file.modelId());
         this.localStatusColor = ChatFormatting.GREEN;
-        Component uploadError = ModelUploadSession.start(file.modelId(), file.fileName(), file.data());
+        Component uploadError = ModelUploadSession.start(file.modelId(), file.fileName(), file.data(), true, cloudVisibility());
         if (uploadError != null) {
             this.serverStatus = Component.translatable("gui.sparkle_morpher.import.state.server_upload_failed", uploadError);
             this.serverStatusColor = ChatFormatting.RED;
@@ -277,7 +286,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
             return;
         }
 
-        Component uploadError = ModelUploadSession.start(modelId, fileName, data);
+        Component uploadError = ModelUploadSession.start(modelId, fileName, data, true, cloudVisibility());
         if (uploadError != null) {
             this.serverStatus = Component.translatable("gui.sparkle_morpher.import.state.server_upload_failed", uploadError);
             this.serverStatusColor = ChatFormatting.RED;
@@ -557,6 +566,16 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
     }
 
     private record LocalUploadFile(String modelId, String fileName, byte[] data) {
+    }
+
+    private String cloudVisibility() {
+        return this.publishToCommunity ? "PUBLIC" : "PRIVATE";
+    }
+
+    private Component visibilityLabel() {
+        return Component.translatable(this.publishToCommunity
+                ? "gui.sparkle_morpher.import.visibility.public"
+                : "gui.sparkle_morpher.import.visibility.private");
     }
 
     @Override
