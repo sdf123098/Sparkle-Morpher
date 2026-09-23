@@ -1,5 +1,10 @@
 package com.micaftic.morpher.client.gui;
 
+import com.micaftic.morpher.cloud.client.CloudAssetSummary;
+
+import java.util.ArrayList;
+import java.util.List;
+
 final class ModelPanelState {
     enum Tab {
         MODEL,
@@ -23,6 +28,19 @@ final class ModelPanelState {
         }
     }
 
+    enum ModelSource {
+        LOCAL,
+        SPM_CLOUD,
+        COMMUNITY_CLOUD
+    }
+
+    enum CloudView {
+        RECENT,
+        FAVORITES,
+        MINE,
+        PUBLIC
+    }
+
     enum SecondaryPanel {
         NONE,
         SITES,
@@ -41,10 +59,19 @@ final class ModelPanelState {
     }
 
     Tab activeTab = Tab.MODEL;
+    ModelSource modelSource = ModelSource.LOCAL;
+    CloudView cloudView = CloudView.RECENT;
     ModelFilter modelFilter = ModelFilter.ALL;
     SettingGroup settingGroup = SettingGroup.GENERAL;
     SecondaryPanel secondaryPanel = SecondaryPanel.NONE;
     String modelSearchText = "";
+    String cloudSearchText = "";
+    String cloudCursor = "";
+    String cloudLoadedKey = "";
+    final List<CloudAssetSummary> cloudEntries = new ArrayList<>();
+    boolean cloudLoaded;
+    boolean cloudLoading;
+    boolean cloudHasMore;
     String resourceSearchText = "";
     String siteEditText = "";
     String categoryEditText = "";
@@ -80,9 +107,12 @@ final class ModelPanelState {
         java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
         out.put("activeTab", activeTab.name());
         out.put("modelFilter", modelFilter.name());
+        out.put("modelSource", modelSource.name());
+        out.put("cloudView", cloudView.name());
         out.put("settingGroup", settingGroup.name());
         out.put("secondaryPanel", secondaryPanel.name());
         out.put("modelSearchText", modelSearchText);
+        out.put("cloudSearchText", cloudSearchText);
         out.put("resourceSearchText", resourceSearchText);
         out.put("siteEditText", siteEditText);
         out.put("categoryEditText", categoryEditText);
@@ -104,6 +134,9 @@ final class ModelPanelState {
         out.put("resourceLoaded", resourceLoaded);
         out.put("resourceLoading", resourceLoading);
         out.put("resourceRequestId", resourceRequestId);
+        out.put("cloudLoaded", cloudLoaded);
+        out.put("cloudLoading", cloudLoading);
+        out.put("cloudHasMore", cloudHasMore);
         return out;
     }
 
@@ -122,6 +155,8 @@ final class ModelPanelState {
             switch (k) {
                 case "activeTab" -> requireEnum(Tab.class, v, k, errors);
                 case "modelFilter" -> requireEnum(ModelFilter.class, v, k, errors);
+                case "modelSource" -> requireEnum(ModelSource.class, v, k, errors);
+                case "cloudView" -> requireEnum(CloudView.class, v, k, errors);
                 case "pickerStyle" -> requireEnum(ModelPickerLayout.Style.class, v, k, errors);
                 case "settingGroup" -> requireEnum(SettingGroup.class, v, k, errors);
                 case "secondaryPanel" -> {
@@ -134,7 +169,7 @@ final class ModelPanelState {
                      "pickerStylePinned", "resourceLoaded", "resourceLoading" -> requireBool(v, k, errors);
                 case "modelScroll", "resourceScroll", "settingsScroll", "sitesScroll",
                      "categoryScroll", "resourceRequestId" -> requireNonNegativeInt(v, k, errors);
-                case "modelSearchText", "resourceSearchText", "siteEditText", "categoryEditText",
+                case "modelSearchText", "cloudSearchText", "resourceSearchText", "siteEditText", "categoryEditText",
                      "selectedModelId", "selectedTextureId", "currentPath", "selectedResourceUrl",
                      "selectedTaskId" -> {
                     // 自由文本：无需校验（应用时截断）
@@ -149,9 +184,12 @@ final class ModelPanelState {
             switch (k) {
                 case "activeTab" -> activeTab = Tab.valueOf(v.toUpperCase(java.util.Locale.ROOT));
                 case "modelFilter" -> modelFilter = ModelFilter.valueOf(v.toUpperCase(java.util.Locale.ROOT));
+                case "modelSource" -> modelSource = ModelSource.valueOf(v.toUpperCase(java.util.Locale.ROOT));
+                case "cloudView" -> cloudView = CloudView.valueOf(v.toUpperCase(java.util.Locale.ROOT));
                 case "settingGroup" -> settingGroup = SettingGroup.valueOf(v.toUpperCase(java.util.Locale.ROOT));
                 case "secondaryPanel" -> secondaryPanel = SecondaryPanel.valueOf(v.toUpperCase(java.util.Locale.ROOT));
                 case "modelSearchText" -> modelSearchText = clampDev(v);
+                case "cloudSearchText" -> cloudSearchText = clampDev(v);
                 case "resourceSearchText" -> resourceSearchText = clampDev(v);
                 case "siteEditText" -> siteEditText = clampDev(v);
                 case "categoryEditText" -> categoryEditText = clampDev(v);

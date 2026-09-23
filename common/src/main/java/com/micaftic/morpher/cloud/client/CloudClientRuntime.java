@@ -239,6 +239,20 @@ public final class CloudClientRuntime {
         });
     }
 
+    /** Fetches one bounded asset page and merges its revisions into the materialization catalog. */
+    public static CompletableFuture<CloudAssetPage> listAssetsPage(String scope, String query, String cursor, int limit) {
+        RuntimeState state = requireState();
+        return state.assets().listPage(scope, query, cursor, limit).thenApply(page -> {
+            for (CloudAssetSummary entry : page.entries()) state.assetCatalog().upsert(entry);
+            return page;
+        });
+    }
+
+    public static void rememberCloudAsset(CloudAssetSummary summary) {
+        RuntimeState state = requireState();
+        state.assetCatalog().upsert(summary);
+    }
+
     public static CompletableFuture<Path> downloadAsset(CloudAssetRef ref) {
         RuntimeState state = requireState();
         CloudAssetSummary summary = state.assetCatalog().get(ref.assetId());
