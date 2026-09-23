@@ -25,6 +25,7 @@ public final class YesSteveModelFabricClient implements ClientModInitializer {
                 .getEntrypoints("sparkle_morpher_render_compat", ClientRenderCompatibility.class)
                 .forEach(ClientRenderCompatibilityRegistry::register);
         OrihimeDirectModelCompat.init();
+        CloudWorldLifecycleEvents.register();
         KeyMappingRegistry.getCustomKeyMappings().forEach(KeyMappingHelper::registerKeyMapping);
 
         HudOverlay debugOverlay = AnimationDebugOverlay.createOverlay();
