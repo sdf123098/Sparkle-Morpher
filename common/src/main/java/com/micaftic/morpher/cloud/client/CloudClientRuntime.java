@@ -56,12 +56,16 @@ public final class CloudClientRuntime {
 
         CloudHttpClient http = new CloudAuthClient(new CloudHttpClient(instance)).authenticated(session);
         CloudAssetClient assets = new CloudAssetClient(http);
+        CloudAppearanceStore appearances = new CloudAppearanceStore();
         CloudRealtimeClient realtime = new CloudRealtimeClient(
                 instance,
                 session.accessToken(),
                 clientVersion,
                 messageConsumer,
-                eventConsumer);
+                event -> {
+                    appearances.apply(event);
+                    eventConsumer.accept(event);
+                });
         RuntimeState next = new RuntimeState(
                 instance,
                 session,
@@ -71,6 +75,7 @@ public final class CloudClientRuntime {
                 new CloudScopeClient(http),
                 new CloudIdentityClient(http),
                 new CloudIdentityBindingClient(http),
+                appearances,
                 realtime,
                 cacheRoot.toAbsolutePath().normalize());
         current = next;
@@ -104,6 +109,14 @@ public final class CloudClientRuntime {
         return requireState().realtime().joinScope(scopeId, worldEpoch);
     }
 
+    public static CompletableFuture<CloudScopeClient.CloudEventRecovery> recoverScope(String scopeId, long after, int limit) {
+        RuntimeState state = requireState();
+        return state.scopes().recoverEvents(scopeId, after, limit).thenApply(recovery -> {
+            state.appearances().applyRecovery(scopeId, recovery);
+            return recovery;
+        });
+    }
+
     public static synchronized void clear() {
         clearCurrent();
         CloudState.reset();
@@ -134,6 +147,7 @@ public final class CloudClientRuntime {
         private final CloudScopeClient scopes;
         private final CloudIdentityClient identities;
         private final CloudIdentityBindingClient identityBindings;
+        private final CloudAppearanceStore appearances;
         private final CloudRealtimeClient realtime;
         private final Path cacheRoot;
         private volatile CloudInstanceInfo instanceInfo;
@@ -147,6 +161,7 @@ public final class CloudClientRuntime {
                 CloudScopeClient scopes,
                 CloudIdentityClient identities,
                 CloudIdentityBindingClient identityBindings,
+                CloudAppearanceStore appearances,
                 CloudRealtimeClient realtime,
                 Path cacheRoot
         ) {
@@ -158,6 +173,7 @@ public final class CloudClientRuntime {
             this.scopes = scopes;
             this.identities = identities;
             this.identityBindings = identityBindings;
+            this.appearances = appearances;
             this.realtime = realtime;
             this.cacheRoot = cacheRoot;
         }
@@ -170,6 +186,7 @@ public final class CloudClientRuntime {
         public CloudScopeClient scopes() { return scopes; }
         public CloudIdentityClient identities() { return identities; }
         public CloudIdentityBindingClient identityBindings() { return identityBindings; }
+        public CloudAppearanceStore appearances() { return appearances; }
         public CloudRealtimeClient realtime() { return realtime; }
         public Path cacheRoot() { return cacheRoot; }
         public CloudInstanceInfo instanceInfo() { return instanceInfo; }
