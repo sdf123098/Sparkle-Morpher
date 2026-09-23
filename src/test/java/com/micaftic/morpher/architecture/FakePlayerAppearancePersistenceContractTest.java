@@ -30,8 +30,8 @@ class FakePlayerAppearancePersistenceContractTest {
                 StandardCharsets.UTF_8);
         assertTrue(capabilityEvent.contains("LAST_PLAYER_LEVELS"));
         assertTrue(capabilityEvent.contains("LAST_PLAYER_LEVELS.remove("));
-        assertTrue(capabilityEvent.contains("syncPlayerModelToSelf(serverPlayer)"));
-        assertTrue(capabilityEvent.contains("syncPlayerModelToTracking(serverPlayer, false)"));
+        assertTrue(capabilityEvent.contains("syncPlayerModelToSelf(serverPlayer)") || capabilityEvent.contains("syncPlayerModelToSelf(sp)"));
+        assertTrue(capabilityEvent.contains("syncPlayerModelToTracking(serverPlayer, false)") || capabilityEvent.contains("syncPlayerModelToTracking(sp, false)"));
     }
 
     private static Path locateRepository() {
