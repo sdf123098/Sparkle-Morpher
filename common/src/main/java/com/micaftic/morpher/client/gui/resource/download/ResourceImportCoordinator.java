@@ -2,8 +2,6 @@ package com.micaftic.morpher.client.gui.resource.download;
 
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
-import com.micaftic.morpher.client.upload.ModelUploadSession;
-import com.micaftic.morpher.client.upload.CloudUploadRuntime;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
 import net.minecraft.ChatFormatting;
@@ -92,41 +90,11 @@ public final class ResourceImportCoordinator {
             DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, localError);
             return;
         }
-        if (!canUploadToServer()) {
-            DownloadQueue.finishTask(task, DownloadQueue.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
-            return;
-        }
-        if (ClientModelManager.isGltfFileName(task.entry.fileName())) {
-            DownloadQueue.finishTask(task, DownloadQueue.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
-            return;
-        }
-        synchronized (DownloadQueue.LOCK) {
-            if (DownloadQueue.currentTask != task || task.cancelRequested || task.state == DownloadQueue.TaskState.CANCELLED) {
-                return;
-            }
-            task.state = DownloadQueue.TaskState.UPLOADING;
-            task.progress = 0f;
-            task.uploadStartedAtMs = System.currentTimeMillis();
-            task.lastUploadProgressAtMs = task.uploadStartedAtMs;
-            task.lastUploadSentBytes = 0;
-            task.uploadFinishingAtMs = 0;
-            task.message = Component.translatable("gui.sparkle_morpher.import.state.server_starting");
-            DownloadPresenter.status = task.message;
-            DownloadPresenter.statusColor = ChatFormatting.YELLOW;
-        }
-        DownloadPresenter.notifyListeners();
-        Component startError = ModelUploadSession.start(modelId, task.entry.fileName(), data);
-        if (startError != null) {
-            if (!canUploadToServer()) {
-                DownloadQueue.finishTask(task, DownloadQueue.TaskState.DONE, Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
-            } else {
-                DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, startError);
-            }
-        }
-    }
-
-    static boolean canUploadToServer() {
-        return CloudUploadRuntime.isConfigured();
+        // Resource Station downloads are local imports only. Uploading to the
+        // selected Cloud instance is an explicit action from ModelUploadScreen;
+        // importing or selecting a local model must never publish it implicitly.
+        DownloadQueue.finishTask(task, DownloadQueue.TaskState.DONE,
+                Component.translatable("gui.sparkle_morpher.resource_station.saved_local", modelId));
     }
 
     static void saveDownloadedModel(String fileName, String modelId, byte[] data) throws IOException {
