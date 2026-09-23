@@ -38,6 +38,7 @@ public final class CloudRealtimeClient implements AutoCloseable {
     private final Consumer<CloudRealtimeMessage> messageConsumer;
     private final Consumer<CloudRealtimeEvent> eventConsumer;
     private final Map<String, Long> targetRevisions = new ConcurrentHashMap<>();
+    private final Map<String, Long> animationRevisions = new ConcurrentHashMap<>();
     private final Set<String> seenEventIds = ConcurrentHashMap.newKeySet();
     private final HttpClient httpClient;
     private final Supplier<CompletableFuture<WebSocket>> webSocketConnector;
@@ -186,6 +187,10 @@ public final class CloudRealtimeClient implements AutoCloseable {
         return Proto.appearanceState(targetId, revision, textureId, scale, disabled);
     }
 
+    static byte[] animationStatePayloadForTest(String targetId, long revision, String channel, String action, String animationKey, long expiresAtUnixMs) {
+        return Proto.animationState(targetId, revision, channel, action, animationKey, expiresAtUnixMs);
+    }
+
     static byte[] leaveScopePayloadForTest(String scopeId) {
         return Proto.leaveScope(scopeId);
     }
@@ -247,7 +252,8 @@ public final class CloudRealtimeClient implements AutoCloseable {
             String scopeId,
             String snapshotId,
             List<CloudScopeClient.CloudTarget> targets,
-            CloudScopeClient.CloudAppearance appearance
+            CloudScopeClient.CloudAppearance appearance,
+            CloudAnimationState animation
     ) {
         public CloudRealtimeEvent {
             kind = requireText(kind, "kind");
@@ -322,12 +328,18 @@ public final class CloudRealtimeClient implements AutoCloseable {
     }
 
     private boolean acceptEvent(CloudRealtimeEvent event) {
-        if ("AppearanceState".equals(event.kind()) && event.appearance() != null) {
+        if (("AppearanceState".equals(event.kind()) && event.appearance() != null)
+                || ("AnimationState".equals(event.kind()) && event.animation() != null)) {
             if (!event.eventId().isBlank() && !seenEventIds.add(event.eventId())) return false;
-            long revision = event.appearance().revision();
-            Long previous = targetRevisions.putIfAbsent(event.appearance().targetId(), revision);
+            if (event.animation() != null && event.animation().expiresAtUnixMs() <= System.currentTimeMillis()) return false;
+            String revisionKey = event.animation() == null
+                    ? event.appearance().targetId()
+                    : event.animation().targetId() + "\u0000" + event.animation().channel();
+            long revision = event.animation() == null ? event.appearance().revision() : event.animation().revision();
+            Map<String, Long> revisions = event.animation() == null ? targetRevisions : animationRevisions;
+            Long previous = revisions.putIfAbsent(revisionKey, revision);
             if (previous != null && revision <= previous) return false;
-            if (previous != null) targetRevisions.put(event.appearance().targetId(), revision);
+            if (previous != null) revisions.put(revisionKey, revision);
         } else if ("TargetSnapshot".equals(event.kind())) {
             for (CloudScopeClient.CloudTarget target : event.targets()) {
                 targetRevisions.merge(target.targetId(), target.revision(), Math::max);
@@ -374,6 +386,10 @@ public final class CloudRealtimeClient implements AutoCloseable {
             return message(fieldString(1, targetId), fieldVarint(2, revision), fieldString(6, textureId), fieldFixed32(7, scale), fieldVarint(8, disabled ? 1 : 0));
         }
 
+        static byte[] animationState(String targetId, long revision, String channel, String action, String animationKey, long expiresAtUnixMs) {
+            return message(fieldString(1, targetId), fieldVarint(2, revision), fieldString(3, channel), fieldString(4, action), fieldString(5, animationKey), fieldVarint(6, expiresAtUnixMs));
+        }
+
         static byte[] envelope(String protocol, String kind, String requestId, String eventId, String scopeId, byte[] payload) {
             return message(fieldString(1, protocol), fieldString(2, kind), fieldString(3, requestId), fieldString(4, eventId), fieldString(5, scopeId), fieldBytes(6, payload));
         }
@@ -413,6 +429,7 @@ public final class CloudRealtimeClient implements AutoCloseable {
             return switch (message.kind()) {
                 case "TargetSnapshot" -> decodeTargetSnapshot(message);
                 case "AppearanceState" -> decodeAppearanceState(message);
+                case "AnimationState" -> decodeAnimationState(message);
                 default -> null;
             };
         }
@@ -429,7 +446,7 @@ public final class CloudRealtimeClient implements AutoCloseable {
                 else if (field == 2 && wire == 2) targets.add(decodeTargetEntry(reader.bytes(), message.scopeId()));
                 else reader.skip(wire);
             }
-            return new CloudRealtimeEvent(message.kind(), message.eventId(), message.scopeId(), snapshotId, targets, null);
+            return new CloudRealtimeEvent(message.kind(), message.eventId(), message.scopeId(), snapshotId, targets, null, null);
         }
 
         private static CloudScopeClient.CloudTarget decodeTargetEntry(byte[] bytes, String scopeId) {
@@ -480,7 +497,34 @@ public final class CloudRealtimeClient implements AutoCloseable {
             CloudScopeClient.CloudAppearance appearance = new CloudScopeClient.CloudAppearance(targetId, revision,
                     assetId.isBlank() ? null : assetId, assetRevision == 0 ? null : assetRevision,
                     rawSha256.isBlank() ? null : rawSha256, textureId.isBlank() ? null : textureId, scale, disabled);
-            return new CloudRealtimeEvent(message.kind(), message.eventId(), message.scopeId(), "", List.of(), appearance);
+            return new CloudRealtimeEvent(message.kind(), message.eventId(), message.scopeId(), "", List.of(), appearance, null);
+        }
+
+        private static CloudRealtimeEvent decodeAnimationState(CloudRealtimeMessage message) {
+            String targetId = "";
+            String channel = "";
+            String action = "";
+            String animationKey = "";
+            long revision = 0;
+            long expiresAtUnixMs = 0;
+            Reader reader = new Reader(message.payload());
+            while (reader.hasRemaining()) {
+                long tag = reader.varint();
+                int field = (int) (tag >>> 3);
+                int wire = (int) (tag & 7);
+                if (field == 1 && wire == 2) targetId = reader.string();
+                else if (field == 2 && wire == 0) revision = reader.varint();
+                else if (field == 3 && wire == 2) channel = reader.string();
+                else if (field == 4 && wire == 2) action = reader.string();
+                else if (field == 5 && wire == 2) animationKey = reader.string();
+                else if (field == 6 && wire == 0) expiresAtUnixMs = reader.varint();
+                else reader.skip(wire);
+            }
+            if (targetId.isBlank() || channel.isBlank() || action.isBlank()) {
+                throw new IllegalArgumentException("AnimationState is incomplete");
+            }
+            return new CloudRealtimeEvent(message.kind(), message.eventId(), message.scopeId(), "", List.of(), null,
+                    new CloudAnimationState(targetId, revision, channel, action, animationKey, expiresAtUnixMs));
         }
 
         private static byte[] message(byte[]... fields) {

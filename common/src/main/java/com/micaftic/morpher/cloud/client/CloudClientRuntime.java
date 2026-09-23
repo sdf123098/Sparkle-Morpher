@@ -61,6 +61,7 @@ public final class CloudClientRuntime {
         CloudHttpClient http = new CloudAuthClient(new CloudHttpClient(instance)).authenticated(session);
         CloudAssetClient assets = new CloudAssetClient(http);
         CloudAppearanceStore appearances = new CloudAppearanceStore();
+        CloudAnimationStore animations = new CloudAnimationStore();
         CloudEntityBindingResolver bindingResolver = new CloudEntityBindingResolver();
         CloudEntityClientCoordinator entityCoordinator = new CloudEntityClientCoordinator(
                 bindingResolver, appearances, WORLD_SESSION::currentGeneration, CloudClientRuntime::enqueueClientTask);
@@ -71,8 +72,9 @@ public final class CloudClientRuntime {
                 messageConsumer,
                 event -> {
                     boolean accepted = appearances.apply(event);
+                    if (event.animation() != null) accepted = animations.apply(event.scopeId(), event.animation()) || accepted;
                     RuntimeState active = current;
-                    if (accepted && active != null && active.appearances() == appearances) {
+                    if (accepted && event.appearance() != null && active != null && active.appearances() == appearances) {
                         String scopeId = active.scopeLifecycle().activeScopeId();
                         String worldEpoch = active.scopeLifecycle().activeWorldEpoch();
                         if (scopeId != null && worldEpoch != null) {
@@ -92,6 +94,7 @@ public final class CloudClientRuntime {
                 new CloudIdentityClient(http),
                 new CloudIdentityBindingClient(http),
                 appearances,
+                animations,
                 bindingResolver,
                 entityCoordinator,
                 realtime,
@@ -158,9 +161,11 @@ public final class CloudClientRuntime {
     public static void leaveScope() {
         RuntimeState state = current;
         if (state != null) {
+            String scopeId = state.scopeLifecycle().activeScopeId();
             state.observations().leave();
             state.bindingResolver().clear();
             state.entityCoordinator().deactivate();
+            state.animations().clearScope(scopeId);
             state.scopeLifecycle().leave();
         }
     }
@@ -281,6 +286,7 @@ public final class CloudClientRuntime {
         current = null;
         if (previous != null) {
             previous.assetCatalog().clear();
+            previous.animations().clear();
             previous.entityCoordinator().deactivate();
             previous.observations().close();
             previous.scopeLifecycle().close();
@@ -300,6 +306,7 @@ public final class CloudClientRuntime {
         private final CloudIdentityClient identities;
         private final CloudIdentityBindingClient identityBindings;
         private final CloudAppearanceStore appearances;
+        private final CloudAnimationStore animations;
         private final CloudEntityBindingResolver bindingResolver;
         private final CloudEntityClientCoordinator entityCoordinator;
         private final CloudRealtimeClient realtime;
@@ -318,6 +325,7 @@ public final class CloudClientRuntime {
                 CloudIdentityClient identities,
                 CloudIdentityBindingClient identityBindings,
                 CloudAppearanceStore appearances,
+                CloudAnimationStore animations,
                 CloudEntityBindingResolver bindingResolver,
                 CloudEntityClientCoordinator entityCoordinator,
                 CloudRealtimeClient realtime,
@@ -335,6 +343,7 @@ public final class CloudClientRuntime {
             this.identities = identities;
             this.identityBindings = identityBindings;
             this.appearances = appearances;
+            this.animations = animations;
             this.bindingResolver = bindingResolver;
             this.entityCoordinator = entityCoordinator;
             this.realtime = realtime;
@@ -354,6 +363,7 @@ public final class CloudClientRuntime {
         public CloudIdentityClient identities() { return identities; }
         public CloudIdentityBindingClient identityBindings() { return identityBindings; }
         public CloudAppearanceStore appearances() { return appearances; }
+        public CloudAnimationStore animations() { return animations; }
         public CloudEntityBindingResolver bindingResolver() { return bindingResolver; }
         public CloudEntityClientCoordinator entityCoordinator() { return entityCoordinator; }
         public CloudRealtimeClient realtime() { return realtime; }
