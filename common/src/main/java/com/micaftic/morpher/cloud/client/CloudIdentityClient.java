@@ -1,10 +1,16 @@
 package com.micaftic.morpher.cloud.client;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.micaftic.morpher.core.api.network.state.CloudErrorCode;
+import com.micaftic.morpher.cloud.identity.CloudIdentityRef;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -18,6 +24,20 @@ public final class CloudIdentityClient {
 
     public CloudIdentityClient(CloudHttpClient http) {
         this.http = Objects.requireNonNull(http, "http");
+    }
+
+    public CompletableFuture<List<CloudIdentity>> listIdentities() {
+        return http.getJson("/v1/identities").thenApply(CloudIdentityClient::parseIdentities);
+    }
+
+    /** Registers only a scope-local offline identity; it is not verified or globally trusted. */
+    public CompletableFuture<CloudIdentity> registerOfflineIdentity(
+            String scopeId,
+            UUID profileUuid,
+            String displayName
+    ) {
+        return http.postJson("/v1/identities", offlineIdentityRequest(scopeId, profileUuid, displayName))
+                .thenApply(CloudIdentityClient::parseIdentity);
     }
 
     public CompletableFuture<CloudIdentityChallenge> createChallenge(String providerId, String username, String profileUuid) {
@@ -50,6 +70,40 @@ public final class CloudIdentityClient {
 
     static CloudIdentity parseIdentityForTest(String body) { return parseIdentity(body); }
 
+    static List<CloudIdentity> parseIdentitiesForTest(String body) { return parseIdentities(body); }
+
+    static String offlineIdentityRequestForTest(String scopeId, UUID profileUuid, String displayName) {
+        return offlineIdentityRequest(scopeId, profileUuid, displayName);
+    }
+
+    private static String offlineIdentityRequest(String scopeId, UUID profileUuid, String displayName) {
+        CloudIdentityRef identity = CloudIdentityRef.offline(scopeId, Objects.requireNonNull(profileUuid, "profileUuid"));
+        if (displayName == null || displayName.isBlank() || displayName.length() > 256
+                || displayName.indexOf('\r') >= 0 || displayName.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("displayName must be a non-empty single-line value of at most 256 characters");
+        }
+        JsonObject body = new JsonObject();
+        body.addProperty("identity", identity.toWireString());
+        body.addProperty("display_name", displayName);
+        return body.toString();
+    }
+
+    private static List<CloudIdentity> parseIdentities(String body) {
+        try {
+            JsonElement root = JsonParser.parseString(body);
+            if (!root.isJsonArray()) throw new IllegalArgumentException("Cloud identities must be an array");
+            JsonArray array = root.getAsJsonArray();
+            List<CloudIdentity> identities = new ArrayList<>(array.size());
+            for (JsonElement element : array) {
+                if (!element.isJsonObject()) throw new IllegalArgumentException("Cloud identity must be an object");
+                identities.add(parseIdentity(element.getAsJsonObject()));
+            }
+            return List.copyOf(identities);
+        } catch (RuntimeException e) {
+            throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud identity catalog");
+        }
+    }
+
     private static CloudIdentityChallenge parseChallenge(String body) {
         try {
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
@@ -61,11 +115,14 @@ public final class CloudIdentityClient {
 
     private static CloudIdentity parseIdentity(String body) {
         try {
-            JsonObject root = JsonParser.parseString(body).getAsJsonObject();
-            return new CloudIdentity(required(root, "identity_id"), required(root, "account_id"), required(root, "identity"), required(root, "display_name"), required(root, "verification_status"));
+            return parseIdentity(JsonParser.parseString(body).getAsJsonObject());
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud identity response");
         }
+    }
+
+    private static CloudIdentity parseIdentity(JsonObject root) {
+        return new CloudIdentity(required(root, "identity_id"), required(root, "account_id"), required(root, "identity"), required(root, "display_name"), required(root, "verification_status"));
     }
 
     private static String required(JsonObject root, String name) {
@@ -90,5 +147,17 @@ public final class CloudIdentityClient {
         }
     }
 
-    public record CloudIdentity(String identityId, String accountId, String identity, String displayName, String verificationStatus) {}
+    public record CloudIdentity(String identityId, String accountId, String identity, String displayName, String verificationStatus) {
+        public CloudIdentity {
+            if (identityId == null || identityId.isBlank() || accountId == null || accountId.isBlank()
+                    || displayName == null || displayName.isBlank() || verificationStatus == null || verificationStatus.isBlank()) {
+                throw new IllegalArgumentException("invalid Cloud identity");
+            }
+            CloudIdentityRef.parse(identity);
+        }
+
+        public CloudIdentityRef identityRef() {
+            return CloudIdentityRef.parse(identity);
+        }
+    }
 }
