@@ -11,18 +11,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FakePlayerAppearancePersistenceContractTest {
     @Test
-    void modelCatalogReloadRestoresAndResynchronizesPersistedSelection() throws IOException {
+    void modelCatalogReloadDoesNotReintroduceServerModelSync() throws IOException {
         String manager = readFirstExisting(
                 Path.of("common/src/main/java/com/micaftic/morpher/model/ServerModelManager.java"),
                 Path.of("../common/src/main/java/com/micaftic/morpher/model/ServerModelManager.java"),
                 Path.of("../src/neoforge/java/com/micaftic/morpher/model/ServerModelManager.java"));
 
-        int restore = manager.indexOf("PlayerModelSelectionStore.restore(player)");
-        assertTrue(restore >= 0);
-        int nextBlock = manager.indexOf("nativeSyncModelsToPlayers", restore);
-        String block = manager.substring(restore, nextBlock >= 0 ? nextBlock : manager.length());
-        assertTrue(block.contains("CapabilityEvent.syncPlayerModelToSelf(player)"));
-        assertTrue(block.contains("CapabilityEvent.syncPlayerModelToTracking(player, false)"));
+        assertTrue(manager.contains("loadModels("));
+        assertTrue(!manager.contains("nativeSyncModels"));
+        assertTrue(!manager.contains("LegacyModelSyncProtocol"));
     }
 
     @Test
