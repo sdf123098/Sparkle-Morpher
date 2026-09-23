@@ -27,6 +27,15 @@ public final class CloudAnimationStore {
         return accepted[0];
     }
 
+    public int applyRecovery(String scopeId, java.util.List<CloudScopeClient.CloudRecoveredEvent> events) {
+        Objects.requireNonNull(events, "events");
+        int accepted = 0;
+        for (CloudScopeClient.CloudRecoveredEvent event : events) {
+            if (event != null && event.animation() != null && apply(scopeId, event.animation())) accepted++;
+        }
+        return accepted;
+    }
+
     public CloudAnimationState get(String scopeId, String targetId, String channel) {
         Map<String, CloudAnimationState> scope = byScope.get(scopeId);
         if (scope == null) return null;

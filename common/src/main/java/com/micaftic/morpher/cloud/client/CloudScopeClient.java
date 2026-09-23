@@ -259,7 +259,22 @@ public final class CloudScopeClient {
             List<CloudRecoveredEvent> result = new ArrayList<>();
             for (JsonElement element : entries) {
                 JsonObject object = object(element);
-                result.add(new CloudRecoveredEvent(object.get("sequence").getAsLong(), string(object, "event_id"), string(object, "kind"), parseAppearance(object.getAsJsonObject("payload"))));
+                String kind = string(object, "kind");
+                JsonObject payload = object(object.get("payload"));
+                CloudAppearance appearance = null;
+                CloudAnimationState animation = null;
+                if ("AppearanceState".equals(kind) || "APPEARANCE_UPDATED".equals(kind)) {
+                    appearance = parseAppearance(payload);
+                } else if ("AnimationState".equals(kind)) {
+                    animation = new CloudAnimationState(string(payload, "target_id"),
+                            payload.get("revision").getAsLong(), string(payload, "channel"),
+                            string(payload, "action"), nullableString(payload, "animation_key"),
+                            payload.get("expires_at_unix_ms").getAsLong());
+                } else {
+                    throw new IllegalArgumentException("Unsupported recovered event kind: " + kind);
+                }
+                result.add(new CloudRecoveredEvent(object.get("sequence").getAsLong(),
+                        string(object, "event_id"), kind, appearance, animation));
             }
             return new CloudEventRecovery(root.get("from_cursor").getAsLong(), root.get("to_cursor").getAsLong(), root.get("has_more").getAsBoolean(), result);
         } catch (RuntimeException e) {
@@ -296,7 +311,11 @@ public final class CloudScopeClient {
             events = events == null ? List.of() : List.copyOf(events);
         }
     }
-    public record CloudRecoveredEvent(long sequence, String eventId, String kind, CloudAppearance appearance) {}
+    public record CloudRecoveredEvent(long sequence, String eventId, String kind, CloudAppearance appearance, CloudAnimationState animation) {
+        public CloudRecoveredEvent(long sequence, String eventId, String kind, CloudAppearance appearance) {
+            this(sequence, eventId, kind, appearance, null);
+        }
+    }
     public record CloudAppearanceUpdate(String requestId, long expectedRevision, String assetId, Long assetRevision, String rawSha256, String textureId, Float scale, boolean disabled) {
         public CloudAppearanceUpdate {
             if (requestId == null || requestId.isBlank()) requestId = UUID.randomUUID().toString();
