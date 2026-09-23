@@ -23,6 +23,9 @@ public final class CloudTargetManagementScreen extends Screen {
     private Button statusButton;
     private boolean active;
     private long lifecycleGeneration;
+    private boolean showingAcl;
+    private int listPage;
+    private String statusMessage;
 
     CloudTargetManagementScreen(Screen parent, CloudManagementController management) {
         super(Component.literal("SPM Cloud targets and ACL"));
@@ -41,8 +44,18 @@ public final class CloudTargetManagementScreen extends Screen {
         this.targetName = field(left + (width + 6) * 2, 32, width, "Display name");
         this.accountId = field(left, 56, width + 54, "Cloud account ID");
         this.role = field(left + width + 60, 56, width + 54, "Role");
-        this.statusButton = addRenderableWidget(Button.builder(Component.literal("Target and ACL management"), button -> { })
-                .bounds(left, 82, Math.max(110, this.width - left * 2), 20).build());
+        int statusWidth = Math.max(90, this.width - left * 2 - 52);
+        this.statusButton = addRenderableWidget(Button.builder(Component.literal(this.statusMessage == null
+                        ? "Target and ACL management" : this.statusMessage), button -> { })
+                .bounds(left, 82, statusWidth, 20).build());
+        Button previousPage = addRenderableWidget(Button.builder(Component.literal("<"), button -> {
+            this.listPage--;
+            init();
+        }).bounds(left + statusWidth + 2, 82, 24, 20).build());
+        Button nextPage = addRenderableWidget(Button.builder(Component.literal(">"), button -> {
+            this.listPage++;
+            init();
+        }).bounds(left + statusWidth + 28, 82, 24, 20).build());
 
         addRenderableWidget(Button.builder(Component.literal("Create target"), button -> createTarget())
                 .bounds(left, 106, width, 20).build());
@@ -58,10 +71,30 @@ public final class CloudTargetManagementScreen extends Screen {
                 .bounds(left + (width + 6) * 2, 130, width, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Set target ACL"), button -> setTargetAcl())
                 .bounds(left + width + 6, 154, width, 20).build());
+        addRenderableWidget(Button.builder(Component.literal(this.showingAcl ? "Show targets" : "Show ACL"), button -> {
+            this.showingAcl = !this.showingAcl;
+            this.listPage = 0;
+            init();
+        }).bounds(left + (width + 6) * 2, 154, width, 20).build());
 
         var snapshot = management.snapshot();
+        var entries = this.showingAcl ? snapshot.acl() : snapshot.targets();
+        int rowsVisible = Math.max(1, (this.height - 32 - 178) / 21);
+        var pageRange = CloudScreenPagination.range(entries.size(), rowsVisible, this.listPage);
+        this.listPage = pageRange.page();
+        previousPage.active = pageRange.page() > 0;
+        nextPage.active = pageRange.page() + 1 < pageRange.pageCount();
         int row = 0;
-        for (var target : snapshot.targets().stream().limit(6).toList()) {
+        if (this.showingAcl) {
+            for (var aclEntry : snapshot.acl().subList(pageRange.startInclusive(), pageRange.endExclusive())) {
+                int y = 178 + row++ * 21;
+                addRenderableWidget(Button.builder(Component.literal(aclEntry.accountId() + "  —  " + aclEntry.role()), button -> {
+                    this.accountId.setValue(aclEntry.accountId());
+                    this.role.setValue(aclEntry.role());
+                    setStatus("Selected ACL entry " + aclEntry.accountId());
+                }).bounds(left, y, Math.max(180, this.width - left * 2), 20).build());
+            }
+        } else for (var target : snapshot.targets().subList(pageRange.startInclusive(), pageRange.endExclusive())) {
             int y = 178 + row++ * 21;
             addRenderableWidget(Button.builder(Component.literal(target.displayName() + "  [" + target.targetId() + "]"), button -> {
                 try {
@@ -95,7 +128,7 @@ public final class CloudTargetManagementScreen extends Screen {
     }
 
     private void refreshTargets() {
-        try { run(management.refreshTargets(), "Targets refreshed"); }
+        try { this.showingAcl = false; this.listPage = 0; run(management.refreshTargets(), "Targets refreshed"); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
@@ -105,22 +138,24 @@ public final class CloudTargetManagementScreen extends Screen {
     }
 
     private void refreshScopeAcl() {
-        try { run(management.refreshScopeAcl(), "Scope ACL refreshed"); }
+        try { this.showingAcl = true; this.listPage = 0; run(management.refreshScopeAcl(), "Scope ACL refreshed"); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void refreshTargetAcl() {
-        try { run(management.refreshTargetAcl(), "Target ACL refreshed"); }
+        try { this.showingAcl = true; this.listPage = 0; run(management.refreshTargetAcl(), "Target ACL refreshed"); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void setScopeAcl() {
-        try { run(management.setScopeAcl(new CloudScopeClient.CloudAclUpdate(accountId.getValue().trim(), role.getValue().trim())), "Scope ACL updated"); }
+        try { this.showingAcl = true; run(management.setScopeAcl(new CloudScopeClient.CloudAclUpdate(accountId.getValue().trim(), role.getValue().trim())
+                ).thenCompose(ignored -> management.refreshScopeAcl()), "Scope ACL updated"); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void setTargetAcl() {
-        try { run(management.setTargetAcl(new CloudScopeClient.CloudAclUpdate(accountId.getValue().trim(), role.getValue().trim())), "Target ACL updated"); }
+        try { this.showingAcl = true; run(management.setTargetAcl(new CloudScopeClient.CloudAclUpdate(accountId.getValue().trim(), role.getValue().trim())
+                ).thenCompose(ignored -> management.refreshTargetAcl()), "Target ACL updated"); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
@@ -141,6 +176,7 @@ public final class CloudTargetManagementScreen extends Screen {
     }
 
     private void setStatus(String message) {
+        this.statusMessage = message;
         if (this.statusButton != null) this.statusButton.setMessage(Component.literal(message));
     }
 
