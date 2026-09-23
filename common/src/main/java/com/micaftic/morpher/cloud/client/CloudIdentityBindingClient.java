@@ -1,6 +1,8 @@
 package com.micaftic.morpher.cloud.client;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.micaftic.morpher.core.api.network.state.CloudErrorCode;
 
@@ -23,6 +25,11 @@ public final class CloudIdentityBindingClient {
         body.addProperty("identity_id", segment(identityId));
         body.addProperty("target_id", segment(targetId));
         return http.postJson("/v1/identities/" + segment(identityId) + "/offline-bindings", body.toString()).thenApply(CloudIdentityBindingClient::parseBinding);
+    }
+
+    public CompletableFuture<java.util.List<CloudBinding>> listScopeBindings(String scopeId) {
+        return http.getJson("/v1/scopes/" + segment(scopeId) + "/offline-bindings")
+                .thenApply(CloudIdentityBindingClient::parseBindings);
     }
 
     public CompletableFuture<CloudClaimCode> createClaimCode(String targetId, String worldEpoch, String entityUuid, Long expiresInSeconds) {
@@ -67,6 +74,27 @@ public final class CloudIdentityBindingClient {
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud identity binding");
         }
+    }
+
+    private static java.util.List<CloudBinding> parseBindings(String body) {
+        try {
+            JsonElement root = JsonParser.parseString(body);
+            if (!root.isJsonArray()) throw new IllegalArgumentException("Cloud bindings must be an array");
+            JsonArray array = root.getAsJsonArray();
+            java.util.ArrayList<CloudBinding> bindings = new java.util.ArrayList<>(array.size());
+            for (JsonElement element : array) bindings.add(parseBinding(element.getAsJsonObject()));
+            return java.util.List.copyOf(bindings);
+        } catch (RuntimeException e) {
+            throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud binding list");
+        }
+    }
+
+    private static CloudBinding parseBinding(JsonObject root) {
+        return new CloudBinding(string(root, "binding_id"), string(root, "account_id"), string(root, "identity_id"),
+                string(root, "target_id"), string(root, "scope_id"), string(root, "world_epoch"),
+                string(root, "entity_uuid"), string(root, "verification_method"), string(root, "status"),
+                root.has("approved_by") && !root.get("approved_by").isJsonNull() ? root.get("approved_by").getAsString() : null,
+                root.get("revision").getAsLong());
     }
 
     private static CloudClaimCode parseClaimCode(String body) {

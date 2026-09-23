@@ -9,6 +9,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CloudIdentityClientTest {
     @Test
+    void parsesOnlyEnabledTrustedIdentityProviders() {
+        var providers = CloudIdentityClient.parseProvidersForTest("""
+                [
+                  {"provider_id":"official","display_name":"Minecraft official","enabled":true},
+                  {"provider_id":"community","display_name":"Community auth","enabled":true},
+                  {"provider_id":"disabled","display_name":"Disabled provider","enabled":false}
+                ]
+                """);
+
+        assertEquals(2, providers.size());
+        assertEquals("official", providers.get(0).providerId());
+        assertEquals("community", providers.get(1).providerId());
+    }
+
+    @Test
     void parsesChallengeWithoutAcceptingProviderUrl() {
         var challenge = CloudIdentityClient.parseChallengeForTest("{\"challenge_id\":\"challenge-1\",\"provider_id\":\"official\",\"server_id\":\"server-1\",\"expires_in_seconds\":120}");
         assertEquals("official", challenge.providerId());
