@@ -33,7 +33,7 @@ public final class CloudUploadRuntime {
     }
 
     public static ModelUploadTransport transport() {
-        return transport;
+        return CloudClientRuntime.isConfigured() ? transport : null;
     }
 
     public static boolean isConfigured() {
