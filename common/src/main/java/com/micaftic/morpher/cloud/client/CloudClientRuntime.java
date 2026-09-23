@@ -182,6 +182,18 @@ public final class CloudClientRuntime {
         return reportObservation(entityUuid, kind.wireValue(), state);
     }
 
+    /** Runs edge-triggered observations for explicitly bound client entities. */
+    public static int tickEntityObservations() {
+        RuntimeState state = current;
+        if (state == null) return 0;
+        int submitted = 0;
+        for (CloudEntityObservationTracker.Observation observation : state.entityCoordinator().collectObservations()) {
+            state.observations().report(observation.entityUuid(), observation.entityKind(), observation.state());
+            submitted++;
+        }
+        return submitted;
+    }
+
     public static void registerEntityProvider(CloudEntityProvider provider) {
         requireState().entityCoordinator().register(provider);
     }
