@@ -27,6 +27,10 @@ import java.util.Optional;
  * format.</p>
  */
 public final class CloudInstanceRegistry {
+    private static final CloudInstanceProfile BUILTIN_OFFICIAL = new CloudInstanceProfile(
+            CloudInstanceConfig.v1("official", URI.create("https://spm-cloud-official.robinson171.workers.dev")),
+            "Official Cloud");
+
     private final Path file;
     private List<CloudInstanceProfile> profiles = List.of();
     private String selectedInstanceId;
@@ -37,8 +41,8 @@ public final class CloudInstanceRegistry {
 
     public synchronized void load() throws IOException {
         if (!Files.isRegularFile(file)) {
-            profiles = List.of();
-            selectedInstanceId = null;
+            profiles = List.of(BUILTIN_OFFICIAL);
+            selectedInstanceId = BUILTIN_OFFICIAL.instanceId();
             return;
         }
         try {
