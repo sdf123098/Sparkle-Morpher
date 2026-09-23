@@ -80,6 +80,26 @@ class CloudRealtimeClientTest {
     }
 
     @Test
+    void decodesAnimationPayloadAndRetainsLeaseExpiry() {
+        CloudRealtimeClient.CloudRealtimeMessage message = new CloudRealtimeClient.CloudRealtimeMessage(
+                CloudInstanceConfig.PROTOCOL_V1,
+                "AnimationState",
+                "",
+                "event-animation",
+                "scope",
+                CloudRealtimeClient.animationStatePayloadForTest("target", 3, "body", "PLAY", "run", 12345L));
+
+        CloudRealtimeClient.CloudRealtimeEvent event = CloudRealtimeClient.decodeEventForTest(message);
+
+        assertEquals("event-animation", event.eventId());
+        assertNotNull(event.animation());
+        assertEquals(3, event.animation().revision());
+        assertEquals("body", event.animation().channel());
+        assertEquals("run", event.animation().animationKey());
+        assertEquals(12345L, event.animation().expiresAtUnixMs());
+    }
+
+    @Test
     void leaveScopePayloadCarriesOnlyTheScopeId() {
         assertArrayEquals(
                 new byte[]{0x0A, 0x07, 's', 'c', 'o', 'p', 'e', '-', 'a'},
