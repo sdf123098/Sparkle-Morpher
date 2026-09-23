@@ -113,13 +113,16 @@ public final class CloudManagementScreen extends Screen {
                 .bounds(left + width + 6, 151, width, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Join selected"), button -> joinScope())
                 .bounds(left + (width + 6) * 2, 151, width, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Identities / Offline"), button ->
+                InputUtil.setScreen(new CloudIdentityManagementScreen(this, management())))
+                .bounds(left, 175, width + 54, 20).build());
 
         if (snapshot.selectedScope() != null) {
             this.scopeId.setValue(snapshot.selectedScope().scopeId());
             this.scopeName.setValue(snapshot.selectedScope().name());
             this.worldEpoch.setValue(snapshot.selectedScope().worldEpoch());
         }
-        int rowsVisible = Math.max(1, (this.height - 32 - 177) / 22);
+        int rowsVisible = Math.max(1, (this.height - 32 - 201) / 22);
         var scopeRange = CloudScreenPagination.range(snapshot.scopes().size(), rowsVisible, this.scopePage);
         this.scopePage = scopeRange.page();
         previousScopePage.active = scopeRange.page() > 0;
@@ -127,7 +130,7 @@ public final class CloudManagementScreen extends Screen {
         int row = 0;
         for (var scope : snapshot.scopes().subList(scopeRange.startInclusive(), scopeRange.endExclusive())) {
             final String id = scope.scopeId();
-            int y = 177 + row++ * 22;
+            int y = 201 + row++ * 22;
             addRenderableWidget(Button.builder(Component.literal(scope.name() + "  [" + id + "]"), button -> {
                 try {
                     management().selectScope(id);
