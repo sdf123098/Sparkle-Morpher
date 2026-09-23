@@ -12,10 +12,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CloudRealtimeClientTest {
+
     @Test
     void protobufEnvelopeRoundTripsUnknownPayload() {
-        CloudRealtimeClient.CloudRealtimeEnvelope original = new CloudRealtimeClient.CloudRealtimeEnvelope(CloudInstanceConfig.PROTOCOL_V1, "TargetSnapshot", "request", "event", "scope", new byte[]{1, 2, 3});
-        CloudRealtimeClient.CloudRealtimeMessage decoded = CloudRealtimeClient.decodeEnvelopeForTest(CloudRealtimeClient.encodeEnvelopeForTest(original));
+        CloudRealtimeClient.CloudRealtimeEnvelope original = new CloudRealtimeClient.CloudRealtimeEnvelope(
+                CloudInstanceConfig.PROTOCOL_V1, "TargetSnapshot", "request", "event", "scope", new byte[]{1, 2, 3});
+
+        CloudRealtimeClient.CloudRealtimeMessage decoded = CloudRealtimeClient.decodeEnvelopeForTest(
+                CloudRealtimeClient.encodeEnvelopeForTest(original));
+
         assertEquals(original.protocolVersion(), decoded.protocolVersion());
         assertEquals(original.kind(), decoded.kind());
         assertEquals(original.requestId(), decoded.requestId());
@@ -26,7 +31,8 @@ class CloudRealtimeClientTest {
 
     @Test
     void envelopeRejectsTruncatedInput() {
-        assertThrows(IllegalArgumentException.class, () -> CloudRealtimeClient.decodeEnvelopeForTest(new byte[]{0x0A, 0x05, 's'}));
+        assertThrows(IllegalArgumentException.class, () ->
+                CloudRealtimeClient.decodeEnvelopeForTest(new byte[]{0x0A, 0x05, 's'}));
     }
 
     @Test
@@ -38,9 +44,15 @@ class CloudRealtimeClientTest {
     @Test
     void decodesTargetSnapshotPayload() {
         CloudRealtimeClient.CloudRealtimeMessage message = new CloudRealtimeClient.CloudRealtimeMessage(
-                CloudInstanceConfig.PROTOCOL_V1, "TargetSnapshot", "request", "", "scope",
+                CloudInstanceConfig.PROTOCOL_V1,
+                "TargetSnapshot",
+                "request",
+                "",
+                "scope",
                 CloudRealtimeClient.targetSnapshotPayloadForTest("snapshot", "target", "PLAYER", "Player", 4));
+
         CloudRealtimeClient.CloudRealtimeEvent event = CloudRealtimeClient.decodeEventForTest(message);
+
         assertEquals("snapshot", event.snapshotId());
         assertEquals(1, event.targets().size());
         assertEquals("target", event.targets().get(0).targetId());
@@ -50,14 +62,27 @@ class CloudRealtimeClientTest {
     @Test
     void decodesAppearancePayloadAndRetainsEventIdentity() {
         CloudRealtimeClient.CloudRealtimeMessage message = new CloudRealtimeClient.CloudRealtimeMessage(
-                CloudInstanceConfig.PROTOCOL_V1, "AppearanceState", "", "event-1", "scope",
+                CloudInstanceConfig.PROTOCOL_V1,
+                "AppearanceState",
+                "",
+                "event-1",
+                "scope",
                 CloudRealtimeClient.appearanceStatePayloadForTest("target", 7, "texture", 1.25F, true));
+
         CloudRealtimeClient.CloudRealtimeEvent event = CloudRealtimeClient.decodeEventForTest(message);
+
         assertEquals("event-1", event.eventId());
         assertNotNull(event.appearance());
         assertEquals(7, event.appearance().revision());
         assertEquals("texture", event.appearance().textureId());
         assertEquals(1.25F, event.appearance().scale());
         assertTrue(event.appearance().disabled());
+    }
+
+    @Test
+    void leaveScopePayloadCarriesOnlyTheScopeId() {
+        assertArrayEquals(
+                new byte[]{0x0A, 0x07, 's', 'c', 'o', 'p', 'e', '-', 'a'},
+                CloudRealtimeClient.leaveScopePayloadForTest("scope-a"));
     }
 }

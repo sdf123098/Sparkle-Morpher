@@ -146,6 +146,10 @@ public final class CloudRealtimeClient implements AutoCloseable {
         return send(new CloudRealtimeEnvelope(CloudInstanceConfig.PROTOCOL_V1, "JoinScope", UUID.randomUUID().toString(), "", scopeId, Proto.joinScope(scopeId, worldEpoch)));
     }
 
+    public CompletableFuture<Void> leaveScope(String scopeId) {
+        return send(new CloudRealtimeEnvelope(CloudInstanceConfig.PROTOCOL_V1, "LeaveScope", UUID.randomUUID().toString(), "", scopeId, Proto.leaveScope(scopeId)));
+    }
+
     public CompletableFuture<Void> heartbeat(long clientTimeUnixMs) {
         return send(new CloudRealtimeEnvelope(CloudInstanceConfig.PROTOCOL_V1, "Heartbeat", UUID.randomUUID().toString(), "", "", Proto.heartbeat(clientTimeUnixMs)));
     }
@@ -180,6 +184,10 @@ public final class CloudRealtimeClient implements AutoCloseable {
 
     static byte[] appearanceStatePayloadForTest(String targetId, long revision, String textureId, float scale, boolean disabled) {
         return Proto.appearanceState(targetId, revision, textureId, scale, disabled);
+    }
+
+    static byte[] leaveScopePayloadForTest(String scopeId) {
+        return Proto.leaveScope(scopeId);
     }
 
     @Override
@@ -347,6 +355,10 @@ public final class CloudRealtimeClient implements AutoCloseable {
 
         static byte[] joinScope(String scopeId, String worldEpoch) {
             return message(fieldString(1, requireText(scopeId, "scopeId")), fieldString(2, requireText(worldEpoch, "worldEpoch")));
+        }
+
+        static byte[] leaveScope(String scopeId) {
+            return message(fieldString(1, requireText(scopeId, "scopeId")));
         }
 
         static byte[] heartbeat(long time) {
