@@ -116,6 +116,8 @@ public final class CloudManagementScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("Identities / Offline"), button ->
                 InputUtil.setScreen(new CloudIdentityManagementScreen(this, management())))
                 .bounds(left, 175, width + 54, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Create Cloud account"), button -> register())
+                .bounds(left + width + 60, 175, width + 54, 20).build());
 
         if (snapshot.selectedScope() != null) {
             this.scopeId.setValue(snapshot.selectedScope().scopeId());
@@ -204,6 +206,16 @@ public final class CloudManagementScreen extends Screen {
             String secret = password.getValue();
             password.setValue("");
             run(management().login(accountId.getValue(), secret), "Cloud login succeeded");
+        } catch (RuntimeException failure) {
+            setStatus(errorText(failure));
+        }
+    }
+
+    private void register() {
+        try {
+            String secret = password.getValue();
+            password.setValue("");
+            run(management().register(accountId.getValue(), secret), "Cloud account created and logged in");
         } catch (RuntimeException failure) {
             setStatus(errorText(failure));
         }
