@@ -353,7 +353,7 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     public void onClose() {
         if (this.parentScreen != null && this.minecraft != null) {
-            InputUtil.setScreen(this.parentScreen);
+            this.minecraft.setScreen(this.parentScreen);
         } else {
             super.onClose();
         }
@@ -1567,23 +1567,8 @@ public class ModernPlayerModelScreen extends Screen {
         fill(g, this.layout.left, this.layout.footerTop, this.layout.width, 1, 0x55303030);
         Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatus() : this.status;
         ChatFormatting color = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatusColor() : this.statusColor;
-        int c = chatColor(color);
+        int c = color.getColor() == null ? MUTED : 0xFF000000 | color.getColor();
         g.text(this.font, trim(line.getString(), this.layout.width - 20), this.layout.left + 10, this.layout.footerTop + 8, c, false);
-    }
-
-    private int chatColor(ChatFormatting color) {
-        if (color == null) {
-            return MUTED;
-        }
-        return switch (color) {
-            case RED, DARK_RED -> 0xFFE05252;
-            case YELLOW, GOLD -> 0xFFFFC857;
-            case GREEN, DARK_GREEN -> 0xFF4CAF50;
-            case AQUA, DARK_AQUA, BLUE, DARK_BLUE -> 0xFF5ECAE8;
-            case WHITE -> 0xFFFFFFFF;
-            case BLACK, DARK_GRAY -> 0xFF6F757A;
-            default -> MUTED;
-        };
     }
 
     private void renderTooltip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -1988,7 +1973,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void openCustomFolderUpload() {
-        InputUtil.setScreen(new CustomFolderUploadScreen(this));
+        Minecraft.getInstance().setScreen(new CustomFolderUploadScreen(this));
     }
 
     private void openCloudUpload() {
@@ -2035,7 +2020,7 @@ public class ModernPlayerModelScreen extends Screen {
             String modelId = cap.getModelId();
             ModelAssembly modelAssembly = cap.getModelAssembly();
             if (modelAssembly != null && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
-                InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
+                minecraft.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
             }
         });
     }
@@ -2250,8 +2235,6 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(nativeSimdPolicyRow(ModelPanelState.SettingGroup.PERFORMANCE));
         rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));
-        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.blaze3d_vulkan_gpu_renderer", GeneralConfig.ENABLE_BLAZE3D_VULKAN_GPU_RENDERER));
-        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.blaze3d_in_pipeline_draw", GeneralConfig.ENABLE_BLAZE3D_IN_PIPELINE_DRAW));
         rows.add(bool(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.lazy_model_loading", GeneralConfig.LAZY_MODEL_LOADING));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.cpu_cache_limit", GeneralConfig.MAX_RESIDENT_CPU_MODELS, 1, 512, 1, ""));
