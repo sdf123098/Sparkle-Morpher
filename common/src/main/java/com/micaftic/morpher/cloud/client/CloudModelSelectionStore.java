@@ -4,7 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.micaftic.morpher.YesSteveModel;
-import dev.architectury.platform.Platform;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -18,7 +18,7 @@ import java.util.Objects;
 
 /** Local, bounded index for Cloud assets explicitly used or favorited by the player. */
 public final class CloudModelSelectionStore {
-    private static final Path FILE = Platform.getConfigFolder().resolve(YesSteveModel.MOD_ID).resolve("cloud_model_selection.json");
+    private static final Path FILE = ModelStoragePaths.folder().resolve("cloud_model_selection.json");
     private static final int MAX_RECENT = 100;
     private static final int MAX_FAVORITES = 500;
     private static final Object LOCK = new Object();
