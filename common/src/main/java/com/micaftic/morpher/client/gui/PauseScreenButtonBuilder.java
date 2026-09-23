@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
+import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -30,8 +31,11 @@ public class PauseScreenButtonBuilder {
 
     @Nullable
     public static List<Button> createButtons(PauseScreen pauseScreen) {
-        if (!isServerConnected()) return null;
         Minecraft minecraft = Minecraft.getInstance();
+        Button cloudButton = Button.builder(Component.literal("SPM Cloud"), button -> CloudManagementScreen.open(pauseScreen))
+                .bounds(Math.max(SCREEN_MARGIN, pauseScreen.width - 100), SCREEN_MARGIN, 90, BUTTON_HEIGHT).build();
+        cloudButton.setTooltip(Tooltip.create(Component.literal("Connect to official or community SPM Cloud")));
+        if (!isServerConnected()) return List.of(cloudButton);
         Component skinLabel = Component.translatable("gui.sparkle_morpher.skin");
         Component rouletteLabel = Component.translatable("gui.sparkle_morpher.config.roulette_mode");
         Component configLabel = Component.translatable("gui.sparkle_morpher.config");
@@ -62,7 +66,7 @@ public class PauseScreenButtonBuilder {
         }
 
         Button skinBtn = Button.builder(skinLabel, button -> {
-            com.micaftic.morpher.util.InputUtil.setScreen(new ModernPlayerModelScreen());
+            InputUtil.setScreen(new ModernPlayerModelScreen());
         }).bounds(skinX, skinY, skinWidth, BUTTON_HEIGHT).build();
         skinBtn.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.player_model.desc")));
 
@@ -72,18 +76,18 @@ public class PauseScreenButtonBuilder {
                 String modelId = cap.getModelId();
                 ModelAssembly modelAssembly = cap.getModelAssembly();
                 if (modelAssembly != null && !modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
-                    com.micaftic.morpher.util.InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
+                    InputUtil.setScreen(new UnifiedRouletteScreen(modelId, modelAssembly, cap));
                 }
             });
         }).bounds(rouletteX, controlY, rouletteWidth, BUTTON_HEIGHT).build();
         rouletteBtn.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.animation_roulette.desc")));
 
         Button configBtn = Button.builder(configLabel, button -> {
-            com.micaftic.morpher.util.InputUtil.setScreen(ModernPlayerModelScreen.settings());
+            InputUtil.setScreen(ModernPlayerModelScreen.settings());
         }).bounds(configX, controlY, configWidth, BUTTON_HEIGHT).build();
         configBtn.setTooltip(Tooltip.create(Component.translatable("gui.sparkle_morpher.config")));
 
-        return List.of(skinBtn, rouletteBtn, configBtn);
+        return List.of(cloudButton, skinBtn, rouletteBtn, configBtn);
     }
 
     private static int buttonWidth(Minecraft minecraft, Component label, int minWidth, int maxWidth) {
