@@ -33,8 +33,11 @@ class CloudAssetIdentityTest {
         String runtimeId = first.runtimeModelId();
         assertEquals(runtimeId, first.runtimeModelId());
         assertTrue(runtimeId.matches("cloud_[0-9a-f]{64}"));
+        assertTrue(CloudAssetIdentity.isRuntimeModelId(runtimeId));
         assertNotEquals("hero", runtimeId);
         assertNotEquals(runtimeId, otherInstance.runtimeModelId());
         assertNotEquals(runtimeId, otherRevision.runtimeModelId());
+        assertFalse(CloudAssetIdentity.isRuntimeModelId("hero"));
+        assertFalse(CloudAssetIdentity.isRuntimeModelId("cloud_not-a-hash"));
     }
 }
