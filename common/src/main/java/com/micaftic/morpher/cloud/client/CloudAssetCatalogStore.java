@@ -31,6 +31,19 @@ public final class CloudAssetCatalogStore {
         return generation.incrementAndGet();
     }
 
+    public synchronized long upsert(CloudAssetSummary entry) {
+        Objects.requireNonNull(entry, "asset entry");
+        Objects.requireNonNull(entry.ref(), "asset ref");
+        if (entry.byteLength() < 0) throw new IllegalArgumentException("asset byteLength must not be negative");
+        Map<String, CloudAssetSummary> next = new HashMap<>(byId);
+        CloudAssetSummary previous = next.put(entry.ref().assetId(), entry);
+        if (previous != null && !previous.ref().equals(entry.ref()) && entry.ref().revision() < previous.ref().revision()) {
+            next.put(entry.ref().assetId(), previous);
+        }
+        byId = Map.copyOf(next);
+        return generation.incrementAndGet();
+    }
+
     public CloudAssetSummary get(String assetId) {
         return byId.get(assetId);
     }

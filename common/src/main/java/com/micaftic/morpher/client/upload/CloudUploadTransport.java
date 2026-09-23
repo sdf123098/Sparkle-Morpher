@@ -36,7 +36,7 @@ public final class CloudUploadTransport implements ModelUploadTransport {
             return CompletableFuture.failedFuture(e);
         }
         return assets.upload(source, metadata.assetId(), metadata.fileName(), metadata.format(), metadata.rawSha256(),
-                        UUID.randomUUID().toString(), progress, cancellation)
+                        UUID.randomUUID().toString(), metadata.visibility(), progress, cancellation)
                 .thenApply(this::resultOf);
     }
 

@@ -589,6 +589,11 @@ public class ClientModelManager {
         return modelId != null && localOnlyModelIds.contains(LocalModelCatalog.canonicalKey(modelId));
     }
 
+    public static boolean isServerModel(String modelId) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        return modelKey != null && serverModels.values().stream().anyMatch(value -> modelKey.equals(value.modelKey));
+    }
+
     public static Optional<Path> getLocalModelSourcePath(String modelId) {
         if (modelId == null || modelId.isBlank()) {
             return Optional.empty();
