@@ -61,6 +61,28 @@ public final class CloudEntityBindingResolver {
         return context;
     }
 
+    public List<CloudScopeClient.CloudEntityBinding> snapshot(String scopeId, String worldEpoch) {
+        Context current = context;
+        if (!current.scopeId().equals(scopeId) || !current.worldEpoch().equals(worldEpoch)) return List.of();
+        return List.copyOf(bindings.values());
+    }
+
+    public boolean isCurrent(String scopeId, String worldEpoch, CloudScopeClient.CloudEntityBinding expected) {
+        Objects.requireNonNull(expected, "expected");
+        Context current = context;
+        if (!current.scopeId().equals(scopeId) || !current.worldEpoch().equals(worldEpoch)) return false;
+        UUID entityUuid;
+        try {
+            entityUuid = parseUuid(expected.entityUuid());
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+        CloudScopeClient.CloudEntityBinding actual = bindings.get(entityUuid);
+        return actual != null
+                && actual.bindingId().equals(expected.bindingId())
+                && actual.revision() == expected.revision();
+    }
+
     public void clear() {
         bindings.clear();
         context = new Context("", "", generation.incrementAndGet());
