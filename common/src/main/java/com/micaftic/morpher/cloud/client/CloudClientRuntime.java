@@ -148,6 +148,23 @@ public final class CloudClientRuntime {
         });
     }
 
+    public static CompletableFuture<List<CloudAssetSummary>> refreshAssets() {
+        RuntimeState state = requireState();
+        return state.assets().list().thenApply(entries -> {
+            state.assetCatalog().replace(entries);
+            return entries;
+        });
+    }
+
+    public static CompletableFuture<Path> downloadAsset(CloudAssetRef ref) {
+        RuntimeState state = requireState();
+        CloudAssetSummary summary = state.assetCatalog().get(ref.assetId());
+        if (summary == null || !summary.ref().equals(ref)) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Cloud asset revision is not in the current catalog"));
+        }
+        return state.assetCache().downloadAndStore(state.assets(), ref, state.cacheRoot());
+    }
+
     public static synchronized void clear() {
         clearCurrent();
         CloudState.reset();
@@ -165,6 +182,7 @@ public final class CloudClientRuntime {
         RuntimeState previous = current;
         current = null;
         if (previous != null) {
+            previous.assetCatalog().clear();
             previous.observations().close();
             previous.scopeLifecycle().close();
             previous.realtime().close();
@@ -177,6 +195,7 @@ public final class CloudClientRuntime {
         private final CloudHttpClient http;
         private final CloudAssetClient assets;
         private final CloudAssetCache assetCache;
+        private final CloudAssetCatalogStore assetCatalog;
         private final CloudScopeClient scopes;
         private final CloudIdentityClient identities;
         private final CloudIdentityBindingClient identityBindings;
@@ -207,6 +226,7 @@ public final class CloudClientRuntime {
             this.http = http;
             this.assets = assets;
             this.assetCache = assetCache;
+            this.assetCatalog = new CloudAssetCatalogStore();
             this.scopes = scopes;
             this.identities = identities;
             this.identityBindings = identityBindings;
@@ -223,6 +243,7 @@ public final class CloudClientRuntime {
         public CloudHttpClient http() { return http; }
         public CloudAssetClient assets() { return assets; }
         public CloudAssetCache assetCache() { return assetCache; }
+        public CloudAssetCatalogStore assetCatalog() { return assetCatalog; }
         public CloudScopeClient scopes() { return scopes; }
         public CloudIdentityClient identities() { return identities; }
         public CloudIdentityBindingClient identityBindings() { return identityBindings; }
