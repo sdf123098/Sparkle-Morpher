@@ -17,8 +17,6 @@ import com.micaftic.morpher.model.catalog.ServerModelCatalog;
 import com.micaftic.morpher.model.cache.ServerModelCache;
 import com.micaftic.morpher.model.format.UUIDComponentData;
 import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.legacy.compat.LegacyCompatNetwork;
-import com.micaftic.morpher.network.message.S2CModelSyncPayload;
 import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
 import com.micaftic.morpher.resource.YSMBinaryDeserializer;
 import com.micaftic.morpher.resource.YSMBinarySerializer;
@@ -460,19 +458,6 @@ public final class ServerModelManager {
         }
     }
 
-    // R8 遗留③：legacy 握手同步协议（PlayerSyncState/step 状态机/发包）迁至 LegacyModelSyncProtocol
-
-
-
-    public static void nativeSendModelData(UUID uuid, @Nullable ByteBuffer data) {
-
-        LegacyCompatNetwork.sendModelData(uuid, data);
-
-    }
-
-
-
-
     public static boolean nativeLoadModels(Object callback) {
         try {
             ModelLoadResult result = loadModelsSnapshot();
@@ -793,19 +778,6 @@ public final class ServerModelManager {
         return new ServerModelData(modelId, animInfo, projectiles, vehicles, serverModelInfo, isCustomSkinModel, isAuth);
     }
 
-    // R8 遗留③：legacy 握手同步协议（nativeSyncModels/sendPacket03/sendPacket05）迁至 LegacyModelSyncProtocol
-
-
-
-    public static void nativeSyncModels(UUID[] uuids, String[] playerNames, String[] modelIds, Object callback) {
-
-        LegacyCompatNetwork.syncModels(uuids, playerNames, modelIds, callback);
-
-    }
-
-
-
-
     public static void nativeExportModel(String modelID, @Nullable String extra, @Nullable Consumer<ExportResult> callback) {
         YSMThreadPool.submit(() -> {
             try {
@@ -946,42 +918,7 @@ public final class ServerModelManager {
         }
     }
 
-    private static void syncLoadedModelsToPlayers() {
-        MinecraftServer currentServer = GameInstance.getServer();
-        if (currentServer == null) {
-            return;
-        }
-        currentServer.execute(() -> {
-            List<ServerPlayer> players = currentServer.getPlayerList().getPlayers();
-            for (ServerPlayer player : players) {
-                PlayerModelSelectionStore.restore(player);
-                validatePlayerModel(player);
-                CapabilityEvent.syncPlayerModelToSelf(player);
-                CapabilityEvent.syncPlayerModelToTracking(player, false);
-            }
-            nativeSyncModels(players.stream().filter(NetworkHandler::isPlayerConnected).map(ServerPlayer::getUUID).toArray(UUID[]::new),
-                    players.stream().filter(NetworkHandler::isPlayerConnected).map(ServerPlayer::getScoreboardName).toArray(String[]::new),
-                    collectPlayerModelIds(players),
-                    null);
-        });
-    }
-
-    public static void requestPlayerAuth(ServerPlayer serverPlayer, @Nullable Consumer<UUIDComponentData> consumer) {
-        MinecraftServer currentServer = GameInstance.getServer();
-        currentServer.execute(() -> {
-            List<ServerPlayer> players = currentServer.getPlayerList().getPlayers();
-            ArrayList<FloatReferencePair<ServerPlayer>> arrayList = new ArrayList<>();
-            for (ServerPlayer serverPlayer2 : players) {
-                if (serverPlayer2.level().dimensionType() == serverPlayer.level().dimensionType()) {
-                    arrayList.add(FloatReferencePair.of(serverPlayer2.distanceTo(serverPlayer), serverPlayer2));
-                }
-            }
-            arrayList.sort((a, b) -> Float.compare(a.firstFloat(), b.firstFloat()));
-            nativeSyncModels(new UUID[]{serverPlayer.getUUID()}, new String[]{serverPlayer.getName().getString()}, collectPlayerModelIds(arrayList.stream().map(it.unimi.dsi.fastutil.Pair::second).toList()), consumer);
-        });
-    }
-
-    public static boolean loadModels(@Nullable Consumer<ModelLoadResult> consumer, @Nullable Consumer<UUIDComponentData> consumer2) {
+    public static boolean loadModels(@Nullable Consumer<ModelLoadResult> consumer) {
         Consumer<ModelLoadResult> action = modelLoadResult -> {
             if (consumer != null) {
                 consumer.accept(modelLoadResult);
@@ -996,7 +933,6 @@ public final class ServerModelManager {
                     PlayerModelSelectionStore.restore(value);
                     validatePlayerModel(value);
                 }
-                nativeSyncModels(players.stream().filter(NetworkHandler::isPlayerConnected).map((player) -> player.getUUID()).toArray(i -> new UUID[i]), players.stream().filter(NetworkHandler::isPlayerConnected).map(serverPlayer -> serverPlayer.getName().getString()).toArray(i2 -> new String[i2]), collectPlayerModelIds(players), consumer2);
             });
         };
         initialized = false;
@@ -1013,10 +949,6 @@ public final class ServerModelManager {
 
     private static void publishModelLoadResult(ModelLoadResult result) {
         onModelLoadComplete(result, null);
-    }
-
-    private static String[] collectPlayerModelIds(Collection<ServerPlayer> collection) {
-        return collection.stream().filter(NetworkHandler::isPlayerConnected).map(serverPlayer -> ModelInfoCapability.get(serverPlayer).map(ModelInfoCapability::getModelId)).filter(Optional::isPresent).map(Optional::get).distinct().toArray(String[]::new);
     }
 
     private static void onModelLoadComplete(ModelLoadResult modelLoadResult, @Nullable Object obj) {
@@ -1050,23 +982,6 @@ public final class ServerModelManager {
             consumer.accept(modelLoadResult);
         }
     }
-
-    public static void syncModelToPlayer(UUID uuid) {
-        nativeSendModelData(uuid, null);
-    }
-
-    // R8 遗留③：legacy 同步会话清理/发送 helper（getPlayerConnection/sendModelData/等）迁至 LegacyModelSyncProtocol
-
-
-
-    public static void clearPlayerSyncState(UUID uuid) {
-
-        LegacyCompatNetwork.clearPlayerSyncState(uuid);
-
-    }
-
-
-
 
     public static Pair<String, String> getDefaultModelConfig() {
         String defaultModelId;

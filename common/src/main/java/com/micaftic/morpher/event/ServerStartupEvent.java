@@ -20,7 +20,7 @@ public final class ServerStartupEvent {
                         throw new RuntimeException("sparkle Loading Failed: " + result.getErrorMessage().getString(256));
                     });
                 }
-            }, null);
+            });
         });
     }
 }

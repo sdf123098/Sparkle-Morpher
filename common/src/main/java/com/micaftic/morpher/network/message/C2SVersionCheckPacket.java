@@ -56,7 +56,6 @@ public class C2SVersionCheckPacket {
                 NetworkHandler.sendToClientPlayer(new S2CSyncStarModelsPacket(cap.getStarModels()), sender);
             });
             CapabilityEvent.forgetSyncedModelStates(sender);
-            ServerModelManager.requestPlayerAuth(sender, null);
         }
     }
 }

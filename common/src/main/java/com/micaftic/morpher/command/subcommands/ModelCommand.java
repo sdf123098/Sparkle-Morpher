@@ -134,20 +134,6 @@ public class ModelCommand {
                 watch.reset();
                 watch.start();
             }
-        }, data -> {
-            watch.stop();
-            if (!data.isEnabled()) {
-                YSMMessageFormatter.sendServerMessage(context.getSource(), YSMMessageFormatter.withPrefix(data.getDisplayComponent()), true);
-                return;
-            }
-            if (!data.getUuidComponentMap().isEmpty()) {
-                for (Component component : data.getUuidComponentMap().values()) {
-                    YSMMessageFormatter.sendServerMessage(context.getSource(), YSMMessageFormatter.withPrefix(component), true);
-                }
-                if (PlatformAPI.isServer()) {
-                    YSMMessageFormatter.sendServerMessage(context.getSource(), Component.translatable("message.sparkle_morpher.model.sync.complete", Double.valueOf(watch.getTime(TimeUnit.MICROSECONDS) / 1000.0d)), true);
-                }
-            }
         })) {
             context.getSource().sendFailure(Component.translatable("message.sparkle_morpher.model.reload.in_progress"));
             return Command.SINGLE_SUCCESS;
