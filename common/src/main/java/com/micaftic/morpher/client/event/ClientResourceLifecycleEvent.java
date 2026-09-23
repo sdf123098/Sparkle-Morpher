@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.cloud.client.CloudClientRuntime;
+import com.micaftic.morpher.client.upload.CloudUploadRuntime;
 import com.micaftic.morpher.core.gpu.BlurStack;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientPlayerEvent;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
@@ -29,7 +29,7 @@ public final class ClientResourceLifecycleEvent {
     }
 
     private static void cleanup(String reason) {
-        CloudClientRuntime.clear();
+        CloudUploadRuntime.clear();
         GpuRenderPath.disposeAllMeshes(reason);
         AudioStreamCache.clearAll(reason);
         BlurStack.disposeAll(reason);
