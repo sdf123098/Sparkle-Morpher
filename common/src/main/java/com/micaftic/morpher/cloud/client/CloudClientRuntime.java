@@ -159,17 +159,24 @@ public final class CloudClientRuntime {
 
     public static CompletableFuture<CloudScopeClient.CloudEventRecovery> recoverScope(String scopeId, long after, int limit) {
         RuntimeState state = requireState();
-        return state.scopes().recoverEvents(scopeId, after, limit).thenApply(recovery -> {
+        long expectedGeneration = WORLD_SESSION.currentGeneration();
+        return WORLD_SESSION.guard(expectedGeneration, state.scopes().recoverEvents(scopeId, after, limit), recovery -> {
+            if (!Objects.equals(scopeId, state.scopeLifecycle().activeScopeId())) {
+                throw new java.util.concurrent.CancellationException("Cloud scope changed before recovery completed");
+            }
             state.appearances().applyRecovery(scopeId, recovery);
-            return recovery;
         });
     }
 
     public static CompletableFuture<List<CloudScopeClient.CloudEntityBinding>> refreshBindings(String scopeId, String worldEpoch) {
         RuntimeState state = requireState();
-        return state.scopes().listBindings(scopeId).thenApply(bindings -> {
+        long expectedGeneration = WORLD_SESSION.currentGeneration();
+        return WORLD_SESSION.guard(expectedGeneration, state.scopes().listBindings(scopeId), bindings -> {
+            if (!Objects.equals(scopeId, state.scopeLifecycle().activeScopeId())
+                    || !Objects.equals(worldEpoch, state.scopeLifecycle().activeWorldEpoch())) {
+                throw new java.util.concurrent.CancellationException("Cloud scope changed before bindings completed");
+            }
             state.bindingResolver().replace(scopeId, worldEpoch, bindings);
-            return bindings;
         });
     }
 
