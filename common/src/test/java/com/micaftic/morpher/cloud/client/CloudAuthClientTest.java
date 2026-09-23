@@ -8,6 +8,20 @@ import org.junit.jupiter.api.Test;
 class CloudAuthClientTest {
 
     @Test
+    void buildsSelfRegistrationRequestWithAccountIdAndPassword() {
+        assertEquals("{\"account_id\":\"player_1\",\"password\":\"correct-horse\"}",
+                CloudAuthClient.registrationRequestForTest("player_1", "correct-horse"));
+    }
+
+    @Test
+    void rejectsInvalidSelfRegistrationCredentialsBeforeSending() {
+        assertThrows(IllegalArgumentException.class,
+                () -> CloudAuthClient.registrationRequestForTest("../admin", "correct-horse"));
+        assertThrows(IllegalArgumentException.class,
+                () -> CloudAuthClient.registrationRequestForTest("player", "short"));
+    }
+
+    @Test
     void parsesSessionWithoutPersistingOrTransformingTokens() {
         CloudSession session = CloudAuthClient.parseSession("""
                 {"access_token":"access-secret","refresh_token":"refresh-secret",
