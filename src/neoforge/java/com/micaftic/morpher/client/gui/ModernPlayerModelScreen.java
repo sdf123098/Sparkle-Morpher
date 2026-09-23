@@ -828,21 +828,22 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void clickCloudAsset(CloudAssetSummary summary) {
-        STATE.selectedModelId = summary.ref().assetId();
+        String cloudModelId = this.controller.cloudModelId(summary);
+        STATE.selectedModelId = cloudModelId;
         STATE.selectedTextureId = "";
-        ModelAssembly assembly = this.controller.assemblyOrNull(summary.ref().assetId());
+        ModelAssembly assembly = this.controller.assemblyOrNull(cloudModelId);
         if (assembly == null) {
             this.controller.importCloudAsset(summary, error -> {
                 if (error != null && !error.getString().isBlank()) { setStatus(error, ChatFormatting.RED); return; }
                 this.controller.markCloudApplied(summary);
-                this.pendingModelApplyId = summary.ref().assetId();
+                this.pendingModelApplyId = cloudModelId;
                 setStatus(Component.translatable("gui.sparkle_morpher.cloud.imported", summary.name()), ChatFormatting.GREEN);
             });
             return;
         }
         this.controller.markCloudApplied(summary);
         STATE.selectedTextureId = selectedTextureOrDefault(assembly);
-        applyModelAndTexture(summary.ref().assetId(), STATE.selectedTextureId, assembly);
+        applyModelAndTexture(cloudModelId, STATE.selectedTextureId, assembly);
     }
     private void renderCurrentModelSummary(GuiGraphicsExtractor g, int x, int y, int w) {
         LocalPlayer player = Minecraft.getInstance().player;

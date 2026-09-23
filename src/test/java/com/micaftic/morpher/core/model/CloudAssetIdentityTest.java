@@ -2,8 +2,7 @@ package com.micaftic.morpher.core.model;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class CloudAssetIdentityTest {
     private static final String HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -23,5 +22,19 @@ class CloudAssetIdentityTest {
                 () -> new CloudAssetIdentity("instance/path", "tenant", "asset", "revision", HASH));
         assertThrows(IllegalArgumentException.class,
                 () -> new CloudAssetIdentity("instance", "tenant", "asset", "revision", "not-a-sha256"));
+    }
+
+    @Test
+    void runtimeModelIdIsSafeAndSeparatesCloudRevisionsFromLocalIds() {
+        CloudAssetIdentity first = new CloudAssetIdentity("official", "catalog", "hero", "1", HASH);
+        CloudAssetIdentity otherInstance = new CloudAssetIdentity("community", "catalog", "hero", "1", HASH);
+        CloudAssetIdentity otherRevision = new CloudAssetIdentity("official", "catalog", "hero", "2", HASH);
+
+        String runtimeId = first.runtimeModelId();
+        assertEquals(runtimeId, first.runtimeModelId());
+        assertTrue(runtimeId.matches("cloud_[0-9a-f]{64}"));
+        assertNotEquals("hero", runtimeId);
+        assertNotEquals(runtimeId, otherInstance.runtimeModelId());
+        assertNotEquals(runtimeId, otherRevision.runtimeModelId());
     }
 }

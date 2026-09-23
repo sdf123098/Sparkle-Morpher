@@ -4,6 +4,7 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
+import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 
@@ -23,7 +24,7 @@ import java.lang.reflect.Method;
  */
 public final class CloudMinecraftEntityProviders {
     private static CloudClientRuntime.RuntimeState registeredRuntime;
-    private static final Set<CloudAssetRef> MATERIALIZING = ConcurrentHashMap.newKeySet();
+    private static final Set<CloudAssetIdentity> MATERIALIZING = ConcurrentHashMap.newKeySet();
 
     private CloudMinecraftEntityProviders() {
     }
@@ -89,54 +90,64 @@ public final class CloudMinecraftEntityProviders {
                 return;
             }
             String assetId = appearance.assetId();
-            if (assetId != null && !assetId.isBlank()
-                    && ClientModelManager.getAvailableModelIds().contains(assetId)) {
+            CloudClientRuntime.RuntimeState runtime = CloudClientRuntime.state();
+            CloudAssetIdentity identity = assetId == null || assetId.isBlank() || runtime == null
+                    ? null : cloudIdentity(runtime, appearance);
+            String runtimeModelId = identity == null ? null : identity.runtimeModelId();
+            if (runtimeModelId != null && ClientModelManager.getAvailableModelIds().contains(runtimeModelId)) {
                 String textureId = appearance.textureId() == null ? "default" : appearance.textureId();
-                capability.initModelWithTexture(assetId, textureId);
+                capability.initModelWithTexture(runtimeModelId, textureId);
             } else if (assetId != null && !assetId.isBlank()) {
-                requestMaterialization(capability, appearance);
+                requestMaterialization(capability, appearance, runtime, identity);
             }
             capability.setForceDisabled(false);
         }
 
         private static void requestMaterialization(LivingAnimatable<?> capability,
-                                                    CloudScopeClient.CloudAppearance appearance) {
+                                                    CloudScopeClient.CloudAppearance appearance,
+                                                    CloudClientRuntime.RuntimeState runtime,
+                                                    CloudAssetIdentity identity) {
             Long revision = appearance.assetRevision();
             String rawSha256 = appearance.rawSha256();
-            if (revision == null || rawSha256 == null || rawSha256.isBlank()) return;
-
-            CloudClientRuntime.RuntimeState runtime = CloudClientRuntime.state();
-            if (runtime == null) return;
+            if (runtime == null || identity == null || revision == null || rawSha256 == null || rawSha256.isBlank()) return;
             CloudAssetSummary summary = runtime.assetCatalog().get(appearance.assetId());
             if (summary == null) return;
             CloudAssetRef ref = new CloudAssetRef(appearance.assetId(), revision, rawSha256);
-            if (!ref.equals(summary.ref()) || !MATERIALIZING.add(ref)) return;
+            if (!ref.equals(summary.ref()) || !MATERIALIZING.add(identity)) return;
 
             runtime.assetMaterialization().ensure(ref).thenAccept(path -> {
                 final byte[] bytes;
                 try {
                     bytes = Files.readAllBytes(path);
                 } catch (IOException failure) {
-                    MATERIALIZING.remove(ref);
+                    MATERIALIZING.remove(identity);
                     return;
                 }
                 Minecraft.getInstance().execute(() -> {
                     if (CloudClientRuntime.state() != runtime) {
-                        MATERIALIZING.remove(ref);
+                        MATERIALIZING.remove(identity);
                         return;
                     }
-                    ClientModelManager.importLocalModel(ref.assetId(), importFileName(summary), bytes, error -> {
-                        MATERIALIZING.remove(ref);
-                        if (error == null && ClientModelManager.getAvailableModelIds().contains(ref.assetId())) {
+                    String runtimeModelId = identity.runtimeModelId();
+                    ClientModelManager.importLocalModel(runtimeModelId, importFileName(summary), bytes, error -> {
+                        MATERIALIZING.remove(identity);
+                        if (error == null && ClientModelManager.getAvailableModelIds().contains(runtimeModelId)) {
                             String textureId = appearance.textureId() == null ? "default" : appearance.textureId();
-                            capability.initModelWithTexture(ref.assetId(), textureId);
+                            capability.initModelWithTexture(runtimeModelId, textureId);
                         }
                     });
                 });
             }).exceptionally(failure -> {
-                MATERIALIZING.remove(ref);
+                MATERIALIZING.remove(identity);
                 return null;
             });
+        }
+
+        private static CloudAssetIdentity cloudIdentity(CloudClientRuntime.RuntimeState runtime,
+                                                        CloudScopeClient.CloudAppearance appearance) {
+            if (appearance.assetRevision() == null || appearance.rawSha256() == null || appearance.rawSha256().isBlank()) return null;
+            return new CloudAssetIdentity(runtime.instance().instanceId(), "catalog", appearance.assetId(),
+                    Long.toString(appearance.assetRevision()), appearance.rawSha256());
         }
 
         private static String importFileName(CloudAssetSummary summary) {

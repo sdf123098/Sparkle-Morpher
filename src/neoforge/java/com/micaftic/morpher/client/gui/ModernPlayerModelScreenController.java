@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.cloud.client.CloudAssetPage;
 import com.micaftic.morpher.cloud.client.CloudAssetSummary;
+import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudModelSelectionStore;
 import com.micaftic.morpher.capability.PlayerCapability;
@@ -598,18 +599,30 @@ public final class ModernPlayerModelScreenController {
     public boolean isCloudFavorite(CloudAssetSummary summary) { return cloudAvailable() && CloudModelSelectionStore.isFavorite(cloudInstanceId(), summary.ref().assetId()); }
     public boolean toggleCloudFavorite(CloudAssetSummary summary) { return cloudAvailable() && CloudModelSelectionStore.toggleFavorite(cloudInstanceId(), summary); }
     public void markCloudApplied(CloudAssetSummary summary) { if (cloudAvailable()) CloudModelSelectionStore.recordApplied(cloudInstanceId(), summary); }
+    public String cloudModelId(CloudAssetSummary summary) {
+        CloudClientRuntime.RuntimeState runtime = CloudClientRuntime.state();
+        if (runtime == null) throw new IllegalStateException("Cloud runtime is not configured");
+        return cloudIdentity(runtime, summary).runtimeModelId();
+    }
     public void importCloudAsset(CloudAssetSummary summary, Consumer<Component> callback) {
-        if (!cloudAvailable()) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
+        CloudClientRuntime.RuntimeState expectedRuntime = CloudClientRuntime.state();
+        if (expectedRuntime == null) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
+        String modelId = cloudIdentity(expectedRuntime, summary).runtimeModelId();
         CloudClientRuntime.rememberCloudAsset(summary);
         CloudClientRuntime.materializeAsset(summary.ref()).thenApplyAsync(path -> {
             try { return Files.readAllBytes(path); } catch (IOException e) { throw new java.util.concurrent.CompletionException(e); }
         }).whenComplete((bytes, failure) -> Minecraft.getInstance().execute(() -> {
+            if (CloudClientRuntime.state() != expectedRuntime) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
             if (failure != null) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.search_failed", rootMessage(failure))); return; }
-            ClientModelManager.importLocalModel(summary.ref().assetId(), cloudFileName(summary), bytes, error -> {
+            ClientModelManager.importLocalModel(modelId, cloudFileName(summary), bytes, error -> {
                 if (error == null) CloudModelSelectionStore.recordApplied(cloudInstanceId(), summary);
                 callback.accept(error);
             });
         }));
+    }
+    private static CloudAssetIdentity cloudIdentity(CloudClientRuntime.RuntimeState runtime, CloudAssetSummary summary) {
+        return new CloudAssetIdentity(runtime.instance().instanceId(), "catalog", summary.ref().assetId(),
+                Long.toString(summary.ref().revision()), summary.ref().rawSha256());
     }
     private static String cloudFileName(CloudAssetSummary summary) {
         String name = summary.name().isBlank() ? summary.ref().assetId() : summary.name();
