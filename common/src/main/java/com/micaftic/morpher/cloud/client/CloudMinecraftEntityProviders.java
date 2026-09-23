@@ -9,6 +9,7 @@ import net.minecraft.world.entity.Entity;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.lang.reflect.Method;
 
 /**
  * Registers the built-in client adapters for the three explicitly bindable
@@ -92,7 +93,33 @@ public final class CloudMinecraftEntityProviders {
 
         private static Entity entity(UUID entityUuid) {
             Minecraft client = Minecraft.getInstance();
-            return client.level == null ? null : client.level.getEntity(entityUuid);
+            if (client.level == null) return null;
+            try {
+                Method byUuid = client.level.getClass().getMethod("getEntity", UUID.class);
+                Object resolved = byUuid.invoke(client.level, entityUuid);
+                if (resolved instanceof Entity entity) return entity;
+            } catch (ReflectiveOperationException ignored) {
+                // 1.21.1 exposes the integer-id overload instead; use the
+                // reflective iterable fallbacks below so this common source
+                // remains binary-safe across the supported client versions.
+            }
+            for (String methodName : new String[]{"entitiesForRendering", "getAllEntities"}) {
+                try {
+                    Method all = client.level.getClass().getMethod(methodName);
+                    Object value = all.invoke(client.level);
+                    if (value instanceof Iterable<?> iterable) {
+                        for (Object candidate : iterable) {
+                            if (candidate instanceof Entity entity && entityUuid.equals(entity.getUUID())) return entity;
+                        }
+                    }
+                } catch (ReflectiveOperationException ignored) {
+                    // Optional loader/version-specific lookup surface.
+                }
+            }
+            for (var player : client.level.players()) {
+                if (entityUuid.equals(player.getUUID())) return player;
+            }
+            return null;
         }
     }
 }
