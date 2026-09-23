@@ -556,15 +556,19 @@ public final class ModernPlayerModelScreenController {
     }
 
     public Set<String> availableModelIds() {
-        return ClientModelManager.getAvailableModelIds();
+        return ClientModelManager.getAvailableModelIds().stream()
+                .filter(modelId -> !CloudAssetIdentity.isRuntimeModelId(modelId))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     public int availableModelCount() {
-        return ClientModelManager.getAvailableModelIds().size();
+        return availableModelIds().size();
     }
 
     public Map<String, ModelAssembly> modelAssemblyMap() {
-        return ClientModelManager.getModelAssemblyMap();
+        return ClientModelManager.getModelAssemblyMap().entrySet().stream()
+                .filter(entry -> !CloudAssetIdentity.isRuntimeModelId(entry.getKey()))
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public Optional<ModelAssembly> lookupAssembly(String modelId) {
@@ -584,7 +588,7 @@ public final class ModernPlayerModelScreenController {
     }
 
     public boolean isLocalOnlyModel(String modelId) {
-        return ClientModelManager.isLocalOnlyModel(modelId);
+        return !CloudAssetIdentity.isRuntimeModelId(modelId) && ClientModelManager.isLocalOnlyModel(modelId);
     }
 
     public boolean isServerModel(String modelId) { return ClientModelManager.isServerModel(modelId); }
