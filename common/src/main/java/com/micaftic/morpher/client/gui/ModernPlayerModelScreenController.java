@@ -14,6 +14,10 @@ import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.client.upload.UploadManager;
+import com.micaftic.morpher.cloud.client.CloudAssetPage;
+import com.micaftic.morpher.cloud.client.CloudAssetSummary;
+import com.micaftic.morpher.cloud.client.CloudClientRuntime;
+import com.micaftic.morpher.cloud.client.CloudModelSelectionStore;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.LoadingStateConfig;
 import com.micaftic.morpher.core.vector.VectorApiCapability;
@@ -579,6 +583,79 @@ public final class ModernPlayerModelScreenController {
 
     public boolean isLocalOnlyModel(String modelId) {
         return ClientModelManager.isLocalOnlyModel(modelId);
+    }
+
+    public boolean isServerModel(String modelId) {
+        return ClientModelManager.isServerModel(modelId);
+    }
+
+    public boolean cloudAvailable() {
+        return CloudClientRuntime.isConfigured();
+    }
+
+    public String cloudInstanceId() {
+        return CloudClientRuntime.state() == null ? "" : CloudClientRuntime.state().instance().instanceId();
+    }
+
+    public CompletableFuture<CloudAssetPage> listCloudAssets(String scope, String query, String cursor, int limit) {
+        if (!cloudAvailable()) return CompletableFuture.failedFuture(new IllegalStateException("Cloud is not connected"));
+        return CloudClientRuntime.listAssetsPage(scope, query, cursor, limit);
+    }
+
+    public List<CloudAssetSummary> recentCloudAssets() {
+        return cloudAvailable() ? CloudModelSelectionStore.recent(cloudInstanceId()) : List.of();
+    }
+
+    public List<CloudAssetSummary> favoriteCloudAssets() {
+        return cloudAvailable() ? CloudModelSelectionStore.favorites(cloudInstanceId()) : List.of();
+    }
+
+    public boolean isCloudFavorite(CloudAssetSummary summary) {
+        return cloudAvailable() && CloudModelSelectionStore.isFavorite(cloudInstanceId(), summary.ref().assetId());
+    }
+
+    public boolean toggleCloudFavorite(CloudAssetSummary summary) {
+        return cloudAvailable() && CloudModelSelectionStore.toggleFavorite(cloudInstanceId(), summary);
+    }
+
+    public void markCloudApplied(CloudAssetSummary summary) {
+        if (cloudAvailable()) CloudModelSelectionStore.recordApplied(cloudInstanceId(), summary);
+    }
+
+    public void importCloudAsset(CloudAssetSummary summary, Consumer<Component> callback) {
+        if (!cloudAvailable()) {
+            callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected"));
+            return;
+        }
+        CloudClientRuntime.rememberCloudAsset(summary);
+        String fileName = cloudFileName(summary);
+        CloudClientRuntime.materializeAsset(summary.ref())
+                .thenApplyAsync(path -> {
+                    try {
+                        return Files.readAllBytes(path);
+                    } catch (IOException e) {
+                        throw new java.util.concurrent.CompletionException(e);
+                    }
+                })
+                .whenComplete((bytes, failure) -> Minecraft.getInstance().execute(() -> {
+                    if (failure != null) {
+                        callback.accept(Component.translatable("gui.sparkle_morpher.cloud.asset_download_failed", rootMessage(failure)));
+                        return;
+                    }
+                    ClientModelManager.importLocalModel(summary.ref().assetId(), fileName, bytes, error -> {
+                        if (error == null) CloudModelSelectionStore.recordApplied(cloudInstanceId(), summary);
+                        callback.accept(error);
+                    });
+                }));
+    }
+
+    private static String cloudFileName(CloudAssetSummary summary) {
+        String name = summary.name() == null || summary.name().isBlank() ? summary.ref().assetId() : summary.name();
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".ysm") || lower.endsWith(".zip") || lower.endsWith(".bbmodel") || lower.endsWith(".gltf") || lower.endsWith(".glb")) return name;
+        String format = summary.format().toLowerCase(Locale.ROOT);
+        String extension = format.contains("bbmodel") ? ".bbmodel" : format.contains("zip") ? ".zip" : format.contains("gltf") ? ".gltf" : ".ysm";
+        return name + extension;
     }
 
     public void markModelUsed(String modelId) {
