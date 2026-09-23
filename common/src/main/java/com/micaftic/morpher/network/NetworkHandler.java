@@ -1,10 +1,9 @@
 package com.micaftic.morpher.network;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.network.message.*;
 import com.micaftic.morpher.mixin.ConnectionAccessor;
 import com.micaftic.morpher.mixin.ServerCommonPacketListenerImplAccessor;
-import io.netty.channel.Channel;
+import com.micaftic.morpher.network.message.*;
 import io.netty.util.AttributeKey;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
@@ -13,8 +12,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
+import com.micaftic.morpher.core.api.network.PacketDirection;
 import com.micaftic.morpher.core.api.network.YSMChannel;
-import com.micaftic.morpher.legacy.compat.LegacyCompatNetwork;
 import com.micaftic.morpher.legacy.compat.LegacyCompatState;
 import com.micaftic.morpher.core.api.network.state.PrivacyState;
 import com.micaftic.morpher.network.protocol.*;
@@ -48,27 +47,24 @@ public final class NetworkHandler {
     }
 
     public static boolean isClientConnected() {
-        // R9.2：只做组合——隐私未激活，且 legacy 会话活跃（握手完成或 MC 连接已协商）
+        // R9.2：隐私未激活 + legacy 会话活跃（握手完成，或当前 MC 连接已协商 SPM channel）
         return PrivacyState.isInactive()
-                && LegacyCompatState.isClientSessionActive(MinecraftConnectionState.isClientConnected());
+                && LegacyCompatState.isClientSessionActive(clientChannelNegotiated());
+    }
+
+    private static boolean clientChannelNegotiated() {
+        if (!MinecraftConnectionState.isClientConnected()) {
+            return false;
+        }
+        return MinecraftConnectionState.isClientConnected();
     }
 
     public static boolean isConnectionValid(@Nullable Connection connection) {
-        if (connection == null || !connection.isConnected()) {
-            return false;
-        }
-        try {
-            Channel channel = ((ConnectionAccessor) connection).ysm$getChannel();
-            if (channel == null) return false;
-            return VERSION.equals(channel.attr(CHANNEL_VERSION_KEY).get());
-        } catch (Exception e) {
-            return connection.isConnected();
-        }
+        return connection != null && ((ConnectionAccessor) connection).ysm$getChannel() != null && VERSION.equals(((ConnectionAccessor) connection).ysm$getChannel().attr(CHANNEL_VERSION_KEY).get());
     }
 
     public static void init() {
         YSMChannel.init(CHANNEL_ID, VERSION);
-        LegacyCompatNetwork.register();
         AnimationProtocol.register();
         EntityModelProtocol.register();
         ServerPolicyProtocol.register();

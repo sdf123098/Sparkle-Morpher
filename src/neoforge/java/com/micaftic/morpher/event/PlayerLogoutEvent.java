@@ -14,7 +14,6 @@ public final class PlayerLogoutEvent {
     private static void onQuit(PlayerEvent.PlayerLoggedOutEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer p)) return;
         if (!YesSteveModel.isAvailable()) return;
-        ServerModelManager.clearPlayerSyncState(p.getUUID());
         ModelInfoCapability.get(p).ifPresent(c -> PlayerModelSelectionStore.saveCurrentSelection(p, c));
         PlayerDataSaveBridge.save(p);
     }

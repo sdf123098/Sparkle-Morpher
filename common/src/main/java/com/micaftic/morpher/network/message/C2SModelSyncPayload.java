@@ -1,6 +1,5 @@
 package com.micaftic.morpher.network.message;
 
-import com.micaftic.morpher.model.ServerModelManager;
 import net.minecraft.network.FriendlyByteBuf;
 import com.micaftic.morpher.core.api.network.PacketContext;
 
@@ -26,8 +25,7 @@ public class C2SModelSyncPayload {
     }
 
     public static void handle(C2SModelSyncPayload message, PacketContext ctx) {
-        if (ctx.isServerSide() && ctx.getSender() != null) {
-            ServerModelManager.nativeSendModelData(ctx.getSender().getUUID(), message.data);
-        }
+        // Removed with the server-side SPM model sync protocol. Cloud uploads
+        // and downloads are HTTP operations owned by the client Cloud runtime.
     }
 }

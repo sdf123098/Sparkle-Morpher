@@ -6,7 +6,6 @@ import com.micaftic.morpher.capability.StarModelsCapability;
 import com.micaftic.morpher.event.CapabilityEvent;
 import com.micaftic.morpher.model.ServerModelManager;
 import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.util.NetworkOnlineDebugLog;
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
 import com.micaftic.morpher.util.PlayerStarModelsStore;
 import net.minecraft.network.FriendlyByteBuf;
@@ -36,7 +35,6 @@ public class C2SVersionCheckPacket {
     public static void handle(C2SVersionCheckPacket message, PacketContext ctx) {
         ServerPlayer sender = ctx.getSender();
         if (sender != null && NetworkHandler.setChannelVersion(ctx.getConnection(), message.version)) {
-            NetworkOnlineDebugLog.info("C2SVersionCheck from {} ver={}", sender.getName().getString(), message.version);
             AuthModelsCapability.get(sender).ifPresent(cap -> {
                 for (String modelId : ServerModelManager.getAuthModels()) {
                     cap.addModel(modelId);
@@ -46,13 +44,10 @@ public class C2SVersionCheckPacket {
             PlayerModelSelectionStore.restore(sender);
             ServerModelManager.validatePlayerModel(sender);
             ModelInfoCapability.get(sender).ifPresent(cap -> {
-                NetworkOnlineDebugLog.info("After validate: {} modelId={} texture={} dirty={}",
-                        sender.getName().getString(), cap.getModelId(), cap.getSelectTexture(), cap.isDirty());
                 cap.setMandatory(false);
                 cap.stopAnimation(sender);
             });
             CapabilityEvent.syncVisiblePlayerModelsTo(sender);
-            NetworkOnlineDebugLog.info("Calling syncPlayerModelToTracking for {}", sender.getName().getString());
             CapabilityEvent.syncPlayerModelToTracking(sender, false);
             AuthModelsCapability.get(sender).ifPresent(cap -> {
                 NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(cap.getAuthModels()), sender);
@@ -60,7 +55,7 @@ public class C2SVersionCheckPacket {
             StarModelsCapability.get(sender).ifPresent(cap -> {
                 NetworkHandler.sendToClientPlayer(new S2CSyncStarModelsPacket(cap.getStarModels()), sender);
             });
-            ServerModelManager.requestPlayerAuth(sender, null);
+            CapabilityEvent.forgetSyncedModelStates(sender);
         }
     }
 }

@@ -10,6 +10,6 @@ public final class ServerStartupEvent {
     public static void register() { NeoForge.EVENT_BUS.addListener(ServerStartupEvent::onStarting); }
     private static void onStarting(ServerStartingEvent event) {
         if (!YesSteveModel.isAvailable()) return;
-        ServerModelManager.loadModels(r -> { if (!r.isSuccess()) event.getServer().execute(() -> { throw new RuntimeException("sparkle Loading Failed: " + r.getErrorMessage().getString(256)); }); }, null);
+        ServerModelManager.loadModels(r -> { if (!r.isSuccess()) event.getServer().execute(() -> { throw new RuntimeException("sparkle Loading Failed: " + r.getErrorMessage().getString(256)); }); });
     }
 }
