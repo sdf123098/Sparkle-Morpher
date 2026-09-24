@@ -111,6 +111,10 @@ public final class CloudInstanceRegistry {
         return selectedInstanceId == null ? Optional.empty() : find(selectedInstanceId);
     }
 
+    public static boolean isBuiltinOfficial(CloudInstanceProfile profile) {
+        return profile != null && BUILTIN_OFFICIAL.instance().equals(profile.instance());
+    }
+
     public synchronized Optional<CloudInstanceProfile> find(String instanceId) {
         return profiles.stream().filter(profile -> profile.instanceId().equals(instanceId)).findFirst();
     }
