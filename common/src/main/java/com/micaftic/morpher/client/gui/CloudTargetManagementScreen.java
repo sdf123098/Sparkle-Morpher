@@ -28,7 +28,7 @@ public final class CloudTargetManagementScreen extends Screen {
     private String statusMessage;
 
     CloudTargetManagementScreen(Screen parent, CloudManagementController management) {
-        super(Component.literal("SPM Cloud targets and ACL"));
+        super(Component.translatable("gui.sparkle_morpher.cloud.manage.target.title"));
         this.parent = parent;
         this.management = management;
     }
@@ -39,14 +39,14 @@ public final class CloudTargetManagementScreen extends Screen {
         clearWidgets();
         int left = Math.max(8, (this.width - 332) / 2);
         int width = Math.min(104, (this.width - 24) / 3);
-        this.targetId = field(left, 32, width, "Target ID (optional)");
-        this.targetKind = field(left + width + 6, 32, width, "PLAYER / FAKE / MAID");
-        this.targetName = field(left + (width + 6) * 2, 32, width, "Display name");
-        this.accountId = field(left, 56, width + 54, "Cloud account ID");
-        this.role = field(left + width + 60, 56, width + 54, "Role");
+        this.targetId = field(left, 32, width, text("target.id"));
+        this.targetKind = field(left + width + 6, 32, width, text("target.kind"));
+        this.targetName = field(left + (width + 6) * 2, 32, width, text("target.name"));
+        this.accountId = field(left, 56, width + 54, text("target.account"));
+        this.role = field(left + width + 60, 56, width + 54, text("target.role"));
         int statusWidth = Math.max(90, this.width - left * 2 - 52);
         this.statusButton = addRenderableWidget(Button.builder(Component.literal(this.statusMessage == null
-                        ? "Target and ACL management" : this.statusMessage), button -> { })
+                        ? text("target.status") : this.statusMessage), button -> { })
                 .bounds(left, 82, statusWidth, 20).build());
         Button previousPage = addRenderableWidget(Button.builder(Component.literal("<"), button -> {
             this.listPage--;
@@ -57,21 +57,21 @@ public final class CloudTargetManagementScreen extends Screen {
             init();
         }).bounds(left + statusWidth + 28, 82, 24, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Create target"), button -> createTarget())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.target.create"), button -> createTarget())
                 .bounds(left, 106, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Refresh targets"), button -> refreshTargets())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.target.refresh"), button -> refreshTargets())
                 .bounds(left + width + 6, 106, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Select target ID"), button -> selectTarget())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.target.select"), button -> selectTarget())
                 .bounds(left + (width + 6) * 2, 106, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Refresh scope ACL"), button -> refreshScopeAcl())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.target.refresh_scope_acl"), button -> refreshScopeAcl())
                 .bounds(left, 130, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Set scope ACL"), button -> setScopeAcl())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.target.set_scope_acl"), button -> setScopeAcl())
                 .bounds(left + width + 6, 130, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Refresh target ACL"), button -> refreshTargetAcl())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.target.refresh_target_acl"), button -> refreshTargetAcl())
                 .bounds(left + (width + 6) * 2, 130, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Set target ACL"), button -> setTargetAcl())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.target.set_target_acl"), button -> setTargetAcl())
                 .bounds(left + width + 6, 154, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal(this.showingAcl ? "Show targets" : "Show ACL"), button -> {
+        addRenderableWidget(Button.builder(Component.literal(this.showingAcl ? text("target.show_targets") : text("target.show_acl")), button -> {
             this.showingAcl = !this.showingAcl;
             this.listPage = 0;
             init();
@@ -91,7 +91,7 @@ public final class CloudTargetManagementScreen extends Screen {
                 addRenderableWidget(Button.builder(Component.literal(aclEntry.accountId() + "  —  " + aclEntry.role()), button -> {
                     this.accountId.setValue(aclEntry.accountId());
                     this.role.setValue(aclEntry.role());
-                    setStatus("Selected ACL entry " + aclEntry.accountId());
+                    setStatus(text("target.selected_acl", aclEntry.accountId()));
                 }).bounds(left, y, Math.max(180, this.width - left * 2), 20).build());
             }
         } else for (var target : snapshot.targets().subList(pageRange.startInclusive(), pageRange.endExclusive())) {
@@ -100,13 +100,13 @@ public final class CloudTargetManagementScreen extends Screen {
                 try {
                     management.selectTarget(target.targetId());
                     this.targetId.setValue(target.targetId());
-                    setStatus("Selected " + target.displayName());
+                    setStatus(text("selected", target.displayName()));
                 } catch (RuntimeException failure) {
                     setStatus(CloudManagementScreen.errorText(failure));
                 }
             }).bounds(left, y, Math.max(180, this.width - left * 2), 20).build());
         }
-        addRenderableWidget(Button.builder(Component.literal("Back"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> onClose())
                 .bounds(this.width / 2 - 50, this.height - 27, 100, 20).build());
     }
 
@@ -123,45 +123,45 @@ public final class CloudTargetManagementScreen extends Screen {
             String scope = management.snapshot().selectedScope().scopeId();
             run(management.createTarget(new CloudScopeClient.CloudTargetCreate(scope,
                     targetId.getValue().isBlank() ? null : targetId.getValue().trim(),
-                    targetKind.getValue().trim(), targetName.getValue().trim())), "Target created");
+                    targetKind.getValue().trim(), targetName.getValue().trim())), text("target.created"));
         } catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void refreshTargets() {
-        try { this.showingAcl = false; this.listPage = 0; run(management.refreshTargets(), "Targets refreshed"); }
+        try { this.showingAcl = false; this.listPage = 0; run(management.refreshTargets(), text("target.refreshed")); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void selectTarget() {
-        try { management.selectTarget(targetId.getValue().trim()); setStatus("Target selected"); }
+        try { management.selectTarget(targetId.getValue().trim()); setStatus(text("target.selected")); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void refreshScopeAcl() {
-        try { this.showingAcl = true; this.listPage = 0; run(management.refreshScopeAcl(), "Scope ACL refreshed"); }
+        try { this.showingAcl = true; this.listPage = 0; run(management.refreshScopeAcl(), text("target.scope_acl_refreshed")); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void refreshTargetAcl() {
-        try { this.showingAcl = true; this.listPage = 0; run(management.refreshTargetAcl(), "Target ACL refreshed"); }
+        try { this.showingAcl = true; this.listPage = 0; run(management.refreshTargetAcl(), text("target.target_acl_refreshed")); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void setScopeAcl() {
         try { this.showingAcl = true; run(management.setScopeAcl(new CloudScopeClient.CloudAclUpdate(accountId.getValue().trim(), role.getValue().trim())
-                ).thenCompose(ignored -> management.refreshScopeAcl()), "Scope ACL updated"); }
+                ).thenCompose(ignored -> management.refreshScopeAcl()), text("target.scope_acl_updated")); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void setTargetAcl() {
         try { this.showingAcl = true; run(management.setTargetAcl(new CloudScopeClient.CloudAclUpdate(accountId.getValue().trim(), role.getValue().trim())
-                ).thenCompose(ignored -> management.refreshTargetAcl()), "Target ACL updated"); }
+                ).thenCompose(ignored -> management.refreshTargetAcl()), text("target.target_acl_updated")); }
         catch (RuntimeException failure) { setStatus(CloudManagementScreen.errorText(failure)); }
     }
 
     private void run(CompletableFuture<?> future, String success) {
         long expectedGeneration = this.lifecycleGeneration;
-        setStatus("Working...");
+        setStatus(text("working"));
         future.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
             if (!this.active || expectedGeneration != this.lifecycleGeneration) return;
             setStatus(failure == null ? success : CloudManagementScreen.errorText(failure));
@@ -178,6 +178,10 @@ public final class CloudTargetManagementScreen extends Screen {
     private void setStatus(String message) {
         this.statusMessage = message;
         if (this.statusButton != null) this.statusButton.setMessage(Component.literal(message));
+    }
+
+    private static String text(String key, Object... args) {
+        return CloudManagementScreen.text(key, args);
     }
 
     @Override

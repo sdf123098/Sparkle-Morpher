@@ -37,7 +37,7 @@ public final class CloudIdentityManagementScreen extends Screen {
     private boolean active;
 
     CloudIdentityManagementScreen(Screen parent, CloudManagementController management) {
-        super(Component.literal("SPM Cloud identities"));
+        super(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.title"));
         this.parent = parent;
         this.management = management;
     }
@@ -50,40 +50,40 @@ public final class CloudIdentityManagementScreen extends Screen {
         int col = Math.min(104, (width - 24) / 3);
         providerButton = addRenderableWidget(Button.builder(Component.literal(providerLabel()), b -> nextProvider())
                 .bounds(left, 28, col * 2 + 6, 20).build());
-        statusButton = addRenderableWidget(Button.builder(Component.literal(status == null ? "Identity and Offline tools" : status), b -> { })
+        statusButton = addRenderableWidget(Button.builder(Component.literal(status == null ? text("identity.status") : status), b -> { })
                 .bounds(left + (col + 6) * 2, 28, col, 20).build());
-        identityId = field(left, 52, col * 2 + 6, "Identity ID / Offline ID");
-        targetId = field(left + (col + 6) * 2, 52, col, "Target ID");
-        entityUuid = field(left, 76, col * 2 + 6, "Entity UUID for claim");
-        claimCode = field(left + (col + 6) * 2, 76, col, "Claim code");
-        bindingId = field(left, 100, col * 2 + 6, "Pending binding ID");
-        revision = field(left + (col + 6) * 2, 100, col, "Expected revision");
+        identityId = field(left, 52, col * 2 + 6, text("identity.id"));
+        targetId = field(left + (col + 6) * 2, 52, col, text("identity.target_id"));
+        entityUuid = field(left, 76, col * 2 + 6, text("identity.entity_uuid"));
+        claimCode = field(left + (col + 6) * 2, 76, col, text("identity.claim_code"));
+        bindingId = field(left, 100, col * 2 + 6, text("identity.binding_id"));
+        revision = field(left + (col + 6) * 2, 100, col, text("identity.revision"));
 
-        addRenderableWidget(Button.builder(Component.literal("Refresh providers / identities"), b -> refresh())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.refresh"), b -> refresh())
                 .bounds(left, 128, col, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Verify current game identity"), b -> verify())
-                .bounds(left + col + 6, 128, col + 54, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Register Offline"), b -> registerOffline())
-                .bounds(left + (col + 6) * 2 + 54, 128, col - 54, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.verify"), b -> verify())
+                .bounds(left + col + 6, 128, col, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.register_offline"), b -> registerOffline())
+                .bounds(left + (col + 6) * 2, 128, col, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Request Offline approval"), b -> requestApproval())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.request_approval"), b -> requestApproval())
                 .bounds(left, 152, col, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Create target claim code"), b -> createClaim())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.create_claim"), b -> createClaim())
                 .bounds(left + col + 6, 152, col, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Redeem claim code"), b -> redeemClaim())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.redeem_claim"), b -> redeemClaim())
                 .bounds(left + (col + 6) * 2, 152, col, 20).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Revoke claim code"), b -> revokeClaim())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.revoke_claim"), b -> revokeClaim())
                 .bounds(left, 176, col, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Approve binding revision"), b -> approveBinding())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.approve_binding"), b -> approveBinding())
                 .bounds(left + col + 6, 176, col + 54, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Back"), b -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("gui.back"), b -> onClose())
                 .bounds(this.width - left - col, 176, col, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Select identity"), b -> selectIdentity())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.select_identity"), b -> selectIdentity())
                 .bounds(left, 200, col, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Refresh scope approvals"), b -> refreshBindings())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.refresh_bindings"), b -> refreshBindings())
                 .bounds(left + col + 6, 200, col, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Select pending binding"), b -> selectBinding())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identity.select_binding"), b -> selectBinding())
                 .bounds(left + (col + 6) * 2, 200, col, 20).build());
         refresh();
     }
@@ -97,7 +97,7 @@ public final class CloudIdentityManagementScreen extends Screen {
     }
 
     private String providerLabel() {
-        if (providers.isEmpty()) return "No trusted provider loaded";
+        if (providers.isEmpty()) return text("identity.no_provider");
         CloudIdentityClient.IdentityProvider selected = providers.get(Math.floorMod(providerIndex, providers.size()));
         return selected.displayName() + "  [" + selected.providerId() + "]";
     }
@@ -127,14 +127,14 @@ public final class CloudIdentityManagementScreen extends Screen {
                         identities = identityRequest.join();
                         providerIndex = Math.min(providerIndex, Math.max(0, providers.size() - 1));
                         providerButton.setMessage(Component.literal(providerLabel()));
-                        setStatus("Loaded " + identities.size() + " Cloud identities; use Select identity");
+                        setStatus(text("identity.loaded", identities.size()));
                         refreshBindings();
                     }
                 }));
     }
 
     private void selectIdentity() {
-        if (identities.isEmpty()) { setStatus("No identities loaded"); return; }
+        if (identities.isEmpty()) { setStatus(text("identity.none_loaded")); return; }
         var identity = identities.get(Math.floorMod(identityIndex++, identities.size()));
         identityId.setValue(identity.identityId());
         setStatus(identity.displayName() + " — " + identity.identity() + " [" + identity.verificationStatus() + "]");
@@ -151,24 +151,24 @@ public final class CloudIdentityManagementScreen extends Screen {
     }
 
     private void selectBinding() {
-        if (bindings.isEmpty()) { setStatus("No Offline bindings in the selected scope"); return; }
+        if (bindings.isEmpty()) { setStatus(text("identity.no_bindings")); return; }
         var binding = bindings.get(Math.floorMod(bindingIndex++, bindings.size()));
         bindingId.setValue(binding.bindingId());
         revision.setValue(Long.toString(binding.revision()));
         identityId.setValue(binding.identityId());
         targetId.setValue(binding.targetId());
-        setStatus(binding.status() + " — entity " + binding.entityUuid() + " (rev " + binding.revision() + ")");
+        setStatus(text("identity.binding_status", binding.status(), binding.entityUuid(), binding.revision()));
     }
 
     private void verify() {
-        if (providers.isEmpty()) { setStatus("Refresh the trusted provider list first"); return; }
+        if (providers.isEmpty()) { setStatus(text("identity.refresh_first")); return; }
         try {
             var profile = MinecraftSessionServiceJoiner.currentProfile();
             var client = com.micaftic.morpher.cloud.client.CloudClientRuntime.state().identities();
             var provider = providers.get(Math.floorMod(providerIndex, providers.size()));
             run(client.createChallenge(provider.providerId(), profile.name(), profile.profileId().toString())
                     .thenCompose(challenge -> client.joinAndComplete(challenge, new MinecraftSessionServiceJoiner())),
-                    identity -> "Verified " + identity.displayName() + " (" + identity.identityId() + ")");
+                    identity -> text("identity.verified", identity.displayName(), identity.identityId()));
         } catch (RuntimeException failure) { setStatus(error(failure)); }
     }
 
@@ -176,33 +176,33 @@ public final class CloudIdentityManagementScreen extends Screen {
         try {
             var profile = MinecraftSessionServiceJoiner.currentProfile();
             run(management.registerOfflineIdentity(profile.profileId(), profile.name()),
-                    identity -> "Pending Offline identity: " + identity.identityId());
+                    identity -> text("identity.pending", identity.identityId()));
         } catch (RuntimeException failure) { setStatus(error(failure)); }
     }
 
     private void requestApproval() {
         try {
             run(management.requestOfflineApproval(identityId.getValue().trim(), targetId.getValue().trim()),
-                    binding -> "Approval requested: " + binding.bindingId() + " rev " + binding.revision());
+                    binding -> text("identity.approval_requested", binding.bindingId(), binding.revision()));
         } catch (RuntimeException failure) { setStatus(error(failure)); }
     }
 
     private void createClaim() {
         try {
             run(management.createClaimCode(targetId.getValue().trim(), entityUuid.getValue().trim(), 600L),
-                    claim -> { claimCode.setValue(claim.code()); return "One-time claim code created (10 min)"; });
+                    claim -> { claimCode.setValue(claim.code()); return text("identity.claim_created"); });
         } catch (RuntimeException failure) { setStatus(error(failure)); }
     }
 
     private void redeemClaim() {
         try {
             run(management.redeemClaimCode(claimCode.getValue().trim(), identityId.getValue().trim()),
-                    binding -> "Claim redeemed: " + binding.bindingId());
+                    binding -> text("identity.claim_redeemed", binding.bindingId()));
         } catch (RuntimeException failure) { setStatus(error(failure)); }
     }
 
     private void revokeClaim() {
-        try { run(management.revokeClaimCode(claimCode.getValue().trim()), ignored -> "Claim code revoked"); }
+        try { run(management.revokeClaimCode(claimCode.getValue().trim()), ignored -> text("identity.claim_revoked")); }
         catch (RuntimeException failure) { setStatus(error(failure)); }
     }
 
@@ -210,13 +210,13 @@ public final class CloudIdentityManagementScreen extends Screen {
         try {
             long expectedRevision = Long.parseLong(revision.getValue().trim());
             run(management.approveBinding(bindingId.getValue().trim(), expectedRevision),
-                    binding -> "Binding approved at revision " + binding.revision());
+                    binding -> text("identity.binding_approved", binding.revision()));
         } catch (RuntimeException failure) { setStatus(error(failure)); }
     }
 
     private <T> void run(CompletableFuture<T> future, Function<T, String> message) {
         long expected = generation;
-        setStatus("Working...");
+        setStatus(text("working"));
         future.whenComplete((value, failure) -> Minecraft.getInstance().execute(() -> {
             if (!active || expected != generation) return;
             setStatus(failure == null ? message.apply(value) : error(failure));
@@ -227,6 +227,10 @@ public final class CloudIdentityManagementScreen extends Screen {
     private void setStatus(String value) {
         status = value;
         if (statusButton != null) statusButton.setMessage(Component.literal(value));
+    }
+
+    private static String text(String key, Object... args) {
+        return CloudManagementScreen.text(key, args);
     }
 
     private static String error(Throwable failure) {
