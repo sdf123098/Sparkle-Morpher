@@ -21,6 +21,9 @@ class CloudInstanceRegistryTest {
         assertEquals("official", official.instanceId());
         assertEquals("Official Cloud", official.name());
         assertEquals("https://spm-cloud-official.robinson171.workers.dev", official.instance().origin().toString());
+        assertTrue(CloudInstanceRegistry.isBuiltinOfficial(official));
+        assertFalse(CloudInstanceRegistry.isBuiltinOfficial(new CloudInstanceRegistry.CloudInstanceProfile(
+                CloudInstanceConfig.v1("official", URI.create("https://cloud.example.org")), "Official Cloud")));
     }
 
     @Test
