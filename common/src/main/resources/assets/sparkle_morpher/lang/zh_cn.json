@@ -881,6 +881,7 @@
   "gui.sparkle_morpher.model_panel.setting.native_simd_compatibility_log": "原生 SIMD 兼容性日志",
   "gui.sparkle_morpher.cloud.manage.instance_id": "实例 ID",
   "gui.sparkle_morpher.cloud.manage.name": "名称",
+  "gui.sparkle_morpher.cloud.manage.official_name": "官方 Cloud",
   "gui.sparkle_morpher.cloud.manage.account": "Cloud 账号",
   "gui.sparkle_morpher.cloud.manage.password": "密码",
   "gui.sparkle_morpher.cloud.manage.scope_id": "范围 ID",

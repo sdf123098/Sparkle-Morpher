@@ -103,7 +103,7 @@ public final class CloudManagementScreen extends Screen {
                 .bounds(switchX, 103, 100, 20).build());
         management().registry().selected().ifPresent(profile -> {
             this.instanceId.setValue(profile.instanceId());
-            this.instanceName.setValue(profile.name());
+            this.instanceName.setValue(displayName(profile));
             this.origin.setValue(profile.instance().origin().toString());
         });
         addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.save_instance"), button -> saveInstance())
@@ -178,8 +178,12 @@ public final class CloudManagementScreen extends Screen {
     private void saveInstance() {
         try {
             CloudInstanceConfig config = CloudInstanceConfig.v1(instanceId.getValue(), URI.create(origin.getValue().trim()));
+            String name = instanceName.getValue().trim();
             CloudInstanceRegistry.CloudInstanceProfile profile = new CloudInstanceRegistry.CloudInstanceProfile(
-                    config, instanceName.getValue().isBlank() ? config.instanceId() : instanceName.getValue().trim());
+                    config, name.isBlank() ? config.instanceId() : name);
+            if (CloudInstanceRegistry.isBuiltinOfficial(profile) && name.equals(text("official_name"))) {
+                profile = new CloudInstanceRegistry.CloudInstanceProfile(config, "Official Cloud");
+            }
             management().registry().addOrReplace(profile);
             management().selectInstance(config.instanceId());
             management().saveInstances();
@@ -205,7 +209,7 @@ public final class CloudManagementScreen extends Screen {
             management().selectInstance(next.instanceId());
             management().saveInstances();
             init();
-            setStatus(text("selected", next.name()));
+            setStatus(text("selected", displayName(next)));
         } catch (IOException | RuntimeException failure) {
             setStatus(errorText(failure));
         }
@@ -336,6 +340,11 @@ public final class CloudManagementScreen extends Screen {
 
     static String text(String key, Object... args) {
         return Component.translatable("gui.sparkle_morpher.cloud.manage." + key, args).getString();
+    }
+
+    private static String displayName(CloudInstanceRegistry.CloudInstanceProfile profile) {
+        return CloudInstanceRegistry.isBuiltinOfficial(profile) && profile.name().equals("Official Cloud")
+                ? text("official_name") : profile.name();
     }
 
     static String errorText(Throwable failure) {

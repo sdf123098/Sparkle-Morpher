@@ -881,6 +881,7 @@
   "gui.sparkle_morpher.model_panel.setting.native_simd_compatibility_log": "Native SIMD compatibility log",
   "gui.sparkle_morpher.cloud.manage.instance_id": "Instance ID",
   "gui.sparkle_morpher.cloud.manage.name": "Name",
+  "gui.sparkle_morpher.cloud.manage.official_name": "Official Cloud",
   "gui.sparkle_morpher.cloud.manage.account": "Cloud account",
   "gui.sparkle_morpher.cloud.manage.password": "Password",
   "gui.sparkle_morpher.cloud.manage.scope_id": "Scope ID",
