@@ -3,8 +3,11 @@ package com.micaftic.morpher.client.gui;
 import com.micaftic.morpher.cloud.CloudInstanceConfig;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudConnectionController;
+import com.micaftic.morpher.cloud.client.CloudGeneratedAccountStore;
+import com.micaftic.morpher.cloud.client.CloudHttpException;
 import com.micaftic.morpher.cloud.client.CloudInstanceRegistry;
 import com.micaftic.morpher.cloud.client.CloudManagementController;
+import com.micaftic.morpher.cloud.client.CloudSession;
 import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -32,6 +35,8 @@ public final class CloudManagementScreen extends Screen {
     private EditBox scopeName;
     private EditBox worldEpoch;
     private Button statusButton;
+    private Button quickConnectButton;
+    private boolean quickConnecting;
     private int scopePage;
     private String statusMessage;
     private boolean active;
@@ -68,20 +73,20 @@ public final class CloudManagementScreen extends Screen {
         clearWidgets();
         int left = Math.max(8, (this.width - 332) / 2);
         int width = Math.min(104, (this.width - 24) / 3);
-        this.instanceId = field(left, 28, width, "Instance ID");
-        this.instanceName = field(left + width + 6, 28, width, "Name");
+        this.instanceId = field(left, 28, width, text("instance_id"));
+        this.instanceName = field(left + width + 6, 28, width, text("name"));
         this.origin = field(left + (width + 6) * 2, 28, width, "https://cloud.example");
-        this.accountId = field(left, 52, width + 54, "Cloud account");
-        this.password = field(left + width + 60, 52, width + 54, "Password");
+        this.accountId = field(left, 52, width + 54, text("account"));
+        this.password = field(left + width + 60, 52, width + 54, text("password"));
         this.password.setMaxLength(256);
-        this.password.setSuggestion("Password");
-        this.scopeId = field(left, 76, width, "Scope ID");
-        this.scopeName = field(left + width + 6, 76, width, "Scope name");
-        this.worldEpoch = field(left + (width + 6) * 2, 76, width, "World epoch");
+        this.password.setSuggestion(text("password"));
+        this.scopeId = field(left, 76, width, text("scope_id"));
+        this.scopeName = field(left + width + 6, 76, width, text("scope_name"));
+        this.worldEpoch = field(left + (width + 6) * 2, 76, width, text("world_epoch"));
 
         var snapshot = management().snapshot();
         String state = this.statusMessage != null ? this.statusMessage
-                : snapshot.authenticated() ? "Connected" : "Disconnected";
+                : snapshot.authenticated() ? text("connected") : text("disconnected");
         int switchX = this.width - left - 100;
         int statusWidth = Math.max(64, switchX - left - 52);
         this.statusButton = addRenderableWidget(Button.builder(Component.literal(state), button -> { })
@@ -94,37 +99,42 @@ public final class CloudManagementScreen extends Screen {
             this.scopePage++;
             init();
         }).bounds(left + statusWidth + 28, 103, 24, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Next instance"), button -> switchInstance())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.next_instance"), button -> switchInstance())
                 .bounds(switchX, 103, 100, 20).build());
         management().registry().selected().ifPresent(profile -> {
             this.instanceId.setValue(profile.instanceId());
-            this.instanceName.setValue(profile.name());
+            this.instanceName.setValue(displayName(profile));
             this.origin.setValue(profile.instance().origin().toString());
         });
-        addRenderableWidget(Button.builder(Component.literal("Save instance"), button -> saveInstance())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.save_instance"), button -> saveInstance())
                 .bounds(left, 127, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Login / refresh"), button -> login())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.login"), button -> login())
                 .bounds(left + width + 6, 127, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Logout"), button -> logout())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.logout"), button -> logout())
                 .bounds(left + (width + 6) * 2, 127, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Create scope"), button -> createScope())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.create_scope"), button -> createScope())
                 .bounds(left, 151, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Refresh scopes"), button -> refreshScopes())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.refresh_scopes"), button -> refreshScopes())
                 .bounds(left + width + 6, 151, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Join selected"), button -> joinScope())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.join_selected"), button -> joinScope())
                 .bounds(left + (width + 6) * 2, 151, width, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Identities / Offline"), button ->
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identities"), button ->
                 InputUtil.setScreen(new CloudIdentityManagementScreen(this, management())))
                 .bounds(left, 175, width + 54, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Create Cloud account"), button -> register())
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.register"), button -> register())
                 .bounds(left + width + 60, 175, width + 54, 20).build());
+        this.quickConnectButton = addRenderableWidget(Button.builder(
+                Component.translatable("gui.sparkle_morpher.cloud.manage.quick_connect"), button -> connectOfficial())
+                .bounds(left, 199, this.width - left * 2, 20).build());
+        this.quickConnectButton.active = !this.quickConnecting && management().registry().selected()
+                .map(CloudInstanceRegistry::isBuiltinOfficial).orElse(false);
 
         if (snapshot.selectedScope() != null) {
             this.scopeId.setValue(snapshot.selectedScope().scopeId());
             this.scopeName.setValue(snapshot.selectedScope().name());
             this.worldEpoch.setValue(snapshot.selectedScope().worldEpoch());
         }
-        int rowsVisible = Math.max(1, (this.height - 32 - 201) / 22);
+        int rowsVisible = Math.max(1, (this.height - 32 - 225) / 22);
         var scopeRange = CloudScreenPagination.range(snapshot.scopes().size(), rowsVisible, this.scopePage);
         this.scopePage = scopeRange.page();
         previousScopePage.active = scopeRange.page() > 0;
@@ -132,18 +142,18 @@ public final class CloudManagementScreen extends Screen {
         int row = 0;
         for (var scope : snapshot.scopes().subList(scopeRange.startInclusive(), scopeRange.endExclusive())) {
             final String id = scope.scopeId();
-            int y = 201 + row++ * 22;
+            int y = 225 + row++ * 22;
             addRenderableWidget(Button.builder(Component.literal(scope.name() + "  [" + id + "]"), button -> {
                 try {
                     management().selectScope(id);
                     this.scopeId.setValue(id);
                     this.worldEpoch.setValue(scope.worldEpoch());
-                    setStatus("Selected " + scope.name());
+                    setStatus(text("selected", scope.name()));
                 } catch (RuntimeException failure) {
                     setStatus(errorText(failure));
                 }
             }).bounds(left, y, Math.max(180, this.width - left * 2 - 82), 20).build());
-            addRenderableWidget(Button.builder(Component.literal("Targets / ACL"), button -> {
+            addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.targets_acl"), button -> {
                 try {
                     management().selectScope(id);
                     InputUtil.setScreen(new CloudTargetManagementScreen(this, management()));
@@ -168,12 +178,16 @@ public final class CloudManagementScreen extends Screen {
     private void saveInstance() {
         try {
             CloudInstanceConfig config = CloudInstanceConfig.v1(instanceId.getValue(), URI.create(origin.getValue().trim()));
+            String name = instanceName.getValue().trim();
             CloudInstanceRegistry.CloudInstanceProfile profile = new CloudInstanceRegistry.CloudInstanceProfile(
-                    config, instanceName.getValue().isBlank() ? config.instanceId() : instanceName.getValue().trim());
+                    config, name.isBlank() ? config.instanceId() : name);
+            if (CloudInstanceRegistry.isBuiltinOfficial(profile) && name.equals(text("official_name"))) {
+                profile = new CloudInstanceRegistry.CloudInstanceProfile(config, "Official Cloud");
+            }
             management().registry().addOrReplace(profile);
             management().selectInstance(config.instanceId());
             management().saveInstances();
-            setStatus("Saved " + config.instanceId());
+            setStatus(text("saved", config.instanceId()));
         } catch (IOException | RuntimeException failure) {
             setStatus(errorText(failure));
         }
@@ -183,7 +197,7 @@ public final class CloudManagementScreen extends Screen {
         try {
             var profiles = management().registry().profiles();
             if (profiles.isEmpty()) {
-                setStatus("No saved Cloud instances");
+                setStatus(text("no_instances"));
                 return;
             }
             String selected = management().registry().selected().map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse(null);
@@ -195,7 +209,7 @@ public final class CloudManagementScreen extends Screen {
             management().selectInstance(next.instanceId());
             management().saveInstances();
             init();
-            setStatus("Selected " + next.name());
+            setStatus(text("selected", displayName(next)));
         } catch (IOException | RuntimeException failure) {
             setStatus(errorText(failure));
         }
@@ -205,7 +219,7 @@ public final class CloudManagementScreen extends Screen {
         try {
             String secret = password.getValue();
             password.setValue("");
-            run(management().login(accountId.getValue(), secret), "Cloud login succeeded");
+            run(management().login(accountId.getValue(), secret), text("login_success"));
         } catch (RuntimeException failure) {
             setStatus(errorText(failure));
         }
@@ -215,8 +229,57 @@ public final class CloudManagementScreen extends Screen {
         try {
             String secret = password.getValue();
             password.setValue("");
-            run(management().register(accountId.getValue(), secret), "Cloud account created and logged in");
+            run(management().register(accountId.getValue(), secret), text("register_success"));
         } catch (RuntimeException failure) {
+            setStatus(errorText(failure));
+        }
+    }
+
+    private void connectOfficial() {
+        if (this.quickConnecting) return;
+        try {
+            var selected = management().registry().selected().orElseThrow();
+            if (!CloudInstanceRegistry.isBuiltinOfficial(selected)) {
+                setStatus(text("official_only"));
+                return;
+            }
+            if (management().snapshot().authenticated()) {
+                setStatus(text("connected"));
+                return;
+            }
+            Path file = Minecraft.getInstance().gameDirectory.toPath().resolve("config")
+                    .resolve("sparkle-morpher").resolve("cloud-generated-account.json");
+            CloudGeneratedAccountStore store = new CloudGeneratedAccountStore(file);
+            var saved = store.load();
+            CloudGeneratedAccountStore.Account account;
+            CompletableFuture<CloudSession> request;
+            if (saved.isPresent()) {
+                account = saved.get();
+                request = management().login(account.accountId(), account.password())
+                        .exceptionallyCompose(failure -> {
+                            Throwable cause = unwrap(failure);
+                            if (cause instanceof CloudHttpException http
+                                    && (http.statusCode() == 401 || http.statusCode() == 404)) {
+                                return management().register(account.accountId(), account.password());
+                            }
+                            return CompletableFuture.failedFuture(cause);
+                        });
+            } else {
+                account = CloudGeneratedAccountStore.generate();
+                store.save(account);
+                request = management().register(account.accountId(), account.password());
+            }
+            accountId.setValue(account.accountId());
+            this.quickConnecting = true;
+            this.quickConnectButton.active = false;
+            long expectedGeneration = this.lifecycleGeneration;
+            request.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
+                if (!this.active || expectedGeneration != this.lifecycleGeneration) return;
+                this.quickConnecting = false;
+                if (this.quickConnectButton != null) this.quickConnectButton.active = true;
+            }));
+            run(request, text("quick_success"));
+        } catch (IOException | RuntimeException failure) {
             setStatus(errorText(failure));
         }
     }
@@ -224,12 +287,12 @@ public final class CloudManagementScreen extends Screen {
     private void logout() {
         management().logout();
         password.setValue("");
-        setStatus("Logged out");
+        setStatus(text("logged_out"));
     }
 
     private void refreshScopes() {
         try {
-            run(management().refreshScopes(), "Scopes refreshed");
+            run(management().refreshScopes(), text("scopes_refreshed"));
         } catch (RuntimeException failure) {
             setStatus(errorText(failure));
         }
@@ -239,7 +302,7 @@ public final class CloudManagementScreen extends Screen {
         try {
             var create = new com.micaftic.morpher.cloud.client.CloudScopeClient.CloudScopeCreate(
                     scopeId.getValue().trim(), scopeName.getValue().trim(), worldEpoch.getValue().trim(), null);
-            run(management().createScope(create), "Scope created");
+            run(management().createScope(create), text("scope_created"));
         } catch (RuntimeException failure) {
             setStatus(errorText(failure));
         }
@@ -248,7 +311,7 @@ public final class CloudManagementScreen extends Screen {
     private void joinScope() {
         try {
             if (management().snapshot().selectedScope() == null) management().selectScope(scopeId.getValue().trim());
-            run(management().enterSelectedScope(), "Joined Cloud scope");
+            run(management().enterSelectedScope(), text("scope_joined"));
         } catch (RuntimeException failure) {
             setStatus(errorText(failure));
         }
@@ -256,7 +319,7 @@ public final class CloudManagementScreen extends Screen {
 
     private void run(CompletableFuture<?> future, String success) {
         long expectedGeneration = this.lifecycleGeneration;
-        setStatus("Working...");
+        setStatus(text("working"));
         future.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
             if (!this.active || expectedGeneration != this.lifecycleGeneration) return;
             setStatus(failure == null ? success : errorText(failure));
@@ -275,11 +338,25 @@ public final class CloudManagementScreen extends Screen {
         if (this.statusButton != null) this.statusButton.setMessage(Component.literal(message));
     }
 
+    static String text(String key, Object... args) {
+        return Component.translatable("gui.sparkle_morpher.cloud.manage." + key, args).getString();
+    }
+
+    private static String displayName(CloudInstanceRegistry.CloudInstanceProfile profile) {
+        return CloudInstanceRegistry.isBuiltinOfficial(profile) && profile.name().equals("Official Cloud")
+                ? text("official_name") : profile.name();
+    }
+
     static String errorText(Throwable failure) {
-        Throwable cause = failure;
-        while (cause.getCause() != null && cause != cause.getCause()) cause = cause.getCause();
+        Throwable cause = unwrap(failure);
         String message = cause.getMessage();
         return message == null || message.isBlank() ? cause.getClass().getSimpleName() : message;
+    }
+
+    private static Throwable unwrap(Throwable failure) {
+        Throwable cause = failure;
+        while (cause.getCause() != null && cause != cause.getCause()) cause = cause.getCause();
+        return cause;
     }
 
     @Override
