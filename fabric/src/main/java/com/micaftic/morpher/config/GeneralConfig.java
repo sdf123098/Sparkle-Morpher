@@ -158,7 +158,6 @@ public class GeneralConfig {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
         defineGeneral(builder);
         ExtraPlayerRenderConfig.define(builder);
-        LoadingStateConfig.define(builder);
         return builder.build();
     }
 

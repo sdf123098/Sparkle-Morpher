@@ -61,6 +61,7 @@ public class S2CSetModelAndTexturePacket {
             LocalPlayer localPlayer = Minecraft.getInstance().player;
             boolean keepLocalOnlyModel = entity == localPlayer
                     && (PrivacyMode.isActive() || ClientModelManager.isSelectedLocalOnlyModel(cap.getModelId()));
+
             if (!keepLocalOnlyModel) {
                 NetworkOnlineDebugLog.info("applyOnClient: APPLYING modelId={}", other.modelId);
                 cap.initModelWithTexture(other.modelId, other.textureId);

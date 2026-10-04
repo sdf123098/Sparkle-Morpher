@@ -2,6 +2,8 @@ package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.cloud.client.CloudAssetPage;
+import com.micaftic.morpher.cloud.client.CloudInstanceRegistry;
+import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudAssetSummary;
 import com.micaftic.morpher.capability.AuthModelsCapability;
 import com.micaftic.morpher.capability.PlayerCapability;
@@ -17,7 +19,6 @@ import com.micaftic.morpher.client.renderer.preview.GuiModelRenderer;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.config.LoadingStateConfig;
 import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.core.gpu.BlurStack;
@@ -124,9 +125,35 @@ public class ModernPlayerModelScreen extends Screen {
     private EditBox modelSearchBox;
     private EditBox cloudSearchBox;
     private long cloudRequestGeneration;
+    private final Set<String> pendingVisibilityChanges = new HashSet<>();
+    private final Set<String> pendingCloudImports = new HashSet<>();
+    private final Set<String> selectedCloudAssetIds = new LinkedHashSet<>();
+    private final Set<String> ownedCloudAssetIds = new HashSet<>();
+    private CloudClientRuntime.RuntimeState cloudActionsRuntime;
+    private String focusedCloudAssetId = "";
+    private String cloudVisibilityFilter = "";
+    private boolean cloudMultiSelectMode;
+    private boolean cloudVisibilityBatchRunning;
+    private int cloudTexturePage;
+    private long cloudImportGeneration;
+    private CloudAssetSummary cloudSelectionCandidate;
     private EditBox resourceSearchBox;
     private EditBox siteEditBox;
     private EditBox categoryEditBox;
+    private EditBox cloudAccountBox;
+    private EditBox cloudPasswordBox;
+    private Component cloudPanelStatus = Component.empty();
+    private Screen afterCloudLogin;
+    private boolean manualCloudAccount;
+    private enum CloudAccountPage { ACCOUNT, INSTANCES, SCOPES }
+    private CloudAccountPage cloudAccountPage = CloudAccountPage.ACCOUNT;
+    private int cloudAccountScroll;
+    private EditBox cloudInstanceIdBox;
+    private EditBox cloudInstanceNameBox;
+    private EditBox cloudOriginBox;
+    private EditBox cloudScopeIdBox;
+    private EditBox cloudScopeNameBox;
+    private EditBox cloudWorldEpochBox;
     private Component status = Component.empty();
     private ChatFormatting statusColor = ChatFormatting.GRAY;
     private boolean resourceStatusMessage;
@@ -300,6 +327,14 @@ public class ModernPlayerModelScreen extends Screen {
         this.resourceSearchBox = null;
         this.siteEditBox = null;
         this.categoryEditBox = null;
+        this.cloudAccountBox = null;
+        this.cloudPasswordBox = null;
+        this.cloudInstanceIdBox = null;
+        this.cloudInstanceNameBox = null;
+        this.cloudOriginBox = null;
+        this.cloudScopeIdBox = null;
+        this.cloudScopeNameBox = null;
+        this.cloudWorldEpochBox = null;
         if (STATE.activeTab == ModelPanelState.Tab.MODEL) {
             if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
                 this.modelSearchBox = new EditBox(this.font, modelListX(), this.layout.contentTop + 30, modelListW(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
@@ -343,12 +378,67 @@ public class ModernPlayerModelScreen extends Screen {
             this.categoryEditBox.setValue(STATE.categoryEditText);
             this.categoryEditBox.setTextColor(TEXT);
             addWidget(this.categoryEditBox);
+        } else if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT) {
+            AccountPanelLayout accountLayout = accountPanelLayout();
+            int fieldX = accountLayout.fieldX();
+            int fieldW = accountLayout.fieldWidth();
+            if (cloudAccountPage == CloudAccountPage.ACCOUNT
+                    && (manualCloudAccount || CloudManagementScreen.management().registry().selected()
+                    .map(profile -> !CloudInstanceRegistry.isBuiltinOfficial(profile)).orElse(true))) {
+                this.cloudAccountBox = cloudField(fieldX, accountLayout.fieldY(0), fieldW, "account", 128);
+                this.cloudAccountBox.setValue(CloudManagementScreen.management().accountId(
+                        CloudManagementScreen.management().registry().selected()
+                                .map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("")));
+                this.cloudPasswordBox = cloudField(fieldX, accountLayout.fieldY(1), fieldW, "password", 256);
+                CloudManagementScreen.maskPassword(this.cloudPasswordBox);
+            } else if (cloudAccountPage == CloudAccountPage.INSTANCES) {
+                var selected = CloudManagementScreen.management().registry().selected();
+                this.cloudInstanceIdBox = cloudField(fieldX, accountLayout.fieldY(0), fieldW, "instance_id", 128);
+                this.cloudInstanceNameBox = cloudField(fieldX, accountLayout.fieldY(1), fieldW, "name", 128);
+                this.cloudOriginBox = cloudField(fieldX, accountLayout.fieldY(2), fieldW, "origin", 2048);
+                selected.ifPresent(profile -> {
+                    cloudInstanceIdBox.setValue(profile.instanceId());
+                    cloudInstanceNameBox.setValue(CloudManagementScreen.displayName(profile));
+                    cloudOriginBox.setValue(profile.instance().origin().toString());
+                });
+            } else if (cloudAccountPage == CloudAccountPage.SCOPES) {
+                var selected = CloudManagementScreen.management().snapshot().selectedScope();
+                this.cloudScopeIdBox = cloudField(fieldX, accountLayout.fieldY(0), fieldW, "scope_id", 128);
+                this.cloudScopeNameBox = cloudField(fieldX, accountLayout.fieldY(1), fieldW, "scope_name", 128);
+                this.cloudWorldEpochBox = cloudField(fieldX, accountLayout.fieldY(2), fieldW, "world_epoch", 128);
+                if (selected != null) {
+                    cloudScopeIdBox.setValue(selected.scopeId());
+                    cloudScopeNameBox.setValue(selected.name());
+                    cloudWorldEpochBox.setValue(selected.worldEpoch());
+                }
+            }
         }
+    }
+
+    private EditBox cloudField(int x, int y, int width, String key, int maxLength) {
+        EditBox field = new EditBox(this.font, x, y, width, 18,
+                Component.translatable("gui.sparkle_morpher.cloud.manage." + key));
+        field.setMaxLength(maxLength);
+        field.setHint(Component.translatable("gui.sparkle_morpher.cloud.manage." + key));
+        field.setTextColor(TEXT);
+        addWidget(field);
+        return field;
+    }
+
+    private AccountPanelLayout accountPanelLayout() {
+        return AccountPanelLayout.of(this.layout.contentLeft, this.layout.contentTop,
+                this.layout.contentWidth, this.layout.contentHeight);
     }
 
     @Override
     public void removed() {
         this.controller.invalidateGeneration();
+            this.cloudRequestGeneration++;
+            STATE.cloudLoading = false;
+            cloudActionsRuntime = null;
+            pendingCloudImports.clear(); pendingVisibilityChanges.clear();
+            cloudVisibilityBatchRunning = false;
+            if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) this.pendingModelApplyId = null;
         this.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
         this.controller.cancelPicking();
         // 释放卡片预览实体池持有的模型引用；本屏重开时会按需重建。
@@ -368,7 +458,7 @@ public class ModernPlayerModelScreen extends Screen {
     public void onClose() {
         if (this.parentScreen != null && this.minecraft != null) {
             InputUtil.setScreen(this.parentScreen);
-        } else if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
+        } else {
             super.onClose();
         }
     }
@@ -376,6 +466,7 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) ensureCloudPageLoaded();
         this.controller.tickDownloads();
         this.controller.pollImports();
         if (this.pendingModelApplyId != null) {
@@ -436,6 +527,7 @@ public class ModernPlayerModelScreen extends Screen {
         switch (STATE.activeTab) {
             case MODEL -> renderModelTab(g, mainMouseX, mainMouseY, partialTick);
             case RESOURCE -> renderResourceTab(g, mainMouseX, mainMouseY, partialTick);
+            case ACCOUNT -> renderCloudAccountPanel(g, mainMouseX, mainMouseY, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, partialTick);
             case SETTINGS -> renderSettingsTab(g, mainMouseX, mainMouseY);
         }
         renderFooter(g);
@@ -451,13 +543,15 @@ public class ModernPlayerModelScreen extends Screen {
             int y = this.layout.top + 6;
             renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, railX, y, railW, th, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
             renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, railX, y + th + 4, railW, th, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, railX, y + (th + 4) * 2, railW, th, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.ACCOUNT, railX, y + (th + 4) * 2, railW, th, IconGlyph.LOCK, Component.translatable("gui.sparkle_morpher.cloud.manage.account_management"));
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, railX, y + (th + 4) * 3, railW, th, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
             return;
         }
-        int tabWidth = this.layout.width / 3;
+        int tabWidth = this.layout.width / 4;
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, this.layout.left, tabWidth, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, this.layout.left + tabWidth, tabWidth, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
-        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, this.layout.left + tabWidth * 2, this.layout.width - tabWidth * 2, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.ACCOUNT, this.layout.left + tabWidth * 2, tabWidth, IconGlyph.LOCK, Component.translatable("gui.sparkle_morpher.cloud.manage.account_management"));
+        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, this.layout.left + tabWidth * 3, this.layout.width - tabWidth * 3, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
     }
 
     private void renderTab(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelPanelState.Tab tab, int x, int w, IconGlyph icon, Component label) {
@@ -507,7 +601,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int modelLeftW() {
-        if (compactModelLayout()) {
+        if (compactModelLayout() || STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
             return 0;
         }
         int minList = modelListMinW();
@@ -640,45 +734,123 @@ public class ModernPlayerModelScreen extends Screen {
         if (this.modelSearchBox != null) {
             this.modelSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
         }
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) renderCloudActions(g, mouseX, mouseY, listX, y + 44, listW);
         if (this.cloudSearchBox != null) this.cloudSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        int pathY = compact ? y + 88 : y + 52;
+        int pathY = STATE.modelSource == ModelPanelState.ModelSource.LOCAL ? (compact ? y + 88 : y + 52) : y + cloudPathOffset();
         if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) renderPathBar(g, listX, pathY, listW);
         else renderCloudViewTabs(g, mouseX, mouseY, listX, pathY, listW);
         int gridY = pathY + 20;
         int actionsBandY = contentBottom - 28;
         int detailStripH = compactDetailStripH();
         int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
-        int gridH = Math.max(compact ? 34 : 50, actionsBandY - 4 - reserve - gridY);
+        int gridH = STATE.modelSource == ModelPanelState.ModelSource.LOCAL
+                    ? Math.max(compact ? 34 : 50, actionsBandY - 4 - reserve - gridY)
+                    : cloudModelViewport().gridHeight();
         if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
         else renderCloudGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
         if (detailStripH > 0) {
             renderCompactDetail(g, mouseX, mouseY, listX, gridY + gridH + 3, listW, detailStripH, partialTick);
         }
         renderModelBottomActions(g, mouseX, mouseY, listX, actionsBandY, listW, gridH);
-        if (!compact && STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-            renderModelDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
+        if (!compact) {
+            if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) renderModelDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
+            else renderCloudDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
         }
     }
 
     private void renderModelSourceTabs(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
-        int tabW = Math.max(1, w / 3);
-        renderTextButton(g, mouseX, mouseY, x, y, tabW, 18, Component.translatable("gui.sparkle_morpher.model_source.local"), () -> switchModelSource(ModelPanelState.ModelSource.LOCAL));
-        renderTextButton(g, mouseX, mouseY, x + tabW, y, tabW, 18, Component.translatable("gui.sparkle_morpher.model_source.spm_cloud"), () -> switchModelSource(ModelPanelState.ModelSource.SPM_CLOUD));
-        renderTextButton(g, mouseX, mouseY, x + tabW * 2, y, w - tabW * 2, 18, Component.translatable("gui.sparkle_morpher.model_source.community_cloud"), () -> switchModelSource(ModelPanelState.ModelSource.COMMUNITY_CLOUD));
+        var profiles = CloudManagementScreen.management().registry().profiles();
+        if (STATE.selectedCloudInstanceId.isBlank() && STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
+            CloudManagementScreen.management().registry().selected().ifPresent(profile -> {
+                STATE.selectedCloudInstanceId = profile.instanceId();
+                CloudManagementScreen.management().selectInstance(profile.instanceId());
+            });
+        }
+        int localW = Math.min(74, Math.max(38, w / 4));
+        int addW = 24;
+        int available = Math.max(1, w - localW - addW);
+        boolean overflow = profiles.size() * 92 > available;
+        int navW = overflow ? 36 : 0;
+        int cloudW = Math.max(1, Math.min(available - navW, 148 * Math.max(1, profiles.size())));
+        int visible = overflow ? Math.max(1, cloudW / 92) : Math.max(1, profiles.size());
+        STATE.cloudTabOffset = Math.min(STATE.cloudTabOffset, Math.max(0, profiles.size() - visible));
+        renderCloudBrowserTab(g, mouseX, mouseY, x, y, localW,
+                Component.translatable("gui.sparkle_morpher.model_source.local"),
+                STATE.modelSource == ModelPanelState.ModelSource.LOCAL,
+                () -> switchModelSource(ModelPanelState.ModelSource.LOCAL));
+        int tabW = Math.max(1, cloudW / visible);
+        for (int i = 0; i < visible && STATE.cloudTabOffset + i < profiles.size(); i++) {
+            var profile = profiles.get(STATE.cloudTabOffset + i);
+            boolean connected = CloudClientRuntime.state(profile.instanceId()) != null;
+            String name = CloudManagementScreen.displayName(profile);
+            String account = CloudManagementScreen.management().accountId(profile.instanceId());
+            boolean selected = STATE.modelSource != ModelPanelState.ModelSource.LOCAL
+                    && profile.instanceId().equals(STATE.selectedCloudInstanceId);
+            String label = (connected ? "● " : "○ ") + name;
+            renderCloudBrowserTab(g, mouseX, mouseY, x + localW + i * tabW, y, tabW,
+                    Component.literal(label), selected, () -> {
+                        switchCloudInstance(profile);
+                        if (!connected) openCloudAccount();
+                    });
+        }
+        if (overflow) {
+            int navX = x + localW + cloudW;
+            renderTextButton(g, mouseX, mouseY, navX, y, 18, 18, Component.literal("‹"),
+                    () -> STATE.cloudTabOffset = Math.max(0, STATE.cloudTabOffset - 1));
+            renderTextButton(g, mouseX, mouseY, navX + 18, y, 18, 18, Component.literal("›"),
+                    () -> STATE.cloudTabOffset = Math.min(Math.max(0, profiles.size() - visible), STATE.cloudTabOffset + 1));
+        }
+        renderTextButton(g, mouseX, mouseY, x + localW + cloudW + navW, y, addW, 18, Component.literal("+"),
+                this::openCloudAccount);
+    }
+
+    private void renderCloudBrowserTab(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w,
+                                       Component label, boolean selected, Runnable action) {
+        boolean hover = inside(mouseX, mouseY, x, y, w, 18);
+        fill(g, x + 1, y + 1, w - 2, 17, selected ? 0xCC34424A : hover ? PANEL_HOVER : 0x50303030);
+        fill(g, x + 1, y, w - 2, 1, selected ? RED : 0x55FFFFFF);
+        fill(g, x, y + 2, 1, 16, 0x55FFFFFF);
+        fill(g, x + w - 1, y + 2, 1, 16, 0x55FFFFFF);
+        if (!selected) fill(g, x + 1, y + 17, w - 2, 1, 0x55FFFFFF);
+        drawCentered(g, Component.literal(trim(label.getString(), w - 10)), x + w / 2, y + 5,
+                selected ? 0xFFFFFFFF : TEXT);
+        hit(x, y, w, 18, label, action);
+    }
+
+    private void switchCloudInstance(CloudInstanceRegistry.CloudInstanceProfile profile) {
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) STATE.saveCloudTab();
+        CloudManagementScreen.management().selectInstance(profile.instanceId());
+        CloudManagementScreen.resumeOfficialAccount();
+        STATE.selectedCloudInstanceId = profile.instanceId();
+        STATE.modelSource = CloudInstanceRegistry.isBuiltinOfficial(profile)
+                ? ModelPanelState.ModelSource.SPM_CLOUD : ModelPanelState.ModelSource.COMMUNITY_CLOUD;
+        STATE.restoreCloudTab(profile.instanceId());
+        STATE.currentPath = "";
+        STATE.modelScroll = 0;
+        cloudImportGeneration++; pendingCloudImports.clear();
+        cloudSelectionCandidate = null; this.pendingModelApplyId = null;
+        this.cloudRequestGeneration++;
+        init();
+        ensureCloudPageLoaded();
     }
 
     private void switchModelSource(ModelPanelState.ModelSource source) {
-        if (STATE.modelSource == source) return;
+        if (STATE.modelSource == source && source == ModelPanelState.ModelSource.LOCAL) return;
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) STATE.saveCloudTab();
         STATE.modelSource = source;
         STATE.currentPath = "";
         STATE.modelScroll = 0;
+        cloudImportGeneration++; pendingCloudImports.clear();
+        cloudSelectionCandidate = null; this.pendingModelApplyId = null;
         resetCloudPage();
         init();
     }
 
     private void resetCloudPage() {
         this.cloudRequestGeneration++;
+        selectedCloudAssetIds.clear();
         STATE.cloudEntries.clear();
+        STATE.cloudScroll = 0;
         STATE.cloudCursor = "";
         STATE.cloudLoadedKey = "";
         STATE.cloudLoaded = false;
@@ -688,11 +860,15 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private String cloudPageKey() {
-        return STATE.modelSource.name() + "|" + STATE.cloudView.name() + "|" + STATE.cloudSearchText.trim().toLowerCase(Locale.ROOT) + "|" + this.controller.cloudInstanceId();
+        return STATE.modelSource.name() + "|" + STATE.cloudView.name() + "|"
+                + STATE.cloudSearchText.trim().toLowerCase(Locale.ROOT) + "|" + this.controller.cloudInstanceId()
+                + "|" + this.controller.cloudAvailable() + "|" + System.identityHashCode(CloudClientRuntime.state(this.controller.cloudInstanceId()));
     }
 
     private void ensureCloudPageLoaded() {
-        if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL || STATE.cloudLoading) return;
+        if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) return;
+        ensureCloudOwnership();
+        if (STATE.cloudLoading) return;
         String key = cloudPageKey();
         if (key.equals(STATE.cloudLoadedKey) && STATE.cloudLoaded) return;
         String instanceId = this.controller.cloudInstanceId();
@@ -768,12 +944,18 @@ public class ModernPlayerModelScreen extends Screen {
     private void switchCloudView(ModelPanelState.CloudView view) {
         if (STATE.cloudView == view) return;
         STATE.cloudView = view;
+        cloudVisibilityFilter = "";
         resetCloudPage();
     }
 
     private void renderCloudGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
+        List<CloudAssetSummary> visible = cloudVisibleEntries();
         glassPanel(g, x, y, w, h);
-        if (STATE.cloudLoading && STATE.cloudEntries.isEmpty()) {
+        if (!this.controller.cloudAvailable()) {
+            drawCentered(g, Component.translatable("gui.sparkle_morpher.cloud.disconnected"), x + w / 2, y + h / 2 - 4, MUTED);
+            return;
+        }
+        if (STATE.cloudLoading && visible.isEmpty()) {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.cloud.loading"), x + w / 2, y + h / 2 - 4, MUTED);
             return;
         }
@@ -781,42 +963,185 @@ public class ModernPlayerModelScreen extends Screen {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.model_source.public_search_required"), x + w / 2, y + h / 2 - 4, MUTED);
             return;
         }
-        if (STATE.cloudEntries.isEmpty()) {
+        if (visible.isEmpty()) {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.cloud.no_models"), x + w / 2, y + h / 2 - 4, MUTED);
             return;
         }
-        int rowH = 36;
-        int maxRows = Math.max(1, (h - 8) / rowH);
-        for (int i = 0; i < STATE.cloudEntries.size() && i < maxRows; i++) {
-            CloudAssetSummary entry = STATE.cloudEntries.get(i);
-            int rowY = y + 4 + i * rowH;
-            boolean selected = entry.ref().assetId().equals(STATE.selectedModelId);
-            boolean hover = inside(mouseX, mouseY, x + 4, rowY, w - 8, rowH - 2);
-            fill(g, x + 4, rowY, w - 8, rowH - 2, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x55303030);
-            String name = entry.name().isBlank() ? entry.ref().assetId() : entry.name();
-            drawText(g, Component.literal(trim(name, w - 54)), x + 10, rowY + 5);
-            String detail = entry.ref().assetId() + " · " + entry.format() + " · " + (entry.isPublic() ? "PUBLIC" : "PRIVATE");
-            drawMuted(g, Component.literal(trim(detail, w - 54)), x + 10, rowY + 19);
-            if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && this.controller.isCloudFavorite(entry)) drawText(g, Component.literal("★"), x + w - 24, rowY + 10);
-            hit(x + 4, rowY, w - 8, rowH - 2, Component.literal(name), () -> clickCloudAsset(entry));
+        CloudModelPage page = cloudGridPage(w, h);
+        g.enableScissor(x, y, x + w, y + h);
+        if (gridMode(w, h) == ModelPickerLayout.GridMode.CARDS) {
+            ModelPickerLayout.Cards cards = ModelPickerLayout.cards(w, h);
+            ensureCardPool(cards.capacity());
+            for (int i = page.start(); i < page.end(); i++) {
+                int slot = i - page.start();
+                int cx = x + cards.originX(w) + (slot % cards.cols()) * (cards.cellW() + ModelPickerLayout.CARD_GAP);
+                int cy = y + cards.originY(h) + (slot / cards.cols()) * (cards.cellH() + ModelPickerLayout.CARD_GAP);
+                renderCloudCard(g, visible.get(i), slot, cx, cy, cards.cellW(), cards.cellH(), mouseX, mouseY);
+            }
+        } else {
+            ModelListMetrics metrics = modelListMetrics(w, h, visible.size());
+            for (int i = page.start(); i < page.end(); i++) {
+                int slot = i - page.start();
+                int cx = x + (slot % metrics.cols()) * metrics.cellW() + 3;
+                int cy = y + (slot / metrics.cols()) * metrics.cellH() + 3;
+                renderCloudTextEntry(g, visible.get(i), cx, cy, metrics.cellW() - 6, metrics.cellH() - 6, metrics.dense(), mouseX, mouseY);
+            }
+        }
+        g.disableScissor();
+    }
+
+    private CloudModelPage cloudGridPage(int w, int h) {
+        List<CloudAssetSummary> visible = cloudVisibleEntries();
+        CloudModelPage page;
+        if (gridMode(w, h) == ModelPickerLayout.GridMode.CARDS) {
+            page = CloudModelPage.cards(visible.size(), ModelPickerLayout.cards(w, h).capacity(), STATE.cloudScroll);
+        } else {
+            ModelListMetrics metrics = modelListMetrics(w, h, visible.size());
+            page = CloudModelPage.rows(visible.size(), metrics.cols(), metrics.rows(), STATE.cloudScroll);
+        }
+        STATE.cloudScroll = page.scroll();
+        return page;
+    }
+
+    private boolean canChangeCloudVisibility(CloudAssetSummary entry) {
+        return STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD &&
+                (STATE.cloudView == ModelPanelState.CloudView.MINE || ownedCloudAssetIds.contains(entry.ref().assetId()));
+    }
+
+    private String cloudEntryName(CloudAssetSummary entry) {
+        return entry.name().isBlank() ? entry.ref().assetId() : entry.name();
+    }
+
+    private String cloudEntryDetail(CloudAssetSummary entry) {
+        String visibility = Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (entry.isPublic() ? "public" : "private")).getString();
+        return entry.format().toUpperCase(Locale.ROOT) + " · " + visibility;
+    }
+
+    private Component cloudEntryTooltip(CloudAssetSummary entry) {
+        return Component.literal(cloudEntryName(entry) + "\n" + entry.ref().assetId() + "\n" + cloudEntryDetail(entry));
+    }
+
+    private Component cloudVisibilityAction(CloudAssetSummary entry) {
+        return Component.translatable("gui.sparkle_morpher.cloud_upload." +
+                (pendingVisibilityChanges.contains(entry.ref().assetId()) ? "changing_visibility" : entry.isPublic() ? "make_private" : "make_public"));
+    }
+
+    private void renderCloudCard(GuiGraphicsExtractor g, CloudAssetSummary entry, int slot, int cx, int cy, int cw, int ch, int mouseX, int mouseY) {
+        String modelId = this.controller.cloudModelId(entry);
+        boolean selected = cloudMultiSelectMode ? selectedCloudAssetIds.contains(entry.ref().assetId()) : modelId.equals(STATE.selectedModelId);
+        boolean hover = inside(mouseX, mouseY, cx, cy, cw, ch);
+        boolean managed = canChangeCloudVisibility(entry) && !cloudMultiSelectMode;
+        int actionH = managed && ch >= 70 ? 22 : 0;
+        int nameH = Math.min(ch - 8, ModelPickerLayout.nameBandH(ch) + actionH);
+        int coverH = Math.max(1, ch - nameH);
+        fill(g, cx, cy, cw, ch, selected ? CARD_SELECT : hover ? CARD_BASE_HOVER : CARD_BASE);
+        ModelAssembly assembly = this.controller.assemblyOrNull(modelId);
+        if (assembly != null) {
+            renderCardMonster(g, slot, modelId, cx, cy, cw, ch, coverH);
+        } else if (pendingCloudImports.contains(modelId)) {
+            drawCardLoading(g, cx, cy, cw, coverH);
+        } else {
+            int size = Math.max(1, Math.min(30, Math.min(cw - 12, coverH - 20)));
+            drawIconScaled(g, IconGlyph.MODEL, cx + (cw - size) / 2, cy + Math.max(2, (coverH - size) / 2 - 4), size);
+            if (coverH >= 50) drawCentered(g, Component.literal(trim(Component.translatable("gui.sparkle_morpher.model_panel.cloud.download_use").getString(), cw - 8)),
+                    cx + cw / 2, cy + coverH - 14, MUTED);
+        }
+        fill(g, cx, cy + coverH, cw, nameH, CARD_NAME_BG);
+        drawCardName(g, new ModelEntry(modelId, cloudEntryName(entry), cloudEntryDetail(entry), false, false),
+                cx, cy + coverH, cw, nameH - actionH, false);
+        if (cloudMultiSelectMode) renderCloudSelection(g, entry, cx + 4, cy + 4);
+        else drawIcon(g, entry.isPublic() ? IconGlyph.SITES : IconGlyph.LOCK, cx + 3, cy + 3);
+
+        border(g, cx, cy, cw, ch, selected ? RED : hover ? CARD_NAME_TEXT : 0x55FFFFFF);
+        hit(cx, cy, cw, ch, cloudEntryTooltip(entry), () -> clickCloudAsset(entry));
+        renderCloudFavoriteControl(g, entry, mouseX, mouseY, cx + cw - 20, cy + 2);
+        if (managed) {
+            if (actionH > 0) renderTextButton(g, mouseX, mouseY, cx + 4, cy + ch - 21, cw - 8, 18, cloudVisibilityAction(entry), () -> changeCloudVisibility(entry));
+            else renderIconButton(g, mouseX, mouseY, cx + 2, cy + 2, entry.isPublic() ? IconGlyph.LOCK : IconGlyph.SITES,
+                    cloudVisibilityAction(entry), () -> changeCloudVisibility(entry));
         }
     }
 
+    private void renderCloudTextEntry(GuiGraphicsExtractor g, CloudAssetSummary entry, int cx, int cy, int cw, int ch, boolean dense, int mouseX, int mouseY) {
+        boolean selected = cloudMultiSelectMode ? selectedCloudAssetIds.contains(entry.ref().assetId()) : this.controller.cloudModelId(entry).equals(STATE.selectedModelId);
+        boolean hover = inside(mouseX, mouseY, cx, cy, cw, ch);
+        boolean managed = canChangeCloudVisibility(entry) && !cloudMultiSelectMode;
+        fill(g, cx, cy, cw, ch, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
+        border(g, cx, cy, cw, ch, selected ? RED : 0x33FFFFFF);
+        int iconY = dense ? cy + Math.max(0, (ch - 16) / 2) : cy + 3;
+        if (cloudMultiSelectMode) renderCloudSelection(g, entry, cx + 4, iconY + 2);
+        else drawIcon(g, entry.isPublic() ? IconGlyph.SITES : IconGlyph.LOCK, cx + 4, iconY);
+        boolean favorite = this.controller.isCloudFavorite(entry);
+        int trailing = managed ? 44 : 22;
+        drawText(g, Component.literal(trim(cloudEntryName(entry), cw - 28 - trailing)), cx + 22,
+                dense ? cy + (ch - this.font.lineHeight) / 2 + 1 : cy + 6);
+        if (!dense) drawMuted(g, Component.literal(trim(cloudEntryDetail(entry), cw - 12)), cx + 6, cy + 22);
+
+        hit(cx, cy, cw, ch, cloudEntryTooltip(entry), () -> clickCloudAsset(entry));
+        renderCloudFavoriteControl(g, entry, mouseX, mouseY, cx + cw - 20, iconY - 1);
+        if (managed) renderIconButton(g, mouseX, mouseY, cx + cw - 42, iconY - 1, entry.isPublic() ? IconGlyph.LOCK : IconGlyph.SITES,
+                cloudVisibilityAction(entry), () -> changeCloudVisibility(entry));
+    }
+
+    private void advanceCloudPage(int w, int h) {
+        CloudModelPage page = cloudGridPage(w, h);
+        if (page.hasNext()) STATE.cloudScroll = page.next();
+        else if (STATE.cloudHasMore && !STATE.cloudLoading) requestCloudPage(true);
+    }
+
+    private void renderCloudPageControls(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
+        List<CloudAssetSummary> visible = cloudVisibleEntries();
+        if (visible.isEmpty() && !STATE.cloudHasMore) return;
+        CloudModelPage page = cloudGridPage(w, h);
+        int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
+        int prevX = nextX - MODEL_PAGE_BUTTON_WIDTH - 4;
+        String range = (visible.isEmpty() ? 0 : page.start() + 1) + "-" + page.end() + "/" + visible.size() + (STATE.cloudHasMore ? "+" : "");
+        int room = prevX - (x + 106) - 8;
+        if (room >= 18) drawMuted(g, Component.literal(trim(range, room)), x + 106, y + 8);
+        renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT,
+                Component.translatable("gui.sparkle_morpher.pre_page"), () -> STATE.cloudScroll = page.previous());
+        Component next = page.hasNext() ? Component.translatable("gui.sparkle_morpher.next_page")
+                : Component.translatable(STATE.cloudLoading ? "gui.sparkle_morpher.cloud.loading" : STATE.cloudHasMore
+                ? "gui.sparkle_morpher.model_panel.cloud.load_more" : "gui.sparkle_morpher.next_page");
+        renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT,
+                next, () -> advanceCloudPage(w, h));
+    }
+
+
+    private void changeCloudVisibility(CloudAssetSummary entry) {
+        focusCloudAsset(entry);
+        startCloudVisibilityBatch(List.of(entry), entry.isPublic() ? "PRIVATE" : "PUBLIC");
+    }
+
     private void clickCloudAsset(CloudAssetSummary summary) {
+        if (!this.controller.cloudAvailable()) {
+            setStatus(Component.translatable("gui.sparkle_morpher.cloud.disconnected"), ChatFormatting.YELLOW); return;
+        }
+        focusCloudAsset(summary);
+        if (cloudMultiSelectMode) {
+            if (!selectedCloudAssetIds.add(summary.ref().assetId())) selectedCloudAssetIds.remove(summary.ref().assetId());
+            return;
+        }
         String cloudModelId = this.controller.cloudModelId(summary);
         STATE.selectedModelId = cloudModelId;
-        STATE.selectedTextureId = "";
         ModelAssembly assembly = this.controller.assemblyOrNull(cloudModelId);
         if (assembly == null) {
+            if (!pendingCloudImports.add(cloudModelId)) return;
+            setStatus(Component.translatable("gui.sparkle_morpher.cloud.loading"), ChatFormatting.YELLOW);
+            int generation = this.controller.generation();
+            long importGeneration = cloudImportGeneration;
+            var expectedRuntime = CloudClientRuntime.state(this.controller.cloudInstanceId());
             this.controller.importCloudAsset(summary, error -> {
+                if (generation != this.controller.generation() || importGeneration != cloudImportGeneration) return;
+                pendingCloudImports.remove(cloudModelId);
+                if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL || CloudClientRuntime.state(this.controller.cloudInstanceId()) != expectedRuntime) return;
+                if (!STATE.selectedModelId.equals(cloudModelId)) return;
                 if (error != null && !error.getString().isBlank()) { setStatus(error, ChatFormatting.RED); return; }
-                this.controller.markCloudApplied(summary);
                 this.pendingModelApplyId = cloudModelId;
                 setStatus(Component.translatable("gui.sparkle_morpher.cloud.imported", summary.name()), ChatFormatting.GREEN);
             });
             return;
         }
-        this.controller.markCloudApplied(summary);
         STATE.selectedTextureId = selectedTextureOrDefault(assembly);
         applyModelAndTexture(cloudModelId, STATE.selectedTextureId, assembly);
     }
@@ -875,7 +1200,8 @@ public class ModernPlayerModelScreen extends Screen {
         ModelPickerLayout.Style style = pickerStyle();
         ModelPickerLayout.GridMode mode = ModelPickerLayout.resolve(style, w, h);
         if (mode != this.lastGridMode) {
-            STATE.modelScroll = 0;
+            if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) STATE.modelScroll = 0;
+            else STATE.cloudScroll = 0;
             this.lastGridMode = mode;
         }
         return mode;
@@ -912,6 +1238,7 @@ public class ModernPlayerModelScreen extends Screen {
         STATE.pickerStyle = next;
         STATE.pickerStylePinned = true;
         STATE.modelScroll = 0;
+        STATE.cloudScroll = 0;
     }
 
     private Component pickerStyleLabel(ModelPickerLayout.Style style) {
@@ -1276,10 +1603,11 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private int currentModelGridH() {
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) return cloudModelViewport().gridHeight();
         int y = this.layout.contentTop + 8;
         int contentBottom = this.layout.footerTop - 6;
         boolean compact = compactModelLayout();
-        int pathY = compact ? y + 88 : y + 52;
+        int pathY = STATE.modelSource == ModelPanelState.ModelSource.LOCAL ? (compact ? y + 88 : y + 52) : y + cloudPathOffset();
         int gridY = pathY + 20;
         int detailStripH = compactDetailStripH();
         int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
@@ -1289,7 +1617,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderModelBottomActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int gridH) {
         fill(g, x, y, w, 24, GLASS_DARK);
         int bx = x + 6;
-        if (STATE.multiSelectMode) {
+        if (STATE.multiSelectMode && STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.DELETE, Component.translatable("gui.sparkle_morpher.model_panel.delete"), this::deleteSelectedModels);
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MOVE, Component.translatable("gui.sparkle_morpher.model_panel.move"), () -> openCategoryPanel(""));
@@ -1312,27 +1640,28 @@ public class ModernPlayerModelScreen extends Screen {
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
             bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.UP, getCustomFolderUploadTooltip(), this::openCustomFolderUpload);
-            bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MODE, pickerStyleLabel(pickerStyle()), this::cyclePickerStyle);
         } else {
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.STAR, Component.translatable("gui.sparkle_morpher.model_panel.toggle_favorite"), this::toggleSelectedStar);
+            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.INFO, Component.translatable("gui.sparkle_morpher.cloud_upload.login"), this::openCloudAccount);
             bx += 24;
             renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.RELOAD, Component.translatable("gui.sparkle_morpher.model_panel.reload_models"), this::resetCloudPage);
+            bx += 24;
+            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MODE, pickerStyleLabel(pickerStyle()), this::cyclePickerStyle);
         }
-        renderModelPageControls(g, mouseX, mouseY, x, y, w, gridH);
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
+                ModelAssembly assembly = selectedAssembly();
+                renderIconButton(g, mouseX, mouseY, x + 78, y + 3, IconGlyph.TEXTURE,
+                        Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures"), () -> {
+                            if (assembly != null) openCloudTexturePicker(assembly, STATE.selectedModelId);
+                            else setStatus(Component.translatable("gui.sparkle_morpher.model_panel.select_model"), ChatFormatting.YELLOW);
+                        });
+            }
+            renderModelPageControls(g, mouseX, mouseY, x, y, w, gridH);
     }
 
     private void renderModelPageControls(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int gridH) {
         if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
-            if (!STATE.cloudEntries.isEmpty()) {
-                Component range = Component.literal("1-" + STATE.cloudEntries.size());
-                int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
-                drawMuted(g, range, Math.max(x + 82, nextX - this.font.width(range) - 8), y + 8);
-                if (STATE.cloudHasMore && !STATE.cloudLoading) {
-                    renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.next_page"), () -> requestCloudPage(true));
-                }
-            }
+            renderCloudPageControls(g, mouseX, mouseY, x, y, w, gridH);
             return;
         }
         List<ModelEntry> entries = collectModelEntries();
@@ -1673,6 +2002,11 @@ public class ModernPlayerModelScreen extends Screen {
         renderIconButton(g, mouseX, mouseY, x + w - 24, y + 6, IconGlyph.CLOSE, Component.translatable("gui.sparkle_morpher.model_panel.close"), () -> {
             STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
             init();
+            if (afterCloudLogin != null) {
+                Screen next = afterCloudLogin;
+                afterCloudLogin = null;
+                InputUtil.setScreen(next);
+            }
         });
         switch (STATE.secondaryPanel) {
             case SITES -> renderSitesPanel(g, mouseX, mouseY, x, y, w, h, partialTick);
@@ -1681,6 +2015,346 @@ public class ModernPlayerModelScreen extends Screen {
             default -> {
             }
         }
+    }
+
+    private void renderCloudAccountPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
+        var management = CloudManagementScreen.management();
+        var selected = management.registry().selected();
+        String name = selected.map(CloudManagementScreen::displayName).orElse("—");
+        String instanceId = selected.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("");
+        boolean connected = CloudClientRuntime.state(instanceId) != null;
+        boolean official = selected.map(CloudInstanceRegistry::isBuiltinOfficial).orElse(false);
+        AccountPanelLayout panels = accountPanelLayout();
+        drawTitle(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account_management"), x + 8, y + 10);
+        drawMuted(g, Component.literal(trim(name + "  ·  " + CloudManagementScreen.text(
+                connected ? "connected" : "disconnected"), w - 130)), x + 118, y + 12);
+        glassPanel(g, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight());
+        glassPanel(g, panels.detailX(), panels.detailY(), panels.detailWidth(), panels.detailHeight());
+        renderRowButton(g, mouseX, mouseY, panels.listX() + 8, panels.listY() + 10,
+                panels.listWidth() - 16, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.account"),
+                cloudAccountPage == CloudAccountPage.ACCOUNT, () -> setCloudAccountPage(CloudAccountPage.ACCOUNT));
+        renderRowButton(g, mouseX, mouseY, panels.listX() + 8, panels.listY() + 34,
+                panels.listWidth() - 16, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.instances"),
+                cloudAccountPage == CloudAccountPage.INSTANCES, () -> setCloudAccountPage(CloudAccountPage.INSTANCES));
+        renderRowButton(g, mouseX, mouseY, panels.listX() + 8, panels.listY() + 58,
+                panels.listWidth() - 16, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.scopes"),
+                cloudAccountPage == CloudAccountPage.SCOPES, () -> setCloudAccountPage(CloudAccountPage.SCOPES));
+        renderCloudAccountList(g, mouseX, mouseY, panels);
+        switch (cloudAccountPage) {
+            case ACCOUNT -> renderCloudAccountDetails(g, mouseX, mouseY, panels, connected, official, partialTick);
+            case INSTANCES -> renderCloudInstances(g, mouseX, mouseY, panels, partialTick);
+            case SCOPES -> renderCloudScopes(g, mouseX, mouseY, panels, partialTick);
+        }
+        drawMuted(g, Component.literal(trim(cloudPanelStatus.getString(), w - 16)), x + 8, y + h - 18);
+    }
+
+    private void renderCloudAccountList(GuiGraphicsExtractor g, int mouseX, int mouseY, AccountPanelLayout panels) {
+        int x = panels.listX();
+        int y = panels.listY();
+        int w = panels.listWidth();
+        int listY = y + 112;
+        int rows = panels.listRows();
+        var management = CloudManagementScreen.management();
+        if (cloudAccountPage == CloudAccountPage.SCOPES) {
+            drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scopes"), x + 8, y + 91);
+            var scopes = management.snapshot().scopes();
+            cloudAccountScroll = clamp(cloudAccountScroll, 0, Math.max(0, scopes.size() - rows));
+            for (int i = 0; i < rows && cloudAccountScroll + i < scopes.size(); i++) {
+                var scope = scopes.get(cloudAccountScroll + i);
+                renderRowButton(g, mouseX, mouseY, x + 8, listY + i * 24, w - 16, 20,
+                        Component.literal(trim(scope.name() + "  [" + scope.scopeId() + "]", w - 28)),
+                        management.snapshot().selectedScope() != null
+                                && management.snapshot().selectedScope().scopeId().equals(scope.scopeId()),
+                        () -> selectCloudScope(scope.scopeId()));
+            }
+            if (scopes.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4,
+                    panels.listHeight() - 120, scopes.size(), rows, cloudAccountScroll);
+            return;
+        }
+        drawSection(g, Component.translatable(cloudAccountPage == CloudAccountPage.ACCOUNT
+                ? "gui.sparkle_morpher.cloud.manage.multi_account"
+                : "gui.sparkle_morpher.cloud.manage.instances"), x + 8, y + 91);
+        var profiles = management.registry().profiles();
+        cloudAccountScroll = clamp(cloudAccountScroll, 0, Math.max(0, profiles.size() - rows));
+        for (int i = 0; i < rows && cloudAccountScroll + i < profiles.size(); i++) {
+            var profile = profiles.get(cloudAccountScroll + i);
+            String account = management.accountId(profile.instanceId());
+            String suffix = cloudAccountPage == CloudAccountPage.ACCOUNT
+                    ? (account.isBlank() ? CloudManagementScreen.text("disconnected") : account)
+                    : profile.instance().origin().toString();
+            String label = CloudManagementScreen.displayName(profile) + "  ·  " + suffix;
+            renderRowButton(g, mouseX, mouseY, x + 8, listY + i * 24, w - 16, 20,
+                    Component.literal(trim(label, w - 28)),
+                    management.registry().selected().map(current -> current.instanceId().equals(profile.instanceId())).orElse(false),
+                    () -> selectCloudInstance(profile));
+        }
+        if (profiles.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4,
+                panels.listHeight() - 120, profiles.size(), rows, cloudAccountScroll);
+    }
+
+    private void renderCloudAccountDetails(GuiGraphicsExtractor g, int mouseX, int mouseY,
+                                           AccountPanelLayout panels, boolean connected, boolean official, float partialTick) {
+        int x = panels.fieldX();
+        int y = panels.detailY();
+        int w = panels.fieldWidth();
+        drawTitle(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, y + 12);
+        if (connected) {
+            String instanceId = CloudManagementScreen.management().registry().selected()
+                    .map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("");
+            drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, y + 40);
+            drawText(g, Component.translatable("gui.sparkle_morpher.cloud_upload.account",
+                    CloudManagementScreen.management().accountId(instanceId)), x, y + 56);
+            int half = panels.buttonWidth(2);
+            renderTextButton(g, mouseX, mouseY, x, y + 82, half, 20,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.logout"), () -> {
+                        CloudManagementScreen.management().logout();
+                        resetCloudPage();
+                        init();
+                    });
+            renderTextButton(g, mouseX, mouseY, x + half + 6, y + 82, half, 20,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.switch_account"), () -> {
+                        CloudManagementScreen.management().logout();
+                        manualCloudAccount = true;
+                        resetCloudPage();
+                        init();
+                    });
+            if (official) renderTextButton(g, mouseX, mouseY, x, y + 116, w, 20,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.identity.bind_current"), () -> {
+                        cloudPanelStatus = Component.translatable("gui.sparkle_morpher.cloud.manage.working");
+                        CloudManagementScreen.bindCurrentGameAccount().whenComplete((identity, failure) ->
+                                Minecraft.getInstance().execute(() -> cloudPanelStatus = failure == null
+                                        ? Component.translatable("gui.sparkle_morpher.cloud.manage.identity.bound", identity.displayName())
+                                        : Component.literal(CloudManagementScreen.errorText(failure))));
+                    });
+            renderTextButton(g, mouseX, mouseY, x, y + (official ? 144 : 116), w, 20,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.identities"),
+                    () -> InputUtil.setScreen(new CloudIdentityManagementScreen(this, CloudManagementScreen.management())));
+        } else if (official && !manualCloudAccount) {
+            drawMuted(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, y + 42);
+            renderTextButton(g, mouseX, mouseY, x, y + 66, w, 24,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.quick_connect"),
+                    () -> runCloudAccount(CloudManagementScreen.connectOfficialAccount(), "quick_success"));
+            renderTextButton(g, mouseX, mouseY, x, y + 98, w, 20,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.manual_account"), () -> {
+                        manualCloudAccount = true;
+                        init();
+                    });
+        } else {
+            drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, panels.fieldY(0) - 14);
+            drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.password"), x, panels.fieldY(1) - 14);
+            if (cloudAccountBox != null) cloudAccountBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+            if (cloudPasswordBox != null) cloudPasswordBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+            int half = panels.buttonWidth(2);
+            renderTextButton(g, mouseX, mouseY, x, panels.actionY(2), half, 20,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.login"), () -> submitCloudAccount(false));
+            renderTextButton(g, mouseX, mouseY, x + half + 6, panels.actionY(2), half, 20,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.register"), () -> submitCloudAccount(true));
+        }
+    }
+
+    private void renderCloudInstances(GuiGraphicsExtractor g, int mouseX, int mouseY,
+                                      AccountPanelLayout panels, float partialTick) {
+        int x = panels.fieldX();
+        drawTitle(g, Component.translatable("gui.sparkle_morpher.cloud.manage.instances"), x, panels.detailY() + 12);
+        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.instance_id"), x, panels.fieldY(0) - 14);
+        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.name"), x, panels.fieldY(1) - 14);
+        drawSection(g, Component.literal("URL"), x, panels.fieldY(2) - 14);
+        if (cloudInstanceIdBox != null) cloudInstanceIdBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        if (cloudInstanceNameBox != null) cloudInstanceNameBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        if (cloudOriginBox != null) cloudOriginBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        int bw = panels.buttonWidth(3);
+        int buttonY = panels.actionY(3);
+        renderTextButton(g, mouseX, mouseY, x, buttonY, bw, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.add_instance"), () -> {
+                    cloudInstanceIdBox.setValue("");
+                    cloudInstanceNameBox.setValue("");
+                    cloudOriginBox.setValue("");
+                    setFocused(cloudInstanceIdBox);
+                });
+        renderTextButton(g, mouseX, mouseY, x + bw + 6, buttonY, bw, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.save_instance"), this::saveCloudInstance);
+        renderTextButton(g, mouseX, mouseY, x + (bw + 6) * 2, buttonY, bw, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.remove_instance"), this::removeCloudInstance);
+    }
+
+    private void renderCloudScopes(GuiGraphicsExtractor g, int mouseX, int mouseY,
+                                   AccountPanelLayout panels, float partialTick) {
+        int x = panels.fieldX();
+        drawTitle(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scopes"), x, panels.detailY() + 12);
+        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scope_id"), x, panels.fieldY(0) - 14);
+        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scope_name"), x, panels.fieldY(1) - 14);
+        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.world_epoch"), x, panels.fieldY(2) - 14);
+        if (cloudScopeIdBox != null) cloudScopeIdBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        if (cloudScopeNameBox != null) cloudScopeNameBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        if (cloudWorldEpochBox != null) cloudWorldEpochBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        int bw = panels.buttonWidth(3);
+        int buttonY = panels.actionY(3);
+        renderTextButton(g, mouseX, mouseY, x, buttonY, bw, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.refresh_scopes"),
+                this::refreshCloudScopes);
+        renderTextButton(g, mouseX, mouseY, x + bw + 6, buttonY, bw, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.create_scope"), this::createCloudScope);
+        renderTextButton(g, mouseX, mouseY, x + (bw + 6) * 2, buttonY, bw, 20,
+                Component.translatable("gui.sparkle_morpher.cloud.manage.join_selected"), this::joinCloudScope);
+        if (CloudManagementScreen.management().snapshot().selectedScope() != null) {
+            renderTextButton(g, mouseX, mouseY, x, buttonY + 28, panels.fieldWidth(), 20,
+                    Component.translatable("gui.sparkle_morpher.cloud.manage.targets_acl"), () ->
+                            InputUtil.setScreen(new CloudTargetManagementScreen(this, CloudManagementScreen.management())));
+        }
+    }
+
+    private void setCloudAccountPage(CloudAccountPage page) {
+        if (cloudAccountPage == page) return;
+        cloudAccountPage = page;
+        cloudAccountScroll = 0;
+        cloudPanelStatus = Component.empty();
+        init();
+    }
+
+    private void selectCloudInstance(CloudInstanceRegistry.CloudInstanceProfile profile) {
+        try {
+            switchCloudInstance(profile);
+            CloudManagementScreen.management().saveInstances();
+            cloudPanelStatus = Component.literal(CloudManagementScreen.text("selected", CloudManagementScreen.displayName(profile)));
+        } catch (java.io.IOException | RuntimeException failure) {
+            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+        }
+    }
+
+    private void saveCloudInstance() {
+        try {
+            var config = com.micaftic.morpher.cloud.CloudInstanceConfig.v1(
+                    cloudInstanceIdBox.getValue().trim(), java.net.URI.create(cloudOriginBox.getValue().trim()));
+            String name = cloudInstanceNameBox.getValue().trim();
+            var profile = new CloudInstanceRegistry.CloudInstanceProfile(config, name.isBlank() ? config.instanceId() : name);
+            CloudManagementScreen.management().registry().addOrReplace(profile);
+            CloudManagementScreen.management().saveInstances();
+            selectCloudInstance(profile);
+        } catch (java.io.IOException | RuntimeException failure) {
+            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+        }
+    }
+
+    private void removeCloudInstance() {
+        try {
+            var selected = CloudManagementScreen.management().registry().selected().orElseThrow();
+            if (CloudInstanceRegistry.isBuiltinOfficial(selected)) return;
+            CloudManagementScreen.management().logout();
+            CloudManagementScreen.management().registry().remove(selected.instanceId());
+            CloudManagementScreen.management().saveInstances();
+            CloudManagementScreen.management().registry().selected().ifPresent(this::switchCloudInstance);
+            init();
+            cloudPanelStatus = Component.literal(CloudManagementScreen.text("instance_removed", selected.name()));
+        } catch (java.io.IOException | RuntimeException failure) {
+            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+        }
+    }
+
+    private void selectCloudScope(String id) {
+        try {
+            CloudManagementScreen.management().selectScope(id);
+            init();
+        } catch (RuntimeException failure) {
+            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+        }
+    }
+
+    private void refreshCloudScopes() {
+        try {
+            runCloudManagementAction(CloudManagementScreen.management().refreshScopes(), "scopes_refreshed");
+        } catch (RuntimeException failure) {
+            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+        }
+    }
+
+    private void createCloudScope() {
+        try {
+            var create = new com.micaftic.morpher.cloud.client.CloudScopeClient.CloudScopeCreate(
+                    cloudScopeIdBox.getValue().trim(), cloudScopeNameBox.getValue().trim(),
+                    cloudWorldEpochBox.getValue().trim(), null);
+            runCloudManagementAction(CloudManagementScreen.management().createScope(create), "scope_created");
+        } catch (RuntimeException failure) {
+            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+        }
+    }
+
+    private void joinCloudScope() {
+        try {
+            CloudManagementScreen.management().selectScope(cloudScopeIdBox.getValue().trim());
+            runCloudManagementAction(CloudManagementScreen.management().enterSelectedScope(), "scope_joined");
+        } catch (RuntimeException failure) {
+            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+        }
+    }
+
+    private void runCloudManagementAction(java.util.concurrent.CompletableFuture<?> request, String successKey) {
+        cloudPanelStatus = Component.translatable("gui.sparkle_morpher.cloud.manage.working");
+        request.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
+            cloudPanelStatus = failure == null
+                    ? Component.literal(CloudManagementScreen.text(successKey))
+                    : Component.literal(CloudManagementScreen.errorText(failure));
+            if (failure == null && STATE.activeTab == ModelPanelState.Tab.ACCOUNT) init();
+        }));
+    }
+
+    public static void openCloudManagement(Screen parent) {
+        ModernPlayerModelScreen screen = new ModernPlayerModelScreen(parent);
+        InputUtil.setScreen(screen);
+        screen.openCloudAccount();
+    }
+
+    void openCloudAccount() {
+        STATE.activeTab = ModelPanelState.Tab.ACCOUNT;
+        STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
+        cloudAccountPage = CloudAccountPage.ACCOUNT;
+        cloudAccountScroll = 0;
+        cloudPanelStatus = Component.empty();
+        manualCloudAccount = false;
+        init();
+    }
+
+    void openCloudAccountForUpload(Screen uploadScreen, String instanceId) {
+        if (CloudManagementScreen.management().registry().find(instanceId).isPresent()) {
+            CloudManagementScreen.management().selectInstance(instanceId);
+        }
+        afterCloudLogin = uploadScreen;
+        openCloudAccount();
+    }
+
+    private void submitCloudAccount(boolean register) {
+        if (cloudAccountBox == null || cloudPasswordBox == null) return;
+        String account = cloudAccountBox.getValue().trim();
+        String password = cloudPasswordBox.getValue();
+        cloudPasswordBox.setValue("");
+        try {
+            runCloudAccount(register ? CloudManagementScreen.management().register(account, password)
+                    : CloudManagementScreen.management().login(account, password),
+                    register ? "register_success" : "login_success");
+        } catch (RuntimeException failure) {
+            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+        }
+    }
+
+    private void runCloudAccount(java.util.concurrent.CompletableFuture<?> request, String successKey) {
+        cloudPanelStatus = Component.translatable("gui.sparkle_morpher.cloud.manage.working");
+        request.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
+            if (failure != null) {
+                cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
+            } else {
+                setStatus(Component.literal(CloudManagementScreen.text(successKey)), ChatFormatting.GREEN);
+                resetCloudPage();
+                if (afterCloudLogin != null) {
+                    Screen next = afterCloudLogin;
+                    afterCloudLogin = null;
+                    InputUtil.setScreen(next);
+                } else {
+                    init();
+                }
+            }
+        }));
     }
 
     private void renderSitesPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
@@ -1740,20 +2414,12 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderImportPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.import_upload"), x + 10, y + 10);
+        drawTitle(g, Component.translatable("gui.sparkle_morpher.import.title"), x + 10, y + 10);
         renderIconButton(g, mouseX, mouseY, x + 12, y + 34, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.choose_file"), this::openFilePicker);
         int yy = y + 70;
         drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.drop_files_hint"), x + 12, yy);
         yy += 20;
-        if (this.controller.uploadSessionActive()) {
-            drawText(g, this.controller.uploadSessionMessage(), x + 12, yy);
-            yy += 14;
-            int barW = w - 24;
-            fill(g, x + 12, yy, barW, 8, 0xAA101010);
-            fill(g, x + 12, yy, (int) (barW * clamp(this.controller.uploadSessionProgress(), 0f, 1f)), 8, this.controller.uploadSessionFailed() ? 0xFFD23232 : RED);
-            yy += 16;
-            drawMuted(g, Component.literal(this.controller.uploadSessionBytesText()), x + 12, yy);
-        } else if (this.controller.localImportInProgress()) {
+        if (this.controller.localImportInProgress()) {
             drawText(g, Component.translatable("gui.sparkle_morpher.model_panel.importing"), x + 12, yy);
         } else {
             drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.no_active_import"), x + 12, yy);
@@ -1763,7 +2429,21 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderFooter(GuiGraphicsExtractor g) {
         fill(g, this.layout.left, this.layout.footerTop, this.layout.width, 1, 0x55303030);
         Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatus() : this.status;
+        if (this.modelSelectionTarget == null && STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
+            String cloudSync = com.micaftic.morpher.cloud.client.CloudPlayerModelSync.status();
+            if (line.getString().isBlank() || cloudSync.contains("失败")) line = Component.literal(cloudSync);
+        }
         ChatFormatting color = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatusColor() : this.statusColor;
+        if (this.modelSelectionTarget != null) {
+            var feedback = com.micaftic.morpher.cloud.client.CloudEntityModelSync.feedback(this.stateKeyValue);
+            if (feedback != null) {
+                line = feedback.message();
+                color = feedback.failed() ? ChatFormatting.RED : feedback.pending() ? ChatFormatting.YELLOW : ChatFormatting.GREEN;
+            } else {
+                line = Component.translatable("gui.sparkle_morpher.cloud.entity.share_hint");
+                color = ChatFormatting.GRAY;
+            }
+        }
         int c = chatColor(color);
         g.text(this.font, trim(line.getString(), this.layout.width - 20), this.layout.left + 10, this.layout.footerTop + 8, c, false);
     }
@@ -1784,20 +2464,22 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderTooltip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        for (Hit hit : this.hits) {
-            if (inside(mouseX, mouseY, hit.x(), hit.y(), hit.w(), hit.h())) {
-                String text = hit.tooltip().getString();
-                if (text.isBlank()) {
-                    return;
-                }
-                int tw = Math.min(220, this.font.width(text) + 10);
-                int tx = Math.min(mouseX + 10, this.width - tw - 4);
-                int ty = Math.min(mouseY + 10, this.height - 18);
-                fill(g, tx, ty, tw, 16, 0xEE101010);
-                border(g, tx, ty, tw, 16, 0x88FFFFFF);
-                g.text(this.font, trim(text, tw - 8), tx + 5, ty + 5, 0xFFFFFFFF, false);
-                return;
-            }
+        for (int i = this.hits.size() - 1; i >= 0; i--) {
+            Hit hit = this.hits.get(i);
+            if (!inside(mouseX, mouseY, hit.x(), hit.y(), hit.w(), hit.h())) continue;
+            if (hit.tooltip().getString().isBlank()) return;
+            int maxWidth = Math.max(8, Math.min(220, this.width - 18));
+            int maxLines = Math.max(1, (this.height - 18) / this.font.lineHeight);
+            var lines = this.font.split(hit.tooltip(), maxWidth).stream().limit(maxLines).toList();
+            int tw = lines.stream().mapToInt(this.font::width).max().orElse(0) + 10;
+            int th = lines.size() * this.font.lineHeight + 10;
+            int tx = Math.max(4, Math.min(mouseX + 10, this.width - tw - 4));
+            int ty = Math.max(4, Math.min(mouseY + 10, this.height - th - 4));
+            fill(g, tx, ty, tw, th, 0xEE101010);
+            border(g, tx, ty, tw, th, 0x88FFFFFF);
+            for (int line = 0; line < lines.size(); line++)
+                g.text(this.font, lines.get(line), tx + 5, ty + 5 + line * this.font.lineHeight, 0xFFFFFFFF, false);
+            return;
         }
     }
 
@@ -1807,6 +2489,46 @@ public class ModernPlayerModelScreen extends Screen {
         double mouseY = event.y();
         int button = event.button();
         if (button == 0 && beginResourceScrollDrag(mouseX, mouseY)) {
+            return true;
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudAccountBox != null
+                && this.cloudAccountBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudAccountBox);
+            return true;
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudPasswordBox != null
+                && this.cloudPasswordBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudPasswordBox);
+            return true;
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudInstanceIdBox != null
+                && this.cloudInstanceIdBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudInstanceIdBox);
+            return true;
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudInstanceNameBox != null
+                && this.cloudInstanceNameBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudInstanceNameBox);
+            return true;
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudOriginBox != null
+                && this.cloudOriginBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudOriginBox);
+            return true;
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudScopeIdBox != null
+                && this.cloudScopeIdBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudScopeIdBox);
+            return true;
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudScopeNameBox != null
+                && this.cloudScopeNameBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudScopeNameBox);
+            return true;
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudWorldEpochBox != null
+                && this.cloudWorldEpochBox.mouseClicked(event, flag)) {
+            setFocused(this.cloudWorldEpochBox);
             return true;
         }
         if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE) {
@@ -1862,6 +2584,17 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         int delta = scrollY > 0 ? -1 : 1;
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT) {
+            AccountPanelLayout panels = accountPanelLayout();
+            if (!inside(mouseX, mouseY, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight())) {
+                return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+            }
+            int count = cloudAccountPage == CloudAccountPage.SCOPES
+                    ? CloudManagementScreen.management().snapshot().scopes().size()
+                    : CloudManagementScreen.management().registry().profiles().size();
+            cloudAccountScroll = clamp(cloudAccountScroll + delta, 0, Math.max(0, count - panels.listRows()));
+            return true;
+        }
         if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.SITES) {
             STATE.sitesScroll = Math.max(0, STATE.sitesScroll + delta);
             return true;
@@ -1872,7 +2605,12 @@ public class ModernPlayerModelScreen extends Screen {
         }
         switch (STATE.activeTab) {
             case MODEL -> {
-                if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) return true;
+                if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
+                    CloudModelPage page = cloudGridPage(modelListW(), currentModelGridH());
+                    if (delta > 0 && !page.hasNext() && STATE.cloudHasMore && !STATE.cloudLoading) requestCloudPage(true);
+                    else STATE.cloudScroll = clamp(STATE.cloudScroll + delta, 0, page.maxScroll());
+                    return true;
+                }
                 if (gridMode(modelListW(), currentModelGridH()) == ModelPickerLayout.GridMode.CARDS) {
                     List<ModelEntry> entries = collectModelEntries();
                     int pages = entries.isEmpty() ? 1
@@ -1883,6 +2621,7 @@ public class ModernPlayerModelScreen extends Screen {
                 }
             }
             case RESOURCE -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll + delta);
+            case ACCOUNT -> { }
             case SETTINGS -> STATE.settingsScroll = Math.max(0, STATE.settingsScroll + delta);
         }
         return true;
@@ -2056,9 +2795,19 @@ public class ModernPlayerModelScreen extends Screen {
     /** §24.7：转发到 Service（保留本方法名，行为不变）。 */
     private void applyModelAndTexture(String modelId, String textureId, ModelAssembly assembly) {
         ModernPlayerModelScreenController.ApplyResult result = this.controller.applyModel(modelId, textureId, this.modelSelectionTarget, this.rememberPlayerSelection);
-        if (result == ModernPlayerModelScreenController.ApplyResult.APPLIED_TO_TARGET
-                || result == ModernPlayerModelScreenController.ApplyResult.APPLIED_TO_PLAYER) {
-            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.applied_model", modelId), ChatFormatting.GREEN);
+        if (result == ModernPlayerModelScreenController.ApplyResult.REQUESTED_TARGET) {
+            setStatus(Component.translatable("gui.sparkle_morpher.cloud.manage.working"), ChatFormatting.YELLOW);
+            return;
+        }
+        if (result == ModernPlayerModelScreenController.ApplyResult.APPLIED_TO_PLAYER) {
+            if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL && this.controller.cloudAvailable()) {
+                    if (cloudSelectionCandidate != null && modelId.equals(this.controller.cloudModelId(cloudSelectionCandidate))) {
+                    this.controller.markCloudApplied(cloudSelectionCandidate);
+                } else for (CloudAssetSummary entry : STATE.cloudEntries) {
+                        if (modelId.equals(this.controller.cloudModelId(entry))) { this.controller.markCloudApplied(entry); break; }
+                    }
+                }
+                setStatus(Component.translatable("gui.sparkle_morpher.model_panel.applied_model", modelId), ChatFormatting.GREEN);
         }
     }
 
@@ -2066,7 +2815,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void toggleSelectedStar() {
         if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
             for (CloudAssetSummary entry : STATE.cloudEntries) {
-                if (entry.ref().assetId().equals(STATE.selectedModelId)) {
+                if (this.controller.cloudAvailable() && this.controller.cloudModelId(entry).equals(STATE.selectedModelId)) {
                     boolean favorite = this.controller.toggleCloudFavorite(entry);
                     setStatus(Component.translatable(favorite ? "gui.sparkle_morpher.model_source.favorite_added" : "gui.sparkle_morpher.model_source.favorite_removed"), ChatFormatting.GREEN);
                     if (STATE.cloudView == ModelPanelState.CloudView.FAVORITES && !favorite) resetCloudPage();
@@ -2205,30 +2954,12 @@ public class ModernPlayerModelScreen extends Screen {
         this.controller.openModelFolder();
     }
 
-    private void openCustomFolderUpload() {
-        InputUtil.setScreen(new CustomFolderUploadScreen(this));
-    }
-
     private void openCloudUpload() {
         Collection<String> candidates = this.selectedModelIds.isEmpty() && STATE.selectedModelId != null && !STATE.selectedModelId.isBlank()
                 ? List.of(STATE.selectedModelId)
                 : new LinkedHashSet<>(this.selectedModelIds);
         List<String> localModels = candidates.stream().filter(ClientModelManager::isLocalOnlyModel).toList();
-        if (localModels.isEmpty()) {
-            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud.empty"), ChatFormatting.YELLOW);
-            return;
-        }
-        InputUtil.setScreen(new ModelUploadScreen(this, localModels));
-    }
-
-    private Component getCustomFolderUploadTooltip() {
-        if (this.controller.isAllowUpload() && this.controller.isOysmServer()) {
-            return Component.translatable("gui.sparkle_morpher.upload_custom_folder.tooltip");
-        }
-        if (!this.controller.isOysmServer()) {
-            return Component.translatable("gui.sparkle_morpher.upload_custom_folder.tooltip.waiting");
-        }
-        return Component.translatable("gui.sparkle_morpher.upload_custom_folder.tooltip.disabled");
+        InputUtil.setScreen(new CloudModelUploadScreen(this, localModels));
     }
 
     /** §24.7：导入推进已外提到 Service，保留本方法供内部/测试调用。 */
@@ -2502,11 +3233,6 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.gpu_debug_log", GeneralConfig.GPU_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.gpu_debug_verbose_log", GeneralConfig.GPU_DEBUG_VERBOSE_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.show_model_id_first", GeneralConfig.SHOW_MODEL_ID_FIRST));
-        rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_disabled", LoadingStateConfig.DISABLE_LOADING_STATE_SCREEN));
-        rows.add(loadingPositionRow(ModelPanelState.SettingGroup.MISC));
-        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_offset_x", LoadingStateConfig.LOADING_STATE_OFFSET_X, -10000, 10000, 10, "px"));
-        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_offset_y", LoadingStateConfig.LOADING_STATE_OFFSET_Y, -10000, 10000, 10, "px"));
-        rows.add(intRow(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.loading_state_auto_hide", LoadingStateConfig.LOADING_STATE_AUTO_HIDE_SECONDS, 1, 30, 1, "s"));
         return rows.stream().filter(row -> row.group() == STATE.settingGroup).toList();
     }
 
@@ -2558,13 +3284,6 @@ public class ModernPlayerModelScreen extends Screen {
         return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.native_simd_validation", null, valueText, this.controller::cycleNativeSimdValidationMode, null, null, null, null);
     }
 
-    private SettingRow loadingPositionRow(ModelPanelState.SettingGroup group) {
-        LoadingStateConfig.Position selected = this.controller.loadingPosition();
-        String valueText = Component.translatable("gui.sparkle_morpher.config.loading_state_position.value." + selected.name().toLowerCase(Locale.ROOT)).getString();
-        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.loading_state_position", null, valueText, null,
-                () -> this.controller.stepLoadingPosition(false),
-                () -> this.controller.stepLoadingPosition(true), null, null);
-    }
 
     private SettingRow intRow(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.IntValue value, int min, int max, int step, String suffix) {
         int current = safeInt(value, min);
@@ -2935,10 +3654,14 @@ public class ModernPlayerModelScreen extends Screen {
         if (!compactModelLayout()) {
             return 0;
         }
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) return cloudModelViewport().detailHeight();
         return STATE.compactPreviewExpanded ? 112 : 18;
     }
 
     private void renderCompactDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
+        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
+            renderCloudCompactDetail(g, mouseX, mouseY, x, y, w, h, partialTick); return;
+        }
         int barH = 18;
         fill(g, x, y, w, h, GLASS_DARK);
         border(g, x, y, w, h, 0x33FFFFFF);
@@ -3107,4 +3830,275 @@ public class ModernPlayerModelScreen extends Screen {
 
     private record SegmentedSetting(Component left, Component right, boolean leftSelected, Runnable leftAction, Runnable rightAction) {
     }
-}
+
+    private List<CloudAssetSummary> cloudVisibleEntries() {
+        String query = STATE.cloudView == ModelPanelState.CloudView.RECENT || STATE.cloudView == ModelPanelState.CloudView.FAVORITES ? STATE.cloudSearchText : "";
+        return CloudModelBrowserFilter.filter(STATE.cloudEntries, query, STATE.cloudView == ModelPanelState.CloudView.PUBLIC ? "PUBLIC" : cloudVisibilityFilter);
+    }
+
+    private List<CloudAssetSummary> cloudActionTargets() {
+        if (cloudMultiSelectMode) return cloudVisibleEntries().stream().filter(entry -> selectedCloudAssetIds.contains(entry.ref().assetId())).toList();
+        CloudAssetSummary focused = focusedCloudAsset();
+        return focused == null ? List.of() : List.of(focused);
+    }
+
+    private CloudAssetSummary focusedCloudAsset() {
+        if (!this.controller.cloudAvailable()) return null;
+        for (CloudAssetSummary entry : STATE.cloudEntries) {
+            if (entry.ref().assetId().equals(focusedCloudAssetId)) return entry;
+            if (focusedCloudAssetId.isEmpty() && this.controller.cloudModelId(entry).equals(STATE.selectedModelId)) return entry;
+        }
+        return null;
+    }
+
+    private void focusCloudAsset(CloudAssetSummary entry) {
+        if (!this.controller.cloudAvailable()) return;
+        focusedCloudAssetId = entry.ref().assetId();
+        cloudSelectionCandidate = entry;
+        String modelId = this.controller.cloudModelId(entry);
+        if (!STATE.selectedModelId.equals(modelId)) { STATE.selectedModelId = modelId; STATE.selectedTextureId = ""; cloudTexturePage = 0; }
+    }
+
+    private void renderCloudSelection(GuiGraphicsExtractor g, CloudAssetSummary entry, int x, int y) {
+        border(g, x, y, 12, 12, BORDER);
+        if (selectedCloudAssetIds.contains(entry.ref().assetId())) fill(g, x + 2, y + 2, 8, 8, 0xFF80CFB6);
+    }
+
+    private void renderCloudFavoriteControl(GuiGraphicsExtractor g, CloudAssetSummary entry, int mouseX, int mouseY, int x, int y) {
+        boolean favorite = this.controller.isCloudFavorite(entry);
+        if (favorite) fill(g, x, y, ICON, ICON, PANEL_ACTIVE);
+        renderIconButton(g, mouseX, mouseY, x, y, IconGlyph.STAR,
+                Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (favorite ? "unfavorite" : "favorite")), () -> {
+                    focusCloudAsset(entry);
+                    setCloudFavorites(List.of(entry), !this.controller.isCloudFavorite(entry));
+                });
+    }
+
+    private void renderCloudActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
+        int bw = Math.max(1, (w - 9) / 4);
+        List<CloudAssetSummary> targets = cloudActionTargets();
+        Component multi = Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (cloudMultiSelectMode ? "multi_done" : "multi"), selectedCloudAssetIds.size());
+        renderTextButton(g, mouseX, mouseY, x, y, bw, 18, multi, () -> { cloudMultiSelectMode = !cloudMultiSelectMode; selectedCloudAssetIds.clear(); });
+        boolean allFavorite = !targets.isEmpty() && targets.stream().allMatch(this.controller::isCloudFavorite);
+        renderTextButton(g, mouseX, mouseY, x + bw + 3, y, bw, 18,
+                Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (allFavorite ? "unfavorite" : "favorite")), () -> setCloudFavorites(cloudActionTargets(), !allFavorite));
+        renderTextButton(g, mouseX, mouseY, x + (bw + 3) * 2, y, bw, 18,
+                Component.translatable("gui.sparkle_morpher.cloud_upload.make_public"), () -> changeCloudVisibilityBatch("PUBLIC"));
+        renderTextButton(g, mouseX, mouseY, x + (bw + 3) * 3, y, w - (bw + 3) * 3, 18,
+                Component.translatable("gui.sparkle_morpher.cloud_upload.make_private"), () -> changeCloudVisibilityBatch("PRIVATE"));
+        if (cloudPathOffset() < 86) return;
+        int rowY = y + 20;
+        renderTextButton(g, mouseX, mouseY, x, rowY, bw, 18,
+                Component.translatable("gui.sparkle_morpher.model_panel.cloud.select_results"), () -> {
+                    cloudMultiSelectMode = true; selectedCloudAssetIds.clear();
+                    for (CloudAssetSummary entry : cloudVisibleEntries()) selectedCloudAssetIds.add(entry.ref().assetId());
+                });
+        renderTextButton(g, mouseX, mouseY, x + bw + 3, rowY, bw, 18,
+                Component.translatable("gui.sparkle_morpher.model_panel.clear_selection"), () -> selectedCloudAssetIds.clear());
+        Component filter = Component.translatable("gui.sparkle_morpher.model_panel.cloud.filter_" +
+                (cloudVisibilityFilter.isEmpty() ? "all" : cloudVisibilityFilter.toLowerCase(Locale.ROOT)));
+        renderTextButton(g, mouseX, mouseY, x + (bw + 3) * 2, rowY, bw, 18, filter, () -> {
+            if (STATE.cloudView == ModelPanelState.CloudView.PUBLIC) return;
+            cloudVisibilityFilter = cloudVisibilityFilter.isEmpty() ? "PRIVATE" : cloudVisibilityFilter.equals("PRIVATE") ? "PUBLIC" : "";
+            STATE.cloudScroll = 0; selectedCloudAssetIds.clear();
+        });
+        renderTextButton(g, mouseX, mouseY, x + (bw + 3) * 3, rowY, w - (bw + 3) * 3, 18,
+                Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
+    }
+
+    private void setCloudFavorites(List<CloudAssetSummary> targets, boolean value) {
+        if (targets.isEmpty()) { setStatus(Component.translatable("gui.sparkle_morpher.model_panel.select_model"), ChatFormatting.YELLOW); return; }
+        try {
+            this.controller.setCloudFavorites(targets, value);
+            if (STATE.cloudView == ModelPanelState.CloudView.FAVORITES && !value) {
+                Set<String> removed = targets.stream().map(entry -> entry.ref().assetId()).collect(java.util.stream.Collectors.toSet());
+                STATE.cloudEntries.removeIf(entry -> removed.contains(entry.ref().assetId()));
+                selectedCloudAssetIds.removeAll(removed);
+            }
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (value ? "favorited_count" : "unfavorited_count"), targets.size()), ChatFormatting.GREEN);
+        } catch (RuntimeException error) {
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud.favorite_failed", rootMessage(error)), ChatFormatting.RED);
+        }
+    }
+
+    private void ensureCloudOwnership() {
+        var runtime = CloudClientRuntime.state(this.controller.cloudInstanceId());
+        if (runtime == cloudActionsRuntime) return;
+        cloudActionsRuntime = runtime;
+        cloudImportGeneration++; pendingCloudImports.clear();
+        cloudSelectionCandidate = null; this.pendingModelApplyId = null;
+        ownedCloudAssetIds.clear(); selectedCloudAssetIds.clear(); pendingVisibilityChanges.clear();
+        focusedCloudAssetId = ""; cloudVisibilityBatchRunning = false; cloudTexturePage = 0;
+        this.cloudRequestGeneration++; STATE.cloudLoading = false; STATE.cloudLoaded = false;
+        if (runtime != null && STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD) requestCloudOwnership("", runtime);
+    }
+
+    private void requestCloudOwnership(String cursor, CloudClientRuntime.RuntimeState expected) {
+        if (CloudClientRuntime.state(this.controller.cloudInstanceId()) != expected || cloudActionsRuntime != expected) return;
+        int generation = this.controller.generation();
+        this.controller.listCloudAssets("mine", "", cursor, 80).whenComplete((page, failure) -> Minecraft.getInstance().execute(() -> {
+            if (generation != this.controller.generation() || CloudClientRuntime.state(this.controller.cloudInstanceId()) != expected || cloudActionsRuntime != expected) return;
+            if (failure != null) return; // The explicit My Models page remains available for a retry.
+            for (CloudAssetSummary entry : page.entries()) ownedCloudAssetIds.add(entry.ref().assetId());
+            if (STATE.cloudView == ModelPanelState.CloudView.FAVORITES) {
+                List<CloudAssetSummary> favorites = this.controller.favoriteCloudAssets();
+                STATE.cloudEntries.replaceAll(entry -> favorites.stream().filter(favorite -> favorite.ref().assetId().equals(entry.ref().assetId())).findFirst().orElse(entry));
+            }
+            if (page.hasMore() && page.nextCursor() != null && !page.nextCursor().isEmpty() && !page.nextCursor().equals(cursor)) requestCloudOwnership(page.nextCursor(), expected);
+        }));
+    }
+
+    private void changeCloudVisibilityBatch(String visibility) {
+        startCloudVisibilityBatch(cloudActionTargets(), visibility);
+    }
+
+    private void runCloudVisibilityBatch(List<CloudAssetSummary> targets, String visibility, int index, int successes, List<String> failures,
+                                         CloudClientRuntime.RuntimeState expected, int generation) {
+        if (generation != this.controller.generation() || CloudClientRuntime.state(this.controller.cloudInstanceId()) != expected || cloudActionsRuntime != expected) return;
+        if (index >= targets.size()) {
+            cloudVisibilityBatchRunning = false;
+            resetCloudPage();
+            Component result = Component.translatable("gui.sparkle_morpher.model_panel.cloud.batch_result", successes, failures.size());
+            if (!failures.isEmpty()) result = Component.literal(result.getString() + "\n" + String.join("\n", failures));
+            setStatus(result, failures.isEmpty() ? ChatFormatting.GREEN : ChatFormatting.RED);
+            return;
+        }
+        CloudAssetSummary entry = targets.get(index);
+        pendingVisibilityChanges.add(entry.ref().assetId());
+        setStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud.batch_progress", index + 1, targets.size()), ChatFormatting.YELLOW);
+        this.controller.setCloudVisibility(entry, visibility).whenComplete((updated, failure) -> Minecraft.getInstance().execute(() -> {
+            if (generation != this.controller.generation() || CloudClientRuntime.state(this.controller.cloudInstanceId()) != expected || cloudActionsRuntime != expected) return;
+            pendingVisibilityChanges.remove(entry.ref().assetId());
+            if (failure != null) failures.add(cloudEntryName(entry) + ": " + rootMessage(failure));
+            else STATE.cloudEntries.replaceAll(item -> item.ref().assetId().equals(updated.ref().assetId()) ? updated : item);
+            runCloudVisibilityBatch(targets, visibility, index + 1, successes + (failure == null ? 1 : 0), failures, expected, generation);
+        }));
+    }
+
+    private void renderCloudDetails(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
+        glassPanel(g, x, y, w, h);
+        drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.details"), x + 8, y + 8);
+        CloudAssetSummary entry = focusedCloudAsset();
+        if (entry == null) { drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 8, y + 28); return; }
+        String modelId = this.controller.cloudModelId(entry);
+        ModelAssembly assembly = this.controller.assemblyOrNull(modelId);
+        int yy = y + 26;
+        drawText(g, Component.literal(trim(cloudEntryName(entry), w - 16)), x + 8, yy); yy += 13;
+        drawMuted(g, Component.literal(trim(cloudEntryDetail(entry), w - 16)), x + 8, yy); yy += 13;
+        drawMuted(g, Component.literal(trim(this.controller.formatBytes(entry.byteLength()) + " · r" + entry.ref().revision(), w - 16)), x + 8, yy); yy += 15;
+        renderTextButton(g, mouseX, mouseY, x + 8, yy, w - 16, 18,
+                Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (this.controller.isCloudFavorite(entry) ? "unfavorite" : "favorite")),
+                () -> setCloudFavorites(List.of(entry), !this.controller.isCloudFavorite(entry))); yy += 21;
+        if (canChangeCloudVisibility(entry)) {
+            renderTextButton(g, mouseX, mouseY, x + 8, yy, w - 16, 18, cloudVisibilityAction(entry), () -> changeCloudVisibility(entry)); yy += 21;
+        }
+        if (assembly == null) {
+            renderTextButton(g, mouseX, mouseY, x + 8, yy, w - 16, 18,
+                    Component.translatable("gui.sparkle_morpher.model_panel.cloud.download_use"), () -> clickCloudAsset(entry));
+            return;
+        }
+        int previewH = Math.min(98, Math.max(0, h - (yy - y) - 98));
+        if (previewH >= 40) {
+            renderSelectedModelPreview(g, assembly, modelId, x + 8, yy, w - 16, previewH, mouseX, mouseY, partialTick); yy += previewH + 6;
+        }
+        Metadata metadata = assembly.getModelData().getExtraInfo();
+        if (metadata != null) {
+            String authorText = metadata.getAuthors() != null && !metadata.getAuthors().isEmpty() ? authors(metadata) : "";
+            String tips = metadata.getTips() == null ? "" : metadata.getTips();
+            String info = authorText + (authorText.isBlank() || tips.isBlank() ? "" : "\n") + tips;
+            if (!info.isBlank()) {
+                drawMuted(g, Component.literal(trim(info.replace('\n', ' '), w - 16)), x + 8, yy);
+                hit(x + 8, yy, w - 16, 12, Component.literal(info), () -> {}); yy += 14;
+            }
+        }
+        renderCloudTextures(g, mouseX, mouseY, assembly, modelId, x + 8, yy, w - 16, Math.max(36, y + h - 8 - yy));
+    }
+
+    private void renderCloudTextures(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelAssembly assembly, String modelId, int x, int y, int w, int h) {
+        List<String> textures = new ArrayList<>(assembly.getAnimationBundle().getTextures().keySet());
+        renderTextButton(g, mouseX, mouseY, x, y - 2, Math.max(36, w - 70), 16,
+                    Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures"), () -> openCloudTexturePicker(assembly, modelId));
+        if (textures.isEmpty()) return;
+        int rows = Math.max(1, (h - 14) / 16);
+        CloudModelPage page = CloudModelPage.cards(textures.size(), rows, cloudTexturePage);
+        int pages = page.maxScroll() + 1;
+        cloudTexturePage = page.scroll();
+        int start = page.start();
+        for (int i = start; i < page.end(); i++) {
+            String texture = textures.get(i);
+            renderRowButton(g, mouseX, mouseY, x, y + 12 + (i - start) * 16, w, 14,
+                    Component.literal(trim(texture, w - 10)), texture.equals(selectedTextureOrDefault(assembly)), () -> {
+                        focusCloudAssetByModelId(modelId);
+                        STATE.selectedTextureId = texture; applySelectedTexture();
+                    });
+        }
+        if (pages > 1) {
+            renderTextButton(g, mouseX, mouseY, x + w - 66, y - 2, 18, 16, Component.literal("‹"), () -> cloudTexturePage = Math.max(0, cloudTexturePage - 1));
+            drawMuted(g, Component.literal((cloudTexturePage + 1) + "/" + pages), x + w - 43, y + 3);
+            renderTextButton(g, mouseX, mouseY, x + w - 18, y - 2, 18, 16, Component.literal("›"), () -> cloudTexturePage = Math.min(pages - 1, cloudTexturePage + 1));
+        }
+    }
+
+    private void focusCloudAssetByModelId(String modelId) {
+        STATE.selectedModelId = modelId;
+    }
+
+    private void startCloudVisibilityBatch(List<CloudAssetSummary> targets, String visibility) {
+        if (cloudVisibilityBatchRunning || !pendingVisibilityChanges.isEmpty()) return;
+        if (targets.isEmpty()) { setStatus(Component.translatable("gui.sparkle_morpher.model_panel.select_model"), ChatFormatting.YELLOW); return; }
+        if (targets.stream().anyMatch(entry -> !canChangeCloudVisibility(entry))) {
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud.only_owned"), ChatFormatting.YELLOW); return;
+        }
+        targets = targets.stream().filter(entry -> entry.isPublic() != visibility.equals("PUBLIC")).toList();
+        if (targets.isEmpty()) { setStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud.visibility_unchanged"), ChatFormatting.GRAY); return; }
+        var expected = CloudClientRuntime.state(this.controller.cloudInstanceId());
+        if (expected == null) return;
+        cloudVisibilityBatchRunning = true;
+        runCloudVisibilityBatch(targets, visibility, 0, 0, new ArrayList<>(), expected, this.controller.generation());
+    }
+
+    private void renderCloudCompactDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
+        fill(g, x, y, w, h, GLASS_DARK); border(g, x, y, w, h, 0x33FFFFFF);
+        renderIconButton(g, mouseX, mouseY, x + 1, y, STATE.compactPreviewExpanded ? IconGlyph.MINUS : IconGlyph.PLUS,
+                Component.translatable("gui.sparkle_morpher.model_panel.details"), () -> STATE.compactPreviewExpanded = !STATE.compactPreviewExpanded);
+        CloudAssetSummary entry = focusedCloudAsset();
+        if (entry == null) { drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 22, y + 5); return; }
+        String modelId = this.controller.cloudModelId(entry);
+        ModelAssembly assembly = this.controller.assemblyOrNull(modelId);
+        String label = cloudEntryName(entry) + " · " + (assembly == null ? cloudEntryDetail(entry) : selectedTextureOrDefault(assembly));
+        drawText(g, Component.literal(trim(label, w - 48)), x + 22, y + 5);
+        renderIconButton(g, mouseX, mouseY, x + w - 19, y, assembly == null ? IconGlyph.INFO : IconGlyph.TEXTURE,
+                    assembly == null ? cloudEntryTooltip(entry) : Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures"), () -> {
+                        if (assembly == null) STATE.compactPreviewExpanded = true;
+                        else openCloudTexturePicker(assembly, modelId);
+                    });
+        if (!STATE.compactPreviewExpanded || h < 54) return;
+        if (assembly == null) {
+            renderTextButton(g, mouseX, mouseY, x + 4, y + 24, w - 8, 18,
+                    Component.translatable("gui.sparkle_morpher.model_panel.cloud.download_use"), () -> clickCloudAsset(entry)); return;
+        }
+        int ph = h - 24; int previewW = Math.min(w / 3, Math.max(56, ph));
+        renderSelectedModelPreview(g, assembly, modelId, x + 3, y + 21, previewW, ph, mouseX, mouseY, partialTick);
+        renderCloudTextures(g, mouseX, mouseY, assembly, modelId, x + previewW + 8, y + 22, w - previewW - 12, ph - 2);
+    }
+
+        private int cloudPathOffset() { return this.layout.contentHeight < 185 ? 66 : 86; }
+        private CloudModelViewport cloudModelViewport() {
+            int gridY = this.layout.contentTop + 8 + cloudPathOffset() + 20;
+            int room = this.layout.footerTop - 6 - 28 - 4 - gridY;
+            return CloudModelViewport.measure(room, compactModelLayout(), STATE.compactPreviewExpanded);
+        }
+        private void openCloudTexturePicker(ModelAssembly assembly, String modelId) {
+            if (!this.controller.cloudAvailable()) return;
+            var expected = CloudClientRuntime.state(this.controller.cloudInstanceId());
+            CloudAssetSummary focused = focusedCloudAsset();
+            String name = focused != null && this.controller.cloudModelId(focused).equals(modelId) ? cloudEntryName(focused) : displayName(modelId, assembly);
+            InputUtil.setScreen(new CloudTextureSelectionScreen(this, name, new ArrayList<>(assembly.getAnimationBundle().getTextures().keySet()),
+                    selectedTextureOrDefault(assembly), texture -> {
+                        if (CloudClientRuntime.state(this.controller.cloudInstanceId()) != expected) return;
+                        STATE.selectedModelId = modelId; STATE.selectedTextureId = texture;
+                        applySelectedTexture();
+                    }));
+        }
+    }
+    

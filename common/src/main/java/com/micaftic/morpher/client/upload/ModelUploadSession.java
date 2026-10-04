@@ -1,7 +1,8 @@
 package com.micaftic.morpher.client.upload;
 
 import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.core.api.network.state.CloudState;
+import com.micaftic.morpher.cloud.client.CloudClientRuntime;
+import com.micaftic.morpher.cloud.client.CloudHttpException;
 import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 import com.micaftic.morpher.legacy.compat.LegacyCompatModelFormat;
 import com.micaftic.morpher.util.DigestUtil;
@@ -52,13 +53,18 @@ public final class ModelUploadSession {
 
     public static synchronized Component start(String modelId, String fileName, byte[] data,
                                                boolean syncSelectionOnComplete, String visibility) {
+        return start(modelId, fileName, data, syncSelectionOnComplete, visibility, null);
+    }
+
+    public static synchronized Component start(String modelId, String fileName, byte[] data,
+                                               boolean syncSelectionOnComplete, String visibility, String instanceId) {
         if (data == null || data.length == 0) {
             return Component.translatable("gui.sparkle_morpher.import.error.empty_file");
         }
         try {
             Path temporary = Files.createTempFile("spm-cloud-upload-", extensionFor(fileName));
             Files.write(temporary, data);
-            Component error = start(modelId, fileName, temporary, syncSelectionOnComplete, visibility, true);
+            Component error = start(modelId, fileName, temporary, syncSelectionOnComplete, visibility, true, instanceId);
             if (error != null) Files.deleteIfExists(temporary);
             return error;
         } catch (IOException error) {
@@ -69,19 +75,27 @@ public final class ModelUploadSession {
     /** Starts a Cloud upload without materializing the source in memory. */
     public static synchronized Component start(String modelId, String fileName, Path source,
                                                boolean syncSelectionOnComplete) {
-        return start(modelId, fileName, source, syncSelectionOnComplete, "PRIVATE", false);
+        return start(modelId, fileName, source, syncSelectionOnComplete, "PRIVATE", false, null);
+    }
+
+    /** Uploads an existing source to the explicitly selected Cloud. */
+    public static synchronized Component start(String modelId, String fileName, Path source,
+                                               String visibility, String instanceId, boolean temporary) {
+        return start(modelId, fileName, source, false, visibility, temporary, instanceId);
     }
 
     private static Component start(String modelId, String fileName, Path source,
                                    boolean ignoredSyncSelectionOnComplete,
                                    String visibility,
-                                   boolean deleteSourceOnCompletion) {
+                                   boolean deleteSourceOnCompletion,
+                                   String instanceId) {
         if (instance != null && !instance.isTerminal()) {
             return Component.translatable("gui.sparkle_morpher.import.error.in_progress");
         }
-        ModelUploadTransport uploadTransport = CloudUploadRuntime.transport();
-        if (uploadTransport == null || !CloudState.isAvailable()) {
-            return Component.translatable("gui.sparkle_morpher.import.error.cloud_unavailable");
+        ModelUploadTransport uploadTransport = instanceId == null
+                ? CloudUploadRuntime.transport() : CloudClientRuntime.uploadTransport(instanceId);
+        if (uploadTransport == null) {
+            return Component.translatable("gui.sparkle_morpher.cloud_upload.unavailable");
         }
         if (modelId == null || modelId.isBlank() || fileName == null || fileName.isBlank()) {
             return Component.translatable("gui.sparkle_morpher.import.error.invalid_model_id_or_hash");
@@ -117,8 +131,12 @@ public final class ModelUploadSession {
         notifyListeners();
         ModelUploadTransport.UploadMetadata metadata = new ModelUploadTransport.UploadMetadata(
                 modelId, fileName, kind.wireName, sha256, totalBytes, visibility);
-        uploadTransport.upload(metadata, source, session::onProgress, session.cancelled::get)
-                .whenComplete((result, error) -> session.complete(result, error));
+        try {
+            uploadTransport.upload(metadata, source, session::onProgress, session.cancelled::get)
+                    .whenComplete((result, error) -> session.complete(result, error));
+        } catch (RuntimeException error) {
+            session.complete(null, error);
+        }
         return null;
     }
 
@@ -178,7 +196,7 @@ public final class ModelUploadSession {
     private synchronized void complete(ModelUploadTransport.UploadResult result, Throwable error) {
         try {
             if (error != null) {
-                fail(Component.literal(rootMessage(error)));
+                fail(uploadFailure(error));
             } else if (cancelled.get()) {
                 fail(Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
             } else {
@@ -199,12 +217,31 @@ public final class ModelUploadSession {
     private void fail(Component reason) {
         state = State.FAILED;
         message = reason;
+        org.slf4j.LoggerFactory.getLogger(ModelUploadSession.class).warn("Cloud upload failed for {} ({}): {}", modelId, fileName, reason.getString());
     }
 
     private static String rootMessage(Throwable error) {
         Throwable current = error;
         while (current.getCause() != null) current = current.getCause();
         return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
+
+    private static Component uploadFailure(Throwable error) {
+        Throwable cause = error;
+        while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+        if (cause instanceof CloudHttpException http) {
+            String key = switch (http.statusCode()) {
+                case 401 -> "session_expired";
+                case 403 -> "forbidden";
+                case 413 -> "too_large";
+                case 429 -> "rate_limited";
+                default -> http.statusCode() >= 500 ? "server_error" : "rejected";
+            };
+            return Component.translatable("gui.sparkle_morpher.cloud_upload.error." + key, http.statusCode())
+                    .append(Component.literal(" [HTTP " + http.statusCode() + " / " + http.errorCode().name() + "] " + http.getMessage()));
+        }
+        if (cause instanceof IOException) return Component.translatable("gui.sparkle_morpher.cloud_upload.error.network").append(Component.literal(" " + rootMessage(error)));
+        return Component.translatable("gui.sparkle_morpher.cloud_upload.error.unknown", rootMessage(error));
     }
 
     private static String extensionFor(String fileName) {

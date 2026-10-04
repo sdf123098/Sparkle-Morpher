@@ -29,12 +29,14 @@ public final class ClientResourceLifecycleEvent {
 
     public static void register() {
         ClientPlayerEvent.CLIENT_DISCONNECT.register(client -> cleanup("client disconnect"));
-        ClientLifecycleEvent.CLIENT_STOPPING.register(client -> cleanup("client stopping"));
+        ClientLifecycleEvent.CLIENT_STOPPING.register(client -> {
+            cleanup("client stopping");
+            CloudUploadRuntime.clear();
+        });
         ClientLevelEvents.AFTER_CLIENT_LEVEL_CHANGE.register((client, level) -> cleanupAfterWorldChange("client level changed"));
     }
 
     private static void cleanup(String reason) {
-        CloudUploadRuntime.clear();
         GpuRenderPath.disposeAllMeshes(reason);
         AudioStreamCache.clearAll(reason);
         BlurStack.disposeAll(reason);

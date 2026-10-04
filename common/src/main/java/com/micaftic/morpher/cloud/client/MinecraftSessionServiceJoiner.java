@@ -1,10 +1,16 @@
 package com.micaftic.morpher.cloud.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.server.Services;
+import com.mojang.authlib.minecraft.MinecraftSessionService;
+import com.google.gson.JsonObject;
+import com.micaftic.morpher.cloud.CloudInstanceConfig;
+import com.micaftic.morpher.core.api.network.state.CloudErrorCode;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.UUID;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -13,14 +19,34 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class MinecraftSessionServiceJoiner implements CloudIdentityClient.SessionJoiner {
     public static IdentityProfile currentProfile() {
-        try {
-            Object user = invoke(Minecraft.getInstance(), "getUser");
-            UUID id = profileId(user);
-            String name = (String) invoke(user, "getName");
-            return new IdentityProfile(id, name);
-        } catch (ReflectiveOperationException failure) {
-            throw new IllegalStateException("Unable to read the active Minecraft profile", failure);
+        var user = Minecraft.getInstance().getUser();
+        return new IdentityProfile(user.getProfileId(), user.getName());
+    }
+
+    @Override
+    public CompletableFuture<JsonObject> prove(CloudIdentityClient.CloudIdentityChallenge challenge,
+                                                CloudInstanceConfig instance, String purpose) {
+        if (!CloudGameIdentityProof.supports(challenge, instance)) {
+            return CloudIdentityClient.SessionJoiner.super.prove(challenge, instance, purpose);
         }
+        return Minecraft.getInstance().getProfileKeyPairManager().prepareKeyPair()
+                .thenApply(pair -> pair)
+                .completeOnTimeout(Optional.empty(), 10, java.util.concurrent.TimeUnit.SECONDS)
+                .exceptionally(failure -> Optional.empty()).thenCompose(optional -> {
+                    if (optional.isEmpty() || optional.get().publicKey().data().hasExpired()) {
+                        return CloudIdentityClient.SessionJoiner.super.prove(challenge, instance, purpose);
+                    }
+                    return CompletableFuture.supplyAsync(() -> {
+                        var pair = optional.get();
+                        var data = pair.publicKey().data();
+                        try {
+                            return CloudGameIdentityProof.sign(challenge, instance, purpose, currentProfile().profileId(),
+                                    pair.privateKey(), data.key(), data.expiresAt().toEpochMilli(), data.keySignature());
+                        } catch (java.security.GeneralSecurityException | IllegalArgumentException failure) {
+                            throw new java.util.concurrent.CompletionException(failure);
+                        }
+                    });
+                });
     }
 
     @Override
@@ -28,52 +54,32 @@ public final class MinecraftSessionServiceJoiner implements CloudIdentityClient.
         return CompletableFuture.runAsync(() -> {
             try {
                 Object client = Minecraft.getInstance();
-                Object user = invoke(client, "getUser");
-                UUID profileId = profileId(user);
-                String accessToken = (String) invoke(user, "getAccessToken");
-                Object sessionService = sessionService(client);
-                invoke(sessionService, "joinServer", profileId, accessToken, challenge.serverId());
-            } catch (ReflectiveOperationException failure) {
+                var user = Minecraft.getInstance().getUser();
+                sessionService(client).joinServer(user.getProfileId(), user.getAccessToken(), challenge.serverId());
+            } catch (ReflectiveOperationException | com.mojang.authlib.exceptions.AuthenticationException failure) {
                 Throwable cause = failure instanceof InvocationTargetException invocation
                         && invocation.getCause() != null ? invocation.getCause() : failure;
-                throw new java.util.concurrent.CompletionException(
-                        new IllegalStateException("Minecraft Session Service rejected the Cloud identity challenge", cause));
+                CloudHttpException rejected = new CloudHttpException(502, CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE,
+                        "Minecraft Session Service rejected the Cloud identity challenge");
+                rejected.initCause(cause);
+                throw new java.util.concurrent.CompletionException(rejected);
             }
         });
     }
 
-    private static Object sessionService(Object client) throws ReflectiveOperationException {
-        try {
-            return invoke(client, "getMinecraftSessionService");
-        } catch (NoSuchMethodException olderApiAbsent) {
-            Object services = invoke(client, "services");
-            return invoke(services, "sessionService");
-        }
-    }
-
-    private static UUID profileId(Object user) throws ReflectiveOperationException {
-        try {
-            return (UUID) invoke(user, "getProfileId");
-        } catch (NoSuchMethodException olderApiAbsent) {
-            Object profile = invoke(user, "getGameProfile");
-            return (UUID) invoke(profile, "getId");
-        }
-    }
-
-    private static Object invoke(Object receiver, String methodName, Object... args) throws ReflectiveOperationException {
-        for (Method method : receiver.getClass().getMethods()) {
-            if (!method.getName().equals(methodName) || method.getParameterCount() != args.length) continue;
-            Class<?>[] parameterTypes = method.getParameterTypes();
-            boolean compatible = true;
-            for (int i = 0; i < args.length; i++) {
-                if (args[i] != null && !parameterTypes[i].isAssignableFrom(args[i].getClass())) {
-                    compatible = false;
-                    break;
-                }
+    static MinecraftSessionService sessionService(Object client) throws ReflectiveOperationException {
+        // Method names are obfuscated on older Fabric versions; return types survive remapping.
+        for (Method method : client.getClass().getMethods()) {
+            if (method.getParameterCount() == 0 && method.getReturnType() == MinecraftSessionService.class) {
+                return (MinecraftSessionService) method.invoke(client);
             }
-            if (compatible) return method.invoke(receiver, args);
         }
-        throw new NoSuchMethodException(receiver.getClass().getName() + "." + methodName);
+        for (Method method : client.getClass().getMethods()) {
+            if (method.getParameterCount() == 0 && method.getReturnType() == Services.class) {
+                return ((Services) method.invoke(client)).sessionService();
+            }
+        }
+        throw new NoSuchMethodException("Minecraft Session Service accessor");
     }
 
     public record IdentityProfile(UUID profileId, String name) {

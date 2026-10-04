@@ -11,19 +11,5 @@ public final class YesSteveModelFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         YesSteveModel.init();
-        
-        EntityTrackingEvents.START_TRACKING.register((trackedEntity, player) -> {
-            if (!YesSteveModel.isAvailable()) return;
-            CapabilityEvent.syncVehicleModelToReceiver(trackedEntity, player);
-            if (trackedEntity instanceof ServerPlayer tracked) {
-                CapabilityEvent.getModelInfoCap(tracked).ifPresent(c -> {
-                    if (NetworkHandler.isPlayerConnected(tracked) || c.isMandatory()) {
-                        c.createSyncMessage(tracked, false).ifPresent(m -> {
-                            NetworkHandler.sendToClientPlayer(m, player);
-                        });
-                    }
-                });
-            }
-        });
     }
 }

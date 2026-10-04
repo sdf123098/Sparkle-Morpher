@@ -2,8 +2,8 @@ package com.micaftic.morpher.fabric.client;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SSetMaidModelPacket;
+import com.micaftic.morpher.cloud.client.CloudEntityModelSync;
+import com.micaftic.morpher.cloud.client.CloudEntityProvider;
 import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
@@ -27,8 +27,7 @@ final class OrihimeDirectModelCompat {
     }
 
     static void init() {
-        if (!FabricLoader.getInstance().isModLoaded("touhou_little_maid")
-                || FabricLoader.getInstance().isModLoaded("yes_steve_model")) {
+        if (!FabricLoader.getInstance().isModLoaded("touhou_little_maid")) {
             return;
         }
         try {
@@ -84,8 +83,8 @@ final class OrihimeDirectModelCompat {
 
     private static void openModelScreen(Screen parent, Entity maid) {
         Minecraft.getInstance().setScreen(new ModernPlayerModelScreen(parent,
-                (modelId, texture) -> NetworkHandler.sendToServer(
-                        new C2SSetMaidModelPacket(maid.getId(), modelId, texture)),
+                (modelId, texture) -> CloudEntityModelSync.applySelection(CloudEntityProvider.Kind.MAID, maid.getUUID(),
+                        maid.getName().getString(), modelId, texture),
                 "maid:" + maid.getUUID()));
     }
 }
