@@ -3,15 +3,8 @@ package com.micaftic.morpher.client.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
-import com.micaftic.morpher.util.SmExecutors;
-import com.micaftic.morpher.mixin.client.MinecraftAccessor;
-import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientPlayerEvent;
-import net.minecraft.client.Minecraft;
-import java.util.concurrent.Executor;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.chat.Component;
-import com.micaftic.morpher.core.api.PlatformAPI;
 
 public final class ClientPlayerJoinNotification {
 
@@ -42,14 +35,13 @@ public final class ClientPlayerJoinNotification {
         }
         // 懒加载模式下，冷启动时模型目录尚未建立；先扫描目录，再恢复上次选择。
         ClientModelManager.reloadLocalModels(error -> ClientModelManager.restorePersistedModelSelection());
-        ClientModelManager.markVanillaServerIfNoHandshake();
     }
 
     private static void onPlayerQuit(LocalPlayer player) {
         boolean reloadLocalModels = notified && YesSteveModel.isAvailable();
         notified = false;
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.disconnect();
-PrivacyMode.endSession();
+        PrivacyMode.endSession();
         ClientModelManager.resetSync();
         if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);

@@ -4,14 +4,12 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.event.AnimationLockEvent;
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
 import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
-import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.util.InputUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
@@ -51,9 +49,7 @@ public final class AnimationRouletteKey {
                 return EventResult.interruptFalse();
             }
             if (InputUtil.isKeyPressed(keyCode, scanCode, modifiers, KEY_ROULETTE)) {
-                if (NetworkHandler.isClientConnected() && !ConfigPolicies.network().canSwitchModel()) {
-                    return EventResult.pass();
-                }
+
                 handleRoulettePress();
                 return EventResult.interruptFalse();
             }
@@ -66,9 +62,7 @@ public final class AnimationRouletteKey {
                 return EventResult.interruptFalse();
             }
             if (InputUtil.isMousePressed(button, modifiers, KEY_ROULETTE)) {
-                if (NetworkHandler.isClientConnected() && !ConfigPolicies.network().canSwitchModel()) {
-                    return EventResult.pass();
-                }
+
                 handleRoulettePress();
                 return EventResult.interruptFalse();
             }
