@@ -15,6 +15,7 @@ import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
 import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
@@ -504,8 +505,9 @@ public final class ModelPreviewRenderer {
         if (localPlayer == null || scale <= 0.0f) {
             return;
         }
-        int width = Math.max(1, Math.round(scale));
-        int height = Math.max(1, Math.round(scale * 2.0f));
+        ModelBounds modelBounds = resolveExtraPlayerBounds(localPlayer);
+        int width = Math.max(1, (int) Math.ceil((modelBounds.maxX - modelBounds.minX) * scale));
+        int height = Math.max(1, (int) Math.ceil((modelBounds.maxY - modelBounds.minY) * scale));
         int logicalFboWidth = width + EXTRA_PLAYER_FBO_PADDING * 2;
         int logicalFboHeight = height + EXTRA_PLAYER_FBO_PADDING * 2;
         Minecraft minecraft = Minecraft.getInstance();
@@ -590,7 +592,7 @@ public final class ModelPreviewRenderer {
                 MultiBufferSource.BufferSource fboBuffer = MultiBufferSource.immediateWithBuffers(fboTypeBuffers, new ByteBufferBuilder(256));
                 long modelStart = profile ? System.nanoTime() : 0L;
                 renderOverlayModel(localPlayer, EXTRA_PLAYER_FBO_PADDING, EXTRA_PLAYER_FBO_PADDING,
-                        scale, yawOffset, zDepth, partialTick, fboBuffer);
+                        scale, yawOffset, zDepth, partialTick, fboBuffer, modelBounds);
                 if (profile) {
                     ExtraPlayerRenderProfiler.recordModel(System.nanoTime() - modelStart);
                 }
@@ -657,7 +659,7 @@ public final class ModelPreviewRenderer {
     }
 
     /** 渲染玩家模型到当前渲染目标（FBO；独立 poseStack + bufferSource，由调用方绑定 FBO 并 endBatch）。 */
-    private static void renderOverlayModel(LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick, MultiBufferSource bufferSource) {
+    private static void renderOverlayModel(LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick, MultiBufferSource bufferSource, ModelBounds modelBounds) {
         RenderPass previousPass = RenderContext.enter(RenderPass.OLD_HUD);
         float previewYaw = FRONT_FACING_YAW;
         // head mode（§22.2）：STRAIGHT（默认）偏移为 0，等价历史行为；FOLLOW 注入玩家真实头部偏移。
@@ -674,7 +676,9 @@ public final class ModelPreviewRenderer {
         PoseStack poseStack = new PoseStack();
         try {
             RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-            poseStack.translate(x + (scale * 0.5d), y + (scale * 2.0d), 0.0d);
+            // Anchor the actual model AABB to the padded FBO instead of assuming every
+            // model is exactly one block wide and two blocks high.
+            poseStack.translate(x + (modelBounds.maxX * scale), y + (modelBounds.maxY * scale), 0.0d);
             poseStack.scale(scale, scale, -scale);
 
             Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.1f);
@@ -719,6 +723,39 @@ public final class ModelPreviewRenderer {
             RenderContext.restore(previousPass);
         }
     }
+
+    private static ModelBounds resolveExtraPlayerBounds(LocalPlayer localPlayer) {
+        AnimatedGeoModel model = PlayerCapability.get(localPlayer)
+                .filter(PlayerCapability::isModelActive)
+                .map(PlayerCapability::getCurrentModel)
+                .orElse(null);
+        if (model != null && model.getGeoModel() != null && model.getGeoModel().bakedBones != null) {
+            float minX = Float.POSITIVE_INFINITY;
+            float minY = Float.POSITIVE_INFINITY;
+            float maxX = Float.NEGATIVE_INFINITY;
+            float maxY = Float.NEGATIVE_INFINITY;
+            for (GeoModel.BakedBone bone : model.getGeoModel().bakedBones) {
+                for (GeoModel.BakedCube cube : bone.cubes) {
+                    for (GeoModel.BakedQuad quad : cube.quads) {
+                        for (int vertex = 0; vertex < 4; vertex++) {
+                            minX = Math.min(minX, quad.x(vertex));
+                            minY = Math.min(minY, quad.y(vertex));
+                            maxX = Math.max(maxX, quad.x(vertex));
+                            maxY = Math.max(maxY, quad.y(vertex));
+                        }
+                    }
+                }
+            }
+            if (Float.isFinite(minX) && Float.isFinite(minY) && maxX > minX && maxY > minY) {
+                return new ModelBounds(minX, minY, maxX, maxY);
+            }
+        }
+        return new ModelBounds(-0.5f, 0.0f, 0.5f, 2.0f);
+    }
+
+    private record ModelBounds(float minX, float minY, float maxX, float maxY) {
+    }
+
     /** head mode（§22.2）：配置未就绪时按默认 STRAIGHT（0 偏移）处理。 */
     private static boolean followPlayerHead() {
         try {

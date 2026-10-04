@@ -17,7 +17,7 @@ import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.molang.parser.ParseException;
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
-import com.micaftic.morpher.network.message.C2SVersionCheckPacket;
+
 import com.micaftic.morpher.network.message.S2CExecuteMolangPacket;
 import com.micaftic.morpher.network.message.S2CModelSyncPayload;
 import com.micaftic.morpher.network.message.S2CSetModelAndTexturePacket;
@@ -27,7 +27,7 @@ import com.micaftic.morpher.network.message.S2CSyncPlayerStatePacket;
 import com.micaftic.morpher.network.message.S2CSyncProjectileModelPacket;
 import com.micaftic.morpher.network.message.S2CSyncStarModelsPacket;
 import com.micaftic.morpher.network.message.S2CSyncVehicleModelPacket;
-import com.micaftic.morpher.network.message.S2CVersionCheckPacket;
+
 import com.micaftic.morpher.util.LocalStarModelsStore;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.minecraft.client.Minecraft;
@@ -121,17 +121,7 @@ public final class ClientPacketHandlers {
     }
 
     public static void handleVersionCheck(Object obj, Connection connection) {
-        if (PrivacyMode.isActive()) return;
-        S2CVersionCheckPacket message = (S2CVersionCheckPacket) obj;
-        ClientModelManager.setOysmServer(message.isOysmServer());
-        ClientModelManager.setAllowUpload(message.isAllowUpload());
-        if (NetworkHandler.setChannelVersion(connection, message.getVersion())) {
-            ClientModelManager.onSyncConnected();
-        }
-        if (NetworkHandler.VERSION.equals(message.getVersion())) {
-            NetworkHandler.markClientHandshakeComplete();
-        }
-        NetworkHandler.sendToServer(new C2SVersionCheckPacket());
+        return;
     }
 
     public static void handleSyncAnimationExpression(Object obj) {

@@ -135,7 +135,6 @@ public class GeneralConfig {
         net.neoforged.neoforge.common.ModConfigSpec.Builder builder = new net.neoforged.neoforge.common.ModConfigSpec.Builder();
         defineGeneral(builder);
         ExtraPlayerRenderConfig.define(builder);
-        LoadingStateConfig.define(builder);
         return builder.build();
     }
 

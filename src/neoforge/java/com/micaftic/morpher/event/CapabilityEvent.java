@@ -5,7 +5,7 @@ import com.micaftic.morpher.capability.*;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidModelSync;
 import com.micaftic.morpher.model.ServerModelManager;
-import com.micaftic.morpher.core.api.network.YSMChannel;
+
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.*;
 import com.micaftic.morpher.util.*;
@@ -47,6 +47,7 @@ public final class CapabilityEvent {
     }
     private static void onPlayerQuit(PlayerEvent.PlayerLoggedOutEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer p)) return;
+
         LAST_PLAYER_LEVELS.remove(p.getUUID());
         SYNCED_PLAYER_MODEL_STATES.remove(p.getUUID());
         SYNCED_PLAYER_MODEL_STATES.values().forEach(s -> s.remove(p.getUUID()));
@@ -82,6 +83,7 @@ public final class CapabilityEvent {
     private static void onServerTick(ServerTickEvent.Post event) {
         if (!YesSteveModel.isAvailable()) return;
         MinecraftServer s = event.getServer(); if (s == null) return;
+
         boolean low = ConfigPolicies.network().lowBandwidthUsage();
         for (ServerPlayer sp : s.getPlayerList().getPlayers()) {
             Level currentLevel = sp.level();
@@ -91,7 +93,7 @@ public final class CapabilityEvent {
                 syncPlayerModelToTracking(sp, false);
             }
             getModelInfoCap(sp).ifPresent(c -> {
-                if (!NetworkHandler.isPlayerConnected(sp) && !c.isMandatory()) { if (sp.tickCount == 200 || sp.tickCount == 600 || sp.tickCount == 1800) NetworkHandler.sendToClientPlayer(new S2CVersionCheckPacket(), sp); return; }
+                if (!NetworkHandler.isPlayerConnected(sp) && !c.isMandatory()) { return; }
                 if (c.isDirty()) { c.getAnimSync().updateAndSync(sp, false, low); c.createSyncMessage(sp, true).ifPresent(m -> { c.clearDirty(); NetworkHandler.sendToTrackingEntityAndSelf(m, sp); rememberTrackedState(sp, c); if (sp.getVehicle() != null && sp.getVehicle().getFirstPassenger() == sp) syncVehicleModel(sp.getVehicle(), sp); }); }
                 else c.getAnimSync().updateAndSync(sp, true, low);
             });
@@ -126,7 +128,7 @@ public final class CapabilityEvent {
     }
 
     public static void syncVehicleModelToReceiver(Entity entity, ServerPlayer receiver) {
-        if (!NetworkHandler.isPlayerConnected(receiver) || !YSMChannel.canSendToClient(receiver)) return;
+        if (!NetworkHandler.isPlayerConnected(receiver) || !false) return;
         VehicleModelCapability.get(entity).filter(VehicleModelCapability::isInitialized).ifPresent(vc -> {
             S2CSyncVehicleModelPacket packet = new S2CSyncVehicleModelPacket(entity.getId(), vc);
             NetworkHandler.sendToClientPlayer(packet, receiver);

@@ -8,14 +8,23 @@
     "defaultRequire": 1
   },
   "client": [
-    "client.ArrowEntityAccessor", "client.BufferSourceMixin", "client.EntityRenderDispatcherMixin",
-    "client.FishingHookAccessor", "client.InventoryScreenMixin",
-    "client.LivingRendererMixin", "client.PauseScreenMixin", "client.RenderSystemAccessor", "client.ScreenAccessor",
+    "client.ArrowEntityAccessor",
+    "client.BufferSourceMixin",
+    "client.EntityRenderDispatcherMixin",
+    "client.FishingHookAccessor",
+    "client.InventoryScreenMixin",
+    "client.LivingRendererMixin",
+    "client.PauseScreenMixin",
+    "client.RenderSystemAccessor",
+    "client.ScreenAccessor",
     "client.ScreenBlurMixin",
-    "client.ThrowableItemProjectileAccessor", "client.WorldRendererMixin"
+    "client.ThrowableItemProjectileAccessor",
+    "client.WorldRendererMixin"
   ],
   "mixins": [
-    "AbstractArrowEntityMixin", "ConnectionAccessor", "ProjectileEntityMixin", "ServerCommonPacketListenerImplAccessor", "ServerPlayerMixin",
-    "compat.TouhouMaidEntityMixin", "compat.TouhouLittleMaidYsmCompatMixin"
+    "AbstractArrowEntityMixin",
+    "ProjectileEntityMixin",
+    "compat.TouhouMaidEntityMixin",
+    "compat.TouhouLittleMaidYsmCompatMixin"
   ]
 }

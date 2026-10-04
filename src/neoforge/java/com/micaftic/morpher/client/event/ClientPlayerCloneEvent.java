@@ -13,7 +13,7 @@ import com.micaftic.morpher.core.api.capability.CapabilityLifecycle;
 public final class ClientPlayerCloneEvent {
     private ClientPlayerCloneEvent() {}
     @SubscribeEvent public static void onClone(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.Clone event) {
-        if (!YesSteveModel.isAvailable() || !NetworkHandler.isClientConnected()) return;
+        if (!YesSteveModel.isAvailable()) return;
         CapabilityLifecycle.revive(event.getOldPlayer());
         PlayerCapability.get(event.getOldPlayer()).ifPresent(c -> PlayerCapability.get(event.getNewPlayer()).ifPresent(n -> n.copyFrom(c)));
         CapabilityLifecycle.invalidate(event.getOldPlayer());

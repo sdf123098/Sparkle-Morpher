@@ -9,6 +9,7 @@ import com.micaftic.morpher.client.gui.resource.download.DownloadQueue;
 import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
+import com.micaftic.morpher.client.gui.CloudManagementScreen;
 import com.micaftic.morpher.cloud.client.CloudMinecraftEntityProviders;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -39,12 +40,15 @@ public final class ClientTickEvent {
         tickCount++;
         InputStateKey.tick();
         CloudMinecraftEntityProviders.tick();
+        com.micaftic.morpher.cloud.client.CloudPlayerModelSync.tick();
+        com.micaftic.morpher.cloud.client.CloudEntityModelSync.tick();
         CloudClientRuntime.drainClientTasks();
+        if (tickCount % 20 == 0) CloudManagementScreen.tickConnections();
         UploadManager.processPendingUploads();
         ClientRenderCompatibilityRegistry.tick();
         DownloadQueue.tick();
         ClientModelManager.flushPendingModels();
-        ClientModelManager.tickSyncWatchdog();
+
         ClientModelManager.trimUnusedGpuCaches();
         if (tickCount % OBJECT_POOL_CLEANUP_INTERVAL_TICKS == 0) {
             ObjectPool.cleanup();

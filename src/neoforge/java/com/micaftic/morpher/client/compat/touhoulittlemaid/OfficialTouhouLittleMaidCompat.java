@@ -3,43 +3,49 @@ package com.micaftic.morpher.client.compat.touhoulittlemaid;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidAccess;
 
 import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SSetMaidModelPacket;
+import com.micaftic.morpher.cloud.client.CloudEntityModelSync;
+import com.micaftic.morpher.cloud.client.CloudEntityProvider;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.entity.Entity;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.apache.logging.log4j.Logger;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
-/**
- * Soft-link integration with the official TartaricAcid Touhou Little Maid.
- *
- * <p>The official mod already exposes a YSM button and a serverbound model
- * packet. SparkleMorpher only needs to make the optional YSM hook visible,
- * open its model screen for the selected maid, and mirror the official synced
- * state into its renderer.</p>
- */
+/** Optional maid model picker using client Cloud synchronization. */
 final class OfficialTouhouLittleMaidCompat {
+    private static final String GUI_INIT_EVENT =
+            "com.github.tartaricacid.touhoulittlemaid.api.event.client.MaidContainerGuiEvent$Init";
     private static final String OPEN_SCREEN_EVENT =
             "com.github.tartaricacid.touhoulittlemaid.compat.ysm.event.OpenYsmMaidScreenEvent";
-    private static final String MODEL_PACKET =
-            "com.github.tartaricacid.touhoulittlemaid.network.message.YsmMaidModelPackage";
 
     private OfficialTouhouLittleMaidCompat() {
     }
 
     static void init(Logger logger) {
         if (!TouhouLittleMaidAccess.isLoaded()
-                || ModList.get().isLoaded("yes_steve_model")
                 || FMLEnvironment.dist != Dist.CLIENT) {
+            return;
+        }
+        try {
+            Class<?> eventClass = Class.forName(GUI_INIT_EVENT, false,
+                    OfficialTouhouLittleMaidCompat.class.getClassLoader());
+            registerGuiInitListener(eventClass);
+            logger.info("Enabled official Touhou Little Maid direct model selection");
+        } catch (Throwable throwable) {
+            logger.debug("Official Touhou Little Maid model button unavailable: {}",
+                    throwable.getMessage());
+        }
+        // Keep a real YSM installation's original screen listener independent.
+        if (ModList.get().isLoaded("yes_steve_model")) {
             return;
         }
         try {
@@ -62,6 +68,41 @@ final class OfficialTouhouLittleMaidCompat {
         NeoForge.EVENT_BUS.addListener(eventClass, OfficialTouhouLittleMaidCompat::onOpenScreen);
     }
 
+    @SuppressWarnings("unchecked")
+    private static void registerGuiInitListener(Class<?> eventClass) {
+        registerGuiInitListenerTyped((Class<? extends net.neoforged.bus.api.Event>) eventClass);
+    }
+
+    private static <T extends net.neoforged.bus.api.Event> void registerGuiInitListenerTyped(Class<T> eventClass) {
+        NeoForge.EVENT_BUS.addListener(eventClass, OfficialTouhouLittleMaidCompat::onGuiInit);
+    }
+
+    private static void onGuiInit(net.neoforged.bus.api.Event event) {
+        try {
+            Object gui = event.getClass().getMethod("getGui").invoke(event);
+            if (!(gui instanceof Screen)) {
+                return;
+            }
+            Object value = gui.getClass().getMethod("getMaid").invoke(gui);
+            if (!(value instanceof Entity maid) || !TouhouLittleMaidAccess.isMaid(maid)) {
+                return;
+            }
+            int left = ((Number) event.getClass().getMethod("getLeftPos").invoke(event)).intValue();
+            int top = ((Number) event.getClass().getMethod("getTopPos").invoke(event)).intValue();
+            Button button = Button.builder(Component.literal("S"), ignored ->
+                    Minecraft.getInstance().setScreen(new ModernPlayerModelScreen(
+                            (modelId, texture) -> applyModel(maid, modelId, texture),
+                            "maid:" + maid.getUUID())))
+                    .bounds(left + 32, top + 14, 9, 9)
+                    .build();
+            button.setTooltip(Tooltip.create(Component.translatable("key.sparkle_morpher.player_model.desc")));
+            event.getClass().getMethod("addButton", String.class, AbstractWidget.class)
+                    .invoke(event, "sparkle_morpher:model", button);
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            // Unsupported optional maid versions must leave their GUI functional.
+        }
+    }
+
     private static void onOpenScreen(net.neoforged.bus.api.Event event) {
         try {
             Method getMaid = event.getClass().getMethod("getMaid");
@@ -78,28 +119,7 @@ final class OfficialTouhouLittleMaidCompat {
     }
 
     private static void applyModel(Entity maid, String modelId, String texture) {
-        if (modelId == null || modelId.isBlank()) {
-            return;
-        }
-        // SPM 自有链路：发 C2SSetMaidModelPacket → server 端 MaidModelSync.applySelectedModel（含 auth 校验）
-        try {
-            NetworkHandler.sendToServer(new C2SSetMaidModelPacket(maid.getId(), modelId, texture == null ? "" : texture));
-            return;
-        } catch (Throwable ignored) {
-            // SPM 包不可用时回退官方女仆协议
-        }
-        try {
-            Class<?> packetClass = Class.forName(MODEL_PACKET, false,
-                    OfficialTouhouLittleMaidCompat.class.getClassLoader());
-            Constructor<?> constructor = packetClass.getConstructor(
-                    int.class, String.class, String.class, Component.class);
-            Object packet = constructor.newInstance(
-                    maid.getId(), modelId, texture == null ? "" : texture, Component.literal(modelId));
-            if (packet instanceof CustomPacketPayload payload) {
-                PacketDistributor.sendToServer(payload);
-            }
-        } catch (Throwable ignored) {
-            // An unsupported TLM version must not affect the model screen.
-        }
+        CloudEntityModelSync.applySelection(CloudEntityProvider.Kind.MAID, maid.getUUID(),
+                maid.getName().getString(), modelId, texture);
     }
 }

@@ -4,11 +4,14 @@ import com.micaftic.morpher.cloud.client.CloudAssetSummary;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 final class ModelPanelState {
     enum Tab {
         MODEL,
         RESOURCE,
+        ACCOUNT,
         SETTINGS
     }
 
@@ -60,6 +63,8 @@ final class ModelPanelState {
 
     Tab activeTab = Tab.MODEL;
     ModelSource modelSource = ModelSource.LOCAL;
+    String selectedCloudInstanceId = "";
+    int cloudTabOffset;
     CloudView cloudView = CloudView.RECENT;
     ModelFilter modelFilter = ModelFilter.ALL;
     SettingGroup settingGroup = SettingGroup.GENERAL;
@@ -69,9 +74,35 @@ final class ModelPanelState {
     String cloudCursor = "";
     String cloudLoadedKey = "";
     final List<CloudAssetSummary> cloudEntries = new ArrayList<>();
+    final Map<String, CloudTabState> cloudTabs = new HashMap<>();
     boolean cloudLoaded;
     boolean cloudLoading;
     boolean cloudHasMore;
+    int cloudScroll;
+
+    record CloudTabState(CloudView view, String search, String cursor, String loadedKey,
+                         List<CloudAssetSummary> entries, boolean loaded, boolean hasMore,
+                         int scroll, ModelPickerLayout.Style style) { }
+
+    void saveCloudTab() {
+        if (selectedCloudInstanceId.isBlank()) return;
+        cloudTabs.put(selectedCloudInstanceId, new CloudTabState(cloudView, cloudSearchText,
+                cloudCursor, cloudLoadedKey, List.copyOf(cloudEntries), cloudLoaded, cloudHasMore, cloudScroll, pickerStyle));
+    }
+
+    void restoreCloudTab(String instanceId) {
+        CloudTabState saved = cloudTabs.get(instanceId);
+        cloudView = saved == null ? CloudView.RECENT : saved.view();
+        cloudSearchText = saved == null ? "" : saved.search();
+        cloudCursor = saved == null ? "" : saved.cursor();
+        cloudLoadedKey = saved == null ? "" : saved.loadedKey();
+        cloudEntries.clear();
+        if (saved != null) cloudEntries.addAll(saved.entries());
+        cloudLoaded = saved != null && saved.loaded();
+        cloudHasMore = saved != null && saved.hasMore();
+        cloudLoading = false;
+        cloudScroll = saved == null || saved.style() != pickerStyle ? 0 : Math.max(0, saved.scroll());
+    }
     String resourceSearchText = "";
     String siteEditText = "";
     String categoryEditText = "";
@@ -137,6 +168,7 @@ final class ModelPanelState {
         out.put("cloudLoaded", cloudLoaded);
         out.put("cloudLoading", cloudLoading);
         out.put("cloudHasMore", cloudHasMore);
+        out.put("cloudScroll", cloudScroll);
         return out;
     }
 

@@ -28,6 +28,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     @Nullable
     private Struct serverVars;
     private String rouletteAnimation = "";
+    private boolean cloudModelStateApplied;
     private boolean officialYsmStateApplied;
     private boolean syncedModelStateApplied;
 
@@ -43,7 +44,37 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
                 current == null || current.getEntity() != living ? new MaidCapability(living) : current));
     }
 
+    /** Cloud bindings have priority over the optional legacy maid synchronization. */
+    public void applyCloudState(String modelId, String textureId) {
+        if (modelId == null || modelId.isBlank()) {
+            clearCloudState();
+            return;
+        }
+        this.cloudModelStateApplied = true;
+        this.rouletteAnimation = "";
+        this.serverVars = null;
+        setForceDisabled(false);
+        initModelWithTexture(modelId, textureId == null ? "default" : textureId);
+    }
+
+    /** Removing a Cloud binding restores the original maid renderer. */
+    public void clearCloudState() {
+        if (!this.cloudModelStateApplied) {
+            return;
+        }
+        this.cloudModelStateApplied = false;
+        this.rouletteAnimation = "";
+        this.serverVars = null;
+        this.officialYsmStateApplied = false;
+        this.syncedModelStateApplied = false;
+        resetModel();
+        setForceDisabled(false);
+    }
+
     public void applySyncedState(VehicleModelCapability state, Int2FloatOpenHashMap values) {
+        if (this.cloudModelStateApplied) {
+            return;
+        }
         this.officialYsmStateApplied = false;
         this.syncedModelStateApplied = state.isInitialized();
         if (!state.isInitialized()) {
@@ -64,7 +95,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
      * to activate the model.
      */
     public void syncOfficialYsmState() {
-        if (this.syncedModelStateApplied) {
+        if (this.cloudModelStateApplied || this.syncedModelStateApplied) {
             return;
         }
         if (!TouhouLittleMaidAccess.isYsmModel(this.entity)) {

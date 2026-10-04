@@ -13,10 +13,10 @@ public final class YsmEventBootstrap {
     public static void register() {
         // R11.2：兼容层服务注册——核心只定义 hook，adapter 在此注入。
         CompatServices.registerMaidModelService(ServerModelManagerService.INSTANCE);
-        CompatServices.registerMaidNetworkService(NetworkHandlerService.INSTANCE);
+        
 
-        ServerStartupEvent.register(); EnterServerEvent.register(); PlayerLogoutEvent.register();
-        CommandRegistry.register(); CapabilityEvent.register(); LivingEventBridge.register();
+  
+  LivingEventBridge.register();
         if (!PlatformAPI.isServer()) {
             registerClient("com.micaftic.morpher.event.EntityJoinCallbackEvent");
             registerClient("com.micaftic.morpher.client.event.ClientResourceLifecycleEvent");

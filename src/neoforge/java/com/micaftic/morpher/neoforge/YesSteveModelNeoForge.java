@@ -9,7 +9,6 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
-import com.micaftic.morpher.core.api.network.neoforge.YSMChannelImpl;
 
 @Mod(YesSteveModel.MOD_ID)
 public final class YesSteveModelNeoForge {
@@ -19,12 +18,8 @@ public final class YesSteveModelNeoForge {
         modContainer.registerConfig(ModConfig.Type.CLIENT, GeneralConfig.buildSpec());
         modContainer.registerConfig(ModConfig.Type.SERVER, ServerConfig.buildSpec());
 
-        // Init network channel and register packets early (before any player join events)
-        YSMChannelImpl.init(NetworkHandler.CHANNEL_ID, NetworkHandler.VERSION);
-        NetworkHandler.init();
-
         YesSteveModel.registerModBusEvents(modEventBus);
-        modEventBus.addListener(YSMChannelImpl::registerPayloadHandlers);
+
         modEventBus.addListener(YesSteveModelNeoForge::onCommonSetup);
     }
 

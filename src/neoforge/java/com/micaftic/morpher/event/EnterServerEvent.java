@@ -15,7 +15,7 @@ public final class EnterServerEvent {
     private static void onJoin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer p)) return;
         if (!YesSteveModel.isAvailable()) return;
-        NetworkHandler.sendToClientPlayer(new S2CVersionCheckPacket(), p);
+
         CapabilityEvent.getAuthModelsCap(p).ifPresent(c -> { for (String m : ServerModelManager.getAuthModels()) c.addModel(m); NetworkHandler.sendToClientPlayer(new S2CSyncAuthModelsPacket(c.getAuthModels()), p); });
         PlayerStarModelsStore.restore(p);
         PlayerModelSelectionStore.restore(p); ServerModelManager.validatePlayerModel(p);

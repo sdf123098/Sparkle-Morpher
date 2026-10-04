@@ -2,7 +2,7 @@ package com.micaftic.morpher.command.subcommands;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.S2CVersionCheckPacket;
+
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -24,7 +24,7 @@ public class PingCommand {
         ServerPlayer playerOrException = context.getSource().getPlayerOrException();
         String version = "1.3.0"; playerOrException.sendSystemMessage(Component.translatable("message.sparkle_morpher.client.ping_result", version));
         if (!NetworkHandler.isPlayerConnected(playerOrException)) {
-            NetworkHandler.sendToClientPlayer(new S2CVersionCheckPacket(), playerOrException);
+
             return Command.SINGLE_SUCCESS;
         }
         return Command.SINGLE_SUCCESS;

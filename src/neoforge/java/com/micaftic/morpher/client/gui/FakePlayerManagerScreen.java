@@ -1,7 +1,5 @@
 package com.micaftic.morpher.client.gui;
 import com.micaftic.morpher.fakeplayer.*;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.*;
 import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -11,7 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-/** Full server-backed fake-player list with local search, filtering, sorting and virtual scrolling. */
+/** Client-visible candidates for Cloud-managed fake-player appearances with local search, filtering, sorting and virtual scrolling. */
 public final class FakePlayerManagerScreen extends Screen {
     private static final int ROW = 25;
     private UUID selectedUuid;
@@ -27,8 +25,14 @@ public final class FakePlayerManagerScreen extends Screen {
     public static void open() {
         FakePlayerListCache.replace(List.of());
         InputUtil.setScreen(new FakePlayerManagerScreen());
-        NetworkHandler.sendToServer(new C2SRequestFakePlayerListPacket());
+        com.micaftic.morpher.cloud.client.CloudEntityModelSync.refreshFakeTargets();
     }
+
+    @Override public void tick() {
+        com.micaftic.morpher.cloud.client.CloudEntityModelSync.refreshFakeTargets();
+    }
+
+    @Override public boolean isPauseScreen() { return false; }
 
     @Override protected void init() {}
 
@@ -39,7 +43,7 @@ public final class FakePlayerManagerScreen extends Screen {
         int x = (width - pw) / 2, y = (height - ph) / 2;
         g.fill(x, y, x + pw, y + ph, 0xF02B3038);
         draw(g, "SPM 假人管理器", x + 18, y + 14, 0xFFFFFFFF);
-        draw(g, "仅显示服务端确认的可管理假人；女仆和普通玩家不会进入此列表。",
+        draw(g, Component.translatable("gui.sparkle_morpher.cloud.entity.fake_hint").getString(),
                 x + 18, y + 31, 0xFFB8C6D0);
         int sy = y + 48;
         g.fill(x + 18, sy, x + pw - 18, sy + 22, searchFocused ? 0xFF56636D : 0xFF343B42);
@@ -61,7 +65,7 @@ public final class FakePlayerManagerScreen extends Screen {
         int count = Math.max(1, (by - 10 - ly) / ROW);
         offset = Math.max(0, Math.min(offset, Math.max(0, rows.size() - count)));
         if (rows.isEmpty()) draw(g, FakePlayerListCache.entries().isEmpty()
-                ? "正在获取服务端快照，或当前没有在线假人。" : "没有匹配的假人。清空搜索或调整筛选。",
+                ? Component.translatable("gui.sparkle_morpher.cloud.entity.fake_empty").getString() : "没有匹配的假人。清空搜索或调整筛选。",
                 x + 26, ly + 12, 0xFFB8C6D0);
         for (int i = 0; i < count && offset + i < rows.size(); i++) {
             FakePlayerListEntry e = rows.get(offset + i);
@@ -147,8 +151,9 @@ public final class FakePlayerManagerScreen extends Screen {
                 && mx >= x + 18 && mx < x + pw - 18 && my >= by && my < by + 24) {
             UUID target = selectedUuid;
             InputUtil.setScreen(new ModernPlayerModelScreen(
-                    (modelId, textureId) -> NetworkHandler.sendToServer(
-                            new C2SRequestFakePlayerModelPacket(target, modelId, textureId)),
+                    (modelId, textureId) -> com.micaftic.morpher.cloud.client.CloudEntityModelSync.applySelection(
+                            com.micaftic.morpher.cloud.client.CloudEntityProvider.Kind.FAKE_PLAYER,
+                            target, selectedName, modelId, textureId),
                     "fake:" + target));
             return true;
         }

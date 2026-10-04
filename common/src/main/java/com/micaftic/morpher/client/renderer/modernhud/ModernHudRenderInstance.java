@@ -24,6 +24,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
@@ -315,13 +316,18 @@ public final class ModernHudRenderInstance {
             }
             drawMeshParts(mesh, 0);
             if (geoModel.isTranslucentTexture(0)) {
+                // Match vanilla entity-translucent state: translucent pixels test against
+                // opaque depth, but must not write depth and hide the model's later layers.
+                RenderSystem.depthMask(false);
                 RenderSystem.enableBlend();
-                RenderSystem.defaultBlendFunc();
+                GL14.glBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA,
+                        GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
                 if (BoneSkinShader.locAlphaMode() >= 0) {
                     GL20.glUniform1i(BoneSkinShader.locAlphaMode(), 2);
                 }
                 drawMeshParts(mesh, 0);
                 RenderSystem.disableBlend();
+                RenderSystem.depthMask(true);
             }
             if (profile) {
                 ExtraPlayerRenderProfiler.recordDrawSubmission(System.nanoTime() - drawStart);
