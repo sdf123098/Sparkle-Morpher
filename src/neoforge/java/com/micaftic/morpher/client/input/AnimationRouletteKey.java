@@ -4,12 +4,10 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.event.AnimationLockEvent;
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
-import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.util.InputUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
@@ -55,7 +53,7 @@ public final class AnimationRouletteKey {
             return;
         }
         if (InputUtil.isKeyPressed(event.getKey(), event.getScanCode(), event.getModifiers(), KEY_ROULETTE)) {
-            if (NetworkHandler.isClientConnected() && !ConfigPolicies.network().canSwitchModel()) return;
+
             handleRoulettePress();
         }
     }
@@ -70,7 +68,7 @@ public final class AnimationRouletteKey {
             return;
         }
         if (InputUtil.isMousePressed(event.getButton(), KEY_ROULETTE)) {
-            if (NetworkHandler.isClientConnected() && !ConfigPolicies.network().canSwitchModel()) return;
+
             handleRoulettePress();
             event.setCanceled(true);
         }

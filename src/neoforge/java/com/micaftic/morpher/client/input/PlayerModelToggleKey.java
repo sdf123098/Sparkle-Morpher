@@ -2,8 +2,6 @@ package com.micaftic.morpher.client.input;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.*;
-import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.util.InputUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.*;
@@ -33,8 +31,7 @@ public final class PlayerModelToggleKey {
     private static boolean openModelScreen() {
         if (!InputUtil.isPlayerReady()) return false;
         if (!YesSteveModel.isAvailable()) { YesSteveModel.sendUnavailableMessage(); return true; }
-        if (NetworkHandler.isClientConnected() && !ConfigPolicies.network().canSwitchModel()) Minecraft.getInstance().setScreen(ModernPlayerModelScreen.settings());
-        else Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
+        Minecraft.getInstance().setScreen(new ModernPlayerModelScreen());
         return true;
     }
 }

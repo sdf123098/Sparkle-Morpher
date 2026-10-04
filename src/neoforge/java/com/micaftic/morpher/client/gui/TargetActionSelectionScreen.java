@@ -6,8 +6,6 @@ import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.fakeplayer.FakePlayerListCache;
 import com.micaftic.morpher.fakeplayer.FakePlayerListEntry;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SRequestFakePlayerListPacket;
 import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -30,7 +28,7 @@ import java.util.UUID;
  * Unified target picker for fake-player and maid action wheels.
  *
  * <p>The picker deliberately does not inspect Minecraft.hitResult. It uses the
- * server-authoritative fake-player snapshot plus loaded nearby maid entities,
+ * Cloud-discovered fake-player snapshot plus loaded nearby maid entities,
  * then hands the selected entity to the existing unified action roulette.</p>
  */
 public final class TargetActionSelectionScreen extends Screen {
@@ -46,9 +44,6 @@ public final class TargetActionSelectionScreen extends Screen {
 
     public static void open() {
         InputUtil.setScreen(new TargetActionSelectionScreen());
-        if (NetworkHandler.isClientConnected()) {
-            NetworkHandler.sendToServer(new C2SRequestFakePlayerListPacket());
-        }
     }
 
     @Override
@@ -133,7 +128,7 @@ public final class TargetActionSelectionScreen extends Screen {
                 ignored -> { if (page + 1 < pageCount) { page++; rebuildTargetWidgets(); } })
                 .bounds(left + 100, top + 132, 90, 20).build());
         addRenderableWidget(Button.builder(Component.literal("刷新"),
-                ignored -> { page = 0; rebuildTargets(); rebuildTargetWidgets(); open(); })
+                ignored -> { page = 0; rebuildTargets(); rebuildTargetWidgets(); })
                 .bounds(left + 204, top + 132, 90, 20).build());
         addRenderableWidget(Button.builder(Component.literal("返回"),
                 ignored -> onClose())

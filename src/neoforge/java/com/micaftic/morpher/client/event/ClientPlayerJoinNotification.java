@@ -3,11 +3,7 @@ package com.micaftic.morpher.client.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.util.SmExecutors;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -22,13 +18,12 @@ public final class ClientPlayerJoinNotification {
         if (!YesSteveModel.isAvailable()) { YesSteveModel.sendUnavailableMessage(); return; }
         if (PrivacyMode.isActive()) { ClientModelManager.enterPrivacyMode(); return; }
         ClientModelManager.reloadLocalModels(error -> ClientModelManager.restorePersistedModelSelection());
-        ClientModelManager.markVanillaServerIfNoHandshake();
     }
     @SubscribeEvent public static void onQuit(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
         boolean reloadLocalModels = notified && YesSteveModel.isAvailable();
         notified = false;
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.disconnect();
-PrivacyMode.endSession();
+        PrivacyMode.endSession();
         ClientModelManager.resetSync();
         if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);

@@ -33,9 +33,6 @@ import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.model.ServerModelManager;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SModelSyncPayload;
-import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
 import com.micaftic.morpher.resource.YSMBinaryDeserializer;
 import com.micaftic.morpher.resource.bundle.ClientModelBundleAssembler;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
@@ -577,9 +574,7 @@ public class ClientModelManager {
     }
 
     public static boolean canUploadToServer() {
-        return NetworkHandler.isClientConnected()
-                && LegacyCompatState.isOysmServer()
-                && LegacyCompatState.isAllowUpload();
+        return com.micaftic.morpher.client.upload.CloudUploadRuntime.isConfigured();
     }
 
     public static boolean isLocalOnlyModel(String modelId) {
@@ -697,10 +692,7 @@ public class ClientModelManager {
      * 此方法设计为只触发一次恢复：恢复后 modelId 不再是 "default"，条件不再满足。
      */
     public static void restorePersistedModelSelectionOnVanillaServer() {
-        // 仅在无模组服务器上执行（YSM 连接未建立 = 服务器没有 YSM 模组）
-        if (NetworkHandler.isClientConnected()) {
-            return;
-        }
+        // Cloud 联机也先恢复本地选择；发布端自行检查模型所属 Cloud。
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {
             return;
@@ -744,7 +736,7 @@ public class ClientModelManager {
                 if (sameRuntimeModelId(modelId, cap.getModelId())) {
                     String textureId = cap.getCurrentTextureName();
                     rememberSelectedModel(modelId, textureId);
-                    NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(modelId, textureId));
+                    com.micaftic.morpher.cloud.client.CloudPlayerModelSync.publishCurrentSelection();
                 }
             });
         }
@@ -762,16 +754,16 @@ public class ClientModelManager {
     public static void resendSelectedServerModel() {
         String modelId = MODEL_SELECTION.selectedModelId();
         String textureId = MODEL_SELECTION.selectedTextureId();
-        if (modelId == null || modelId.isBlank() || textureId == null || isLocalOnlyModel(modelId) || !NetworkHandler.isClientConnected()) {
+        if (modelId == null || modelId.isBlank() || textureId == null) {
             return;
         }
         Minecraft.getInstance().execute(() -> {
             String currentModelId = MODEL_SELECTION.selectedModelId();
             String currentTextureId = MODEL_SELECTION.selectedTextureId();
-            if (!sameRuntimeModelId(modelId, currentModelId) || currentTextureId == null || isLocalOnlyModel(modelId) || !containsRuntimeModel(modelId)) {
+            if (!sameRuntimeModelId(modelId, currentModelId) || currentTextureId == null || !containsRuntimeModel(modelId)) {
                 return;
             }
-            NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(modelId, currentTextureId));
+            com.micaftic.morpher.cloud.client.CloudPlayerModelSync.publishCurrentSelection();
         });
     }
 
@@ -1006,9 +998,7 @@ public class ClientModelManager {
 
 
     public static synchronized void resetSync() {
-        // R9.2：oySm/allowUpload 与握手标志统一由 resetClientHandshake（→ LegacySpmHandshakeState.resetClientSession）复位
 
-        NetworkHandler.resetClientHandshake();
         Minecraft.getInstance().execute(() -> {
             syncState.setState(SyncState.IDLE);
         });
@@ -1016,7 +1006,6 @@ public class ClientModelManager {
 
     public static void enterPrivacyMode() {
 
-        NetworkHandler.resetClientHandshake();
         Minecraft.getInstance().execute(() -> {
             syncState.setState(SyncState.LOADING);
             markSyncActivity();
@@ -1033,11 +1022,11 @@ public class ClientModelManager {
     }
 
     public static boolean isAllowUpload() {
-        return LegacyCompatState.isAllowUpload();
+        return com.micaftic.morpher.client.upload.CloudUploadRuntime.isConfigured();
     }
 
     public static boolean isOysmServer() {
-        return LegacyCompatState.isOysmServer();
+        return com.micaftic.morpher.client.upload.CloudUploadRuntime.isConfigured();
     }
 
     // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
@@ -1058,9 +1047,6 @@ public class ClientModelManager {
      * 将同步状态从 WAITING 重置为 IDLE，避免加载状态 UI 一直卡在“等待中”。
      */
     public static void markVanillaServerIfNoHandshake() {
-        if (NetworkHandler.isClientConnected()) {
-            return;
-        }
         if (syncState.getCurrentState() == SyncState.WAITING) {
             syncState.setState(SyncState.IDLE);
         }
