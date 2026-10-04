@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.micaftic.morpher.core.api.network.state.CloudErrorCode;
 import com.micaftic.morpher.cloud.identity.CloudIdentityRef;
+import com.micaftic.morpher.cloud.CloudInstanceConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,8 +16,8 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Cloud game-identity verification boundary. The loader/version adapter owns
- * the Session Service join; this client only sends the opaque challenge id to
- * the trusted Cloud origin and never accepts a provider URL from the client.
+ * the Session Service join or player certificate proof. Game access tokens and
+ * private keys stay in-process; provider URLs are controlled by the Cloud operator.
  */
 public final class CloudIdentityClient {
 
@@ -58,8 +59,12 @@ public final class CloudIdentityClient {
     }
 
     public CompletableFuture<CloudIdentity> completeChallenge(String challengeId) {
+        return completeChallenge(challengeId, new JsonObject());
+    }
+
+    private CompletableFuture<CloudIdentity> completeChallenge(String challengeId, JsonObject proof) {
         requireChallengeId(challengeId);
-        JsonObject body = new JsonObject();
+        JsonObject body = proof.deepCopy();
         body.addProperty("challenge_id", challengeId);
         return http.postJson("/v1/auth/challenges/" + CloudScopeClient.segment(challengeId) + "/complete", body.toString())
                 .thenApply(CloudIdentityClient::parseIdentity);
@@ -68,7 +73,8 @@ public final class CloudIdentityClient {
     public CompletableFuture<CloudIdentity> joinAndComplete(CloudIdentityChallenge challenge, SessionJoiner joiner) {
         Objects.requireNonNull(challenge, "challenge");
         Objects.requireNonNull(joiner, "joiner");
-        return joiner.join(challenge).thenCompose(ignored -> completeChallenge(challenge.challengeId()));
+        return joiner.prove(challenge, http.instance(), "link")
+                .thenCompose(proof -> completeChallenge(challenge.challengeId(), proof));
     }
 
     static CloudIdentityChallenge parseChallengeForTest(String body) { return parseChallenge(body); }
@@ -131,7 +137,8 @@ public final class CloudIdentityClient {
     private static CloudIdentityChallenge parseChallenge(String body) {
         try {
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
-            return new CloudIdentityChallenge(required(root, "challenge_id"), required(root, "provider_id"), required(root, "server_id"), root.get("expires_in_seconds").getAsLong());
+            return new CloudIdentityChallenge(required(root, "challenge_id"), required(root, "provider_id"), required(root, "server_id"), root.get("expires_in_seconds").getAsLong(),
+                    root.has("profile_key_payload") ? required(root, "profile_key_payload") : "");
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud identity challenge response");
         }
@@ -161,13 +168,22 @@ public final class CloudIdentityClient {
     @FunctionalInterface
     public interface SessionJoiner {
         CompletableFuture<Void> join(CloudIdentityChallenge challenge);
+
+        default CompletableFuture<JsonObject> prove(CloudIdentityChallenge challenge, CloudInstanceConfig instance, String purpose) {
+            return join(challenge).thenApply(ignored -> new JsonObject());
+        }
     }
 
-    public record CloudIdentityChallenge(String challengeId, String providerId, String serverId, long expiresInSeconds) {
+    public record CloudIdentityChallenge(String challengeId, String providerId, String serverId, long expiresInSeconds, String profileKeyPayload) {
+        public CloudIdentityChallenge(String challengeId, String providerId, String serverId, long expiresInSeconds) {
+            this(challengeId, providerId, serverId, expiresInSeconds, "");
+        }
+
         public CloudIdentityChallenge {
             if (challengeId == null || challengeId.isBlank() || providerId == null || providerId.isBlank() || serverId == null || serverId.isBlank() || expiresInSeconds <= 0) {
                 throw new IllegalArgumentException("invalid Cloud identity challenge");
             }
+            if (profileKeyPayload == null || profileKeyPayload.length() > 4096) throw new IllegalArgumentException("invalid profile key payload");
         }
     }
 

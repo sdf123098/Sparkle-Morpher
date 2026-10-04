@@ -1,181 +1,178 @@
 package com.micaftic.morpher.cloud.client;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.micaftic.morpher.YesSteveModel;
+import com.google.gson.*;
 import com.micaftic.morpher.core.storage.ModelStoragePaths;
-
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.nio.file.*;
+import java.util.*;
 
-/** Local, bounded index for Cloud assets explicitly used or favorited by the player. */
+/** Favorites are retained independently of bounded application history. */
 public final class CloudModelSelectionStore {
-    private static final Path FILE = ModelStoragePaths.folder().resolve("cloud_model_selection.json");
-    private static final int MAX_RECENT = 100;
-    private static final int MAX_FAVORITES = 500;
-    private static final Object LOCK = new Object();
-
+    private static Index current;
     private CloudModelSelectionStore() {}
-
-    public static List<CloudAssetSummary> recent(String instanceId) {
-        return read(instanceId, false);
+    private static synchronized Index index() {
+        Path file = ModelStoragePaths.folder().resolve("cloud_model_selection.json");
+        if (current == null || !current.file.equals(file)) current = new Index(file);
+        return current;
     }
-
-    public static List<CloudAssetSummary> favorites(String instanceId) {
-        return read(instanceId, true);
+    public static List<CloudAssetSummary> recent(String key) { return index().read(key, false); }
+    public static List<CloudAssetSummary> favorites(String key) { return index().read(key, true); }
+    public static boolean isFavorite(String key, String id) { return index().isFavorite(key, id); }
+    public static void recordApplied(String key, CloudAssetSummary asset) { index().recordApplied(key, asset); }
+    public static boolean toggleFavorite(String key, CloudAssetSummary asset) {
+        Index store = index();
+        synchronized (store) { return store.setFavorite(key, asset, !store.isFavorite(key, asset.ref().assetId())); }
     }
+    public static boolean setFavorite(String key, CloudAssetSummary asset, boolean value) { return index().setFavorite(key, asset, value); }
+    public static void setFavorites(String key, List<CloudAssetSummary> assets, boolean value) { index().setFavorites(key, assets, value); }
+    public static void refreshSummaries(String key, List<CloudAssetSummary> assets) { index().refreshSummaries(key, assets); }
 
-    public static boolean isFavorite(String instanceId, String assetId) {
-        synchronized (LOCK) {
-            JsonObject root = readRoot();
-            JsonArray entries = entries(root, instanceId);
-            for (var element : entries) {
-                if (element.isJsonObject() && assetId.equals(text(element.getAsJsonObject(), "asset_id"))) {
-                    return element.getAsJsonObject().has("favorite") && element.getAsJsonObject().get("favorite").getAsBoolean();
-                }
+    // Injectable file and cached reads; rendering a star never reads the disk again.
+    static final class Index {
+        private final Path file;
+        private JsonObject cached;
+        Index(Path file) { this.file = Objects.requireNonNull(file); }
+        private JsonObject root() {
+            if (cached == null) {
+                try { cached = Files.exists(file) ? JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject() : new JsonObject(); }
+                catch (IOException e) { throw new UncheckedIOException("Cannot read Cloud favorites", e); }
+                catch (RuntimeException e) { throw new IllegalStateException("Invalid Cloud favorites file: " + file, e); }
             }
-            return false;
+            return cached;
         }
-    }
-
-    public static void recordApplied(String instanceId, CloudAssetSummary summary) {
-        Objects.requireNonNull(instanceId, "instanceId");
-        Objects.requireNonNull(summary, "summary");
-        synchronized (LOCK) {
-            JsonObject root = readRoot();
-            JsonArray source = entries(root, instanceId);
-            JsonArray next = new JsonArray();
-            JsonObject updated = toJson(summary, true, System.currentTimeMillis());
-            for (var element : source) {
-                if (!element.isJsonObject() || !summary.ref().assetId().equals(text(element.getAsJsonObject(), "asset_id"))) next.add(element);
-                else updated.addProperty("favorite", element.getAsJsonObject().has("favorite") && element.getAsJsonObject().get("favorite").getAsBoolean());
-            }
-            next.add(updated);
-            trim(next, MAX_RECENT);
-            putEntries(root, instanceId, next);
-            writeRoot(root);
+        synchronized boolean isFavorite(String key, String id) {
+            JsonObject item = find(entries(root(), key), id);
+            return item != null && flag(item);
         }
-    }
-
-    public static boolean toggleFavorite(String instanceId, CloudAssetSummary summary) {
-        Objects.requireNonNull(summary, "summary");
-        synchronized (LOCK) {
-            JsonObject root = readRoot();
-            JsonArray source = entries(root, instanceId);
-            JsonArray next = new JsonArray();
-            boolean favorite = false;
-            boolean found = false;
-            for (var element : source) {
+        synchronized List<CloudAssetSummary> read(String key, boolean favoritesOnly) {
+            List<JsonObject> items = new ArrayList<>();
+            for (var element : entries(root(), key)) {
                 if (!element.isJsonObject()) continue;
                 JsonObject item = element.getAsJsonObject();
-                if (summary.ref().assetId().equals(text(item, "asset_id"))) {
-                    found = true;
-                    favorite = !(item.has("favorite") && item.get("favorite").getAsBoolean());
-                    item = toJson(summary, favorite, item.has("last_used_at") ? item.get("last_used_at").getAsLong() : 0L);
-                }
-                next.add(item);
+                if (favoritesOnly ? flag(item) : usedAt(item) > 0) items.add(item);
             }
-            if (!found) {
-                favorite = true;
-                next.add(toJson(summary, true, System.currentTimeMillis()));
-            }
-            trimFavorites(next, MAX_FAVORITES);
-            putEntries(root, instanceId, next);
-            writeRoot(root);
-            return favorite;
-        }
-    }
-
-    private static List<CloudAssetSummary> read(String instanceId, boolean favoritesOnly) {
-        synchronized (LOCK) {
+            Collections.reverse(items);
+            if (!favoritesOnly) items.sort(Comparator.comparingLong(CloudModelSelectionStore::usedAt).reversed());
             List<CloudAssetSummary> result = new ArrayList<>();
-            JsonArray source = entries(readRoot(), instanceId);
-            for (int i = source.size() - 1; i >= 0; i--) {
-                var element = source.get(i);
-                if (!element.isJsonObject()) continue;
-                JsonObject item = element.getAsJsonObject();
-                if (favoritesOnly && !(item.has("favorite") && item.get("favorite").getAsBoolean())) continue;
-                try { result.add(fromJson(item)); } catch (RuntimeException ignored) { }
+            for (JsonObject item : items) {
+                try { result.add(fromJson(!favoritesOnly && item.has("last_applied") && item.get("last_applied").isJsonObject() ? item.getAsJsonObject("last_applied") : item)); }
+                catch (RuntimeException ignored) { /* A bad entry must not hide the rest. */ }
+                if (!favoritesOnly && result.size() >= 100) break;
             }
             return List.copyOf(result);
         }
-    }
-
-    private static JsonArray entries(JsonObject root, String instanceId) {
-        if (!root.has(instanceId) || !root.get(instanceId).isJsonArray()) return new JsonArray();
-        return root.getAsJsonArray(instanceId);
-    }
-
-    private static void putEntries(JsonObject root, String instanceId, JsonArray values) { root.add(instanceId, values); }
-
-    private static JsonObject toJson(CloudAssetSummary summary, boolean favorite, long lastUsedAt) {
-        JsonObject out = new JsonObject();
-        out.addProperty("asset_id", summary.ref().assetId());
-        out.addProperty("revision", summary.ref().revision());
-        out.addProperty("raw_sha256", summary.ref().rawSha256());
-        out.addProperty("name", summary.name());
-        out.addProperty("format", summary.format());
-        out.addProperty("byte_length", summary.byteLength());
-        out.addProperty("visibility", summary.visibility());
-        out.addProperty("favorite", favorite);
-        out.addProperty("last_used_at", lastUsedAt);
-        return out;
-    }
-
-    private static CloudAssetSummary fromJson(JsonObject object) {
-        return new CloudAssetSummary(new CloudAssetRef(text(object, "asset_id"), object.get("revision").getAsLong(), text(object, "raw_sha256")),
-                text(object, "name"), text(object, "format"), object.get("byte_length").getAsLong(),
-                object.has("visibility") ? text(object, "visibility") : "PRIVATE");
-    }
-
-    private static String text(JsonObject object, String key) {
-        return object.has(key) && !object.get(key).isJsonNull() ? object.get(key).getAsString() : "";
-    }
-
-    private static void trim(JsonArray values, int max) {
-        while (values.size() > max) values.remove(0);
-    }
-
-    private static void trimFavorites(JsonArray values, int max) {
-        while (countFavorites(values) > max) {
-            for (int i = 0; i < values.size(); i++) {
-                var item = values.get(i);
-                if (item.isJsonObject() && item.getAsJsonObject().has("favorite") && item.getAsJsonObject().get("favorite").getAsBoolean()) {
-                    item.getAsJsonObject().addProperty("favorite", false);
-                    break;
-                }
+        synchronized void recordApplied(String key, CloudAssetSummary asset) {
+            JsonObject next = root().deepCopy();
+            JsonArray values = entries(next, key);
+            JsonObject old = find(values, asset.ref().assetId());
+            JsonObject updated = toJson(asset, old != null && flag(old), System.currentTimeMillis());
+            if (old != null) {
+                try { if (fromJson(old).ref().revision() >= asset.ref().revision()) updated = old.deepCopy(); }
+                catch (RuntimeException ignored) { }
             }
+            updated.addProperty("last_used_at", System.currentTimeMillis());
+            JsonObject used = toJson(asset, false, 0);
+            used.addProperty("name", text(updated, "name"));
+            used.addProperty("visibility", text(updated, "visibility"));
+            updated.add("last_applied", used);
+            replace(values, updated); prune(values); next.add(key, values); save(next);
+        }
+        synchronized boolean setFavorite(String key, CloudAssetSummary asset, boolean value) {
+            JsonObject next = root().deepCopy();
+            JsonArray values = entries(next, key);
+            JsonObject old = find(values, asset.ref().assetId());
+            if (old == null && !value) return false;
+            JsonObject updated = toJson(asset, value, old == null ? 0 : usedAt(old));
+            if (old != null) {
+                try { if (fromJson(old).ref().revision() >= asset.ref().revision()) { updated = old.deepCopy(); updated.addProperty("favorite", value); } }
+                catch (RuntimeException ignored) { }
+                if (usedAt(old) > 0) updated.add("last_applied", applied(old));
+            }
+            replace(values, updated); prune(values); next.add(key, values); save(next);
+            return value;
+        }
+        synchronized void setFavorites(String key, List<CloudAssetSummary> assets, boolean value) {
+            JsonObject next = root().deepCopy();
+            JsonArray values = entries(next, key);
+            for (CloudAssetSummary asset : assets) {
+                JsonObject old = find(values, asset.ref().assetId());
+                if (old == null && !value) continue;
+                JsonObject updated = toJson(asset, value, old == null ? 0 : usedAt(old));
+                if (old != null) {
+                    try { if (fromJson(old).ref().revision() >= asset.ref().revision()) updated = old.deepCopy(); }
+                    catch (RuntimeException ignored) { }
+                    updated.addProperty("favorite", value);
+                    if (usedAt(old) > 0) updated.add("last_applied", applied(old));
+                }
+                replace(values, updated);
+            }
+            prune(values); next.add(key, values); save(next);
+        }
+        synchronized void refreshSummaries(String key, List<CloudAssetSummary> assets) {
+            JsonObject next = root().deepCopy();
+            JsonArray values = entries(next, key);
+            boolean changed = false;
+            for (CloudAssetSummary asset : assets) {
+                JsonObject old = find(values, asset.ref().assetId());
+                if (old == null) continue;
+                try { if (fromJson(old).ref().revision() > asset.ref().revision()) continue; }
+                catch (RuntimeException ignored) { }
+                JsonObject updated = toJson(asset, flag(old), usedAt(old));
+                if (usedAt(old) > 0) {
+                    JsonObject used = applied(old);
+                    used.addProperty("name", asset.name()); used.addProperty("visibility", asset.visibility());
+                    updated.add("last_applied", used);
+                }
+                if (!updated.equals(old)) { replace(values, updated); changed = true; }
+            }
+            if (changed) { next.add(key, values); save(next); }
+        }
+        private void save(JsonObject next) {
+            Path temp = null;
+            try {
+                Path parent = file.toAbsolutePath().getParent(); Files.createDirectories(parent);
+                temp = Files.createTempFile(parent, "cloud-selection-", ".tmp");
+                Files.writeString(temp, next.toString(), StandardCharsets.UTF_8);
+                try { Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
+                catch (AtomicMoveNotSupportedException e) { Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING); }
+                cached = next;
+            } catch (IOException e) { throw new UncheckedIOException("Cannot save Cloud favorites", e); }
+            finally { if (temp != null) try { Files.deleteIfExists(temp); } catch (IOException ignored) { } }
         }
     }
-
-    private static int countFavorites(JsonArray values) {
-        int count = 0;
-        for (var item : values) if (item.isJsonObject() && item.getAsJsonObject().has("favorite") && item.getAsJsonObject().get("favorite").getAsBoolean()) count++;
-        return count;
+    private static JsonObject applied(JsonObject item) {
+        JsonObject copy = item.has("last_applied") && item.get("last_applied").isJsonObject() ? item.getAsJsonObject("last_applied").deepCopy() : item.deepCopy();
+        copy.remove("last_applied"); return copy;
     }
-
-    private static JsonObject readRoot() {
-        if (!Files.isRegularFile(FILE)) return new JsonObject();
-        try { return JsonParser.parseString(Files.readString(FILE, StandardCharsets.UTF_8)).getAsJsonObject(); }
-        catch (Exception e) { YesSteveModel.LOGGER.warn("[SM] Failed to load Cloud model selection store", e); return new JsonObject(); }
+    private static JsonArray entries(JsonObject root, String key) { return root.has(key) && root.get(key).isJsonArray() ? root.getAsJsonArray(key) : new JsonArray(); }
+    private static JsonObject find(JsonArray values, String id) {
+        for (var item : values) if (item.isJsonObject() && id.equals(text(item.getAsJsonObject(), "asset_id"))) return item.getAsJsonObject();
+        return null;
     }
-
-    private static void writeRoot(JsonObject root) {
-        try {
-            Path parent = FILE.getParent();
-            Files.createDirectories(parent);
-            Path temp = parent.resolve(FILE.getFileName() + ".tmp");
-            Files.writeString(temp, root.toString(), StandardCharsets.UTF_8);
-            try { Files.move(temp, FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-            catch (AtomicMoveNotSupportedException e) { Files.move(temp, FILE, StandardCopyOption.REPLACE_EXISTING); }
-        } catch (IOException e) { YesSteveModel.LOGGER.warn("[SM] Failed to save Cloud model selection store", e); }
+    private static void replace(JsonArray values, JsonObject updated) {
+        for (int i = 0; i < values.size(); i++) if (values.get(i).isJsonObject() && text(updated, "asset_id").equals(text(values.get(i).getAsJsonObject(), "asset_id"))) { values.set(i, updated); return; }
+        values.add(updated);
     }
+    private static void prune(JsonArray values) {
+        List<JsonObject> history = new ArrayList<>();
+        for (var item : values) if (item.isJsonObject() && usedAt(item.getAsJsonObject()) > 0) history.add(item.getAsJsonObject());
+        history.sort(Comparator.comparingLong(CloudModelSelectionStore::usedAt).reversed());
+        for (int i = 100; i < history.size(); i++) { history.get(i).addProperty("last_used_at", 0); history.get(i).remove("last_applied"); }
+        for (int i = values.size() - 1; i >= 0; i--) if (values.get(i).isJsonObject() && !flag(values.get(i).getAsJsonObject()) && usedAt(values.get(i).getAsJsonObject()) == 0) values.remove(i);
+    }
+    private static boolean flag(JsonObject item) { try { return item.has("favorite") && item.get("favorite").getAsBoolean(); } catch (RuntimeException ignored) { return false; } }
+    private static long usedAt(JsonObject item) { try { return item.has("last_used_at") ? item.get("last_used_at").getAsLong() : 0; } catch (RuntimeException ignored) { return 0; } }
+    private static JsonObject toJson(CloudAssetSummary asset, boolean favorite, long used) {
+        JsonObject out = new JsonObject();
+        out.addProperty("asset_id", asset.ref().assetId()); out.addProperty("revision", asset.ref().revision()); out.addProperty("raw_sha256", asset.ref().rawSha256());
+        out.addProperty("name", asset.name()); out.addProperty("format", asset.format()); out.addProperty("byte_length", asset.byteLength()); out.addProperty("visibility", asset.visibility());
+        out.addProperty("favorite", favorite); out.addProperty("last_used_at", used); return out;
+    }
+    private static CloudAssetSummary fromJson(JsonObject item) {
+        return new CloudAssetSummary(new CloudAssetRef(text(item, "asset_id"), item.get("revision").getAsLong(), text(item, "raw_sha256")),
+                text(item, "name"), text(item, "format"), item.get("byte_length").getAsLong(), item.has("visibility") ? text(item, "visibility") : "PRIVATE");
+    }
+    private static String text(JsonObject item, String key) { try { return item.has(key) && !item.get(key).isJsonNull() ? item.get(key).getAsString() : ""; } catch (RuntimeException ignored) { return ""; } }
 }

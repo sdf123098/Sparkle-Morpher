@@ -5,7 +5,6 @@ import com.micaftic.morpher.client.event.ReplacePlayerRenderEvent;
 import com.micaftic.morpher.client.event.ReplacePlayerHandRenderEvent;
 import com.micaftic.morpher.client.renderer.AnimationDebugOverlay;
 import com.micaftic.morpher.client.renderer.ExtraPlayerOverlay;
-import com.micaftic.morpher.client.renderer.ModelSyncStateOverlay;
 import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import net.minecraft.client.Minecraft;
@@ -31,13 +30,11 @@ import net.neoforged.neoforge.client.event.RenderPlayerEvent;
 import net.neoforged.neoforge.client.event.lifecycle.ClientStartedEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import com.micaftic.morpher.core.api.client.HudOverlay;
-import com.micaftic.morpher.core.api.network.YSMChannel;
 
 import java.util.List;
 
 public final class NeoForgeClientEventBridge {
     private static final List<HudOverlay> HUD_OVERLAYS = List.of(
-            new ModelSyncStateOverlay(),
             new ExtraPlayerOverlay(),
             AnimationDebugOverlay.createOverlay()
     );
@@ -46,7 +43,7 @@ public final class NeoForgeClientEventBridge {
     }
 
     public static void register(IEventBus modBus) {
-        modBus.addListener(YSMChannel::registerClientPayloadHandlers);
+
         modBus.addListener(NeoForgeClientEventBridge::onRegisterKeyMappings);
         modBus.addListener(NeoForgeClientEventBridge::onAddClientReloadListeners);
         NeoForge.EVENT_BUS.register(NeoForgeClientEventBridge.class);

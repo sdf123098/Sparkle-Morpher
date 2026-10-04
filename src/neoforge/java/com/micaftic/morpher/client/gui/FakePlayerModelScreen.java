@@ -2,9 +2,6 @@ package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.fakeplayer.FakePlayerListCache;
 import com.micaftic.morpher.fakeplayer.FakePlayerListEntry;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SRequestFakePlayerListPacket;
-import com.micaftic.morpher.network.message.C2SRequestFakePlayerModelPacket;
 import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
@@ -14,7 +11,7 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 import java.util.UUID;
 
-/** Standalone target picker and model manager for server-confirmed fake players. */
+/** Client-only target picker for Cloud-managed fake-player appearances. */
 public final class FakePlayerModelScreen extends Screen {
 
     private UUID selectedUuid;
@@ -27,12 +24,18 @@ public final class FakePlayerModelScreen extends Screen {
     public static void open() {
         FakePlayerListCache.replace(List.of());
         InputUtil.setScreen(new FakePlayerModelScreen());
-        NetworkHandler.sendToServer(new C2SRequestFakePlayerListPacket());
+        com.micaftic.morpher.cloud.client.CloudEntityModelSync.refreshFakeTargets();
     }
 
     public static void openFromCrosshair() {
         open();
     }
+
+    @Override public void tick() {
+        com.micaftic.morpher.cloud.client.CloudEntityModelSync.refreshFakeTargets();
+    }
+
+    @Override public boolean isPauseScreen() { return false; }
 
     @Override
     protected void init() {
@@ -47,13 +50,13 @@ public final class FakePlayerModelScreen extends Screen {
         int y = (this.height - panelH) / 2;
         g.fill(x, y, x + panelW, y + panelH, 0xF02B3038);
         text(g, Component.literal("SPM 假人外观管理"), x + 18, y + 16, 0xFFFFFFFF);
-        text(g, Component.literal("准星目标会自动预选，也可以直接从服务端列表选择。"),
+        text(g, Component.translatable("gui.sparkle_morpher.cloud.entity.fake_hint"),
                 x + 18, y + 38, 0xFFB8C6D0);
 
         List<FakePlayerListEntry> entries = FakePlayerListCache.entries();
         int listY = y + 58;
         if (entries.isEmpty()) {
-            text(g, Component.literal("正在获取可管理假人，或当前没有在线假人。"),
+            text(g, Component.translatable("gui.sparkle_morpher.cloud.entity.fake_empty"),
                     x + 18, listY + 12, 0xFFB8C6D0);
         } else {
             int maxRows = Math.min(entries.size(), Math.max(1, (panelH - 118) / 25));
@@ -119,8 +122,9 @@ public final class FakePlayerModelScreen extends Screen {
                 && event.y() >= buttonY && event.y() < buttonY + 24) {
             UUID target = selectedUuid;
             InputUtil.setScreen(new ModernPlayerModelScreen(this,
-                    (modelId, textureId) -> NetworkHandler.sendToServer(
-                            new C2SRequestFakePlayerModelPacket(target, modelId, textureId)),
+                    (modelId, textureId) -> com.micaftic.morpher.cloud.client.CloudEntityModelSync.applySelection(
+                            com.micaftic.morpher.cloud.client.CloudEntityProvider.Kind.FAKE_PLAYER,
+                            target, selectedName, modelId, textureId),
                     "fake:" + target));
             return true;
         }

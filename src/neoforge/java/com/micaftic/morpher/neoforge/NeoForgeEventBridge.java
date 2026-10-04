@@ -22,14 +22,13 @@ import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
-import com.micaftic.morpher.core.api.network.YSMChannel;
 
 public final class NeoForgeEventBridge {
     private NeoForgeEventBridge() {
     }
 
     public static void register(IEventBus modBus) {
-        modBus.addListener(YSMChannel::registerPayloadHandlers);
+
         NeoForge.EVENT_BUS.register(NeoForgeEventBridge.class);
     }
 
@@ -121,18 +120,6 @@ public final class NeoForgeEventBridge {
 
     @SubscribeEvent
     public static void onStartTracking(net.neoforged.neoforge.event.entity.player.PlayerEvent.StartTracking event) {
-        if (!com.micaftic.morpher.YesSteveModel.isAvailable()) return;
-        net.minecraft.world.entity.Entity target = event.getTarget();
-        if (!(event.getEntity() instanceof ServerPlayer tracker)) return;
-        com.micaftic.morpher.event.CapabilityEvent.syncVehicleModelToReceiver(target, tracker);
-        if (target instanceof ServerPlayer tracked) {
-            com.micaftic.morpher.event.CapabilityEvent.getModelInfoCap(tracked).ifPresent(c -> {
-                if (com.micaftic.morpher.network.NetworkHandler.isPlayerConnected(tracked) || c.isMandatory()) {
-                    c.createSyncMessage(tracked, false).ifPresent(m -> {
-                        com.micaftic.morpher.network.NetworkHandler.sendToClientPlayer(m, tracker);
-                    });
-                }
-            });
-        }
+        return;
     }
 }

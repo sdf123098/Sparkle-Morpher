@@ -19,7 +19,7 @@ public final class ClientPlayerCloneEvent {
     }
 
     private static void onClientPlayerRespawn(LocalPlayer oldPlayer, LocalPlayer newPlayer) {
-        if (!YesSteveModel.isAvailable() || !NetworkHandler.isClientConnected()) {
+        if (!YesSteveModel.isAvailable()) {
             return;
         }
         CapabilityLifecycle.revive(oldPlayer);

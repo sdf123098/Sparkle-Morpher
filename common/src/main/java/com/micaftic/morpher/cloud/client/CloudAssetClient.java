@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 
 import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 
@@ -38,6 +37,23 @@ public final class CloudAssetClient {
         return http.getJson(path.toString()).thenApply(this::parsePage);
     }
 
+    /** Changes owner-controlled visibility without sending model bytes or creating a revision. */
+    public CompletableFuture<CloudAssetSummary> setVisibility(String assetId, String visibility) {
+        if (!"PUBLIC".equals(visibility) && !"PRIVATE".equals(visibility))
+            throw new IllegalArgumentException("Visibility must be PUBLIC or PRIVATE");
+        new CloudAssetRef(assetId, 1, "0".repeat(64));
+        var body = new com.google.gson.JsonObject();
+        body.addProperty("visibility", visibility);
+        return http.putJson("/v1/assets/" + encode(assetId).replace(".", "%2E") + "/visibility", body.toString())
+                .thenApply(response -> {
+                    try { return parseSummary(JsonParser.parseString(response).getAsJsonObject()); }
+                    catch (RuntimeException failure) {
+                        throw new CloudHttpException(200, com.micaftic.morpher.core.api.network.state.CloudErrorCode.MALFORMED_MESSAGE,
+                                "Malformed Cloud visibility response");
+                    }
+                });
+    }
+
     /**
      * Fetches original bytes. The caller must verify the response SHA-256
      * against {@link CloudAssetRef#rawSha256()} before replacing a cache file.
@@ -51,16 +67,8 @@ public final class CloudAssetClient {
     }
 
     public CompletableFuture<CloudAssetSummary> upload(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256, String requestId) {
-        return http.uploadAsset(content, assetId, assetName, assetFormat, rawSha256, requestId).thenCompose(response -> {
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.INTERNAL, "Cloud asset upload failed"));
-            }
-            try {
-                return CompletableFuture.completedFuture(parseSummary(JsonParser.parseString(new String(response.body(), StandardCharsets.UTF_8)).getAsJsonObject()));
-            } catch (RuntimeException failure) {
-                return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud asset upload response"));
-            }
-        });
+        return http.uploadAsset(content, assetId, assetName, assetFormat, rawSha256, requestId)
+                .thenCompose(this::parseUploadResponse);
     }
 
     public CompletableFuture<CloudAssetSummary> upload(
@@ -97,7 +105,7 @@ public final class CloudAssetClient {
 
     private CompletableFuture<CloudAssetSummary> parseUploadResponse(HttpResponse<byte[]> response) {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            return CompletableFuture.failedFuture(new CloudHttpException(response.statusCode(), com.micaftic.morpher.core.api.network.state.CloudErrorCode.INTERNAL, "Cloud asset upload failed"));
+            return CompletableFuture.failedFuture(CloudHttpClient.httpFailure(response));
         }
         try {
             return CompletableFuture.completedFuture(parseSummary(JsonParser.parseString(new String(response.body(), StandardCharsets.UTF_8)).getAsJsonObject()));

@@ -20,7 +20,7 @@ public final class YesSteveModelNeoForge {
             initClient(modBus, container);
         }
         YesSteveModel.init();
-        NetworkHandler.init();
+
         LifecycleEvent.fireSetup();
     }
 
