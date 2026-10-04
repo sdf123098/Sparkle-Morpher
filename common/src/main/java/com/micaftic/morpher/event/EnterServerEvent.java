@@ -6,7 +6,7 @@ import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.S2CSetModelAndTexturePacket;
 import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
 import com.micaftic.morpher.network.message.S2CSyncStarModelsPacket;
-import com.micaftic.morpher.network.message.S2CVersionCheckPacket;
+
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
 import com.micaftic.morpher.util.PlayerStarModelsStore;
 import com.micaftic.morpher.core.architectury.event.events.common.PlayerEvent;
@@ -25,7 +25,7 @@ public final class EnterServerEvent {
             if (!YesSteveModel.isAvailable()) {
                 return;
             }
-            NetworkHandler.sendToClientPlayer(new S2CVersionCheckPacket(), player);
+
             CapabilityEvent.getAuthModelsCap(player).ifPresent(authModelsCap -> {
                 for (String modelId : ServerModelManager.getAuthModels()) {
                     authModelsCap.addModel(modelId);

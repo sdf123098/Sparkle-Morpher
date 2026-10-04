@@ -37,6 +37,7 @@ public final class CloudManagementController {
 
     public void loadInstances() throws IOException {
         registry.load();
+        registry.selected().ifPresent(connection::select);
     }
 
     public void saveInstances() throws IOException {
@@ -50,10 +51,14 @@ public final class CloudManagementController {
     public synchronized CloudInstanceRegistry.CloudInstanceProfile selectInstance(String instanceId) {
         CloudInstanceRegistry.CloudInstanceProfile next = registry.find(instanceId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown Cloud instance: " + instanceId));
-        CloudInstanceRegistry.CloudInstanceProfile active = connection.profile();
-        if (active != null && !active.instanceId().equals(next.instanceId())) logout();
-        else requestGeneration.advance();
+        requestGeneration.advance();
         registry.select(next.instanceId());
+        connection.select(next);
+        scopes = List.of();
+        targets = List.of();
+        acl = List.of();
+        selectedScope = null;
+        selectedTarget = null;
         return next;
     }
 
@@ -61,18 +66,43 @@ public final class CloudManagementController {
         CloudInstanceRegistry.CloudInstanceProfile profile = registry.selected()
                 .orElseThrow(() -> new IllegalStateException("No Cloud instance is selected"));
         return connection.login(profile, accountId, password, cacheRoot, clientVersion)
-                .thenCompose(session -> refreshScopes().thenApply(ignored -> session));
+                .thenCompose(session -> registry.selected().map(selected -> selected.instanceId().equals(profile.instanceId()))
+                        .orElse(false) ? refreshScopes().thenApply(ignored -> session)
+                        : CompletableFuture.completedFuture(session));
     }
 
     public CompletableFuture<CloudSession> register(String accountId, String password) {
         CloudInstanceRegistry.CloudInstanceProfile profile = registry.selected()
                 .orElseThrow(() -> new IllegalStateException("No Cloud instance is selected"));
         return connection.register(profile, accountId, password, cacheRoot, clientVersion)
-                .thenCompose(session -> refreshScopes().thenApply(ignored -> session));
+                .thenCompose(session -> registry.selected().map(selected -> selected.instanceId().equals(profile.instanceId()))
+                        .orElse(false) ? refreshScopes().thenApply(ignored -> session)
+                        : CompletableFuture.completedFuture(session));
+    }
+
+    public CompletableFuture<CloudSession> loginWithGameIdentity(
+            String providerId,
+            MinecraftSessionServiceJoiner.IdentityProfile gameProfile,
+            CloudIdentityClient.SessionJoiner joiner
+    ) {
+        CloudInstanceRegistry.CloudInstanceProfile profile = registry.selected()
+                .orElseThrow(() -> new IllegalStateException("No Cloud instance is selected"));
+        return connection.loginWithGameIdentity(profile, providerId, gameProfile, joiner, cacheRoot, clientVersion)
+                .thenCompose(session -> registry.selected().map(selected -> selected.instanceId().equals(profile.instanceId()))
+                        .orElse(false) ? refreshScopes().thenApply(ignored -> session)
+                        : CompletableFuture.completedFuture(session));
     }
 
     public CompletableFuture<CloudSession> refreshSession() {
         return connection.refresh(cacheRoot, clientVersion);
+    }
+
+    public void tickConnections() {
+        connection.tick(cacheRoot, clientVersion);
+    }
+
+    public String accountId(String instanceId) {
+        return connection.accountId(instanceId);
     }
 
     public void logout() {

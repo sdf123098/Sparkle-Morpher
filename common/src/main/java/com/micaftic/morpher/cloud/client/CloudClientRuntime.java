@@ -7,7 +7,9 @@ import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
@@ -22,6 +24,7 @@ import java.util.function.Consumer;
  */
 public final class CloudClientRuntime {
     private static volatile RuntimeState current;
+    private static final Map<String, RuntimeState> INSTANCES = new ConcurrentHashMap<>();
     private static final CloudWorldSession WORLD_SESSION = new CloudWorldSession();
     private static final ConcurrentLinkedQueue<Runnable> CLIENT_TASKS = new ConcurrentLinkedQueue<>();
 
@@ -56,7 +59,8 @@ public final class CloudClientRuntime {
         Objects.requireNonNull(messageConsumer, "messageConsumer");
         Objects.requireNonNull(eventConsumer, "eventConsumer");
 
-        clearCurrent();
+        RuntimeState previous = INSTANCES.remove(instance.instanceId());
+        if (previous != null) closeState(previous);
 
         CloudHttpClient http = new CloudAuthClient(new CloudHttpClient(instance)).authenticated(session);
         CloudAssetClient assets = new CloudAssetClient(http);
@@ -99,7 +103,8 @@ public final class CloudClientRuntime {
                 entityCoordinator,
                 realtime,
                 cacheRoot.toAbsolutePath().normalize());
-        current = next;
+        INSTANCES.put(instance.instanceId(), next);
+        if (current == null || current.instance().instanceId().equals(instance.instanceId())) current = next;
 
         http.discoverInstance().whenComplete((info, failure) -> {
             if (failure == null) {
@@ -117,13 +122,42 @@ public final class CloudClientRuntime {
         return current;
     }
 
+    public static RuntimeState state(String instanceId) {
+        return INSTANCES.get(instanceId);
+    }
+
+    public static synchronized boolean selectInstance(String instanceId) {
+        RuntimeState next = INSTANCES.get(instanceId);
+        if (next == null) return false;
+        if (current != next) leaveScope();
+        current = next;
+        return true;
+    }
+
+    public static synchronized void removeInstance(String instanceId) {
+        RuntimeState removed = INSTANCES.remove(instanceId);
+        if (removed == null) return;
+        if (current == removed) current = null;
+        closeState(removed);
+        if (current == null && !INSTANCES.isEmpty()) current = INSTANCES.values().iterator().next();
+    }
+
     public static ModelUploadTransport uploadTransport() {
         RuntimeState state = requireState();
         return state.uploadTransport();
     }
 
+    public static ModelUploadTransport uploadTransport(String instanceId) {
+        RuntimeState state = INSTANCES.get(instanceId);
+        return state == null ? null : state.uploadTransport();
+    }
+
     public static CompletableFuture<CloudRealtimeClient> connectRealtime() {
         return requireState().realtime().connect();
+    }
+
+    public static void reconnectRealtime() {
+        for (RuntimeState state : INSTANCES.values()) state.realtime().connect();
     }
 
     public static synchronized long onWorldJoined(Object connectionToken) {
@@ -284,7 +318,9 @@ public final class CloudClientRuntime {
     }
 
     public static synchronized void clear() {
-        clearCurrent();
+        for (RuntimeState state : INSTANCES.values()) closeState(state);
+        INSTANCES.clear();
+        current = null;
         CloudState.reset();
     }
 
@@ -296,17 +332,13 @@ public final class CloudClientRuntime {
         return state;
     }
 
-    private static void clearCurrent() {
-        RuntimeState previous = current;
-        current = null;
-        if (previous != null) {
-            previous.assetCatalog().clear();
-            previous.animations().clear();
-            previous.entityCoordinator().deactivate();
-            previous.observations().close();
-            previous.scopeLifecycle().close();
-            previous.realtime().close();
-        }
+    private static void closeState(RuntimeState previous) {
+        previous.assetCatalog().clear();
+        previous.animations().clear();
+        previous.entityCoordinator().deactivate();
+        previous.observations().close();
+        previous.scopeLifecycle().close();
+        previous.realtime().close();
     }
 
     public static final class RuntimeState {
@@ -353,7 +385,8 @@ public final class CloudClientRuntime {
             this.assetCache = assetCache;
             this.assetCatalog = new CloudAssetCatalogStore();
             this.assetMaterialization = new CloudAssetMaterializationCoordinator(
-                    assetCatalog, ref -> assetCache.downloadAndStore(assets, ref, cacheRoot));
+                    assetCatalog, ref -> assetCache.downloadAndStore(assets, ref, cacheRoot),
+                    ref -> CloudModelSelectionStore.recent(instance.instanceId()).stream().anyMatch(asset -> asset.ref().equals(ref)));
             this.scopes = scopes;
             this.identities = identities;
             this.identityBindings = identityBindings;

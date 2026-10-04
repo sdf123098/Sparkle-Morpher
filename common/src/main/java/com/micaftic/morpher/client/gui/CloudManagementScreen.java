@@ -1,54 +1,54 @@
 package com.micaftic.morpher.client.gui;
 
-import com.micaftic.morpher.cloud.CloudInstanceConfig;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudConnectionController;
+import com.micaftic.morpher.cloud.client.CloudAuthClient;
 import com.micaftic.morpher.cloud.client.CloudGeneratedAccountStore;
 import com.micaftic.morpher.cloud.client.CloudHttpException;
+import com.micaftic.morpher.cloud.client.CloudIdentityClient;
 import com.micaftic.morpher.cloud.client.CloudInstanceRegistry;
 import com.micaftic.morpher.cloud.client.CloudManagementController;
 import com.micaftic.morpher.cloud.client.CloudSession;
-import com.micaftic.morpher.util.InputUtil;
+import com.micaftic.morpher.cloud.client.CloudHttpClient;
+import com.micaftic.morpher.cloud.client.MinecraftSessionServiceJoiner;
+import com.micaftic.morpher.core.api.network.state.CloudErrorCode;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/** Client UI for connecting to an official or community SPM Cloud instance. */
-public final class CloudManagementScreen extends Screen {
+/** Cloud connection facade used by the model panel account tab. */
+public final class CloudManagementScreen {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("SparkleMorpher/Cloud");
     private static final String CLIENT_VERSION = "2.0.0";
     private static CloudManagementController management;
-
-    private final Screen parent;
-    private EditBox instanceId;
-    private EditBox instanceName;
-    private EditBox origin;
-    private EditBox accountId;
-    private EditBox password;
-    private EditBox scopeId;
-    private EditBox scopeName;
-    private EditBox worldEpoch;
-    private Button statusButton;
-    private Button quickConnectButton;
-    private boolean quickConnecting;
-    private int scopePage;
-    private String statusMessage;
-    private boolean active;
-    private long lifecycleGeneration;
-
-    public CloudManagementScreen(Screen parent) {
-        super(Component.literal("SPM Cloud"));
-        this.parent = parent;
-    }
+    private static long nextRealtimeReconnectMillis;
+    private static boolean autoResumeAttempted;
+    private static CompletableFuture<CloudSession> officialConnectInFlight;
 
     public static void open(Screen parent) {
-        InputUtil.setScreen(new CloudManagementScreen(parent));
+        try {
+            Class.forName("com.micaftic.morpher.client.gui.ModernPlayerModelScreen")
+                    .getMethod("openCloudManagement", Screen.class).invoke(null, parent);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Failed to open Cloud account management in the model panel", failure);
+        }
+    }
+
+    public static void tickConnections() {
+        CloudManagementController current = management;
+        if (current == null) return;
+        current.tickConnections();
+        long now = System.currentTimeMillis();
+        if (now >= nextRealtimeReconnectMillis) {
+            nextRealtimeReconnectMillis = now + 10_000L;
+            CloudClientRuntime.reconnectRealtime();
+        }
     }
 
     static synchronized CloudManagementController management() {
@@ -60,6 +60,7 @@ public final class CloudManagementScreen extends Screen {
                     CloudClientRuntime.defaultCacheRoot(), CLIENT_VERSION);
             try {
                 management.loadInstances();
+                resumeOfficialAccount();
             } catch (IOException failure) {
                 throw new IllegalStateException("Failed to load the SPM Cloud instance registry", failure);
             }
@@ -67,300 +68,254 @@ public final class CloudManagementScreen extends Screen {
         return management;
     }
 
-    @Override
-    protected void init() {
-        this.active = true;
-        clearWidgets();
-        int left = Math.max(8, (this.width - 332) / 2);
-        int width = Math.min(104, (this.width - 24) / 3);
-        this.instanceId = field(left, 28, width, text("instance_id"));
-        this.instanceName = field(left + width + 6, 28, width, text("name"));
-        this.origin = field(left + (width + 6) * 2, 28, width, "https://cloud.example");
-        this.accountId = field(left, 52, width + 54, text("account"));
-        this.password = field(left + width + 60, 52, width + 54, text("password"));
-        this.password.setMaxLength(256);
-        this.password.setSuggestion(text("password"));
-        this.scopeId = field(left, 76, width, text("scope_id"));
-        this.scopeName = field(left + width + 6, 76, width, text("scope_name"));
-        this.worldEpoch = field(left + (width + 6) * 2, 76, width, text("world_epoch"));
+    /** Restores a previously generated official account once per client session. */
+    static void resumeOfficialAccount() {
+        if (autoResumeAttempted || management == null) return;
+        var selected = management.registry().selected();
+        if (selected.isEmpty() || !CloudInstanceRegistry.isBuiltinOfficial(selected.get())) return;
+        autoResumeAttempted = true;
+        if (CloudClientRuntime.state(selected.get().instanceId()) != null) return;
+        connectOfficialAccount(false).exceptionally(failure -> null);
+    }
 
-        var snapshot = management().snapshot();
-        String state = this.statusMessage != null ? this.statusMessage
-                : snapshot.authenticated() ? text("connected") : text("disconnected");
-        int switchX = this.width - left - 100;
-        int statusWidth = Math.max(64, switchX - left - 52);
-        this.statusButton = addRenderableWidget(Button.builder(Component.literal(state), button -> { })
-                .bounds(left, 103, statusWidth, 20).build());
-        Button previousScopePage = addRenderableWidget(Button.builder(Component.literal("<"), button -> {
-            this.scopePage--;
-            init();
-        }).bounds(left + statusWidth + 2, 103, 24, 20).build());
-        Button nextScopePage = addRenderableWidget(Button.builder(Component.literal(">"), button -> {
-            this.scopePage++;
-            init();
-        }).bounds(left + statusWidth + 28, 103, 24, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.next_instance"), button -> switchInstance())
-                .bounds(switchX, 103, 100, 20).build());
-        management().registry().selected().ifPresent(profile -> {
-            this.instanceId.setValue(profile.instanceId());
-            this.instanceName.setValue(displayName(profile));
-            this.origin.setValue(profile.instance().origin().toString());
-        });
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.save_instance"), button -> saveInstance())
-                .bounds(left, 127, width, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.login"), button -> login())
-                .bounds(left + width + 6, 127, width, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.logout"), button -> logout())
-                .bounds(left + (width + 6) * 2, 127, width, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.create_scope"), button -> createScope())
-                .bounds(left, 151, width, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.refresh_scopes"), button -> refreshScopes())
-                .bounds(left + width + 6, 151, width, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.join_selected"), button -> joinScope())
-                .bounds(left + (width + 6) * 2, 151, width, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.identities"), button ->
-                InputUtil.setScreen(new CloudIdentityManagementScreen(this, management())))
-                .bounds(left, 175, width + 54, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.register"), button -> register())
-                .bounds(left + width + 60, 175, width + 54, 20).build());
-        this.quickConnectButton = addRenderableWidget(Button.builder(
-                Component.translatable("gui.sparkle_morpher.cloud.manage.quick_connect"), button -> connectOfficial())
-                .bounds(left, 199, this.width - left * 2, 20).build());
-        this.quickConnectButton.active = !this.quickConnecting && management().registry().selected()
-                .map(CloudInstanceRegistry::isBuiltinOfficial).orElse(false);
+    static CompletableFuture<CloudSession> connectOfficialAccount() {
+        return connectOfficialAccount(true);
+    }
 
-        if (snapshot.selectedScope() != null) {
-            this.scopeId.setValue(snapshot.selectedScope().scopeId());
-            this.scopeName.setValue(snapshot.selectedScope().name());
-            this.worldEpoch.setValue(snapshot.selectedScope().worldEpoch());
-        }
-        int rowsVisible = Math.max(1, (this.height - 32 - 225) / 22);
-        var scopeRange = CloudScreenPagination.range(snapshot.scopes().size(), rowsVisible, this.scopePage);
-        this.scopePage = scopeRange.page();
-        previousScopePage.active = scopeRange.page() > 0;
-        nextScopePage.active = scopeRange.page() + 1 < scopeRange.pageCount();
-        int row = 0;
-        for (var scope : snapshot.scopes().subList(scopeRange.startInclusive(), scopeRange.endExclusive())) {
-            final String id = scope.scopeId();
-            int y = 225 + row++ * 22;
-            addRenderableWidget(Button.builder(Component.literal(scope.name() + "  [" + id + "]"), button -> {
-                try {
-                    management().selectScope(id);
-                    this.scopeId.setValue(id);
-                    this.worldEpoch.setValue(scope.worldEpoch());
-                    setStatus(text("selected", scope.name()));
-                } catch (RuntimeException failure) {
-                    setStatus(errorText(failure));
+    private static synchronized CompletableFuture<CloudSession> connectOfficialAccount(boolean createIfMissing) {
+        if (officialConnectInFlight != null) {
+            if (!createIfMissing) return officialConnectInFlight;
+            CompletableFuture<CloudSession> previous = officialConnectInFlight;
+            CompletableFuture<CloudSession> upgraded = previous.exceptionallyCompose(failure -> {
+                Throwable cause = unwrap(failure);
+                if (!(cause instanceof NoLinkedGameAccountException)) return CompletableFuture.failedFuture(cause);
+                return loginSavedOrCreate(true);
+            });
+            officialConnectInFlight = upgraded;
+            upgraded.whenComplete((ignored, failure) -> {
+                synchronized (CloudManagementScreen.class) {
+                    if (officialConnectInFlight == upgraded) officialConnectInFlight = null;
                 }
-            }).bounds(left, y, Math.max(180, this.width - left * 2 - 82), 20).build());
-            addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.manage.targets_acl"), button -> {
-                try {
-                    management().selectScope(id);
-                    InputUtil.setScreen(new CloudTargetManagementScreen(this, management()));
-                } catch (RuntimeException failure) {
-                    setStatus(errorText(failure));
-                }
-            }).bounds(this.width - left - 78, y, 78, 20).build());
+            });
+            return upgraded;
         }
-
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> onClose())
-                .bounds(this.width / 2 - 50, this.height - 27, 100, 20).build());
-    }
-
-    private EditBox field(int x, int y, int width, String hint) {
-        EditBox editBox = new EditBox(this.font, x, y, width, 20, Component.literal(hint));
-        editBox.setMaxLength(256);
-        editBox.setHint(Component.literal(hint));
-        addRenderableWidget(editBox);
-        return editBox;
-    }
-
-    private void saveInstance() {
-        try {
-            CloudInstanceConfig config = CloudInstanceConfig.v1(instanceId.getValue(), URI.create(origin.getValue().trim()));
-            String name = instanceName.getValue().trim();
-            CloudInstanceRegistry.CloudInstanceProfile profile = new CloudInstanceRegistry.CloudInstanceProfile(
-                    config, name.isBlank() ? config.instanceId() : name);
-            if (CloudInstanceRegistry.isBuiltinOfficial(profile) && name.equals(text("official_name"))) {
-                profile = new CloudInstanceRegistry.CloudInstanceProfile(config, "Official Cloud");
-            }
-            management().registry().addOrReplace(profile);
-            management().selectInstance(config.instanceId());
-            management().saveInstances();
-            setStatus(text("saved", config.instanceId()));
-        } catch (IOException | RuntimeException failure) {
-            setStatus(errorText(failure));
-        }
-    }
-
-    private void switchInstance() {
-        try {
-            var profiles = management().registry().profiles();
-            if (profiles.isEmpty()) {
-                setStatus(text("no_instances"));
-                return;
-            }
-            String selected = management().registry().selected().map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse(null);
-            int current = -1;
-            for (int i = 0; i < profiles.size(); i++) {
-                if (profiles.get(i).instanceId().equals(selected)) current = i;
-            }
-            var next = profiles.get((current + 1) % profiles.size());
-            management().selectInstance(next.instanceId());
-            management().saveInstances();
-            init();
-            setStatus(text("selected", displayName(next)));
-        } catch (IOException | RuntimeException failure) {
-            setStatus(errorText(failure));
-        }
-    }
-
-    private void login() {
-        try {
-            String secret = password.getValue();
-            password.setValue("");
-            run(management().login(accountId.getValue(), secret), text("login_success"));
-        } catch (RuntimeException failure) {
-            setStatus(errorText(failure));
-        }
-    }
-
-    private void register() {
-        try {
-            String secret = password.getValue();
-            password.setValue("");
-            run(management().register(accountId.getValue(), secret), text("register_success"));
-        } catch (RuntimeException failure) {
-            setStatus(errorText(failure));
-        }
-    }
-
-    private void connectOfficial() {
-        if (this.quickConnecting) return;
         try {
             var selected = management().registry().selected().orElseThrow();
             if (!CloudInstanceRegistry.isBuiltinOfficial(selected)) {
-                setStatus(text("official_only"));
-                return;
+                return CompletableFuture.failedFuture(new IllegalStateException(text("official_only")));
             }
-            if (management().snapshot().authenticated()) {
-                setStatus(text("connected"));
-                return;
+            if (CloudClientRuntime.state(selected.instanceId()) != null) {
+                return CompletableFuture.failedFuture(new IllegalStateException(text("connected")));
             }
-            Path file = Minecraft.getInstance().gameDirectory.toPath().resolve("config")
-                    .resolve("sparkle-morpher").resolve("cloud-generated-account.json");
-            CloudGeneratedAccountStore store = new CloudGeneratedAccountStore(file);
+            CompletableFuture<CloudSession> request = loginWithLinkedGameAccount().exceptionallyCompose(failure -> {
+                Throwable cause = unwrap(failure);
+                if (cause instanceof CloudHttpException http && http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) {
+                    // Restore an existing local account during an outage; never create a duplicate on another device.
+                    return loginSavedOrCreate(false).exceptionallyCompose(savedFailure -> CompletableFuture.failedFuture(
+                            unwrap(savedFailure) instanceof NoLinkedGameAccountException ? cause : unwrap(savedFailure)));
+                }
+                if (!(cause instanceof NoLinkedGameAccountException)) return CompletableFuture.failedFuture(cause);
+                return loginSavedOrCreate(createIfMissing);
+            });
+            officialConnectInFlight = request;
+            request.whenComplete((ignored, failure) -> {
+                synchronized (CloudManagementScreen.class) {
+                    if (officialConnectInFlight == request) officialConnectInFlight = null;
+                }
+            });
+            return request;
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
+    private static CompletableFuture<CloudSession> loginSavedOrCreate(boolean createIfMissing) {
+        try {
+            CloudGeneratedAccountStore store = new CloudGeneratedAccountStore(generatedAccountFile());
             var saved = store.load();
-            CloudGeneratedAccountStore.Account account;
-            CompletableFuture<CloudSession> request;
             if (saved.isPresent()) {
-                account = saved.get();
-                request = management().login(account.accountId(), account.password())
-                        .exceptionallyCompose(failure -> {
-                            Throwable cause = unwrap(failure);
+                var account = saved.get();
+                return management().login(account.accountId(), account.password())
+                        .exceptionallyCompose(loginFailure -> {
+                            Throwable cause = unwrap(loginFailure);
                             if (cause instanceof CloudHttpException http
                                     && (http.statusCode() == 401 || http.statusCode() == 404)) {
                                 return management().register(account.accountId(), account.password());
                             }
                             return CompletableFuture.failedFuture(cause);
                         });
-            } else {
-                account = CloudGeneratedAccountStore.generate();
-                store.save(account);
-                request = management().register(account.accountId(), account.password());
             }
-            accountId.setValue(account.accountId());
-            this.quickConnecting = true;
-            this.quickConnectButton.active = false;
-            long expectedGeneration = this.lifecycleGeneration;
-            request.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
-                if (!this.active || expectedGeneration != this.lifecycleGeneration) return;
-                this.quickConnecting = false;
-                if (this.quickConnectButton != null) this.quickConnectButton.active = true;
-            }));
-            run(request, text("quick_success"));
-        } catch (IOException | RuntimeException failure) {
-            setStatus(errorText(failure));
+            if (!createIfMissing) return CompletableFuture.failedFuture(new NoLinkedGameAccountException());
+            var account = CloudGeneratedAccountStore.generate();
+            store.save(account);
+            return management().register(account.accountId(), account.password())
+                    .thenCompose(CloudManagementScreen::bindAfterLogin);
+        } catch (IOException | RuntimeException error) {
+            return CompletableFuture.failedFuture(error);
         }
     }
 
-    private void logout() {
-        management().logout();
-        password.setValue("");
-        setStatus(text("logged_out"));
+    private static CompletableFuture<CloudSession> bindAfterLogin(CloudSession session) {
+        return bindCurrentGameAccount().handle((ignored, failure) -> session);
     }
 
-    private void refreshScopes() {
-        try {
-            run(management().refreshScopes(), text("scopes_refreshed"));
-        } catch (RuntimeException failure) {
-            setStatus(errorText(failure));
+    private static CompletableFuture<CloudSession> loginWithLinkedGameAccount() {
+        var selected = management().registry().selected().orElseThrow();
+        var auth = new CloudAuthClient(new CloudHttpClient(selected.instance()));
+        return auth.gameIdentityProviders().handle((providers, failure) -> {
+            if (failure == null) return CompletableFuture.completedFuture(providers);
+            Throwable cause = unwrap(failure);
+            if (cause instanceof CloudHttpException http && (http.statusCode() == 401 || http.statusCode() == 404)) {
+                return CompletableFuture.completedFuture(List.<CloudIdentityClient.IdentityProvider>of());
+            }
+            return CompletableFuture.<List<CloudIdentityClient.IdentityProvider>>failedFuture(cause);
+        }).thenCompose(next -> next).thenCompose(providers -> {
+            if (providers.isEmpty()) return CompletableFuture.failedFuture(new NoLinkedGameAccountException());
+            final MinecraftSessionServiceJoiner.IdentityProfile profile;
+            try { profile = MinecraftSessionServiceJoiner.currentProfile(); }
+            catch (RuntimeException failure) { return CompletableFuture.failedFuture(new NoLinkedGameAccountException()); }
+            return tryLinkedProvider(providers, 0, profile, null);
+        });
+    }
+
+    private static CompletableFuture<CloudSession> tryLinkedProvider(
+            List<CloudIdentityClient.IdentityProvider> providers, int index,
+            MinecraftSessionServiceJoiner.IdentityProfile profile, Throwable unavailable
+    ) {
+        if (index >= providers.size()) return CompletableFuture.failedFuture(
+                unavailable != null ? unavailable : new NoLinkedGameAccountException());
+        return management().loginWithGameIdentity(providers.get(index).providerId(), profile,
+                new MinecraftSessionServiceJoiner()).exceptionallyCompose(failure -> {
+                    Throwable cause = unwrap(failure);
+                    if (cause instanceof CloudHttpException http) {
+                        if (http.errorCode() == CloudErrorCode.IDENTITY_NOT_LINKED) {
+                            return CompletableFuture.failedFuture(new NoLinkedGameAccountException());
+                        }
+                        if (http.errorCode() == CloudErrorCode.IDENTITY_PROFILE_MISMATCH) {
+                            return tryLinkedProvider(providers, index + 1, profile, unavailable);
+                        }
+                        if (http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) {
+                            return tryLinkedProvider(providers, index + 1, profile, unavailable != null ? unavailable : cause);
+                        }
+                    }
+                    return CompletableFuture.failedFuture(cause);
+                });
+    }
+
+    static CompletableFuture<CloudIdentityClient.CloudIdentity> bindCurrentGameAccount() {
+        var selected = management().registry().selected().orElseThrow();
+        if (!CloudInstanceRegistry.isBuiltinOfficial(selected) || CloudClientRuntime.state(selected.instanceId()) == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException(text("official_only")));
         }
+        final MinecraftSessionServiceJoiner.IdentityProfile profile;
+        try { profile = MinecraftSessionServiceJoiner.currentProfile(); }
+        catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
+        return management().identityProviders().thenCompose(providers -> tryBindingProvider(providers, 0, profile, null));
     }
 
-    private void createScope() {
-        try {
-            var create = new com.micaftic.morpher.cloud.client.CloudScopeClient.CloudScopeCreate(
-                    scopeId.getValue().trim(), scopeName.getValue().trim(), worldEpoch.getValue().trim(), null);
-            run(management().createScope(create), text("scope_created"));
-        } catch (RuntimeException failure) {
-            setStatus(errorText(failure));
+    private static CompletableFuture<CloudIdentityClient.CloudIdentity> tryBindingProvider(
+            List<CloudIdentityClient.IdentityProvider> providers, int index,
+            MinecraftSessionServiceJoiner.IdentityProfile profile, Throwable unavailable
+    ) {
+        if (index >= providers.size()) return CompletableFuture.failedFuture(
+                unavailable != null ? unavailable : new IllegalStateException(text("identity.no_matching_provider")));
+        var client = CloudClientRuntime.state().identities();
+        return client.createChallenge(providers.get(index).providerId(), profile.name(), profile.profileId().toString())
+                .thenCompose(challenge -> client.joinAndComplete(challenge, new MinecraftSessionServiceJoiner()))
+                .exceptionallyCompose(failure -> {
+                    Throwable cause = unwrap(failure);
+                    if (cause instanceof CloudHttpException http
+                            && http.errorCode() == CloudErrorCode.IDENTITY_PROFILE_MISMATCH) {
+                        return tryBindingProvider(providers, index + 1, profile, unavailable);
+                    }
+                    if (cause instanceof CloudHttpException http
+                            && http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) {
+                        return tryBindingProvider(providers, index + 1, profile, unavailable != null ? unavailable : cause);
+                    }
+                    return CompletableFuture.failedFuture(cause);
+                });
+    }
+
+    private static final class NoLinkedGameAccountException extends RuntimeException {
+        private NoLinkedGameAccountException() { super("No game account is linked to an official Cloud account"); }
+    }
+
+    public static void maskPassword(EditBox field) {
+        java.util.function.BiFunction<String, Integer, net.minecraft.util.FormattedCharSequence> formatter =
+                (value, offset) -> net.minecraft.util.FormattedCharSequence.forward(
+                        "*".repeat(value.length()), net.minecraft.network.chat.Style.EMPTY);
+        // 1.21 uses BiFunction; 26.x uses TextFormatter. Discover types so older Fabric names can be remapped.
+        for (var setter : EditBox.class.getMethods()) {
+            if (setter.getParameterCount() != 1 || setter.getReturnType() != void.class) continue;
+            Class<?> callback = setter.getParameterTypes()[0];
+            Object adapter = null;
+            if (callback == java.util.function.BiFunction.class) adapter = formatter;
+            else if (callback.isInterface() && java.util.Arrays.stream(callback.getMethods()).anyMatch(method ->
+                    method.getReturnType() == net.minecraft.util.FormattedCharSequence.class
+                            && java.util.Arrays.equals(method.getParameterTypes(), new Class<?>[]{String.class, int.class}))) {
+                adapter = java.lang.reflect.Proxy.newProxyInstance(callback.getClassLoader(), new Class<?>[]{callback},
+                        (proxy, method, args) -> {
+                            if (method.getDeclaringClass() == Object.class) return switch (method.getName()) {
+                                case "equals" -> proxy == args[0];
+                                case "hashCode" -> System.identityHashCode(proxy);
+                                case "toString" -> "SPM password formatter";
+                                default -> throw new UnsupportedOperationException();
+                            };
+                            return formatter.apply((String) args[0], (Integer) args[1]);
+                        });
+            }
+            if (adapter == null) continue;
+            try { setter.invoke(field, adapter); return; }
+            catch (ReflectiveOperationException failure) { throw new IllegalStateException("Unable to mask Cloud password input", failure); }
         }
+        throw new IllegalStateException("Minecraft password formatter is unavailable");
     }
 
-    private void joinScope() {
-        try {
-            if (management().snapshot().selectedScope() == null) management().selectScope(scopeId.getValue().trim());
-            run(management().enterSelectedScope(), text("scope_joined"));
-        } catch (RuntimeException failure) {
-            setStatus(errorText(failure));
-        }
-    }
-
-    private void run(CompletableFuture<?> future, String success) {
-        long expectedGeneration = this.lifecycleGeneration;
-        setStatus(text("working"));
-        future.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
-            if (!this.active || expectedGeneration != this.lifecycleGeneration) return;
-            setStatus(failure == null ? success : errorText(failure));
-            if (failure == null) init();
-        }));
-    }
-
-    @Override
-    public void removed() {
-        this.active = false;
-        this.lifecycleGeneration++;
-    }
-
-    private void setStatus(String message) {
-        this.statusMessage = message;
-        if (this.statusButton != null) this.statusButton.setMessage(Component.literal(message));
+    private static Path generatedAccountFile() {
+        return Minecraft.getInstance().gameDirectory.toPath().resolve("config")
+                .resolve("sparkle-morpher").resolve("cloud-generated-account.json");
     }
 
     static String text(String key, Object... args) {
         return Component.translatable("gui.sparkle_morpher.cloud.manage." + key, args).getString();
     }
 
-    private static String displayName(CloudInstanceRegistry.CloudInstanceProfile profile) {
+    static String displayName(CloudInstanceRegistry.CloudInstanceProfile profile) {
         return CloudInstanceRegistry.isBuiltinOfficial(profile) && profile.name().equals("Official Cloud")
                 ? text("official_name") : profile.name();
     }
 
     static String errorText(Throwable failure) {
+        LOGGER.warn("SPM Cloud operation failed", failure);
         Throwable cause = unwrap(failure);
+        String key = errorKey(cause);
+        if (key != null) return text(key);
         String message = cause.getMessage();
         return message == null || message.isBlank() ? cause.getClass().getSimpleName() : message;
     }
 
+    static String errorKey(Throwable failure) {
+        Throwable cause = unwrap(failure);
+        if (cause instanceof CloudHttpException http) {
+            if (http.errorCode() == CloudErrorCode.IDENTITY_ALREADY_LINKED) return "identity.already_linked";
+            if (http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) return "identity.provider_unavailable";
+        }
+        if (cause instanceof java.net.ConnectException
+                || cause instanceof java.nio.channels.ClosedChannelException) {
+            return "error.connection";
+        }
+        return null;
+    }
+
     private static Throwable unwrap(Throwable failure) {
         Throwable cause = failure;
-        while (cause.getCause() != null && cause != cause.getCause()) cause = cause.getCause();
+        // Keep transport and Cloud error types: their nested causes are diagnostic details.
+        while ((cause instanceof java.util.concurrent.CompletionException
+                || cause instanceof java.util.concurrent.ExecutionException)
+                && cause.getCause() != null && cause != cause.getCause()) {
+            cause = cause.getCause();
+        }
         return cause;
     }
 
-    @Override
-    public void onClose() {
-        InputUtil.setScreen(this.parent);
-    }
 }

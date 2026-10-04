@@ -6,7 +6,6 @@ import com.micaftic.morpher.client.compat.ClientRenderCompatibility;
 import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.renderer.AnimationDebugOverlay;
 import com.micaftic.morpher.client.renderer.ExtraPlayerOverlay;
-import com.micaftic.morpher.client.renderer.ModelSyncStateOverlay;
 import com.micaftic.morpher.core.architectury.registry.client.keymappings.KeyMappingRegistry;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.api.ClientModInitializer;
@@ -30,7 +29,6 @@ public final class YesSteveModelFabricClient implements ClientModInitializer {
 
         HudOverlay debugOverlay = AnimationDebugOverlay.createOverlay();
         HudOverlay loadingOverlay = new ExtraPlayerOverlay();
-        HudOverlay syncOverlay = new ModelSyncStateOverlay();
         HudElementRegistry.attachElementAfter(VanillaHudElements.BOSS_BAR, com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "hud_overlays"), (guiGraphics, tickDelta) -> {
             Minecraft mc = Minecraft.getInstance();
             float delta = tickDelta.getGameTimeDeltaTicks();
@@ -39,7 +37,6 @@ public final class YesSteveModelFabricClient implements ClientModInitializer {
             Font font = mc.font;
             debugOverlay.render(guiGraphics, font, delta, w, h);
             loadingOverlay.render(guiGraphics, font, delta, w, h);
-            syncOverlay.render(guiGraphics, font, delta, w, h);
         });
 
         ClientModelManager.loadDefaultModel();

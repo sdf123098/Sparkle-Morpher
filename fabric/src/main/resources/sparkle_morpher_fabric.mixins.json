@@ -15,7 +15,6 @@
     "client.MouseHandlerMixin"
   ],
   "mixins": [
-    "LivingEntityEffectMixin",
-    "PlayerListAccessor"
+    "LivingEntityEffectMixin"
   ]
 }

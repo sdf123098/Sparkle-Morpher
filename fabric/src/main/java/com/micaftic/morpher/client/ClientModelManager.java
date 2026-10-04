@@ -12,7 +12,7 @@ import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.ModelAssemblyFactory;
 import com.micaftic.morpher.legacy.compat.LegacyCompatState;
-import com.micaftic.morpher.legacy.compat.LegacyCompatClient;
+
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
 import com.micaftic.morpher.core.model.ModelRef;
 import com.micaftic.morpher.core.model.ModelSourceType;
@@ -383,7 +383,6 @@ public class ClientModelManager {
     static void resetClientState() {
         MODEL_TASK_GENERATION.incrementAndGet();
         modelTaskDispatcher.getQueue().clear();
-        LegacyCompatClient.resetSyncState();
 
         int discardedModelTasks = modelPhraseExecutor.getQueue().size();
         modelPhraseExecutor.getQueue().clear();
@@ -393,9 +392,8 @@ public class ClientModelManager {
         failedSyncModelsCount.set(0);
         syncManifestProcessed = false;
         syncCompletionScheduled.set(false);
-        LegacyCompatClient.clearCachedModelHashes();
 
-        LegacyCompatClient.releaseAllInFlightBuffers();
+
         serverModels.clear();
         cachedModelFiles.clear();
         cpuReloadInFlight.clear();
@@ -821,6 +819,7 @@ public class ClientModelManager {
                     importLocalGltfModel(modelKey, fileName, importData);
                     Minecraft.getInstance().execute(ClientModelManager::flushPendingModels);
                     YesSteveModel.LOGGER.info("[SM] Imported local glTF model: {}", modelKey);
+                    if (callback != null) Minecraft.getInstance().execute(() -> callback.accept(null));
                     return;
                 }
                 RawYsmModel rawModel = parseImportModel(fileName, importData);
@@ -972,18 +971,19 @@ public class ClientModelManager {
 
     public static synchronized void resetSync() {
         // R9.2：oySm/allowUpload 与握手标志统一由 resetClientHandshake（→ LegacySpmHandshakeState.resetClientSession）复位
-        LegacyCompatClient.processServerData(null);
+
         NetworkHandler.resetClientHandshake();
         ((Executor) Minecraft.getInstance()).execute(() -> {
-            syncState.setState(SyncState.WAITING);
+            syncState.setState(SyncState.IDLE);
         });
     }
 
     public static void enterPrivacyMode() {
-        LegacyCompatClient.processServerData(null);
+
         NetworkHandler.resetClientHandshake();
         ((Executor) Minecraft.getInstance()).execute(() -> {
             syncState.setState(SyncState.LOADING);
+            markSyncActivity();
             forEachGuiWidget(IGuiWidget::onSyncBegin);
         });
         reloadLocalModels(error -> {
@@ -1007,16 +1007,13 @@ public class ClientModelManager {
     // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
 
     public static void startSync(Connection connection, ByteBuffer byteBuffer) {
-        LegacyCompatClient.enqueueSync(connection, byteBuffer);
+        // Minecraft server sync has been removed.
     }
 
 
     public static void onSyncConnected() {
-        if (((MinecraftAccessor) Minecraft.getInstance()).ysm$isLocalServer()) {
-            syncState.setState(SyncState.LOADING);
-        } else {
-            syncState.setState(SyncState.IDLE);
-        }
+        // The handshake is not model transfer. Wait for the manifest before showing progress.
+        syncState.setState(SyncState.IDLE);
         forEachGuiWidget(IGuiWidget::onSyncBegin);
     }
 
@@ -1036,6 +1033,7 @@ public class ClientModelManager {
     static void onSyncProgress(int totalModels) {
         if (totalModels == -1) {
             ((Executor) Minecraft.getInstance()).execute(() -> {
+                markSyncActivity();
                 syncState.setState(SyncState.PREPARING);
                 forEachGuiWidget(IGuiWidget::onSyncError);
             });
@@ -1640,7 +1638,6 @@ public class ClientModelManager {
     }
 
     /**
-     * 由客户端每帧（经 {@code ModelSyncStateOverlay#render}）调用。
      * 若同步处于进行中（还有待下载模型或仍在 SYNCING）且超过
      * {@link #SYNC_WATCHDOG_TIMEOUT_MILLIS} 没有任何进度，则强制结束同步，
      * 防止加载弹窗永久卡在某一进度。
@@ -1650,7 +1647,9 @@ public class ClientModelManager {
         if (last == 0L) {
             return;
         }
-        boolean active = pendingModelsCount.get() > 0 || syncState.getCurrentState() == SyncState.SYNCING;
+        boolean active = pendingModelsCount.get() > 0 || syncState.getCurrentState() == SyncState.SYNCING
+                || syncState.getCurrentState() == SyncState.PREPARING
+                || syncState.getCurrentState() == SyncState.LOADING;
         if (!active) {
             lastSyncActivityMillis = 0L;
             return;
@@ -1669,8 +1668,8 @@ public class ClientModelManager {
         NetworkOnlineDebugLog.info("onSyncComplete: selectedModelId={} selectedTextureId={} assemblyMapSize={}",
                 MODEL_SELECTION.selectedModelId(), MODEL_SELECTION.selectedTextureId(), modelAssemblyMap.size());
         int failedModels = failedSyncModelsCount.getAndSet(0);
-        LegacyCompatClient.resetStep();
-        LegacyCompatClient.clearCachedModelHashes();
+
+
         lastSyncActivityMillis = 0L;
         syncManifestProcessed = false;
 
@@ -2075,7 +2074,8 @@ public class ClientModelManager {
     }
 
     public static class SyncStatus {
-        private SyncState currentState = SyncState.WAITING;
+        // Cloud models load on demand; joining a world does not await a server manifest.
+        private SyncState currentState = SyncState.IDLE;
 
         private int totalModels = -1;
 
@@ -2141,108 +2141,6 @@ public class ClientModelManager {
     }
 
     public static void exportAllCachedModels(@Nullable String extra, @Nullable Consumer<ExportResult> callback) {
-        YSMThreadPool.submit(() -> {
-            try {
-                if (LegacyCompatClient.clientKey() == null) {
-                    if (callback != null) {
-                        callback.accept(new ExportResult(false, Component.literal("(unavailable)"), "", "", 0));
-                    }
-                    return;
-                }
-
-                String folder = LegacyCompatClient.currentCacheFolderName() != null ? LegacyCompatClient.currentCacheFolderName() : "default_cache";
-                File cacheDir = ServerModelManager.CACHE_CLIENT.resolve(folder).toFile();
-
-                if (!cacheDir.exists() || !cacheDir.isDirectory()) {
-                    if (callback != null) {
-                        callback.accept(new ExportResult(false, Component.literal("鐏忔碍婀悽鐔稿灇娴犺缍嶇紓鎾崇摠閹存牜绱︾€涙ɑ鏋冩禒璺恒仚娑撳秴鐡ㄩ崷? " + folder), "", "", 0));
-                    }
-                    return;
-                }
-
-                File[] files = cacheDir.listFiles();
-                if (files == null || files.length == 0) {
-                    if (callback != null) {
-                        callback.accept(new ExportResult(false, Component.literal("(unavailable)"), "", "", 0));
-                    }
-                    return;
-                }
-
-                int successCount = 0;
-                for (File file : files) {
-                    if (!file.isFile()) continue;
-
-                    try {
-                        byte[] fileBytes = Files.readAllBytes(file.toPath());
-                        byte[] clearText = YsmCrypt.readInPlace(fileBytes, LegacyCompatClient.clientKey());
-
-                        int coreDataLength;
-                        String exportName = file.getName(); // Fallback name
-
-                        try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(clearText, 32)) {
-                            RawYsmModel rawModel = deserializer.deserializeKeepOpen();
-                            coreDataLength = deserializer.getReader().getRawBuf().readerIndex();
-
-                            if (rawModel.metadata != null && rawModel.metadata.name != null && !rawModel.metadata.name.trim().isEmpty()) {
-                                exportName = rawModel.metadata.name.trim();
-                            } else if (rawModel.properties != null && rawModel.properties.sha256 != null && !rawModel.properties.sha256.isEmpty()) {
-                                exportName = rawModel.properties.sha256;
-                            }
-                        }
-
-                        exportName = exportName.replaceAll("[\\\\/:*?\"<>|]", "_");
-
-                        try (YSMByteBuf outBuf = new YSMByteBuf(Unpooled.buffer())) {
-                            outBuf.writeDword(32);
-
-                            outBuf.getRawBuf().writeBytes(clearText, 0, coreDataLength);
-
-                            outBuf.writeVarInt(32); // Version
-                            outBuf.writeVarInt(1);
-
-                            byte[] randBytes = new byte[8];
-                            SECURE_RANDOM.nextBytes(randBytes);
-                            StringBuilder sb = new StringBuilder(16);
-                            for (byte b : randBytes) {
-                                sb.append(String.format("%02x", b));
-                            }
-                            outBuf.writeString(sb.toString()); // rand hash
-
-                            outBuf.writeVarLong(java.time.Instant.now().getEpochSecond()); // time
-                            outBuf.writeString(extra != null ? extra : ""); // extra info
-                            outBuf.writeVarInt(0); // padding
-
-                            byte[] rawBytes = new byte[outBuf.getRawBuf().readableBytes()];
-                            outBuf.getRawBuf().readBytes(rawBytes);
-
-                            byte[] finalEncrypted = YsmCrypt.encryptYsmFile(rawBytes);
-
-                            Path exportPath = ServerModelManager.EXPORT.resolve(exportName + ".ysm");
-                            Files.createDirectories(exportPath.getParent());
-                            Files.write(exportPath, finalEncrypted);
-
-                            successCount++;
-                            YesSteveModel.LOGGER.info("[SM] Successfully exported cached model to: " + exportPath);
-                        }
-                    } catch (Exception e) {
-                        YesSteveModel.LOGGER.error("[SM] Failed to export cached model: " + file.getName(), e);
-                    }
-                }
-
-                if (callback != null) {
-                    String displayPath = Paths.get("export").toString();
-                    if (successCount > 0) {
-                        callback.accept(new ExportResult(true, null, displayPath, "", 0));
-                    } else {
-                        callback.accept(new ExportResult(false, Component.literal("(unavailable)"), "", "", 0));
-                    }
-                }
-            } catch (Exception e) {
-                YesSteveModel.LOGGER.error("[SM] Error during batch export", e);
-                if (callback != null) {
-                    callback.accept(new ExportResult(false, Component.literal("閹靛綊鍣虹€电厧鍤潻鍥┾柤閸欐垹鏁撴稉銉╁櫢闁挎瑨顕? " + e.getMessage()), "", "", 0));
-                }
-            }
-        });
+        if (callback != null) callback.accept(new ExportResult(false, Component.literal("旧联机缓存导出已移除；请从 Cloud 下载原模型"), "", "", 0));
     }
 }

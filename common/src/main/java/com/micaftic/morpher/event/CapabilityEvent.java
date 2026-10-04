@@ -9,14 +9,14 @@ import com.micaftic.morpher.capability.VehicleModelCapability;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidModelSync;
 import com.micaftic.morpher.model.ServerModelManager;
-import com.micaftic.morpher.core.api.network.YSMChannel;
+
 import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.network.message.S2CSetModelAndTexturePacket;
 import com.micaftic.morpher.network.message.S2CSyncAuthModelsPacket;
 import com.micaftic.morpher.network.message.S2CSyncProjectileModelPacket;
 import com.micaftic.morpher.network.message.S2CSyncStarModelsPacket;
 import com.micaftic.morpher.network.message.S2CSyncVehicleModelPacket;
-import com.micaftic.morpher.network.message.S2CVersionCheckPacket;
+
 import com.micaftic.morpher.util.PlayerModelSelectionStore;
 import com.micaftic.morpher.util.PlayerStarModelsStore;
 import com.micaftic.morpher.core.architectury.utils.GameInstance;
@@ -82,6 +82,7 @@ public final class CapabilityEvent {
 
     private static void onPlayerQuit(ServerPlayer player) {
         UUID playerId = player.getUUID();
+
         LAST_PLAYER_LEVELS.remove(playerId);
         SYNCED_PLAYER_MODEL_STATES.remove(playerId);
         SYNCED_PLAYER_MODEL_STATES.values().forEach(states -> states.remove(playerId));
@@ -173,6 +174,7 @@ public final class CapabilityEvent {
         if (!YesSteveModel.isAvailable()) {
             return;
         }
+
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
         boolean bool = ConfigPolicies.network().lowBandwidthUsage();
         for (ServerPlayer serverPlayer : players) {
@@ -185,7 +187,7 @@ public final class CapabilityEvent {
             getModelInfoCap(serverPlayer).ifPresent(cap -> {
                 if (!NetworkHandler.isPlayerConnected(serverPlayer) && !cap.isMandatory()) {
                     if (serverPlayer.tickCount == 200 || serverPlayer.tickCount == 600 || serverPlayer.tickCount == 1800) {
-                        NetworkHandler.sendToClientPlayer(new S2CVersionCheckPacket(), serverPlayer);
+
                     }
                     return;
                 }
@@ -224,7 +226,7 @@ public final class CapabilityEvent {
 
     private static void sendModelStateIfNeeded(ServerPlayer source, ModelInfoCapability cap, ServerPlayer receiver, String stateKey) {
         // R9.1：接收方未装 SPM（未协商 channel）时跳过——避免每 tick 无效发送尝试与状态记录
-        if (!NetworkHandler.isPlayerConnected(receiver) || !YSMChannel.canSendToClient(receiver)) {
+        if (!NetworkHandler.isPlayerConnected(receiver) || !false) {
             return;
         }
         UUID sourceId = source.getUUID();
@@ -293,7 +295,7 @@ public final class CapabilityEvent {
 
     /** Sends the persisted vehicle state to a client when it starts tracking the entity. */
     public static void syncVehicleModelToReceiver(Entity entity, ServerPlayer receiver) {
-        if (!NetworkHandler.isPlayerConnected(receiver) || !YSMChannel.canSendToClient(receiver)) {
+        if (!NetworkHandler.isPlayerConnected(receiver) || !false) {
             return;
         }
         VehicleModelCapability.get(entity).filter(VehicleModelCapability::isInitialized).ifPresent(vehicleModelCap ->

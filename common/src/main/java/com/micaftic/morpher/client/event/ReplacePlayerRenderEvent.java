@@ -33,6 +33,7 @@ public class ReplacePlayerRenderEvent {
         PlayerCapability cap = null;
         try {
             cap = PlayerCapability.get(entity).orElse(null);
+            if (cap != null) cap.tickModel();
             boolean firstPersonSuppressionSatisfied = cap != null
                     && (!CameraUtil.isFirstPerson(cap)
                         || FirstPersonCompat.isFirstPersonActive()
@@ -45,7 +46,7 @@ public class ReplacePlayerRenderEvent {
                     ConfigPolicies.render().disableSelfModel(),
                     ConfigPolicies.render().disableOtherModel(),
                     entity.isSpectator(),
-                    cap != null && cap.isModelActive(),
+                    cap != null && cap.isModelActive() && cap.hasRenderableModel(),
                     firstPersonSuppressionSatisfied
             ));
             if (decision == PlayerRenderPolicy.Decision.RENDER_CUSTOM) {
