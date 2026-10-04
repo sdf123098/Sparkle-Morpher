@@ -10,7 +10,6 @@ import net.minecraft.world.entity.Entity;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -38,6 +37,7 @@ public final class CloudMinecraftEntityProviders {
             CloudClientRuntime.registerEntityProvider(new CapabilityProvider(CloudEntityProvider.Kind.MAID));
             registeredRuntime = runtime;
         }
+        CloudSelectedModelRecovery.tick(runtime);
         CloudClientRuntime.tickEntityObservations();
     }
 
@@ -129,7 +129,7 @@ public final class CloudMinecraftEntityProviders {
                         return;
                     }
                     String runtimeModelId = identity.runtimeModelId();
-                    ClientModelManager.importLocalModel(runtimeModelId, importFileName(summary), bytes, error -> {
+                    ClientModelManager.importLocalModel(runtimeModelId, CloudAssetImportName.fileName(summary), bytes, error -> {
                         MATERIALIZING.remove(identity);
                         if (error == null && ClientModelManager.getAvailableModelIds().contains(runtimeModelId)) {
                             String textureId = appearance.textureId() == null ? "default" : appearance.textureId();
@@ -150,15 +150,6 @@ public final class CloudMinecraftEntityProviders {
                     Long.toString(appearance.assetRevision()), appearance.rawSha256());
         }
 
-        private static String importFileName(CloudAssetSummary summary) {
-            String name = summary.name() == null || summary.name().isBlank() ? summary.ref().assetId() : summary.name();
-            String format = summary.format() == null ? "" : summary.format().trim().toLowerCase(Locale.ROOT);
-            if (!format.isBlank() && format.matches("[a-z0-9]{1,12}")
-                    && !name.toLowerCase(Locale.ROOT).endsWith("." + format)) {
-                name += "." + format;
-            }
-            return name;
-        }
 
         private static Entity entity(UUID entityUuid) {
             Minecraft client = Minecraft.getInstance();

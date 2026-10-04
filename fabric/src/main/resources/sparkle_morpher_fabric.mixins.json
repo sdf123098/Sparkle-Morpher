@@ -12,7 +12,6 @@
     "client.YSMSoundInstanceFabricMixin"
   ],
   "mixins": [
-    "LivingEntityEffectMixin",
-    "PlayerListAccessor"
+    "LivingEntityEffectMixin"
   ]
 }

@@ -56,6 +56,7 @@ public class S2CSetModelAndTexturePacket {
             LocalPlayer localPlayer = Minecraft.getInstance().player;
             boolean keepLocalOnlyModel = entity == localPlayer
                     && (PrivacyMode.isActive() || ClientModelManager.isSelectedLocalOnlyModel(cap.getModelId()));
+
             if (!keepLocalOnlyModel) {
                 cap.initModelWithTexture(other.modelId, other.textureId);
                 cap.setForceDisabled(other.disabled);

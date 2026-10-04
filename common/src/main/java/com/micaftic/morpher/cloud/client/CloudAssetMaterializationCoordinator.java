@@ -6,6 +6,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Coordinates safe materialization of one trusted Cloud asset revision.
@@ -19,14 +20,21 @@ import java.util.function.Function;
 public final class CloudAssetMaterializationCoordinator {
     private final CloudAssetCatalogStore catalog;
     private final Function<CloudAssetRef, CompletableFuture<Path>> downloader;
+    private final Predicate<CloudAssetRef> previouslyApplied;
     private final ConcurrentMap<CloudAssetRef, CompletableFuture<Path>> inFlight = new ConcurrentHashMap<>();
 
     public CloudAssetMaterializationCoordinator(
             CloudAssetCatalogStore catalog,
             Function<CloudAssetRef, CompletableFuture<Path>> downloader
     ) {
+        this(catalog, downloader, ref -> false);
+    }
+
+    public CloudAssetMaterializationCoordinator(CloudAssetCatalogStore catalog,
+            Function<CloudAssetRef, CompletableFuture<Path>> downloader, Predicate<CloudAssetRef> previouslyApplied) {
         this.catalog = Objects.requireNonNull(catalog, "catalog");
         this.downloader = Objects.requireNonNull(downloader, "downloader");
+        this.previouslyApplied = Objects.requireNonNull(previouslyApplied, "previouslyApplied");
     }
 
     public CompletableFuture<Path> ensure(CloudAssetRef ref) {
@@ -37,6 +45,20 @@ public final class CloudAssetMaterializationCoordinator {
                     new IllegalArgumentException("Cloud asset revision is not in the trusted catalog"));
         }
 
+        return materialize(ref);
+    }
+
+    /** Exact saved application only. The downloader still checks current server ACL and the SHA. */
+    public CompletableFuture<Path> ensurePreviouslyApplied(CloudAssetRef ref) {
+        Objects.requireNonNull(ref, "ref");
+        try {
+            if (!previouslyApplied.test(ref)) return CompletableFuture.failedFuture(
+                    new IllegalArgumentException("Cloud asset revision has not previously been applied"));
+        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
+        return materialize(ref);
+    }
+
+    private CompletableFuture<Path> materialize(CloudAssetRef ref) {
         synchronized (this) {
             CompletableFuture<Path> existing = inFlight.get(ref);
             if (existing != null) return existing;

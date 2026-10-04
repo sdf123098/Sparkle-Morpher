@@ -136,7 +136,6 @@ public class GeneralConfig {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
         defineGeneral(builder);
         ExtraPlayerRenderConfig.define(builder);
-        LoadingStateConfig.define(builder);
         return builder.build();
     }
 

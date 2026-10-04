@@ -69,7 +69,8 @@ public final class ClientPlayerJoinNotification {
     private static void onPlayerQuit(LocalPlayer player) {
         boolean reloadLocalModels = notified && YesSteveModel.isAvailable();
         notified = false;
-        PrivacyMode.endSession();
+        com.micaftic.morpher.cloud.client.CloudPlayerModelSync.disconnect();
+PrivacyMode.endSession();
         ClientModelManager.resetSync();
         if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);

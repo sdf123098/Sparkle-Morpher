@@ -24,7 +24,7 @@ public final class CommonEvent {
                 YesSteveModel.LOGGER.error(YesSteveModel.getErrorMessage());
                 return;
             }
-            NetworkHandler.init();
+
             TouhouMaidCompat.init();
             nativeInit();
         });

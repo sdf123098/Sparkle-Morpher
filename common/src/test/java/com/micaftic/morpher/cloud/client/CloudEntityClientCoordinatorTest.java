@@ -77,6 +77,32 @@ class CloudEntityClientCoordinatorTest {
                 "binding", "scope", "epoch", ENTITY.toString(), "PLAYER", "target", "VISIBLE", null, revision);
     }
 
+    @Test
+    void replaysCachedAppearanceWhenMaidAppearsAndRespawns() {
+        CloudEntityBindingResolver resolver = new CloudEntityBindingResolver();
+        resolver.replace("scope", "epoch", List.of(new CloudScopeClient.CloudEntityBinding(
+                "binding", "scope", "epoch", ENTITY.toString(), "MAID", "target", "REGISTERED", null, 1L)));
+        CloudAppearanceStore appearances = new CloudAppearanceStore();
+        appearances.apply("scope", appearance(2L));
+        CloudEntityClientCoordinator coordinator = new CloudEntityClientCoordinator(
+                resolver, appearances, () -> 1L, Runnable::run);
+        RecordingProvider maid = new RecordingProvider(CloudEntityProvider.Kind.MAID);
+        coordinator.register(maid);
+        coordinator.activate("scope", "epoch", 1L);
+        coordinator.collectObservations();
+        assertTrue(maid.applied.isEmpty());
+        maid.available = true;
+        coordinator.collectObservations();
+        assertEquals(1, maid.applied.size(), "appearance received before spawn must be applied on visibility");
+        coordinator.collectObservations();
+        assertEquals(1, maid.applied.size(), "unchanged visibility must not reapply each tick");
+        maid.available = false;
+        coordinator.collectObservations();
+        maid.available = true;
+        coordinator.collectObservations();
+        assertEquals(2, maid.applied.size(), "same UUID respawn must restore the cached appearance");
+    }
+
     private static CloudScopeClient.CloudAppearance appearance(long revision) {
         return new CloudScopeClient.CloudAppearance("target", revision, "asset", 1L, "sha", "default", 1.0f, false);
     }

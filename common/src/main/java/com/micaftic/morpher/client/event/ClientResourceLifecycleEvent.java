@@ -15,11 +15,13 @@ public final class ClientResourceLifecycleEvent {
     public static void register() {
         // 能力存储（CapabilityClientStore）的清理由各自平台模块处理（fabric 在 FabricClientResourceLifecycle 中注册）。
         ClientPlayerEvent.CLIENT_PLAYER_QUIT.register(player -> cleanup("client disconnect"));
-        ClientLifecycleEvent.CLIENT_STOPPING.register(client -> cleanup("client stopping"));
+        ClientLifecycleEvent.CLIENT_STOPPING.register(client -> {
+            cleanup("client stopping");
+            CloudUploadRuntime.clear();
+        });
     }
 
     private static void cleanup(String reason) {
-        CloudUploadRuntime.clear();
         ClientModelManager.releaseServerSyncedModels(reason);
         GpuRenderPath.disposeAllMeshes(reason);
         AudioStreamCache.clearAll(reason);
