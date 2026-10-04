@@ -3,8 +3,6 @@ package com.micaftic.morpher.client.input;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.ModernPlayerModelScreen;
 import com.micaftic.morpher.client.gui.PlayerModelScreen;
-import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.util.InputUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.micaftic.morpher.core.architectury.event.EventResult;
@@ -51,11 +49,7 @@ public final class PlayerModelToggleKey {
             YesSteveModel.sendUnavailableMessage();
             return true;
         }
-        if (NetworkHandler.isClientConnected() && !ConfigPolicies.network().canSwitchModel()) {
-            InputUtil.setScreen(ModernPlayerModelScreen.settings());
-        } else {
-            InputUtil.setScreen(new ModernPlayerModelScreen());
-        }
+        InputUtil.setScreen(new ModernPlayerModelScreen());
         return true;
     }
 
@@ -77,11 +71,7 @@ public final class PlayerModelToggleKey {
             YesSteveModel.sendUnavailableMessage();
             return true;
         }
-        if (NetworkHandler.isClientConnected() && !ConfigPolicies.network().canSwitchModel()) {
-            InputUtil.setScreen(ModernPlayerModelScreen.settings());
-        } else {
-            InputUtil.setScreen(new ModernPlayerModelScreen());
-        }
+        InputUtil.setScreen(new ModernPlayerModelScreen());
         return true;
     }
 }
