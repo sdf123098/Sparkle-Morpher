@@ -9,6 +9,8 @@ import com.micaftic.morpher.core.api.network.state.CloudErrorCode;
 import com.micaftic.morpher.core.api.network.state.CloudState;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -34,6 +36,7 @@ import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 public final class CloudHttpClient {
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    private static final Duration UPLOAD_TIMEOUT = Duration.ofMinutes(5);
 
     private final CloudInstanceConfig instance;
     private final HttpClient httpClient;
@@ -125,12 +128,13 @@ public final class CloudHttpClient {
     public CompletableFuture<HttpResponse<byte[]>> uploadAsset(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256, String requestId, String visibility) {
         Objects.requireNonNull(content, "content");
         HttpRequest.Builder builder = requestBuilder("/v1/assets")
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(UPLOAD_TIMEOUT)
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/octet-stream")
                 .header("Idempotency-Key", requiredHeader(requestId, "requestId"))
-                .header("X-Asset-Id", requiredHeader(assetId, "assetId"))
-                .header("X-Asset-Name", requiredHeader(assetName, "assetName"))
+                .header("X-Asset-Metadata-Encoding", "utf-8-percent")
+                .header("X-Asset-Id", metadataHeader(assetId, "assetId"))
+                .header("X-Asset-Name", metadataHeader(assetName, "assetName"))
                 .header("X-Asset-Format", requiredHeader(assetFormat, "assetFormat"))
                 .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"))
                 .header("X-Asset-Visibility", requiredHeader(visibility, "visibility"));
@@ -169,12 +173,13 @@ public final class CloudHttpClient {
         Objects.requireNonNull(progress, "progress");
         Objects.requireNonNull(cancellation, "cancellation");
         HttpRequest.Builder builder = requestBuilder("/v1/assets")
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(UPLOAD_TIMEOUT)
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/octet-stream")
                 .header("Idempotency-Key", requiredHeader(requestId, "requestId"))
-                .header("X-Asset-Id", requiredHeader(assetId, "assetId"))
-                .header("X-Asset-Name", requiredHeader(assetName, "assetName"))
+                .header("X-Asset-Metadata-Encoding", "utf-8-percent")
+                .header("X-Asset-Id", metadataHeader(assetId, "assetId"))
+                .header("X-Asset-Name", metadataHeader(assetName, "assetName"))
                 .header("X-Asset-Format", requiredHeader(assetFormat, "assetFormat"))
                 .header("X-Asset-Sha256", requiredHeader(rawSha256, "rawSha256"))
                 .header("X-Asset-Visibility", requiredHeader(visibility, "visibility"));
@@ -223,11 +228,19 @@ public final class CloudHttpClient {
         return builder;
     }
 
-    private static CloudHttpException httpFailure(HttpResponse<?> response) {
+    static CloudHttpException httpFailure(HttpResponse<?> response) {
         String body = response.body() instanceof byte[] bytes
                 ? new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
                 : String.valueOf(response.body());
-        return new CloudHttpException(response.statusCode(), errorCodeFrom(body), "Cloud HTTP request failed");
+        String message = "Cloud HTTP request failed";
+        try {
+            JsonElement value = JsonParser.parseString(body).getAsJsonObject().get("message");
+            if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
+                String detail = value.getAsString().replaceAll("[\\p{Cntrl}]", " ").trim();
+                if (!detail.isBlank()) message = detail.substring(0, Math.min(2048, detail.length()));
+            }
+        } catch (RuntimeException ignored) { }
+        return new CloudHttpException(response.statusCode(), errorCodeFrom(body), message);
     }
 
     static CloudInstanceInfo parseInstanceResponse(CloudInstanceConfig expected, String body) {
@@ -298,6 +311,11 @@ public final class CloudHttpClient {
         } catch (RuntimeException ignored) {
             return CloudErrorCode.INTERNAL;
         }
+    }
+
+    /** Percent-encode UTF-8 metadata, keeping HTTP headers ASCII and literal percent/plus signs unambiguous. */
+    private static String metadataHeader(String value, String name) {
+        return URLEncoder.encode(requiredHeader(value, name), StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private static String requiredHeader(String value, String name) {

@@ -2,11 +2,10 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.client.upload.CloudUploadRuntime;
-import com.micaftic.morpher.capability.client.PlayerCapabilityClientStore;
 import com.micaftic.morpher.core.gpu.BlurStack;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientPlayerEvent;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
+import com.micaftic.morpher.capability.client.PlayerCapabilityClientStore;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.world.entity.Entity;
 
@@ -24,13 +23,11 @@ public final class ClientResourceLifecycleEvent {
     }
 
     public static void register() {
-        // NeoForge routes client logout and respawn through the shared client event bridge.
         ClientPlayerEvent.CLIENT_PLAYER_QUIT.register(player -> cleanup("client disconnect"));
         ClientPlayerEvent.CLIENT_PLAYER_RESPAWN.register((oldPlayer, newPlayer) -> cleanupAfterWorldChange("client player respawn"));
     }
 
     private static void cleanup(String reason) {
-        CloudUploadRuntime.clear();
         GpuRenderPath.disposeAllMeshes(reason);
         AudioStreamCache.clearAll(reason);
         BlurStack.disposeAll(reason);

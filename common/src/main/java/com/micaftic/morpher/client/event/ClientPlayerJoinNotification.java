@@ -42,35 +42,14 @@ public final class ClientPlayerJoinNotification {
         }
         // 懒加载模式下，冷启动时模型目录尚未建立；先扫描目录，再恢复上次选择。
         ClientModelManager.reloadLocalModels(error -> ClientModelManager.restorePersistedModelSelection());
-        if (((MinecraftAccessor) Minecraft.getInstance()).ysm$isLocalServer()) {
-            return;
-        }
-        // R2.1：原裸线程（handshake watchdog + 60s 服务器未响应提示）改为 BACKGROUND 池提交
-        SmExecutors.submit(SmExecutors.Pool.BACKGROUND, () -> {
-            try {
-                Thread.sleep(3000L);
-                ((Executor) Minecraft.getInstance()).execute(ClientModelManager::markVanillaServerIfNoHandshake);
-            } catch (InterruptedException ignored) {
-            }
-        });
-        SmExecutors.submit(SmExecutors.Pool.BACKGROUND, () -> {
-            try {
-                Thread.sleep(60000L);
-                ((Executor) Minecraft.getInstance()).execute(() -> {
-                    LocalPlayer localPlayer = Minecraft.getInstance().player;
-                    if (localPlayer != null && localPlayer.connection.isAcceptingMessages() && !NetworkHandler.isConnectionValid(localPlayer.connection.getConnection())) {
-                        localPlayer.sendSystemMessage(Component.translatable("message.sparkle_morpher.client.server_not_found"));
-                    }
-                });
-            } catch (InterruptedException ignored) {
-            }
-        });
+        ClientModelManager.markVanillaServerIfNoHandshake();
     }
 
     private static void onPlayerQuit(LocalPlayer player) {
         boolean reloadLocalModels = notified && YesSteveModel.isAvailable();
         notified = false;
-        PrivacyMode.endSession();
+        com.micaftic.morpher.cloud.client.CloudPlayerModelSync.disconnect();
+PrivacyMode.endSession();
         ClientModelManager.resetSync();
         if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);

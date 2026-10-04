@@ -8,7 +8,8 @@
     "defaultRequire": 1
   },
   "client": [
-    "client.GpuDeviceAccessor", "client.ArrowEntityAccessor",
+    "client.GpuDeviceAccessor",
+    "client.ArrowEntityAccessor",
     "client.BufferSourceMixin",
     "client.CameraAccessor",
     "client.MinecraftAccessor",
@@ -27,11 +28,7 @@
   ],
   "mixins": [
     "AbstractArrowEntityMixin",
-    "ConnectionAccessor",
-    "PlayerListAccessor",
     "ProjectileEntityMixin",
-    "ServerCommonPacketListenerImplAccessor",
-    "ServerPlayerMixin",
     "compat.TouhouMaidEntityMixin",
     "compat.TouhouLittleMaidYsmCompatMixin"
   ]

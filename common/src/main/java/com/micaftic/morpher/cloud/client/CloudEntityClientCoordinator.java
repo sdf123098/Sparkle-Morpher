@@ -161,7 +161,17 @@ public final class CloudEntityClientCoordinator {
                 }
             }
         }
-        return observationTracker.update(snapshot, available);
+        List<CloudEntityObservationTracker.Observation> changes = observationTracker.update(snapshot, available);
+        for (CloudEntityObservationTracker.Observation change : changes) {
+            if (change.state() == CloudEntityObservationCoordinator.ObservationState.VISIBLE) {
+                for (CloudScopeClient.CloudEntityBinding binding : snapshot) {
+                    if (binding.entityUuid().equals(change.entityUuid().toString())) {
+                        applyAppearance(context.scopeId(), context.worldEpoch(), context.worldGeneration(), binding.targetId());
+                    }
+                }
+            }
+        }
+        return changes;
     }
 
     private static String requireText(String value, String name) {

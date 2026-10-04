@@ -28,8 +28,10 @@ import java.util.Optional;
  */
 public final class CloudInstanceRegistry {
     private static final CloudInstanceProfile BUILTIN_OFFICIAL = new CloudInstanceProfile(
-            CloudInstanceConfig.v1("official", URI.create("https://spm-cloud-official.robinson171.workers.dev")),
+            CloudInstanceConfig.v1("official", URI.create("https://micafic.xyz")),
             "Official Cloud");
+    private static final CloudInstanceConfig LEGACY_OFFICIAL = CloudInstanceConfig.v1("official",
+            URI.create("https://spm-cloud-official.robinson171.workers.dev"));
 
     private final Path file;
     private List<CloudInstanceProfile> profiles = List.of();
@@ -48,13 +50,22 @@ public final class CloudInstanceRegistry {
         try {
             JsonObject root = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
             List<CloudInstanceProfile> loaded = new ArrayList<>();
+            boolean migrated = false;
             JsonElement entries = root.get("instances");
             if (entries != null && entries.isJsonArray()) {
-                for (JsonElement entry : entries.getAsJsonArray()) loaded.add(parseProfile(entry.getAsJsonObject()));
+                for (JsonElement entry : entries.getAsJsonArray()) {
+                    CloudInstanceProfile profile = parseProfile(entry.getAsJsonObject());
+                    if (LEGACY_OFFICIAL.equals(profile.instance())) {
+                        profile = new CloudInstanceProfile(BUILTIN_OFFICIAL.instance(), profile.name());
+                        migrated = true;
+                    }
+                    loaded.add(profile);
+                }
             }
             profiles = deduplicate(loaded);
             selectedInstanceId = nullableText(root, "selected_instance_id");
             if (selectedInstanceId != null && find(selectedInstanceId).isEmpty()) selectedInstanceId = null;
+            if (migrated) save();
         } catch (RuntimeException failure) {
             throw new IOException("Malformed Cloud instance registry: " + file, failure);
         }

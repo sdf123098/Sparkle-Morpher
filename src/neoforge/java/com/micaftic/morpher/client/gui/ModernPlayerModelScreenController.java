@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.cloud.client.CloudAssetPage;
 import com.micaftic.morpher.cloud.client.CloudAssetSummary;
+import com.micaftic.morpher.cloud.client.CloudAssetImportName;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
@@ -21,7 +22,6 @@ import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.config.LoadingStateConfig;
 import com.micaftic.morpher.core.render.NativeSimdValidator;
 import com.micaftic.morpher.core.vector.VectorApiCapability;
 import com.micaftic.morpher.model.ServerModelManager;
@@ -90,8 +90,8 @@ public final class ModernPlayerModelScreenController {
 
     /** 一次导入动作的结果（Screen 据此设置文案，文案仍留在 Screen 侧）。 */
     public enum ApplyResult {
-        /** 应用到了外部回调目标（女仆 / NPC 面板）。 */
-        APPLIED_TO_TARGET,
+        /** 已提交外部目标选择；Cloud 确认后才算应用成功。 */
+        REQUESTED_TARGET,
         /** 应用到了本地玩家（直接 capability 或发包）。 */
         APPLIED_TO_PLAYER,
         /** 本地玩家不在线。 */
@@ -425,10 +425,6 @@ public final class ModernPlayerModelScreenController {
         if (this.localImportInProgress) {
             return;
         }
-        ModelUploadSession existing = ModelUploadSession.getInstance();
-        if (existing != null && !existing.isTerminal()) {
-            return;
-        }
         FilePickerCoordinator.PickedFile file = this.pendingImports.poll();
         if (file == null) {
             return;
@@ -447,14 +443,7 @@ public final class ModernPlayerModelScreenController {
                 this.host.postStatus(error, ChatFormatting.RED);
                 return;
             }
-            if (ClientModelManager.isGltfFileName(fileName)) {
-                this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
-                return;
-            }
-            Component uploadError = ModelUploadSession.start(modelId, fileName, file.data());
-            if (uploadError != null) {
-                this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
-            }
+            this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
         });
     }
 
@@ -593,34 +582,77 @@ public final class ModernPlayerModelScreenController {
     }
 
     public boolean isServerModel(String modelId) { return ClientModelManager.isServerModel(modelId); }
-    public boolean cloudAvailable() { return CloudClientRuntime.isConfigured(); }
-    public String cloudInstanceId() { return CloudClientRuntime.state() == null ? "" : CloudClientRuntime.state().instance().instanceId(); }
+    public boolean cloudAvailable() { return CloudClientRuntime.state(state.selectedCloudInstanceId) != null; }
+    public String cloudInstanceId() { return state.selectedCloudInstanceId; }
     public CompletableFuture<CloudAssetPage> listCloudAssets(String scope, String query, String cursor, int limit) {
         if (!cloudAvailable()) return CompletableFuture.failedFuture(new IllegalStateException("Cloud is not connected"));
-        return CloudClientRuntime.listAssetsPage(scope, query, cursor, limit);
+        String instanceId = cloudInstanceId();
+        var runtime = CloudClientRuntime.state(instanceId);
+        return runtime.assets().listPage(scope, query, cursor, limit).thenApply(page -> {
+            for (CloudAssetSummary entry : page.entries()) runtime.assetCatalog().upsert(entry);
+            if (CloudClientRuntime.state(instanceId) == runtime) refreshCloudSelectionMetadata(instanceId, page.entries());
+            return page;
+        });
     }
-    public List<CloudAssetSummary> recentCloudAssets() { return cloudAvailable() ? CloudModelSelectionStore.recent(cloudInstanceId()) : List.of(); }
-    public List<CloudAssetSummary> favoriteCloudAssets() { return cloudAvailable() ? CloudModelSelectionStore.favorites(cloudInstanceId()) : List.of(); }
-    public boolean isCloudFavorite(CloudAssetSummary summary) { return cloudAvailable() && CloudModelSelectionStore.isFavorite(cloudInstanceId(), summary.ref().assetId()); }
-    public boolean toggleCloudFavorite(CloudAssetSummary summary) { return cloudAvailable() && CloudModelSelectionStore.toggleFavorite(cloudInstanceId(), summary); }
-    public void markCloudApplied(CloudAssetSummary summary) { if (cloudAvailable()) CloudModelSelectionStore.recordApplied(cloudInstanceId(), summary); }
+
+    public CompletableFuture<CloudAssetSummary> setCloudVisibility(CloudAssetSummary summary, String visibility) {
+        String instanceId = cloudInstanceId();
+        var runtime = CloudClientRuntime.state(instanceId);
+        if (runtime == null) return CompletableFuture.failedFuture(new IllegalStateException("Cloud is not connected"));
+        return runtime.assets().setVisibility(summary.ref().assetId(), visibility).thenApply(updated -> {
+            runtime.assetCatalog().upsert(updated);
+            if (CloudClientRuntime.state(instanceId) == runtime) refreshCloudSelectionMetadata(instanceId, List.of(updated));
+            return updated;
+        });
+    }
+
+    public List<CloudAssetSummary> recentCloudAssets() {
+        try { return cloudAvailable() ? CloudModelSelectionStore.recent(cloudInstanceId()) : List.of(); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); return List.of(); }
+    }
+    public List<CloudAssetSummary> favoriteCloudAssets() {
+        try { return cloudAvailable() ? CloudModelSelectionStore.favorites(cloudInstanceId()) : List.of(); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); return List.of(); }
+    }
+    public boolean isCloudFavorite(CloudAssetSummary summary) {
+        try { return cloudAvailable() && CloudModelSelectionStore.isFavorite(cloudInstanceId(), summary.ref().assetId()); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); return false; }
+    }
+    public boolean toggleCloudFavorite(CloudAssetSummary summary) {
+        if (!cloudAvailable()) return false;
+        return CloudModelSelectionStore.toggleFavorite(cloudInstanceId(), summary);
+    }
+    public void markCloudApplied(CloudAssetSummary summary) {
+        try { if (cloudAvailable()) CloudModelSelectionStore.recordApplied(cloudInstanceId(), summary); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); }
+    }
     public String cloudModelId(CloudAssetSummary summary) {
-        CloudClientRuntime.RuntimeState runtime = CloudClientRuntime.state();
+        CloudClientRuntime.RuntimeState runtime = CloudClientRuntime.state(state.selectedCloudInstanceId);
         if (runtime == null) throw new IllegalStateException("Cloud runtime is not configured");
         return cloudIdentity(runtime, summary).runtimeModelId();
     }
     public void importCloudAsset(CloudAssetSummary summary, Consumer<Component> callback) {
-        CloudClientRuntime.RuntimeState expectedRuntime = CloudClientRuntime.state();
+        int generation = this.screenGeneration;
+        String instanceId = cloudInstanceId();
+        CloudClientRuntime.RuntimeState expectedRuntime = CloudClientRuntime.state(instanceId);
         if (expectedRuntime == null) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
         String modelId = cloudIdentity(expectedRuntime, summary).runtimeModelId();
-        CloudClientRuntime.rememberCloudAsset(summary);
-        CloudClientRuntime.materializeAsset(summary.ref()).thenApplyAsync(path -> {
+        expectedRuntime.assetCatalog().upsert(summary);
+        boolean previouslyApplied = false;
+        try { previouslyApplied = CloudModelSelectionStore.recent(instanceId).stream().anyMatch(entry -> entry.ref().equals(summary.ref())); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); }
+        CompletableFuture<Path> materialized = previouslyApplied
+        ? expectedRuntime.assetMaterialization().ensurePreviouslyApplied(summary.ref())
+        : expectedRuntime.assetMaterialization().ensure(summary.ref());
+        materialized.thenApplyAsync(path -> {
             try { return Files.readAllBytes(path); } catch (IOException e) { throw new java.util.concurrent.CompletionException(e); }
         }).whenComplete((bytes, failure) -> Minecraft.getInstance().execute(() -> {
-            if (CloudClientRuntime.state() != expectedRuntime) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
+            if (generation != this.screenGeneration) return;
+            if (CloudClientRuntime.state(instanceId) != expectedRuntime) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
             if (failure != null) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.search_failed", rootMessage(failure))); return; }
-            ClientModelManager.importLocalModel(modelId, cloudFileName(summary), bytes, error -> {
-                if (error == null) CloudModelSelectionStore.recordApplied(cloudInstanceId(), summary);
+            ClientModelManager.importLocalModel(modelId, CloudAssetImportName.fileName(summary), bytes, error -> {
+                if (generation != this.screenGeneration) return;
+                if (CloudClientRuntime.state(instanceId) != expectedRuntime) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
                 callback.accept(error);
             });
         }));
@@ -629,14 +661,6 @@ public final class ModernPlayerModelScreenController {
         return new CloudAssetIdentity(runtime.instance().instanceId(), "catalog", summary.ref().assetId(),
                 Long.toString(summary.ref().revision()), summary.ref().rawSha256());
     }
-    private static String cloudFileName(CloudAssetSummary summary) {
-        String name = summary.name().isBlank() ? summary.ref().assetId() : summary.name();
-        String lower = name.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".ysm") || lower.endsWith(".zip") || lower.endsWith(".bbmodel") || lower.endsWith(".gltf") || lower.endsWith(".glb")) return name;
-        String format = summary.format().toLowerCase(Locale.ROOT);
-        return name + (format.contains("bbmodel") ? ".bbmodel" : format.contains("zip") ? ".zip" : format.contains("gltf") ? ".gltf" : ".ysm");
-    }
-
     public void markModelUsed(String modelId) {
         ClientModelManager.markModelUsed(modelId);
     }
@@ -665,7 +689,7 @@ public final class ModernPlayerModelScreenController {
                 ClientModelManager.rememberSelectedModel(modelId, textureId);
             }
             selectionTarget.accept(modelId, textureId);
-            return ApplyResult.APPLIED_TO_TARGET;
+            return ApplyResult.REQUESTED_TARGET;
         }
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {
@@ -690,6 +714,7 @@ public final class ModernPlayerModelScreenController {
                 cap.initModelWithTexture(modelId, textureId);
             }
         });
+        com.micaftic.morpher.cloud.client.CloudPlayerModelSync.publishCurrentSelection();
         return ApplyResult.APPLIED_TO_PLAYER;
     }
 
@@ -784,20 +809,7 @@ public final class ModernPlayerModelScreenController {
         NativeSimdValidator.resetSession();
     }
 
-    public LoadingStateConfig.Position loadingPosition() {
-        return GeneralConfig.safeGet(LoadingStateConfig.LOADING_STATE_POSITION, LoadingStateConfig.Position.TOP_CENTER);
-    }
 
-    /** 上一个加载界面位置（原 {@code loadingPositionRow} 的 decrement 分支）。 */
-    public void stepLoadingPosition(boolean forward) {
-        LoadingStateConfig.Position[] values = LoadingStateConfig.Position.values();
-        LoadingStateConfig.Position selected = loadingPosition();
-        LoadingStateConfig.Position next = forward
-                ? values[(selected.ordinal() + 1) % values.length]
-                : values[(selected.ordinal() - 1 + values.length) % values.length];
-        LoadingStateConfig.LOADING_STATE_POSITION.set(next);
-        LoadingStateConfig.LOADING_STATE_POSITION.save();
-    }
 
     public boolean gpuRendererSelected() {
         boolean gpu = safeBool(GeneralConfig.USE_GPU_RENDERER);
@@ -847,4 +859,22 @@ public final class ModernPlayerModelScreenController {
         }
         return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
     }
+
+    private String cloudStoreFailure = "";
+    private void reportCloudStoreFailure(RuntimeException error) {
+        String message = rootMessage(error);
+        if (message.equals(cloudStoreFailure)) return;
+        cloudStoreFailure = message;
+        com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM] Cloud favorites could not be saved or loaded", error);
+        Minecraft.getInstance().execute(() -> this.host.postStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud.favorite_failed", message), ChatFormatting.RED));
+    }
+    private void refreshCloudSelectionMetadata(String instanceId, List<CloudAssetSummary> entries) {
+        try { CloudModelSelectionStore.refreshSummaries(instanceId, entries); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); }
+    }
+    public void setCloudFavorites(List<CloudAssetSummary> entries, boolean favorite) {
+        if (!cloudAvailable()) throw new IllegalStateException("Cloud is not connected");
+        CloudModelSelectionStore.setFavorites(cloudInstanceId(), entries, favorite);
+    }
+
 }
