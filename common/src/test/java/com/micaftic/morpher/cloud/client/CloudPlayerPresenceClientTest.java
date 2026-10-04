@@ -72,6 +72,7 @@ class CloudPlayerPresenceClientTest {
             assertEquals(b,publication.get("entity_uuid").getAsString());
             assertEquals(6,publication.get("expected_revision").getAsInt());
             assertEquals("贴图二",publication.get("texture_id").getAsString());
+            assertTrue(publication.has("motion"), "Cloud player publications must include an explicit motion envelope, including clears");
             assertEquals("POST",requests.get(2)[0]);
             assertEquals(b,JsonParser.parseString(requests.get(2)[3]).getAsJsonObject().getAsJsonArray("entity_uuids").get(0).getAsString());
             assertTrue(JsonParser.parseString(requests.get(3)[3]).getAsJsonObject().get("asset_id").isJsonNull());

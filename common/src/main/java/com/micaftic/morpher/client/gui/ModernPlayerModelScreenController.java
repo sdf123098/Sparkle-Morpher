@@ -23,9 +23,6 @@ import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.vector.VectorApiCapability;
 import com.micaftic.morpher.model.ServerModelManager;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
-import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
 import com.micaftic.morpher.util.LocalStarModelsStore;
 import com.micaftic.morpher.util.SmExecutors;
 import com.micaftic.morpher.util.ModelIdUtil;
@@ -722,16 +719,7 @@ public final class ModernPlayerModelScreenController {
             if (rememberPlayerSelection) {
                 ClientModelManager.rememberSelectedModel(modelId, textureId);
             }
-            if (ClientModelManager.isLocalOnlyModel(modelId)) {
-                cap.initModelWithTexture(modelId, textureId);
-            } else if (NetworkHandler.isClientConnected()) {
-                if (ClientModelManager.isLocalOnlyModel(cap.getModelId())) {
-                    cap.initModelWithTexture(modelId, textureId);
-                }
-                NetworkHandler.sendToServer(new C2SRequestSwitchModelPacket(modelId, textureId));
-            } else {
-                cap.initModelWithTexture(modelId, textureId);
-            }
+            cap.initModelWithTexture(modelId, textureId);
         });
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.publishCurrentSelection();
         return ApplyResult.APPLIED_TO_PLAYER;
@@ -746,11 +734,11 @@ public final class ModernPlayerModelScreenController {
             if (cap.containsModel(modelId)) {
                 cap.removeModel(modelId);
                 LocalStarModelsStore.remove(modelId);
-                NetworkHandler.sendToServer(C2SSetStarModelPacket.remove(modelId));
+
             } else {
                 cap.addModel(modelId);
                 LocalStarModelsStore.add(modelId);
-                NetworkHandler.sendToServer(C2SSetStarModelPacket.add(modelId));
+
             }
             return true;
         }).orElse(false);
