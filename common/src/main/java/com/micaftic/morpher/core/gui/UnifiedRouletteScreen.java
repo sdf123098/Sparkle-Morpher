@@ -1,5 +1,6 @@
 package com.micaftic.morpher.core.gui;
 
+import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
 import com.google.common.collect.Lists;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.animation.custom.CustomRouletteLayout;
@@ -16,8 +17,6 @@ import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 import com.micaftic.morpher.core.gpu.Pie;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SPlayAnimationPacket;
 import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import net.minecraft.ChatFormatting;
@@ -606,7 +605,7 @@ public class UnifiedRouletteScreen extends Screen {
             if (animatableModel.getEntity() == Minecraft.getInstance().player) {
                 AnimationLockEvent.toggleLock();
             } else {
-                NetworkHandler.sendToServer(C2SPlayAnimationPacket.createWithIndex(animatableModel.getEntity().getId()));
+                CloudPlayerMotionSync.stop(animatableModel);
                 onClose();
             }
             return true;
@@ -668,30 +667,7 @@ public class UnifiedRouletteScreen extends Screen {
 
     private void playAnimation(String key) {
         LocalPlayer player = Minecraft.getInstance().player;
-        Entity entity = animatableModel.getEntity();
-        boolean online = NetworkHandler.isClientConnected();
-        AnimationRouletteDebugLog.info("client select key={} online={} custom={} hoveredIndex={} model={} entityId={}",
-                key, online, usingCustomLayout, hoveredIndex, lastModelId, entity == null ? -1 : entity.getId());
-        if (online && entity != null) {
-            if (usingCustomLayout) {
-                int realIndex = customOriginalIndexMap.getOrDefault(key, hoveredIndex);
-                String realCategory = customOriginalCategoryMap.getOrDefault(key, StringPool.EMPTY);
-                AnimationRouletteDebugLog.info("client send custom key={} index={} category={} entityId={}",
-                        key, realIndex, realCategory, entity.getId());
-                if (entity == player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory, key));
-                else NetworkHandler.sendToServer(new C2SPlayAnimationPacket(realIndex, realCategory, entity.getId(), key));
-            } else {
-                Pair<String, Integer> last = navigationStack.peekLast();
-                String submenu = (last != null && StringUtils.isNotBlank(last.getLeft())) ? last.getLeft() : StringPool.EMPTY;
-                AnimationRouletteDebugLog.info("client send original key={} index={} category={} entityId={}",
-                        key, hoveredIndex, submenu, entity.getId());
-                if (entity == player) NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu, key));
-                else NetworkHandler.sendToServer(new C2SPlayAnimationPacket(hoveredIndex, submenu, entity.getId(), key));
-            }
-        } else if (player != null) {
-            PlayerCapability.get(player).ifPresent(cap -> cap.requestModelSwitch(key));
-            AnimationRouletteDebugLog.info("client local fallback key={} model={}", key, lastModelId);
-        }
+        CloudPlayerMotionSync.play(animatableModel, key);
         if (player != null && GeneralConfig.PRINT_ANIMATION_ROULETTE_MSG.get()) {
             player.sendSystemMessage(Component.translatable("message.sparkle_morpher.model.animation_roulette.play", key));
         }

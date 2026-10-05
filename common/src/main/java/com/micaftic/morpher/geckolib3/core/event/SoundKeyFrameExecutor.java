@@ -38,6 +38,10 @@ public class SoundKeyFrameExecutor {
         this.audioPlayerManager.stopAll();
     }
 
+    public void skipBefore(float tick) {
+        while (!reachEnd() && this.soundKeyFrames.get(this.nextIndex).getStartTick() < tick) this.nextIndex++;
+    }
+
     public void stop() {
         this.audioPlayerManager.stopAll();
     }

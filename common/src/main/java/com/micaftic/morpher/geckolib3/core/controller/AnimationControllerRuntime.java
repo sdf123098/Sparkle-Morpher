@@ -17,6 +17,9 @@ import com.micaftic.morpher.geckolib3.core.keyframe.ConstantPoint;
 import com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext;
 import com.micaftic.morpher.geckolib3.core.util.TransitionVector3f;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.cloud.client.CloudControllerMotionCursor;
+import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntReferenceImmutablePair;
@@ -79,6 +82,32 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
 
     private final SoundTransitionGate soundTransitionGate = new SoundTransitionGate();
 
+    private final CloudControllerMotionCursor cloudCursor = new CloudControllerMotionCursor();
+    private long stateStartedAt;
+
+    private String cloudName() { return this.parentName == null ? this.name : this.name + "." + this.parentName; }
+
+    /** The observer adopts the owner's state and random choices before evaluating clip conditions. */
+    private boolean synchronizeEntry(ExpressionEvaluator<AnimationContext<?>> evaluator) {
+        if (CloudPlayerMotionSync.isOwner(this.animatable)) return false;
+        var motion = CloudPlayerMotionSync.motion(this.animatable);
+        var entry = motion == null ? null : motion.controllers().get(cloudName());
+        if (entry == null || entry.state().isEmpty()) { this.cloudCursor.clear(); return false; }
+        AnimationState target = this.animationEntries.getStates().get(StringPool.computeIfAbsent(entry.state()));
+        if (target == null) { this.cloudCursor.clear(); return false; }
+        boolean transition = this.currentEntry != target || this.cloudCursor.needsTransition(entry);
+        if (transition) {
+            updateDisplayName(target.getName());
+            transitionToEntry(target, evaluator);
+            float elapsed = CloudPlayerMotionSync.elapsedTicks(entry.startedAtUnixMs());
+            for (int i = 0; i < this.activeSlotCount; i++) this.animationSlots.get(i).getResampler().seekFromElapsedTicks(elapsed);
+        }
+        if (transition || this.cloudCursor.needsVariables(entry))
+            entry.variables().forEach((name, value) -> evaluator.entity().scopedStorage().setScoped(StringPool.computeIfAbsent(name), value));
+        this.cloudCursor.accept(entry);
+        return true;
+    }
+
     public AnimationControllerRuntime(T animatable, String name, float transitionLengthTicks) {
         this.animatable = animatable;
         this.name = name;
@@ -94,8 +123,10 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
         evaluator.entity().setPlaybackFlags(this.playbackFlags);
         float currentTick = event.currentTick;
         this.visitedEntries.clear();
-        boolean transitioned = false;
-        while (evaluateTransitions(evaluator)) {
+        AnimationState previousEntry = this.currentEntry;
+        boolean authoritative = synchronizeEntry(evaluator);
+        boolean transitioned = previousEntry != this.currentEntry;
+        while (!authoritative && evaluateTransitions(evaluator)) {
             transitioned = true;
             if (this.activeSlotCount != 0) {
                 break;
@@ -327,6 +358,10 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
             slot.getResampler().resetRequestedAnimation();
             slot.getResampler().setAnimation(pair.getLeft());
         }
+        this.stateStartedAt = Math.max(System.currentTimeMillis(), this.stateStartedAt + 1);
+        if (evaluator.entity().storage != null)
+            CloudPlayerMotionSync.controller(this.animatable, cloudName(), nextState == null ? "" : nextState.getName(),
+                    this.stateStartedAt, evaluator.entity().storage.numericSnapshot());
     }
 
     @Override
@@ -352,6 +387,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
         this.boneTargets = ReferenceLists.emptyList();
         this.animationEntries = null;
         this.currentEntry = null;
+        this.cloudCursor.clear();
+        this.stateStartedAt = 0;
         this.activeSlotCount = 0;
         this.activeBoneTransforms.clear();
         this.boneTransformMap.clear();

@@ -20,10 +20,15 @@ public final class CloudPlayerPresenceClient {
     }
 
     public CompletableFuture<Long> publish(String identityId, UUID entityId, long expected, CloudPlayerSelection selection, JsonObject nameProof) {
+        return publish(identityId, entityId, expected, selection, nameProof, null);
+    }
+
+    public CompletableFuture<Long> publish(String identityId, UUID entityId, long expected, CloudPlayerSelection selection, JsonObject nameProof, CloudPlayerMotion motion) {
         JsonObject body = new JsonObject();
         body.addProperty("identity_id", CloudScopeClient.segment(identityId));
         body.addProperty("entity_uuid", entityId.toString()); body.addProperty("expected_revision", expected);
         if (nameProof != null) body.add("profile_name_proof", nameProof.deepCopy());
+        body.add("motion", selection == null || motion == null ? JsonNull.INSTANCE : motion.toJson());
         if (selection == null) body.add("asset_id", JsonNull.INSTANCE);
         else {
             body.addProperty("asset_id", selection.ref().assetId()); body.addProperty("asset_revision", selection.ref().revision());
@@ -51,7 +56,8 @@ public final class CloudPlayerPresenceClient {
                 JsonObject value = row.getAsJsonObject("selection");
                 selection = new CloudPlayerSelection(instance, origin, new CloudAssetRef(value.get("asset_id").getAsString(),
                         value.get("asset_revision").getAsLong(), value.get("raw_sha256").getAsString()),
-                        value.get("format").getAsString(), value.get("texture_id").getAsString());
+                        value.get("format").getAsString(), value.get("texture_id").getAsString(),
+                        CloudPlayerMotion.fromJson(value.get("motion")), row.has("revision") ? row.get("revision").getAsLong() : 0);
             }
             if (result.containsKey(id)) throw new IllegalArgumentException("Duplicate Cloud player UUID");
             result.put(id, selection);

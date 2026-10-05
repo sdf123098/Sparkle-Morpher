@@ -29,7 +29,6 @@ public final class CloudManagementScreen {
     private static CloudManagementController management;
     private static long nextRealtimeReconnectMillis;
     private static boolean autoResumeAttempted;
-    private static CompletableFuture<CloudSession> officialConnectInFlight;
 
     public static void open(Screen parent) {
         try {
@@ -68,176 +67,228 @@ public final class CloudManagementScreen {
         return management;
     }
 
-    /** Restores a previously generated official account once per client session. */
+    /** Restores only the selected instance; automatic recovery never creates an account. */
     static void resumeOfficialAccount() {
-        if (autoResumeAttempted || management == null) return;
-        var selected = management.registry().selected();
-        if (selected.isEmpty() || !CloudInstanceRegistry.isBuiltinOfficial(selected.get())) return;
+        if (autoResumeAttempted || management == null || management.registry().selected().isEmpty()) return;
         autoResumeAttempted = true;
-        if (CloudClientRuntime.state(selected.get().instanceId()) != null) return;
-        connectOfficialAccount(false).exceptionally(failure -> null);
+        if (CloudClientRuntime.state(management.registry().selected().orElseThrow().instanceId()) == null)
+            connectOfficialAccount(false).exceptionally(failure -> null);
     }
 
-    static CompletableFuture<CloudSession> connectOfficialAccount() {
-        return connectOfficialAccount(true);
-    }
-
-    private static synchronized CompletableFuture<CloudSession> connectOfficialAccount(boolean createIfMissing) {
-        if (officialConnectInFlight != null) {
-            if (!createIfMissing) return officialConnectInFlight;
-            CompletableFuture<CloudSession> previous = officialConnectInFlight;
-            CompletableFuture<CloudSession> upgraded = previous.exceptionallyCompose(failure -> {
-                Throwable cause = unwrap(failure);
-                if (!(cause instanceof NoLinkedGameAccountException)) return CompletableFuture.failedFuture(cause);
-                return loginSavedOrCreate(true);
-            });
-            officialConnectInFlight = upgraded;
-            upgraded.whenComplete((ignored, failure) -> {
-                synchronized (CloudManagementScreen.class) {
-                    if (officialConnectInFlight == upgraded) officialConnectInFlight = null;
-                }
-            });
-            return upgraded;
+    record AccountContext(CloudManagementController controller,
+                          CloudInstanceRegistry.CloudInstanceProfile selected, long generation) {
+        void check() {
+            if (controller.accountGeneration() != generation
+                    || !controller.registry().selected().map(selected::equals).orElse(false))
+                throw new java.util.concurrent.CancellationException("Cloud instance selection changed");
         }
+        CloudClientRuntime.RuntimeState runtime() {
+            check();
+            var runtime = CloudClientRuntime.state(selected.instanceId());
+            if (runtime == null || !runtime.instance().equals(selected.instance()))
+                throw new java.util.concurrent.CancellationException("Cloud account changed");
+            return runtime;
+        }
+        void checkSession(CloudSession session) {
+            if (!runtime().session().equals(session)) throw new java.util.concurrent.CancellationException("Cloud login session changed");
+        }
+        void check(CloudClientRuntime.RuntimeState runtime) {
+            if (runtime() != runtime) throw new java.util.concurrent.CancellationException("Cloud account changed");
+        }
+    }
+
+    static AccountContext accountContext() {
+        var controller = management();
+        synchronized (controller) {
+            return new AccountContext(controller, controller.registry().selected().orElseThrow(), controller.accountGeneration());
+        }
+    }
+
+    static CompletableFuture<CloudSession> connectOfficialAccount() { return connectOfficialAccount(true); }
+
+    private static CompletableFuture<CloudSession> connectOfficialAccount(boolean createIfMissing) {
         try {
-            var selected = management().registry().selected().orElseThrow();
-            if (!CloudInstanceRegistry.isBuiltinOfficial(selected)) {
-                return CompletableFuture.failedFuture(new IllegalStateException(text("official_only")));
-            }
-            if (CloudClientRuntime.state(selected.instanceId()) != null) {
+            var context = accountContext();
+            if (CloudClientRuntime.state(context.selected().instanceId()) != null)
                 return CompletableFuture.failedFuture(new IllegalStateException(text("connected")));
-            }
-            CompletableFuture<CloudSession> request = loginWithLinkedGameAccount().exceptionallyCompose(failure -> {
+            return loginWithLinkedGameAccount(context).exceptionallyCompose(failure -> {
+                context.check();
                 Throwable cause = unwrap(failure);
-                if (cause instanceof CloudHttpException http && http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) {
-                    // Restore an existing local account during an outage; never create a duplicate on another device.
-                    return loginSavedOrCreate(false).exceptionallyCompose(savedFailure -> CompletableFuture.failedFuture(
+                if (cause instanceof CloudHttpException http && http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE)
+                    return loginSavedOrCreate(context, false).exceptionallyCompose(savedFailure -> CompletableFuture.failedFuture(
                             unwrap(savedFailure) instanceof NoLinkedGameAccountException ? cause : unwrap(savedFailure)));
-                }
                 if (!(cause instanceof NoLinkedGameAccountException)) return CompletableFuture.failedFuture(cause);
-                return loginSavedOrCreate(createIfMissing);
-            });
-            officialConnectInFlight = request;
-            request.whenComplete((ignored, failure) -> {
-                synchronized (CloudManagementScreen.class) {
-                    if (officialConnectInFlight == request) officialConnectInFlight = null;
-                }
-            });
-            return request;
-        } catch (RuntimeException failure) {
-            return CompletableFuture.failedFuture(failure);
-        }
+                return loginSavedOrCreate(context, createIfMissing);
+            }).thenApply(session -> { context.checkSession(session); return session; });
+        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
     }
 
-    private static CompletableFuture<CloudSession> loginSavedOrCreate(boolean createIfMissing) {
+    private static CompletableFuture<CloudSession> loginSavedOrCreate(AccountContext context, boolean createIfMissing) {
         try {
-            CloudGeneratedAccountStore store = new CloudGeneratedAccountStore(generatedAccountFile());
+            context.check();
+            CloudGeneratedAccountStore store = new CloudGeneratedAccountStore(generatedAccountFile(context.selected()));
             var saved = store.load();
             if (saved.isPresent()) {
                 var account = saved.get();
-                return management().login(account.accountId(), account.password())
-                        .exceptionallyCompose(loginFailure -> {
-                            Throwable cause = unwrap(loginFailure);
-                            if (cause instanceof CloudHttpException http
-                                    && (http.statusCode() == 401 || http.statusCode() == 404)) {
-                                return management().register(account.accountId(), account.password());
-                            }
-                            return CompletableFuture.failedFuture(cause);
-                        });
+                synchronized (context.controller()) {
+                    context.check();
+                    return context.controller().login(account.accountId(), account.password()).exceptionallyCompose(failure -> {
+                        context.check();
+                        var cause = unwrap(failure);
+                        if (createIfMissing && cause instanceof CloudHttpException http && (http.statusCode() == 401 || http.statusCode() == 404))
+                            return registerAccount(context, account.accountId(), account.password());
+                        return CompletableFuture.failedFuture(cause);
+                    }).thenCompose(session -> {
+                        context.checkSession(session);
+                        return createIfMissing ? bindCurrentGameAccount(context).thenApply(identity -> session)
+                                : CompletableFuture.completedFuture(session);
+                    });
+                }
             }
             if (!createIfMissing) return CompletableFuture.failedFuture(new NoLinkedGameAccountException());
-            var account = CloudGeneratedAccountStore.generate();
-            store.save(account);
-            return management().register(account.accountId(), account.password())
-                    .thenCompose(CloudManagementScreen::bindAfterLogin);
-        } catch (IOException | RuntimeException error) {
-            return CompletableFuture.failedFuture(error);
-        }
+            return instanceInfo(context).thenCompose(info -> {
+                context.check(); requireRegistration(info);
+                var account = CloudGeneratedAccountStore.generate();
+                try { store.save(account); } catch (IOException failure) { return CompletableFuture.failedFuture(failure); }
+                return registerAccount(context, account.accountId(), account.password())
+                        .thenCompose(session -> { context.checkSession(session); return bindCurrentGameAccount(context).thenApply(identity -> session); });
+            });
+        } catch (IOException | RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
     }
 
-    private static CompletableFuture<CloudSession> bindAfterLogin(CloudSession session) {
-        return bindCurrentGameAccount().handle((ignored, failure) -> session);
+    private static CompletableFuture<com.micaftic.morpher.cloud.client.CloudInstanceInfo> instanceInfo(AccountContext context) {
+        context.check();
+        return new CloudHttpClient(context.selected().instance()).discoverInstance().thenApply(info -> { context.check(); return info; });
     }
 
-    private static CompletableFuture<CloudSession> loginWithLinkedGameAccount() {
-        var selected = management().registry().selected().orElseThrow();
-        var auth = new CloudAuthClient(new CloudHttpClient(selected.instance()));
-        return auth.gameIdentityProviders().handle((providers, failure) -> {
-            if (failure == null) return CompletableFuture.completedFuture(providers);
-            Throwable cause = unwrap(failure);
-            if (cause instanceof CloudHttpException http && (http.statusCode() == 401 || http.statusCode() == 404)) {
-                return CompletableFuture.completedFuture(List.<CloudIdentityClient.IdentityProvider>of());
-            }
-            return CompletableFuture.<List<CloudIdentityClient.IdentityProvider>>failedFuture(cause);
-        }).thenCompose(next -> next).thenCompose(providers -> {
-            if (providers.isEmpty()) return CompletableFuture.failedFuture(new NoLinkedGameAccountException());
-            final MinecraftSessionServiceJoiner.IdentityProfile profile;
-            try { profile = MinecraftSessionServiceJoiner.currentProfile(); }
-            catch (RuntimeException failure) { return CompletableFuture.failedFuture(new NoLinkedGameAccountException()); }
-            return tryLinkedProvider(providers, 0, profile, null);
+    private static void requireRegistration(com.micaftic.morpher.cloud.client.CloudInstanceInfo info) {
+        if (info.auth() != null && !info.auth().selfRegistration()) throw new IllegalStateException(text("registration_disabled"));
+    }
+
+    private static CompletableFuture<CloudSession> registerAccount(AccountContext context, String account, String password) {
+        return instanceInfo(context).thenCompose(info -> {
+            requireRegistration(info);
+            synchronized (context.controller()) { context.check(); return context.controller().register(account, password).thenApply(session -> { context.checkSession(session); return session; }); }
         });
     }
 
-    private static CompletableFuture<CloudSession> tryLinkedProvider(
+    static CompletableFuture<CloudSession> submitAccount(boolean register, String account, String password) {
+        try {
+            var context = accountContext();
+            if (register) return registerAccount(context, account, password).thenApply(session -> { context.checkSession(session); return session; });
+            synchronized (context.controller()) {
+                context.check(); return context.controller().login(account, password).thenApply(session -> { context.checkSession(session); return session; });
+            }
+        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
+    }
+
+    private static CompletableFuture<CloudSession> loginWithLinkedGameAccount(AccountContext context) {
+        var auth = new CloudAuthClient(new CloudHttpClient(context.selected().instance()));
+        return auth.gameIdentityProviders().handle((providers, failure) -> {
+            context.check();
+            if (failure == null) return CompletableFuture.completedFuture(providers);
+            Throwable cause = unwrap(failure);
+            if (cause instanceof CloudHttpException http && (http.statusCode() == 401 || http.statusCode() == 404))
+                return CompletableFuture.completedFuture(List.<CloudIdentityClient.IdentityProvider>of());
+            return CompletableFuture.<List<CloudIdentityClient.IdentityProvider>>failedFuture(cause);
+        }).thenCompose(next -> next).thenCompose(providers -> {
+            context.check();
+            if (providers.isEmpty()) return CompletableFuture.failedFuture(new NoLinkedGameAccountException());
+            return tryLinkedProvider(context, providers, 0, MinecraftSessionServiceJoiner.currentProfile(), null);
+        });
+    }
+
+    private static CompletableFuture<CloudSession> tryLinkedProvider(AccountContext context,
             List<CloudIdentityClient.IdentityProvider> providers, int index,
-            MinecraftSessionServiceJoiner.IdentityProfile profile, Throwable unavailable
-    ) {
-        if (index >= providers.size()) return CompletableFuture.failedFuture(
-                unavailable != null ? unavailable : new NoLinkedGameAccountException());
-        return management().loginWithGameIdentity(providers.get(index).providerId(), profile,
-                new MinecraftSessionServiceJoiner()).exceptionallyCompose(failure -> {
-                    Throwable cause = unwrap(failure);
-                    if (cause instanceof CloudHttpException http) {
-                        if (http.errorCode() == CloudErrorCode.IDENTITY_NOT_LINKED) {
-                            return CompletableFuture.failedFuture(new NoLinkedGameAccountException());
-                        }
-                        if (http.errorCode() == CloudErrorCode.IDENTITY_PROFILE_MISMATCH) {
-                            return tryLinkedProvider(providers, index + 1, profile, unavailable);
-                        }
-                        if (http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) {
-                            return tryLinkedProvider(providers, index + 1, profile, unavailable != null ? unavailable : cause);
-                        }
-                    }
-                    return CompletableFuture.failedFuture(cause);
-                });
+            MinecraftSessionServiceJoiner.IdentityProfile profile, Throwable unavailable) {
+        context.check();
+        if (index >= providers.size()) return CompletableFuture.failedFuture(unavailable != null ? unavailable : new NoLinkedGameAccountException());
+        CompletableFuture<CloudSession> request;
+        synchronized (context.controller()) {
+            context.check();
+            request = context.controller().loginWithGameIdentity(providers.get(index).providerId(), profile, guardedJoiner(context, null));
+        }
+        return request.thenApply(session -> { context.checkSession(session); return session; }).exceptionallyCompose(failure -> {
+            context.check(); Throwable cause = unwrap(failure);
+            if (cause instanceof CloudHttpException http) {
+                if (http.errorCode() == CloudErrorCode.IDENTITY_NOT_LINKED || http.errorCode() == CloudErrorCode.IDENTITY_PROFILE_MISMATCH)
+                    return tryLinkedProvider(context, providers, index + 1, profile, unavailable);
+                if (http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE)
+                    return tryLinkedProvider(context, providers, index + 1, profile, unavailable != null ? unavailable : cause);
+            }
+            return CompletableFuture.failedFuture(cause);
+        });
     }
 
     static CompletableFuture<CloudIdentityClient.CloudIdentity> bindCurrentGameAccount() {
-        var selected = management().registry().selected().orElseThrow();
-        if (!CloudInstanceRegistry.isBuiltinOfficial(selected) || CloudClientRuntime.state(selected.instanceId()) == null) {
-            return CompletableFuture.failedFuture(new IllegalStateException(text("official_only")));
-        }
-        final MinecraftSessionServiceJoiner.IdentityProfile profile;
-        try { profile = MinecraftSessionServiceJoiner.currentProfile(); }
-        catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
-        return management().identityProviders().thenCompose(providers -> tryBindingProvider(providers, 0, profile, null));
+        return bindCurrentGameAccount(accountContext());
     }
 
-    private static CompletableFuture<CloudIdentityClient.CloudIdentity> tryBindingProvider(
-            List<CloudIdentityClient.IdentityProvider> providers, int index,
-            MinecraftSessionServiceJoiner.IdentityProfile profile, Throwable unavailable
-    ) {
-        if (index >= providers.size()) return CompletableFuture.failedFuture(
-                unavailable != null ? unavailable : new IllegalStateException(text("identity.no_matching_provider")));
-        var client = CloudClientRuntime.state().identities();
+    private static CompletableFuture<CloudIdentityClient.CloudIdentity> bindCurrentGameAccount(AccountContext context) {
+        try {
+            var runtime = context.runtime();
+            var profile = MinecraftSessionServiceJoiner.currentProfile();
+            return runtime.identities().listProviders().thenCompose(providers -> tryBindingProvider(context, runtime, providers, 0, profile, null))
+                    .thenApply(identity -> { context.check(runtime); com.micaftic.morpher.cloud.client.CloudPlayerModelSync.requestIdentityRefresh(runtime); return identity; });
+        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
+    }
+
+    static CompletableFuture<CloudIdentityClient.CloudIdentity> bindProvider(String providerId) {
+        try {
+            var context = accountContext(); var runtime = context.runtime(); var profile = MinecraftSessionServiceJoiner.currentProfile();
+            return runtime.identities().listProviders().thenCompose(providers -> {
+                context.check(runtime);
+                var enabled = providers.stream().filter(provider -> provider.providerId().equals(providerId)).toList();
+                return tryBindingProvider(context, runtime, enabled, 0, profile, null);
+            }).thenApply(identity -> { context.check(runtime); com.micaftic.morpher.cloud.client.CloudPlayerModelSync.requestIdentityRefresh(runtime); return identity; });
+        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
+    }
+
+    private static CloudIdentityClient.SessionJoiner guardedJoiner(AccountContext context, CloudClientRuntime.RuntimeState runtime) {
+        var adapter = new MinecraftSessionServiceJoiner();
+        return new CloudIdentityClient.SessionJoiner() {
+            private void check() { if (runtime == null) context.check(); else context.check(runtime); }
+            public CompletableFuture<Void> join(CloudIdentityClient.CloudIdentityChallenge challenge) {
+                check(); return adapter.join(challenge).thenApply(ignored -> { check(); return null; });
+            }
+            public CompletableFuture<com.google.gson.JsonObject> prove(CloudIdentityClient.CloudIdentityChallenge challenge,
+                    com.micaftic.morpher.cloud.CloudInstanceConfig instance, String purpose) {
+                check(); return adapter.prove(challenge, instance, purpose).thenApply(proof -> { check(); return proof; });
+            }
+        };
+    }
+
+    private static CompletableFuture<CloudIdentityClient.CloudIdentity> tryBindingProvider(AccountContext context,
+            CloudClientRuntime.RuntimeState runtime, List<CloudIdentityClient.IdentityProvider> providers, int index,
+            MinecraftSessionServiceJoiner.IdentityProfile profile, Throwable unavailable) {
+        context.check(runtime);
+        if (index >= providers.size()) return CompletableFuture.failedFuture(unavailable != null ? unavailable : new IllegalStateException(text("identity.no_matching_provider")));
+        var client = runtime.identities();
         return client.createChallenge(providers.get(index).providerId(), profile.name(), profile.profileId().toString())
-                .thenCompose(challenge -> client.joinAndComplete(challenge, new MinecraftSessionServiceJoiner()))
+                .thenCompose(challenge -> { context.check(runtime); return client.joinAndComplete(challenge, guardedJoiner(context, runtime)); })
                 .exceptionallyCompose(failure -> {
-                    Throwable cause = unwrap(failure);
-                    if (cause instanceof CloudHttpException http
-                            && http.errorCode() == CloudErrorCode.IDENTITY_PROFILE_MISMATCH) {
-                        return tryBindingProvider(providers, index + 1, profile, unavailable);
-                    }
-                    if (cause instanceof CloudHttpException http
-                            && http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) {
-                        return tryBindingProvider(providers, index + 1, profile, unavailable != null ? unavailable : cause);
-                    }
+                    context.check(runtime); Throwable cause = unwrap(failure);
+                    if (cause instanceof CloudHttpException http && http.errorCode() == CloudErrorCode.IDENTITY_PROFILE_MISMATCH)
+                        return tryBindingProvider(context, runtime, providers, index + 1, profile, unavailable);
+                    if (cause instanceof CloudHttpException http && http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE)
+                        return tryBindingProvider(context, runtime, providers, index + 1, profile, unavailable != null ? unavailable : cause);
                     return CompletableFuture.failedFuture(cause);
                 });
     }
 
+    static CompletableFuture<Boolean> currentIdentityBound(AccountContext context) {
+        try {
+            var runtime = context.runtime(); var profile = MinecraftSessionServiceJoiner.currentProfile();
+            return runtime.identities().listIdentities().thenApply(identities -> {
+                context.check(runtime);
+                return identities.stream().filter(identity -> identity.verificationStatus().equals("VERIFIED")
+                        && identity.identityRef().profileUuid().equals(profile.profileId())).count() == 1;
+            });
+        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
+    }
+
     private static final class NoLinkedGameAccountException extends RuntimeException {
-        private NoLinkedGameAccountException() { super("No game account is linked to an official Cloud account"); }
+        private NoLinkedGameAccountException() { super("No game identity is linked to a Cloud account"); }
     }
 
     public static void maskPassword(EditBox field) {
@@ -271,7 +322,16 @@ public final class CloudManagementScreen {
         throw new IllegalStateException("Minecraft password formatter is unavailable");
     }
 
-    private static Path generatedAccountFile() {
+    private static Path generatedAccountFile(CloudInstanceRegistry.CloudInstanceProfile profile) {
+        if (!CloudInstanceRegistry.isBuiltinOfficial(profile)) {
+            String key = profile.instanceId() + "\n" + profile.instance().origin();
+            try {
+                String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(key.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                return Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("sparkle-morpher")
+                        .resolve("cloud-generated-accounts").resolve(hash + ".json");
+            } catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+        }
         return Minecraft.getInstance().gameDirectory.toPath().resolve("config")
                 .resolve("sparkle-morpher").resolve("cloud-generated-account.json");
     }
@@ -297,6 +357,7 @@ public final class CloudManagementScreen {
     static String errorKey(Throwable failure) {
         Throwable cause = unwrap(failure);
         if (cause instanceof CloudHttpException http) {
+            if (http.errorCode() == CloudErrorCode.ACCOUNT_EXISTS) return "registration_account_exists";
             if (http.errorCode() == CloudErrorCode.IDENTITY_ALREADY_LINKED) return "identity.already_linked";
             if (http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) return "identity.provider_unavailable";
         }

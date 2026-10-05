@@ -48,6 +48,8 @@ public final class CloudManagementController {
         return registry;
     }
 
+    public synchronized long accountGeneration() { return requestGeneration.current(); }
+
     public synchronized CloudInstanceRegistry.CloudInstanceProfile selectInstance(String instanceId) {
         CloudInstanceRegistry.CloudInstanceProfile next = registry.find(instanceId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown Cloud instance: " + instanceId));
@@ -105,7 +107,7 @@ public final class CloudManagementController {
         return connection.accountId(instanceId);
     }
 
-    public void logout() {
+    public synchronized void logout() {
         requestGeneration.advance();
         connection.logout();
         scopes = List.of();
