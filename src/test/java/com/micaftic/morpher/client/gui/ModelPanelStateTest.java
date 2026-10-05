@@ -6,8 +6,52 @@ import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ModelPanelStateTest {
+    @Test
+    void newCommunityCloudTabStartsWithAllModels() {
+        ModelPanelState state = new ModelPanelState();
+        state.modelSource = ModelPanelState.ModelSource.COMMUNITY_CLOUD;
+        state.restoreCloudTab("self-hosted");
+        assertEquals("ALL", state.cloudView.name());
+    }
+
+    @Test
+    void communityCloudHasManagementViewsAndUsesTheirCatalogScopes() {
+        ModelPanelState state = new ModelPanelState();
+        state.modelSource = ModelPanelState.ModelSource.COMMUNITY_CLOUD;
+        assertEquals(java.util.List.of(ModelPanelState.CloudView.ALL, ModelPanelState.CloudView.RECENT,
+                ModelPanelState.CloudView.FAVORITES, ModelPanelState.CloudView.MINE, ModelPanelState.CloudView.PUBLIC),
+                state.cloudViews());
+        state.cloudView = ModelPanelState.CloudView.MINE;
+        assertEquals("mine", state.cloudCatalogScope());
+        state.cloudView = ModelPanelState.CloudView.ALL;
+        assertEquals("accessible", state.cloudCatalogScope());
+        assertFalse(state.cloudSearchRequired());
+        state.cloudView = ModelPanelState.CloudView.PUBLIC;
+        assertEquals("public", state.cloudCatalogScope());
+        assertTrue(state.cloudSearchRequired());
+        state.modelSource = ModelPanelState.ModelSource.SPM_CLOUD;
+        assertFalse(state.cloudViews().contains(ModelPanelState.CloudView.ALL));
+        assertTrue(state.cloudSearchRequired());
+        state.cloudSearchText = " fox ";
+        assertFalse(state.cloudSearchRequired());
+    }
+
+    @Test
+    void communityVisibilityChangesRequireOwnershipOutsideMyModels() {
+        ModelPanelState state = new ModelPanelState();
+        state.modelSource = ModelPanelState.ModelSource.COMMUNITY_CLOUD;
+        for (var view : state.cloudViews()) {
+            state.cloudView = view;
+            assertTrue(state.canChangeCloudVisibility(true));
+            assertEquals(view == ModelPanelState.CloudView.MINE, state.canChangeCloudVisibility(false));
+        }
+        state.modelSource = ModelPanelState.ModelSource.LOCAL;
+        assertFalse(state.canChangeCloudVisibility(true));
+    }
+
     @Test
     void modelFilterSeparatesServerAvailableAndLocalOnlyModels() {
         assertTrue(Arrays.asList(ModelPanelState.ModelFilter.values())

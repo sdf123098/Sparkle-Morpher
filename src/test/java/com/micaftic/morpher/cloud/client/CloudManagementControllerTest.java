@@ -28,6 +28,11 @@ class CloudManagementControllerTest {
         controller.selectInstance(community.instanceId());
 
         assertEquals("community", registry.selected().orElseThrow().instanceId());
+        org.junit.jupiter.api.Assertions.assertTrue(controller.autoLoginEnabled());
+        controller.logout();
+        assertFalse(controller.autoLoginEnabled());
+        controller.selectInstance(official.instanceId());
+        org.junit.jupiter.api.Assertions.assertTrue(controller.autoLoginEnabled());
     }
 
     @Test

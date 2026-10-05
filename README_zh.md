@@ -44,6 +44,14 @@ Minecraft 综合自定义模型加载器，让玩家为角色挂载自定义模�
 - 可配置黑名单（`config/sparkle_morpher/blacklist.txt`）限制特定模型。
 - 通过 Cardinal Components 实体数据实现客户端-服务端模型状态同步。
 
+### SPM Cloud：官方与自建
+
+可以使用官方 Cloud，也可以独立部署 [Rust 自建后端](https://github.com/sdf123098/spm-cloud)，支持 Docker Compose、Linux 原生和 Windows 原生。搭建说明：[中文](https://github.com/sdf123098/spm-cloud/blob/main/README_zh.md) · [English](https://github.com/sdf123098/spm-cloud/blob/main/README.md)。
+
+更新后的客户端选择同一个 Cloud、完成游戏身份绑定后，在普通 Minecraft 服务器上也可互相看见公开的玩家模型、贴图、模型自定义设置及轮盘/待机动作。社区实例提供全部模型、最近使用、收藏、我的模型和公开模型页面；全部模型直接列出可访问的模型，不要求搜索词。
+
+自建外置认证可用一条完整的 `SPM_CLOUD_HAS_JOINED_URL` 接入自建或 all-in-one 网关，也可用 `SPM_CLOUD_IDENTITY_PROVIDERS` 配置多个服务。认证服务由 Cloud 运营者启用。已绑定账号自动恢复登录，失败后间隔重试；手动退出后停止自动恢复，重新选择实例后恢复。各 Cloud 的账号、模型和身份绑定相互独立，私有模型不会向其他玩家发布。
+
 ### 服务端带宽上限
 
 服主可以在 `config/sparkle_morpher-server.toml` 中配置全局模型传输限速：
