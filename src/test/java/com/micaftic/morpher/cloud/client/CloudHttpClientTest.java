@@ -41,6 +41,39 @@ class CloudHttpClientTest {
     @TempDir Path directory;
 
     @Test
+    void addingInstanceDiscoversItsIdWithoutCredentialsAndRejectsChangedOrigins() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicReference<String> advertisedOrigin = new AtomicReference<>("https://cloud.example.test");
+        server.createContext("/v1/instance", exchange -> {
+            assertEquals("GET", exchange.getRequestMethod());
+            assertEquals(null, exchange.getRequestHeaders().getFirst("Authorization"));
+            byte[] json = ("{\"instance_id\":\"server-owner\",\"origin\":\"" + advertisedOrigin.get()
+                    + "\",\"protocol\":\"spm.cloud.v1\"}").getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, json.length);
+            exchange.getResponseBody().write(json);
+            exchange.close();
+        });
+        server.start();
+        try (HttpClient delegate = HttpClient.newHttpClient()) {
+            HttpClient local = new LoopbackClient(delegate, URI.create("http://127.0.0.1:" + server.getAddress().getPort()));
+            var profile = CloudHttpClient.discoverProfile("cloud.example.test/", "", local).get(10, TimeUnit.SECONDS);
+            assertEquals("server-owner", profile.instanceId());
+            assertEquals(URI.create("https://cloud.example.test"), profile.instance().origin());
+            assertEquals("cloud.example.test", profile.name());
+            var named = CloudHttpClient.discoverProfile("https://cloud.example.test", "  My server  ", local).get(10, TimeUnit.SECONDS);
+            assertEquals("My server", named.name());
+            advertisedOrigin.set("https://other.example.test");
+            var failure = assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> CloudHttpClient.discoverProfile("cloud.example.test", "", local).get(10, TimeUnit.SECONDS));
+            assertEquals(CloudErrorCode.INSTANCE_MISMATCH, ((CloudHttpException) failure.getCause()).errorCode());
+            assertThrows(IllegalArgumentException.class, () -> CloudHttpClient.discoverProfile("http://cloud.example.test", "", local));
+            assertThrows(IllegalArgumentException.class, () -> CloudHttpClient.discoverProfile("https://user:password@cloud.example.test", "", local));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void uploadsUnicodeMetadataWithoutChangingAssetIdentityOrBytes() throws Exception {
         byte[] content = {0, 1, 2, 13, 10, (byte) 255, 42};
         String sha = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
@@ -203,7 +236,7 @@ class CloudHttpClientTest {
         @Override public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
             HttpRequest.Builder builder = HttpRequest.newBuilder(origin.resolve(request.uri().getRawPath()));
             request.headers().map().forEach((key, values) -> values.forEach(value -> builder.header(key, value)));
-            builder.method(request.method(), request.bodyPublisher().orElseThrow());
+            builder.method(request.method(), request.bodyPublisher().orElse(HttpRequest.BodyPublishers.noBody()));
             return delegate.sendAsync(builder.build(), handler);
         }
         @Override public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request, HttpResponse.BodyHandler<T> handler,

@@ -1076,5 +1076,22 @@
   "gui.sparkle_morpher.cloud.entity.share_hint": "应用后将通过 Cloud 向观察此实体的客户端分享模型。",
   "gui.sparkle_morpher.cloud.manage.registration_disabled": "此 Cloud 已关闭自主注册，请使用服主提供的账号登录后绑定游戏身份。",
   "gui.sparkle_morpher.cloud.manage.identity.binding_required": "Cloud 账号已登录。请点击“绑定当前游戏账号”验证当前游戏身份后启用联机同步。",
-  "gui.sparkle_morpher.cloud.manage.registration_account_exists": "此 Cloud 账号已存在，请使用现有账号登录。"
+  "gui.sparkle_morpher.cloud.manage.registration_account_exists": "此 Cloud 账号已存在，请使用现有账号登录。",
+  "gui.sparkle_morpher.cloud.manage.instance_management": "实例管理",
+  "gui.sparkle_morpher.cloud.manage.register_short": "注册账号",
+  "gui.sparkle_morpher.cloud.manage.account_intro": "使用游戏账号快捷登录，或登录 Cloud 账号。",
+  "gui.sparkle_morpher.cloud.manage.manage_account": "管理账号",
+  "gui.sparkle_morpher.cloud.manage.back_instances": "返回实例管理",
+  "gui.sparkle_morpher.cloud.manage.address": "Cloud 地址",
+  "gui.sparkle_morpher.cloud.manage.optional_name": "显示名称（可选）",
+  "gui.sparkle_morpher.cloud.manage.instance_intro": "填写服主提供的 Cloud 地址即可。",
+  "gui.sparkle_morpher.cloud.manage.checking_instance": "正在检查 Cloud 地址…",
+  "gui.sparkle_morpher.cloud.manage.instance_conflict": "该 ID 已被其他地址使用，请服主设置唯一的实例 ID。",
+  "gui.sparkle_morpher.cloud.manage.instance_added": "Cloud 实例已添加",
+  "gui.sparkle_morpher.cloud.manage.back": "返回",
+  "gui.sparkle_morpher.cloud.manage.register_and_login": "注册并登录",
+  "gui.sparkle_morpher.cloud.manage.register_hint": "账号使用字母或数字开头；密码至少 8 位。",
+  "gui.sparkle_morpher.cloud.manage.login_hint": "填写在当前 Cloud 注册的账号和密码。",
+  "gui.sparkle_morpher.cloud.manage.address_required": "请填写 Cloud 地址。",
+  "gui.sparkle_morpher.cloud.manage.credentials_required": "请填写账号和密码。"
 }
