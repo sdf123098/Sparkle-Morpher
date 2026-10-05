@@ -458,8 +458,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderCloudForm(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
         boolean login = STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN;
-        renderTextButton(g, mouseX, mouseY, x + 16, y + 8, 44, 18, cloudText("back"), () -> { closeCloudForm(); init(); });
-        drawTitle(g, cloudText(login ? (registerCloudAccount ? "register_short" : "login") : "add_instance"), x + 70, y + 12);
+        drawTitle(g, cloudText(login ? (registerCloudAccount ? "register_short" : "login") : "add_instance"), x + 16, y + 12);
         if (login) {
             int tabW = (w - 32) / 2;
             renderCloudBrowserTab(g, mouseX, mouseY, x + 16, y + 30, tabW, cloudText("login"), !registerCloudAccount, () -> { if (!cloudFormBusy) openCloudLoginForm(false); });
