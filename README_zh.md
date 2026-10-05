@@ -1,132 +1,124 @@
-﻿# Sparkle's Morpher — 花火火的变身器
+# Sparkle's Morpher (SPM) — 花火火的变身器
 
 > [English](README.md) | **中文** | [日本語](README_ja.md) | [한국어](README_ko.md)
 
-**QQ:** 1104823534 | **Discord:** [点此加入](https://discord.gg/3KqK7USF39) | **Telegram:** [加入 Telegram](https://t.me/sparklemorpher) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **爱发电:** [Micaftic](https://afdian.com/a/Micaftic)
+一个**纯客户端 Minecraft 自定义模型模组**。用自定义 3D 模型、贴图、动画与音效装扮角色，在任何 Minecraft 服务器上，与同样安装 SPM 的玩家互相看见彼此的模型。
 
-Minecraft 综合自定义模型加载器，让玩家为角色挂载自定义模型、动画与音效——告别一成不变的方块小人。
+**只需在客户端安装 SPM，Minecraft 服务器无需安装 SPM、插件或进行改造。** 多人模型共享通过 SPM Cloud 实现：双方连接同一个 Cloud 实例，绑定当前游戏身份，并选择对方有权访问的 Cloud 模型。
 
-> 这是一个**综合模型加载器**：当前支持 `.ysm` 格式（基于 OpenYSM，MIT 许可）和 `.bbmodel` 格式（Blockbench），后续会陆续加入对其他主流模型格式的支持。
+**QQ:** 1104823534 | **Discord:** [加入 Discord](https://discord.gg/3KqK7USF39) | **Telegram:** [加入 Telegram](https://t.me/sparklemorpher) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **爱发电:** [Micaftic](https://afdian.com/a/Micaftic)
 
----
+[快速开始](#quick-start) · [多人互相可见](#multiplayer) · [模型格式](#model-formats) · [功能](#features) · [支持的构建](#supported-builds) · [SPM Cloud](#spm-cloud) · [兼容性](#compatibility) · [常见问题](#faq) · [致谢](#credits)
 
-## 功能特性
+<a id="quick-start"></a>
+## 快速开始
 
-### 自定义玩家模型与皮肤
+1. 在 [Releases](https://github.com/sdf123098/Sparkle-Morpher/releases) 下载与你的 **Minecraft 版本和加载器**匹配的构建。六种构建见下表。
+2. 将 SPM `.jar` 放入客户端的 `mods` 文件夹。Fabric 构建还需要 Fabric API；如果所选发行包要求其他依赖，请一并安装。使用对应的 Fabric 或 NeoForge 配置启动 Minecraft。
+3. 进入世界或服务器，按 **Alt + Y** 打开模型面板。导入本地模型或选择 Cloud 模型，再选择贴图与设置。按 **Z** 打开动画转盘。按键可在 Minecraft 的控制设置中修改。
+4. 如需互相可见，双方选择**同一个 Cloud 实例**，登录并绑定当前游戏身份。选择公开的 Cloud 模型，或上传自己的模型并设为公开。确认隐私模式已关闭。对方的 SPM 客户端会自动下载并渲染有权访问的模型。
 
-用完全自定义的 3D 模型替换原版玩家模型。所有自定义模型在多人游戏中**对其他玩家可见**
+使用本地模型无需配置 Cloud。仅在本地导入文件不会自动上传或共享模型。
 
-### 模型格式支持
+<a id="multiplayer"></a>
+## 在任何服务器上互相看见模型
 
-- **`.ysm`** — 基于 OpenYSM/YSMParser 的原生格式，支持完整骨骼模型与权重动画。
-- **`.bbmodel`** — 直接导入 Blockbench 项目文件。支持网格三角化（N 边形扇形三角化）、UV 归一化、面旋转、膨胀扩展、内嵌 Base64 纹理提取及 PNG IHDR 头解析。
-- **Figura 头像包** — 直接导入 Figura `.zip` 压缩包。内置 `ZipModelSniffer` 自动识别并分流 YSM 文件夹、Figura 头像和纯 BBModel 压缩包。
+SPM 的模型共享独立于 Minecraft 服务器的模组配置。无论是原版服、插件服还是模组服，都无需请服主安装 SPM。
 
-### 动画系统
+| 使用情况 | 显示效果 |
+|---|---|
+| 双方安装 SPM、连接同一 Cloud、完成游戏身份验证，并使用有权访问的 Cloud 模型 | 各客户端显示对方的自定义模型与贴图；受支持的模型设置及转盘/待机动作也会同步。 |
+| 对方没有安装 SPM | 对方看到你的普通 Minecraft 外观。 |
+| 模型仅在本地导入 | 可以在本地使用，不会自动通过 Cloud 共享。 |
+| 双方使用不同 Cloud、身份未绑定，或无权访问模型 | 解决这些条件之前，双方无法通过 Cloud 共享外观。 |
 
-- **动画转盘**（默认按键：Z）— 径向菜单快速切换当前模型的动作与动画。
-- **动画控制器** — 完整支持基于状态机的动画控制器，具备 `loop`（循环）、`once`（单次）和 `hold`（保持）播放模式。
-- **Molang 表达式** — 数据点同时支持原始数值和 Molang 表达式字符串，实现动态动画混合。
+模型资源与外观更新在 **SPM 客户端和 SPM Cloud** 之间传输。Minecraft 服务器继续处理游戏逻辑。模型替换改变客户端渲染，不改变服务器规则、碰撞箱或权限。
 
-### 音效系统
+<a id="model-formats"></a>
+## 模型格式
 
-播放模型内置的语音和音效，由技能或动作触发。音频解码采用 **Opus** 格式，跨平台原生加速，低延迟播放。
+| 格式 | 导入支持 |
+|---|---|
+| `.ysm` | 带有贴图和模型动画的 YSM 模型，使用基于 OpenYSM/YSMParser 的导入管线。 |
+| `.bbmodel` | Blockbench 项目中的立方体/网格几何、骨骼层级、贴图及受支持的动画。 |
+| `.zip` | 按内容识别 YSM 文件夹、Blockbench 模型包、Figura 头像包与 Bedrock 模型包。 |
+| Bedrock 几何 | `.geo.json` / `geometry.json`；Bedrock 模型包还可包含 `.animation.json` 文件与 PNG 贴图。 |
+| `.gltf` / `.glb` | 本地 glTF 模型导入。请保留 `.gltf` 引用的配套外部资源。 |
 
-### 多模型管理
+Figura 包导入读取模型与贴图，不提供 Figura Lua 运行环境。支持导入某种格式不代表支持原软件的所有功能。Cloud 上传与共享以所选实例支持的格式为准。
 
-- 从本地文件、目录或 URL 导入模型，支持加速下载。
-- 按分组和收藏组织管理模型。
-- 自动目录扫描，识别 `.ysm`、`.zip` 和 `.bbmodel` 文件。
+<a id="features"></a>
+## 功能
 
-### 服务端功能
+- **自定义外观：**替换玩家模型、切换贴图，调整模型提供的自定义设置。
+- **动画转盘：**按 Z 选择模型自带动作；受支持的模型可使用动画控制器、`loop` / `once` / `hold` 播放模式及 Molang 表达式。
+- **模型音效：**播放模型自带语音与音效，支持 Opus 音频解码。
+- **模型管理：**从本地文件、目录或 URL 导入，浏览、分组和收藏模型。
+- **Cloud 模型库：**浏览全部模型、最近使用、收藏、我的模型和公开模型；全部模型直接列出可访问模型，无需搜索词。
+- **更多模型目标：**受支持的实体、载具与投射物也可使用自定义模型；具体目标取决于模型及所选构建的联动支持。
 
-- 服务端可定义模型清单并下发至客户端。
-- 可配置黑名单（`config/sparkle_morpher/blacklist.txt`）限制特定模型。
-- 通过 Cardinal Components 实体数据实现客户端-服务端模型状态同步。
+<a id="supported-builds"></a>
+## 支持的构建
 
-### SPM Cloud：官方与自建
+请选择适用于客户端的构建。Fabric 与 NeoForge 分别提供独立发行包。
 
-可以使用官方 Cloud，也可以独立部署 [Rust 自建后端](https://github.com/sdf123098/spm-cloud)，支持 Docker Compose、Linux 原生和 Windows 原生。搭建说明：[中文](https://github.com/sdf123098/spm-cloud/blob/main/README_zh.md) · [English](https://github.com/sdf123098/spm-cloud/blob/main/README.md)。
+| 构建 | 加载器 | Minecraft | Git 分支 |
+|---|---|---|---|
+| Sparkle-Morpher-Fa1.21.1 | Fabric | 1.21.1 | `main` |
+| Sparkle-Morpher-Fa26.1.2 | Fabric | 26.1.2 | `fa26.1.2` |
+| Sparkle-Morpher-Fa26.2 | Fabric | 26.2 | `fa26.2` |
+| Sparkle-Morpher-Neo1.21.1 | NeoForge | 1.21.1 | `neo1.21.1` |
+| Sparkle-Morpher-Neo26.1.2 | NeoForge | 26.1.2 | `neo26.1.2` |
+| Sparkle-Morpher-Neo26.2 | NeoForge | 26.2 | `neo26.2` |
 
-更新后的客户端选择同一个 Cloud、完成游戏身份绑定后，在普通 Minecraft 服务器上也可互相看见公开的玩家模型、贴图、模型自定义设置及轮盘/待机动作。社区实例提供全部模型、最近使用、收藏、我的模型和公开模型页面；全部模型直接列出可访问的模型，不要求搜索词。
+Minecraft 1.21.1 使用 Java 21，Minecraft 26.1.2 / 26.2 使用 Java 25。具体依赖以对应发行包的要求为准。一起游玩时，请使用 Cloud 协议兼容的构建。
 
-自建外置认证可用一条完整的 `SPM_CLOUD_HAS_JOINED_URL` 接入自建或 all-in-one 网关，也可用 `SPM_CLOUD_IDENTITY_PROVIDERS` 配置多个服务。认证服务由 Cloud 运营者启用。已绑定账号自动恢复登录，失败后间隔重试；手动退出后停止自动恢复，重新选择实例后恢复。各 Cloud 的账号、模型和身份绑定相互独立，私有模型不会向其他玩家发布。
+<a id="spm-cloud"></a>
+## SPM Cloud：官方或自建
 
-### 服务端带宽上限
+可以使用内置官方 Cloud，也可以连接社区或自建实例。**SPM Cloud 是独立的模型与同步服务，不是 Minecraft 服务端模组。** 希望互相共享外观的玩家需要选择同一个实例。
 
-服主可以在 `config/sparkle_morpher-server.toml` 中配置全局模型传输限速：
+- 使用游戏账号登录，或使用 Cloud 账号登录后绑定当前游戏身份。可用认证服务与注册方式由 Cloud 运营者决定。
+- 已绑定账号可自动恢复登录，失败后会间隔重试；手动退出后暂停自动恢复，重新选择实例后恢复。
+- 每个实例的账号、模型和身份绑定相互独立。切换实例不会迁移模型库或身份绑定。
+- 私有模型不会自动变为公开。希望在多人游戏中普遍可见时，请使用公开模型；仅选用私有模型不会赋予其他玩家访问权限。
 
-```toml
-[server_scheduler]
-EnableGlobalBandwidthLimit = false
-BandwidthLimit = 5
-```
+自建部署请参阅独立的 [SPM Cloud Rust 后端](https://github.com/sdf123098/spm-cloud)及其 [English](https://github.com/sdf123098/spm-cloud/blob/main/README.md) / [中文](https://github.com/sdf123098/spm-cloud/blob/main/README_zh.md)搭建说明。支持 Docker Compose、Linux 原生和 Windows 原生部署。自定义认证网关与多个身份提供方由 Cloud 运营者配置；这些配置属于 Cloud 服务，无需改动 Minecraft 服务器。
 
-`BandwidthLimit` 单位为 Mbps。开启 `EnableGlobalBandwidthLimit` 后，该上限会全局共享作用于服务端向客户端下发模型同步包，以及客户端向服务端上传模型分片；收藏同步等普通小包不受限速影响。
+<a id="compatibility"></a>
+## 模组兼容性
 
-### 模组兼容性
+SPM 包含 Better Combat、Curios、Create、Iris/Sodium 和皮肤层渲染的联动支持。实际可用性取决于 Minecraft 版本、加载器及其他模组的版本，该列表不保证任意组合均可兼容。使用 SPM 本身无需为了可选联动而安装这些模组。
 
-兼容主流模组：
+<a id="faq"></a>
+## 常见问题
 
-| 类别 | 兼容模组 |
-|------|---------|
-| 战斗 | Better Combat |
-| 饰品 | Curios |
-| 建造与自动化 | Create |
-| 渲染 | Iris、Sodium |
-| 玩家皮肤 | 皮肤层兼容 |
+### Minecraft 服务器需要安装 SPM 吗？
 
-### 跨平台支持
+不需要。在希望显示自定义模型的客户端安装 SPM 即可，Cloud 独立于 Minecraft 服务器处理外观共享。
 
-多个构建变体覆盖所有主流加载器和版本组合：
+### 双方都安装了 SPM，为什么仍看不到彼此的模型？
 
----
+检查双方是否连接同一个 Cloud 实例、已登录、已绑定并验证当前游戏身份，以及是否关闭隐私模式。请选择有权访问的 Cloud 模型，而非仅在本地导入的模型，并检查 Cloud 连接状态。自建实例如果缺少动作同步，还需确认后端支持当前动画协议。
 
-## 工作原理
+### 不使用 Cloud 也能使用 SPM 吗？
 
-### 模型导入管线
+可以在本地使用模型。通过 Cloud 进行多人共享需要正常的 Cloud 连接。Cloud 不可用时，共享与新模型下载可能中断。
 
-导入模型文件时，Sparkle's Morpher 会执行智能处理管线：
+### 可以使用外置认证服务吗？
 
-1. **压缩包嗅探** — 按内容分类：YSM 文件夹、Figura 头像（含 `avatar.json` + `.bbmodel`）、纯 BBModel 压缩包或未知格式。
-2. **解析** — `.ysm` 文件经 YSMParser 处理；`.bbmodel` 文件由内置 `BBModelParser` 解析，处理大纲树、立方体/网格元素、纹理、动画和控制器状态。
-3. **转换** — 解析数据转换为引擎内部 `RawGeometry` 格式。N 顶点网格面经扇形三角化处理；UV 坐标按纹理分辨率归一化；压缩包中的外部 PNG 纹理优先于内嵌 Base64 源。
-4. **渲染** — 转换后的模型在玩家激活时替换原版渲染器，自动隐藏默认玩家模型。
+请选择所用 Cloud 实例已启用的认证服务，并验证当前游戏身份。Minecraft 服务器的登录模式本身不会自动生成已验证的 Cloud 身份绑定。
 
-### BBModel 兼容性
+### 不同语言的 README 内容一致吗？
 
-完整支持 Blockbench 格式，包括：
+英文、中文、日文和韩文采用相同的章节顺序、安装步骤、多人共享条件与构建表。章节 ID 统一，因此 `#multiplayer` 等链接在各语言中均可使用。阅读任何语言版本，使用要求都相同。
 
-- 大纲树的嵌套骨骼层级与父子关系
-- 立方体和网格元素的正确面 UV 映射
-- 内嵌纹理（Base64）的 PNG 头尺寸检测
-- 动画播放与循环模式映射
-- Blockbench 5 "free" 格式兼容（精简大纲节点 + `groups[]` 回退）
-- 孤立元素处理（未被引用的元素自动归入默认骨骼）
-
----
-
-## 架构
-
-Sparkle's Morpher 采用**公共核心 + 平台适配器**分层架构：
-
-- **`common`** — 所有变体共享的核心逻辑：模型解析、网格处理、压缩包嗅探、动画控制器、音频解码和 Molang 求值。
-- **`fabric`** / **`neoforge`** — 平台特定适配器，处理初始化、网络通信、组件注册和渲染钩子。
-- **原生层** — 跨平台原生库，用于 Opus 音频解码。
-
----
-
-## 依赖
-
-因构建变体而异——详见 `mods.toml`（NeoForge）或 `fabric.mod.json`（Fabric）。Fabric 变体需用户自行安装 Fabric API；其他依赖通过 Jar-in-Jar 内置。
-
----
-
+<a id="credits"></a>
 ## 致谢与许可
 
-- 基于 [OpenYSM](https://github.com/OpenYSM)（MIT 许可证）二次开发。
-- 使用 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）进行 `.ysm` 模型解析。
+- 基于 [OpenYSM](https://github.com/OpenYSM)（MIT）开发。
+- 使用 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）进行 YSM 模型解析。
 - 默认模型库：[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)。
-- Blockbench 格式由 [JannisX11/Blockbench](https://github.com/JannisX11/blockbench) 开发。
+- Blockbench：[JannisX11/Blockbench](https://github.com/JannisX11/blockbench)。
 
-**许可证：** MIT
+SPM 使用 [MIT](LICENSE) 许可证。模型资源遵循各自作者的许可与使用条款。
