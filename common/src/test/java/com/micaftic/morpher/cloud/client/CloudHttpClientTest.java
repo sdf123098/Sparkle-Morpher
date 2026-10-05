@@ -89,6 +89,27 @@ class CloudHttpClientTest {
         }
     }
 
+    @Test
+    void duplicateRegistrationPreservesAccountExistsCodeAndExplanation() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/auth/register", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            byte[] body = "{\"code\":\"ACCOUNT_EXISTS\",\"message\":\"Cloud account already exists; sign in instead\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(409, body.length);
+            exchange.getResponseBody().write(body); exchange.close();
+        });
+        server.start();
+        try (HttpClient delegate = HttpClient.newHttpClient()) {
+            var client = new CloudHttpClient(INSTANCE, new LoopbackClient(delegate, URI.create("http://127.0.0.1:" + server.getAddress().getPort())));
+            var failure = assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> client.postJson("/v1/auth/register", "{}").get(10, TimeUnit.SECONDS));
+            var cloud = (CloudHttpException) failure.getCause();
+            assertEquals(409, cloud.statusCode());
+            assertEquals("ACCOUNT_EXISTS", cloud.errorCode().name());
+            assertEquals("Cloud account already exists; sign in instead", cloud.getMessage());
+        } finally { server.stop(0); }
+    }
+
     private record CapturedUpload(String assetId, String name, String encoding, String sha, String visibility, byte[] content) {}
 
     @Test
@@ -203,6 +224,12 @@ class CloudHttpClientTest {
         assertEquals(65_536, info.maxMessageBytes());
         assertEquals(1024, info.maxAssetBytes());
         assertEquals(45, info.heartbeatTtlSeconds());
+        assertEquals(false, info.playerMotionSupported());
+        CloudInstanceInfo upgraded = CloudHttpClient.parseInstanceResponse(INSTANCE, """
+                {"instance_id":"local-dev","origin":"https://cloud.example.test","protocol":"spm.cloud.v1",
+                 "capabilities":["future_capability","player_motion_v1"]}
+                """);
+        assertTrue(upgraded.playerMotionSupported());
     }
 
     @Test

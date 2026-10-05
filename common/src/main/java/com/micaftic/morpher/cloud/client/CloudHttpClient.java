@@ -265,12 +265,30 @@ public final class CloudHttpClient {
                     positiveLimit(limits, "max_asset_bytes", 128L * 1024 * 1024),
                     positiveLimit(limits, "max_subscriptions", 128),
                     positiveLimit(limits, "heartbeat_interval_seconds", 15),
-                    positiveLimit(limits, "heartbeat_ttl_seconds", 45));
+                    positiveLimit(limits, "heartbeat_ttl_seconds", 45),
+                    root.has("capabilities") && root.get("capabilities").isJsonArray()
+                            && java.util.stream.StreamSupport.stream(root.getAsJsonArray("capabilities").spliterator(), false)
+                            .anyMatch(value -> value.isJsonPrimitive() && "player_motion_v1".equals(value.getAsString())),
+                    parseAuthCapabilities(root));
         } catch (CloudHttpException e) {
             throw e;
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud instance response");
         }
+    }
+
+    private static CloudInstanceInfo.AuthCapabilities parseAuthCapabilities(JsonObject root) {
+        if (!root.has("auth")) return null;
+        JsonObject auth = root.getAsJsonObject("auth");
+        return new CloudInstanceInfo.AuthCapabilities(authFlag(auth, "password_login"), authFlag(auth, "game_identity_login"),
+                authFlag(auth, "game_identity_link"), authFlag(auth, "self_registration"));
+    }
+
+    private static boolean authFlag(JsonObject auth, String name) {
+        if (!auth.has(name)) return true;
+        JsonElement value = auth.get(name);
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) throw new IllegalArgumentException("Invalid Cloud auth flag: " + name);
+        return value.getAsBoolean();
     }
 
     private static String requiredString(JsonObject root, String name) {

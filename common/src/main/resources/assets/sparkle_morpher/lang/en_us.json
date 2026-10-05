@@ -902,8 +902,8 @@
   "gui.sparkle_morpher.cloud.manage.join_selected": "Join selected",
   "gui.sparkle_morpher.cloud.manage.identities": "Identities / Offline",
   "gui.sparkle_morpher.cloud.manage.register": "Register manually",
-  "gui.sparkle_morpher.cloud.manage.quick_connect": "Sign in with game account / create Cloud account",
-  "gui.sparkle_morpher.cloud.manage.quick_success": "Official Cloud account connected",
+  "gui.sparkle_morpher.cloud.manage.quick_connect": "Game account login / create Cloud account",
+  "gui.sparkle_morpher.cloud.manage.quick_success": "Connected to Cloud",
   "gui.sparkle_morpher.cloud.manage.official_only": "Select the official Cloud instance first",
   "gui.sparkle_morpher.cloud.manage.targets_acl": "Targets / ACL",
   "gui.sparkle_morpher.cloud.manage.selected": "Selected %s",
@@ -968,7 +968,7 @@
   "gui.sparkle_morpher.cloud.manage.identity.verified": "Verified %s (%s)",
   "gui.sparkle_morpher.cloud.manage.identity.bind_current": "Link current game account",
   "gui.sparkle_morpher.cloud.manage.identity.bound": "Linked %s. Other devices can sign in automatically",
-  "gui.sparkle_morpher.cloud.manage.identity.no_matching_provider": "Could not verify this game account. Check that its authentication provider is enabled on official Cloud",
+  "gui.sparkle_morpher.cloud.manage.identity.no_matching_provider": "Could not verify this game account. Check that its authentication provider is enabled on this Cloud.",
   "gui.sparkle_morpher.cloud.manage.identity.already_linked": "This game account is linked to another Cloud account",
   "gui.sparkle_morpher.cloud.manage.identity.provider_unavailable": "Game authentication service is temporarily unavailable. Try again later",
   "gui.sparkle_morpher.cloud.manage.identity.pending": "Pending Offline identity: %s",
@@ -1073,5 +1073,8 @@
   "gui.sparkle_morpher.cloud.entity.privacy": "Entity models cannot be published in privacy mode",
   "gui.sparkle_morpher.cloud.entity.fake_hint": "Select the player entity corresponding to the Carpet fake player. Cloud controls editing permissions.",
   "gui.sparkle_morpher.cloud.entity.fake_empty": "No other player entities are visible. Move closer to the fake player.",
-  "gui.sparkle_morpher.cloud.entity.share_hint": "Applying a model shares it through Cloud with clients observing this entity."
+  "gui.sparkle_morpher.cloud.entity.share_hint": "Applying a model shares it through Cloud with clients observing this entity.",
+  "gui.sparkle_morpher.cloud.manage.registration_disabled": "This Cloud has disabled self-registration. Sign in with an account supplied by its operator, then bind your game identity.",
+  "gui.sparkle_morpher.cloud.manage.identity.binding_required": "Signed in to Cloud. Bind your current game account to enable multiplayer synchronization.",
+  "gui.sparkle_morpher.cloud.manage.registration_account_exists": "This Cloud account already exists. Sign in with the existing account."
 }

@@ -4,6 +4,7 @@ package com.micaftic.morpher.core.api.network.state;
 public enum CloudErrorCode {
     NONE,
     UNAUTHENTICATED,
+    ACCOUNT_EXISTS,
     SESSION_EXPIRED,
     REFRESH_REUSED,
     INSTANCE_MISMATCH,

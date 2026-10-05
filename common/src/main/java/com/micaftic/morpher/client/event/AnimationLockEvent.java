@@ -1,9 +1,8 @@
 package com.micaftic.morpher.client.event;
 
+import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SPlayAnimationPacket;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientTickEvent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.ClientInput;
@@ -25,10 +24,7 @@ public class AnimationLockEvent {
         if (YesSteveModel.isAvailable() && !animationLocked && (localPlayer = client.player) != null && isPlayerMoving(localPlayer)) {
             PlayerCapability.get(localPlayer).ifPresent(cap -> {
                 if (cap.isModelSwitching()) {
-                    cap.clearModelSwitch();
-                    if (NetworkHandler.isClientConnected()) {
-                        NetworkHandler.sendToServer(C2SPlayAnimationPacket.createDefault());
-                    }
+                    CloudPlayerMotionSync.stop(cap);
                 }
             });
         }

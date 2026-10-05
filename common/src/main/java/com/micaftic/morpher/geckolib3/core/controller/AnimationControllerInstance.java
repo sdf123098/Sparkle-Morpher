@@ -53,6 +53,13 @@ public class  AnimationControllerInstance {
 
     private float tickOffset;
 
+    private float synchronizedElapsed = Float.NaN;
+
+    /** Apply once after requesting a clip; subsequent heartbeats leave its clock running. */
+    public void seekFromElapsedTicks(float elapsed) {
+        this.synchronizedElapsed = Float.isFinite(elapsed) ? Math.max(0, elapsed) : 0;
+    }
+
     private IInterpolable transitionInterpolator;
 
     private float savedEndingTick;
@@ -150,7 +157,19 @@ public class  AnimationControllerInstance {
             }
             this.tickOffset = tick;
             adjustedTick = 0.0f;
-            if (this.transitionInterpolator.getProgress() > 0.0f) {
+            if (!Float.isNaN(this.synchronizedElapsed)) {
+                adjustedTick = this.synchronizedElapsed;
+                this.synchronizedElapsed = Float.NaN;
+                if (this.currentAnimationLoop == ILoopType.EDefaultLoopTypes.LOOP) {
+                    adjustedTick = this.currentAnimation.animationLength > 0 ? adjustedTick % this.currentAnimation.animationLength : 0;
+                } else {
+                    adjustedTick = Math.min(adjustedTick, this.currentAnimation.animationLength);
+                }
+                this.tickOffset = tick - adjustedTick;
+                this.instructionExecutor.executeTo(evaluator, adjustedTick, false);
+                this.soundExecutor.skipBefore(Math.max(0, adjustedTick - 10));
+                this.animationState = AnimationState.RUNNING;
+            } else if (this.transitionInterpolator.getProgress() > 0.0f) {
                 this.animationState = AnimationState.BEGINNING_TRANSITION;
             } else {
                 this.animationState = AnimationState.RUNNING;
@@ -390,6 +409,7 @@ public class  AnimationControllerInstance {
     }
 
     private void clearAnimation() {
+        this.synchronizedElapsed = Float.NaN;
         if (this.animationState != AnimationState.IDLE) {
             this.animationState = AnimationState.IDLE;
             if (this.soundExecutor != null) {

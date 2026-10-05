@@ -25,13 +25,18 @@ public final class CloudPlayerModelSync {
     private static volatile long generation;
     private static long nextPoll, nextPublish, lastPollSuccess;
     private static boolean polling, publishing, identifying, hasPublished, hasAttempted;
+    private static CompletableFuture<Long> pendingPublication;
     private static String identityId;
     private static long ownRevision = -1;
     private static CloudPlayerSelection lastPublished;
     private static CloudPlayerSelection lastAttempted;
+    private static CloudPlayerMotion lastPublishedMotion;
+    private static long nextMotionPublish;
     private static UUID publicationUuid;
     private static JsonObject ownNameProof;
     private static long nextIdentityRefresh;
+    private static long identityAttempt;
+    private static boolean identityRefreshRequested;
     private record Identification(CloudIdentityClient.CloudIdentity identity, JsonObject nameProof) {}
     private static String status = "Cloud 联机：等待进入世界";
     private record Attempt(CloudPlayerAppearanceState.Snapshot token, Player entity,
@@ -42,6 +47,7 @@ public final class CloudPlayerModelSync {
     public static boolean ownsAppearance(UUID playerId) { return !PrivacyMode.isActive() && STATE.ownsAppearance(playerId); }
 
     private static void clearRemote(Player player) {
+        CloudPlayerMotionSync.remove(player.getUUID());
         STATE.remove(player.getUUID()); ATTEMPTS.remove(player.getUUID());
         if (!CloudEntityModelSync.ownsFakeAppearance(player.getUUID()))
             PlayerCapability.get(player).ifPresent(cap -> { cap.clearModel(); cap.setForceDisabled(true); });
@@ -49,14 +55,27 @@ public final class CloudPlayerModelSync {
 
     private static void reset(Minecraft client, CloudClientRuntime.RuntimeState runtime) {
         // Retire an old publication using its acknowledged revision. CAS prevents it clearing a newer session.
-        if (sessionRuntime != null && identityId != null && ownRevision >= 0 && publicationUuid != null)
-            new CloudPlayerPresenceClient(sessionRuntime.http()).publish(identityId, publicationUuid, ownRevision, null, ownNameProof).exceptionally(error -> null);
+        if (sessionRuntime != null && identityId != null && publicationUuid != null) {
+            var oldApi = new CloudPlayerPresenceClient(sessionRuntime.http());
+            String oldIdentity = identityId; UUID oldUuid = publicationUuid;
+            long acknowledged = ownRevision; JsonObject oldProof = ownNameProof;
+            CompletableFuture<Long> retiredRevision = pendingPublication == null ? CompletableFuture.completedFuture(acknowledged)
+                    : pendingPublication.handle((value, error) -> error == null ? value : acknowledged);
+            retiredRevision.thenCompose(value -> value >= 0 ? oldApi.publish(oldIdentity, oldUuid, value, null, oldProof)
+                    : CompletableFuture.completedFuture(value)).exceptionally(error -> {
+                YesSteveModel.LOGGER.debug("[SM][CloudPlayer] retired session clear: {}", message(error)); return null;
+            });
+        }
         if (client.level != null) for (Player player : client.level.players()) if (player != client.player && STATE.ownsAppearance(player.getUUID())) clearRemote(player);
         generation++; STATE.clear(); ATTEMPTS.clear(); IMPORTS.clear(); AUTHORIZED.clear(); authorizationRuntime = null;
+        CloudPlayerMotionSync.reset(); lastPublishedMotion = null; nextMotionPublish = 0;
         sessionRuntime = runtime; connection = client.getConnection(); level = client.level;
         polling = publishing = identifying = hasPublished = hasAttempted = false; identityId = null; ownRevision = -1;
+        pendingPublication = null;
         nextPoll = nextPublish = lastPollSuccess = 0; lastPublished = lastAttempted = null; publicationUuid = null;
         ownNameProof = null; nextIdentityRefresh = 0;
+        identityAttempt++; identityRefreshRequested = false;
+        status = runtime == null ? "Cloud 联机：请先登录 Cloud 账号" : "Cloud 联机：正在检查当前游戏身份";
     }
 
     public static void disconnect() {
@@ -74,6 +93,7 @@ public final class CloudPlayerModelSync {
         // Dimension/respawn changes invalidate imports but keep the session publication revision.
         if (level != client.level) {
             generation++; level = client.level; STATE.clear(); ATTEMPTS.clear(); IMPORTS.clear();
+            CloudPlayerMotionSync.clearPeers();
             polling = publishing = identifying = false; nextPoll = nextPublish = 0;
         }
         if (client.player == null || client.level == null) return;
@@ -86,16 +106,18 @@ public final class CloudPlayerModelSync {
             for (Player player : client.level.players()) if (player != client.player && STATE.ownsAppearance(player.getUUID())) clearRemote(player);
             publish(runtime, null, now); return;
         }
-        if (!identifying && (identityId == null && now >= nextPublish || ownNameProof != null && now >= nextIdentityRefresh)) identify(runtime, now);
+        if (!identifying && (identityRefreshRequested || identityId == null && now >= nextPublish || ownNameProof != null && now >= nextIdentityRefresh)) identify(runtime, now);
         CloudPlayerSelection selection = localSelection(runtime);
-        if (identityId != null && (!hasPublished || !Objects.equals(lastPublished, selection) || now >= nextPublish)) publish(runtime, selection, now);
+        boolean motionChanged = selection != null && motionSupported(runtime)
+                && !Objects.equals(lastPublishedMotion, CloudPlayerMotionSync.snapshot(selection.runtimeModelId())) && now >= nextMotionPublish;
+        if (identityId != null && (!hasPublished || !Objects.equals(lastPublished, selection) || motionChanged || now >= nextPublish)) publish(runtime, selection, now);
         List<Player> peers = client.level.players().stream().filter(player -> player != client.player).map(player -> (Player) player).toList();
         if (!polling && now >= nextPoll && !peers.isEmpty()) poll(runtime, peers, now);
         // Transient Cloud outages keep a verified appearance briefly; then revert to vanilla.
         if (lastPollSuccess > 0 && now - lastPollSuccess > 60000) for (Player player : peers) if (STATE.ownsAppearance(player.getUUID())) clearRemote(player);
         for (Player player : peers) {
             var token = STATE.get(player.getUUID());
-            if (token != null && token.selection() != null) apply(player, token);
+            if (token != null && token.selection() != null) { apply(player, token); CloudPlayerMotionSync.apply(player); }
             else if (!CloudEntityModelSync.ownsFakeAppearance(player.getUUID()))
                 PlayerCapability.get(player).ifPresent(cap -> cap.setForceDisabled(true));
         }
@@ -103,13 +125,15 @@ public final class CloudPlayerModelSync {
 
     private static void identify(CloudClientRuntime.RuntimeState runtime, long now) {
         identifying = true; nextPublish = now + 10000; long token = generation;
+        identityRefreshRequested = false; long attempt = ++identityAttempt;
         var profile = MinecraftSessionServiceJoiner.currentProfile();
         UUID entityUuid = Minecraft.getInstance().player.getUUID();
         runtime.identities().listIdentities().thenCompose(identities -> {
             var matches = identities.stream().filter(identity -> identity.verificationStatus().equals("VERIFIED")
                     && identity.identityRef().profileUuid().equals(profile.profileId())).toList();
-            if (matches.size() != 1) return CompletableFuture.<Identification>failedFuture(
-                    new IllegalStateException("请在 Cloud 账号管理绑定当前游戏身份"));
+            if (matches.isEmpty()) return CompletableFuture.<Identification>completedFuture(null);
+            if (matches.size() > 1) return CompletableFuture.<Identification>failedFuture(
+                    new IllegalStateException("当前 UUID 对应多个已验证身份，请在游戏身份管理确认登录提供方"));
             var identity = matches.get(0);
             if (entityUuid.equals(profile.profileId()))
                 return CompletableFuture.completedFuture(new Identification(identity, null));
@@ -123,14 +147,27 @@ public final class CloudPlayerModelSync {
                             (CloudIdentityClient.SessionJoiner) value -> new MinecraftSessionServiceJoiner().join(value)))
                     .thenApply(verified -> new Identification(verified, null));
         }).whenComplete((identity, error) -> Minecraft.getInstance().execute(() -> {
-            if (!current(token, runtime)) return; identifying = false;
-            if (error == null) { identityId = identity.identity().identityId(); ownNameProof = identity.nameProof(); nextIdentityRefresh = System.currentTimeMillis() + 120000; nextPublish = 0; status = "Cloud 联机：游戏身份已验证"; }
+            if (!current(token, runtime) || attempt != identityAttempt) return; identifying = false;
+            if (error == null && identity == null) {
+                identityId = null; ownNameProof = null;
+                status = "Cloud 账号已登录：请在账号管理点击“绑定当前游戏身份”后使用联机同步";
+            }
+            else if (error == null) { identityId = identity.identity().identityId(); ownNameProof = identity.nameProof(); nextIdentityRefresh = System.currentTimeMillis() + 120000; nextPublish = 0; status = "Cloud 联机：游戏身份已验证"; }
             else { nextIdentityRefresh = System.currentTimeMillis() + 10000; status = "Cloud 联机身份验证失败：" + message(error); YesSteveModel.LOGGER.warn("[SM][CloudPlayer] identity: {}", message(error)); }
         }));
     }
 
     /** Local selection callbacks request immediate publication; tick also notices texture changes. */
     public static void publishCurrentSelection() { nextPublish = 0; }
+
+    /** A verified binding becomes usable immediately; results from another instance are ignored. */
+    public static void requestIdentityRefresh(CloudClientRuntime.RuntimeState runtime) {
+        Minecraft.getInstance().execute(() -> {
+            if (runtime == null || runtime != CloudClientRuntime.state() || runtime != sessionRuntime) return;
+            identityAttempt++; identifying = false; identityRefreshRequested = true;
+            status = "Cloud 联机：正在检查当前游戏身份";
+        });
+    }
 
     private static CloudPlayerSelection localSelection(CloudClientRuntime.RuntimeState runtime) {
         Player player = Minecraft.getInstance().player;
@@ -145,24 +182,33 @@ public final class CloudPlayerModelSync {
     }
 
     private static void publish(CloudClientRuntime.RuntimeState runtime, CloudPlayerSelection selection, long now) {
-        if (publishing || identityId == null || now < nextPublish && hasAttempted && Objects.equals(selection, lastAttempted)) return;
+        CloudPlayerMotion motion = selection != null && motionSupported(runtime) ? CloudPlayerMotionSync.snapshot(selection.runtimeModelId()) : null;
+        boolean changed = !Objects.equals(motion, lastPublishedMotion) && now >= nextMotionPublish;
+        if (publishing || identityId == null || now < nextPublish && hasAttempted && Objects.equals(selection, lastAttempted) && !changed) return;
         lastAttempted = selection; hasAttempted = true;
-        publishing = true; nextPublish = now + 15000; long token = generation;
+        publishing = true; nextPublish = now + 15000; nextMotionPublish = now + 250; long token = generation;
         var api = new CloudPlayerPresenceClient(runtime.http()); UUID uuid = Minecraft.getInstance().player.getUUID();
         JsonObject nameProof = ownNameProof;
         publicationUuid = uuid;
         CompletableFuture<Long> revision = ownRevision < 0 ? api.revision(identityId) : CompletableFuture.completedFuture(ownRevision);
-        revision.thenCompose(expected -> current(token, runtime) ? api.publish(identityId, uuid, expected, selection, nameProof)
-                : CompletableFuture.failedFuture(new CancellationException())).whenComplete((value, error) -> Minecraft.getInstance().execute(() -> {
+        CompletableFuture<Long> operation = revision.thenCompose(expected -> current(token, runtime)
+                ? api.publish(identityId, uuid, expected, PrivacyMode.isActive() ? null : selection, nameProof,
+                    PrivacyMode.isActive() ? null : motion)
+                : CompletableFuture.failedFuture(new CancellationException()));
+        pendingPublication = operation;
+        operation.whenComplete((value, error) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, runtime)) return; publishing = false;
-            if (error == null) { ownRevision = value; lastPublished = selection; hasPublished = true; status = "Cloud 联机：已同步模型与贴图"; }
+            if (pendingPublication == operation) pendingPublication = null;
+            if (error == null) { ownRevision = value; lastPublished = selection; lastPublishedMotion = motion; hasPublished = true;
+                status = motionSupported(runtime) ? "Cloud 联机：已同步模型、贴图与动作" : "Cloud 联机：模型与贴图已同步；此实例需升级后端以同步动作"; }
             else { ownRevision = -1; nextPublish = System.currentTimeMillis() + 3000; hasPublished = false;
+                nextMotionPublish = nextPublish;
                 status = "Cloud 联机发布失败：" + message(error); YesSteveModel.LOGGER.warn("[SM][CloudPlayer] publish: {}", message(error)); }
         }));
     }
 
     private static void poll(CloudClientRuntime.RuntimeState runtime, List<Player> peers, long now) {
-        polling = true; nextPoll = now + 1000; long token = generation;
+        polling = true; nextPoll = now + (motionSupported(runtime) ? 250 : 1000); long token = generation;
         var api = new CloudPlayerPresenceClient(runtime.http()); List<CompletableFuture<Map<UUID, CloudPlayerSelection>>> requests = new ArrayList<>();
         List<UUID> ids = peers.stream().map(Player::getUUID).distinct().toList();
         for (int i = 0; i < ids.size(); i += 64) requests.add(api.query(ids.subList(i, Math.min(i + 64, ids.size()))));
@@ -175,7 +221,12 @@ public final class CloudPlayerModelSync {
             for (Player player : Minecraft.getInstance().level.players()) if (player != Minecraft.getInstance().player && ids.contains(player.getUUID())) {
                 CloudPlayerSelection selection = entries.get(player.getUUID());
                 if (selection == null) clearRemote(player);
-                else { var old = STATE.get(player.getUUID()); if (old == null || !selection.equals(old.selection())) { STATE.publish(player.getUUID(), selection); ATTEMPTS.remove(player.getUUID()); } }
+                else {
+                    if (!CloudPlayerMotionSync.receive(player, selection)) continue;
+                    CloudPlayerSelection appearance = selection.withoutMotion();
+                    var old = STATE.get(player.getUUID());
+                    if (old == null || !appearance.equals(old.selection())) { STATE.publish(player.getUUID(), appearance); ATTEMPTS.remove(player.getUUID()); }
+                }
             }
         }));
     }
@@ -183,6 +234,10 @@ public final class CloudPlayerModelSync {
     private static String message(Throwable error) {
         while (error instanceof CompletionException && error.getCause() != null) error = error.getCause();
         return Objects.requireNonNullElse(error.getMessage(), error.getClass().getSimpleName());
+    }
+
+    private static boolean motionSupported(CloudClientRuntime.RuntimeState runtime) {
+        return runtime.instanceInfo() != null && runtime.instanceInfo().playerMotionSupported();
     }
 
     private static String originFingerprint(CloudClientRuntime.RuntimeState runtime) {
