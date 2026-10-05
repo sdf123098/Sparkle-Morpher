@@ -6,7 +6,11 @@ import java.util.Objects;
 
 /** A player's selection, never an endpoint, credential or model payload. */
 public record CloudPlayerSelection(String instanceId, String originSha256, CloudAssetRef ref,
-        String format, String textureId) {
+        String format, String textureId, CloudPlayerMotion motion, long appearanceRevision) {
+    public CloudPlayerSelection(String instanceId, String originSha256, CloudAssetRef ref, String format, String textureId) {
+        this(instanceId, originSha256, ref, format, textureId, null, 0);
+    }
+    public CloudPlayerSelection withoutMotion() { return new CloudPlayerSelection(instanceId, originSha256, ref, format, textureId); }
     public CloudPlayerSelection {
         Objects.requireNonNull(ref, "ref");
         if (instanceId == null || !instanceId.matches("[a-z0-9][a-z0-9._-]{0,63}"))

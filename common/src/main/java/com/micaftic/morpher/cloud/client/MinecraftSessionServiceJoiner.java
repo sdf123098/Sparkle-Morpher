@@ -26,8 +26,15 @@ public final class MinecraftSessionServiceJoiner implements CloudIdentityClient.
     @Override
     public CompletableFuture<JsonObject> prove(CloudIdentityClient.CloudIdentityChallenge challenge,
                                                 CloudInstanceConfig instance, String purpose) {
-        if (!CloudGameIdentityProof.supports(challenge, instance)) {
+        if (challenge.profileKeyPayload().isEmpty()) {
             return CloudIdentityClient.SessionJoiner.super.prove(challenge, instance, purpose);
+        }
+        final UUID profileId;
+        try {
+            profileId = currentProfile().profileId();
+            CloudGameIdentityProof.validateChallenge(challenge, instance, purpose, profileId);
+        } catch (IllegalArgumentException failure) {
+            return CompletableFuture.failedFuture(failure);
         }
         return Minecraft.getInstance().getProfileKeyPairManager().prepareKeyPair()
                 .thenApply(pair -> pair)
@@ -40,7 +47,7 @@ public final class MinecraftSessionServiceJoiner implements CloudIdentityClient.
                         var pair = optional.get();
                         var data = pair.publicKey().data();
                         try {
-                            return CloudGameIdentityProof.sign(challenge, instance, purpose, currentProfile().profileId(),
+                            return CloudGameIdentityProof.sign(challenge, instance, purpose, profileId,
                                     pair.privateKey(), data.key(), data.expiresAt().toEpochMilli(), data.keySignature());
                         } catch (java.security.GeneralSecurityException | IllegalArgumentException failure) {
                             throw new java.util.concurrent.CompletionException(failure);

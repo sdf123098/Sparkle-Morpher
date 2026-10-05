@@ -1,5 +1,6 @@
 package com.micaftic.morpher.client.entity;
 
+import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
@@ -10,8 +11,6 @@ import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
 import com.micaftic.morpher.geckolib3.core.enums.AnimationState;
 import com.micaftic.morpher.resource.models.ModelProperties;
 import com.micaftic.morpher.molang.runtime.Struct;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SPlayAnimationPacket;
 import com.micaftic.morpher.util.AnimationRouletteDebugLog;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.floats.FloatArrayList;
@@ -175,11 +174,8 @@ public abstract class CustomPlayerEntity extends LivingAnimatable<Player> implem
     @Override
     public void afterSetupAnim(float seekTime, boolean isFirstPerson) {
         super.afterSetupAnim(seekTime, isFirstPerson);
-        if (this.isLocalPlayer && isFirstPerson && isModelSwitching() && getAnimationState(getCapControllerKey()) == AnimationState.IDLE) {
-            clearModelSwitch();
-            if (NetworkHandler.isClientConnected()) {
-                NetworkHandler.sendToServer(C2SPlayAnimationPacket.createDefault());
-            }
+        if (this.isLocalPlayer && isModelSwitching() && !isDisabledState() && getAnimationState(getCapControllerKey()) == AnimationState.IDLE) {
+            CloudPlayerMotionSync.stop(this);
         }
     }
 
