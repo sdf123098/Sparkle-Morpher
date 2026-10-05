@@ -64,6 +64,30 @@ public final class CloudHttpClient {
         return instance;
     }
 
+    /** Initial discovery sends no credentials and keeps the user-entered origin authoritative. */
+    public static CompletableFuture<CloudInstanceRegistry.CloudInstanceProfile> discoverProfile(String address, String name) {
+        return discoverProfile(address, name, HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build());
+    }
+
+    static CompletableFuture<CloudInstanceRegistry.CloudInstanceProfile> discoverProfile(String address, String name, HttpClient httpClient) {
+        String normalized = Objects.requireNonNull(address, "address").trim();
+        if (!normalized.contains("://")) normalized = "https://" + normalized;
+        CloudInstanceConfig probe = CloudInstanceConfig.v1("discovery", URI.create(normalized));
+        return new CloudHttpClient(probe, httpClient).getJson("/v1/instance").thenApply(body -> {
+            try {
+                JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+                CloudInstanceConfig expected = CloudInstanceConfig.v1(requiredString(root, "instance_id"), probe.origin());
+                CloudInstanceInfo info = parseInstanceResponse(expected, body);
+                String label = name == null || name.isBlank() ? probe.origin().getHost() : name.trim();
+                return new CloudInstanceRegistry.CloudInstanceProfile(info.config(), label);
+            } catch (CloudHttpException failure) {
+                throw failure;
+            } catch (RuntimeException failure) {
+                throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud instance response");
+            }
+        });
+    }
+
     public CompletableFuture<CloudInstanceInfo> discoverInstance() {
         CloudState.setStatus(CloudConnectionStatus.CONNECTING, CloudErrorCode.NONE, instance.instanceId());
         HttpRequest request = requestBuilder("/v1/instance")
