@@ -169,11 +169,16 @@ public class ModernPlayerModelScreen extends Screen {
     private EditBox cloudPasswordBox;
     private Component cloudPanelStatus = Component.empty();
     private Screen afterCloudLogin;
-    private boolean manualCloudAccount;
+    private boolean registerCloudAccount;
+    private boolean cloudFormBusy;
+    private long cloudFormGeneration;
+    private String cloudAccountDraft = "";
+    private String cloudAddressDraft = "";
+    private String cloudNameDraft = "";
     private enum CloudAccountPage { ACCOUNT, INSTANCES, SCOPES }
     private CloudAccountPage cloudAccountPage = CloudAccountPage.ACCOUNT;
     private int cloudAccountScroll;
-    private EditBox cloudInstanceIdBox;
+    private int cloudDetailScroll;
     private EditBox cloudInstanceNameBox;
     private EditBox cloudOriginBox;
     private EditBox cloudScopeIdBox;
@@ -346,6 +351,8 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     protected void init() {
         clearWidgets();
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT) cloudAccountPage = CloudAccountPage.ACCOUNT;
+        else if (STATE.activeTab == ModelPanelState.Tab.INSTANCE && cloudAccountPage == CloudAccountPage.ACCOUNT) cloudAccountPage = CloudAccountPage.INSTANCES;
         this.layout = ModelPanelLayout.create(this.width, this.height);
         this.modelSearchBox = null;
         this.cloudSearchBox = null;
@@ -354,13 +361,13 @@ public class ModernPlayerModelScreen extends Screen {
         this.categoryEditBox = null;
         this.cloudAccountBox = null;
         this.cloudPasswordBox = null;
-        this.cloudInstanceIdBox = null;
         this.cloudInstanceNameBox = null;
         this.cloudOriginBox = null;
         this.cloudScopeIdBox = null;
         this.cloudScopeNameBox = null;
         this.cloudWorldEpochBox = null;
-        if (STATE.activeTab == ModelPanelState.Tab.MODEL) {
+        boolean cloudFormOpen = STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE;
+        if (!cloudFormOpen && STATE.activeTab == ModelPanelState.Tab.MODEL) {
             if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
                 this.modelSearchBox = new EditBox(this.font, modelListX(), this.layout.contentTop + 30, modelListW(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
                 this.modelSearchBox.setMaxLength(256);
@@ -375,7 +382,7 @@ public class ModernPlayerModelScreen extends Screen {
                 addWidget(this.cloudSearchBox);
                 ensureCloudPageLoaded();
             }
-        } else if (STATE.activeTab == ModelPanelState.Tab.RESOURCE) {
+        } else if (!cloudFormOpen && STATE.activeTab == ModelPanelState.Tab.RESOURCE) {
             this.resourceSearchBox = new EditBox(this.font, resourceListX(), this.layout.contentTop + 8, resourceSearchW(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
             this.resourceSearchBox.setMaxLength(256);
             this.resourceSearchBox.setValue(STATE.resourceSearchText);
@@ -403,38 +410,37 @@ public class ModernPlayerModelScreen extends Screen {
             this.categoryEditBox.setValue(STATE.categoryEditText);
             this.categoryEditBox.setTextColor(TEXT);
             addWidget(this.categoryEditBox);
-        } else if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT) {
-            AccountPanelLayout accountLayout = accountPanelLayout();
+        } else if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN) {
+            int x = secondaryPanelX() + 16;
+            int w = secondaryPanelW() - 32;
+            this.cloudAccountBox = cloudField(x, cloudFormFieldY(0), w, "account", 128);
+            this.cloudAccountBox.setValue(cloudAccountDraft);
+            this.cloudAccountBox.setResponder(value -> cloudAccountDraft = value);
+            this.cloudPasswordBox = cloudField(x, cloudFormFieldY(1), w, "password", 1024);
+            CloudManagementScreen.maskPassword(this.cloudPasswordBox);
+            setInitialFocus(this.cloudAccountBox);
+        } else if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) {
+            int x = secondaryPanelX() + 16;
+            int w = secondaryPanelW() - 32;
+            this.cloudOriginBox = cloudField(x, cloudFormFieldY(0), w, "address", 2048);
+            this.cloudOriginBox.setValue(cloudAddressDraft);
+            this.cloudOriginBox.setResponder(value -> cloudAddressDraft = value);
+            this.cloudInstanceNameBox = cloudField(x, cloudFormFieldY(1), w, "optional_name", 128);
+            this.cloudInstanceNameBox.setValue(cloudNameDraft);
+            this.cloudInstanceNameBox.setResponder(value -> cloudNameDraft = value);
+            setInitialFocus(this.cloudOriginBox);
+        } else if (STATE.activeTab == ModelPanelState.Tab.INSTANCE && cloudAccountPage == CloudAccountPage.SCOPES) {
+            AccountPanelLayout accountLayout = cloudDetailLayout();
             int fieldX = accountLayout.fieldX();
             int fieldW = accountLayout.fieldWidth();
-            if (cloudAccountPage == CloudAccountPage.ACCOUNT
-                    && manualCloudAccount) {
-                this.cloudAccountBox = cloudField(fieldX, accountLayout.fieldY(0), fieldW, "account", 128);
-                this.cloudAccountBox.setValue(CloudManagementScreen.management().accountId(
-                        CloudManagementScreen.management().registry().selected()
-                                .map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("")));
-                this.cloudPasswordBox = cloudField(fieldX, accountLayout.fieldY(1), fieldW, "password", 256);
-                CloudManagementScreen.maskPassword(this.cloudPasswordBox);
-            } else if (cloudAccountPage == CloudAccountPage.INSTANCES) {
-                var selected = CloudManagementScreen.management().registry().selected();
-                this.cloudInstanceIdBox = cloudField(fieldX, accountLayout.fieldY(0), fieldW, "instance_id", 128);
-                this.cloudInstanceNameBox = cloudField(fieldX, accountLayout.fieldY(1), fieldW, "name", 128);
-                this.cloudOriginBox = cloudField(fieldX, accountLayout.fieldY(2), fieldW, "origin", 2048);
-                selected.ifPresent(profile -> {
-                    cloudInstanceIdBox.setValue(profile.instanceId());
-                    cloudInstanceNameBox.setValue(CloudManagementScreen.displayName(profile));
-                    cloudOriginBox.setValue(profile.instance().origin().toString());
-                });
-            } else if (cloudAccountPage == CloudAccountPage.SCOPES) {
-                var selected = CloudManagementScreen.management().snapshot().selectedScope();
-                this.cloudScopeIdBox = cloudField(fieldX, accountLayout.fieldY(0), fieldW, "scope_id", 128);
-                this.cloudScopeNameBox = cloudField(fieldX, accountLayout.fieldY(1), fieldW, "scope_name", 128);
-                this.cloudWorldEpochBox = cloudField(fieldX, accountLayout.fieldY(2), fieldW, "world_epoch", 128);
-                if (selected != null) {
-                    cloudScopeIdBox.setValue(selected.scopeId());
-                    cloudScopeNameBox.setValue(selected.name());
-                    cloudWorldEpochBox.setValue(selected.worldEpoch());
-                }
+            var selected = CloudManagementScreen.management().snapshot().selectedScope();
+            this.cloudScopeIdBox = cloudField(fieldX, accountLayout.fieldY(0), fieldW, "scope_id", 128);
+            this.cloudScopeNameBox = cloudField(fieldX, accountLayout.fieldY(1), fieldW, "scope_name", 128);
+            this.cloudWorldEpochBox = cloudField(fieldX, accountLayout.fieldY(2), fieldW, "world_epoch", 128);
+            if (selected != null) {
+                cloudScopeIdBox.setValue(selected.scopeId());
+                cloudScopeNameBox.setValue(selected.name());
+                cloudWorldEpochBox.setValue(selected.worldEpoch());
             }
         }
     }
@@ -463,7 +469,7 @@ public class ModernPlayerModelScreen extends Screen {
             pendingCloudImports.clear(); pendingVisibilityChanges.clear();
             cloudVisibilityBatchRunning = false;
             if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) this.pendingModelApplyId = null;
-        this.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
+        closeCloudForm();
         this.controller.cancelPicking();
         // 释放卡片预览实体池持有的模型引用；本屏重开时会按需重建。
         this.cardPreviewModels.clear();
@@ -480,8 +486,13 @@ public class ModernPlayerModelScreen extends Screen {
 
     @Override
     public void onClose() {
+        if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE) {
+            closeCloudForm();
+            init();
+            return;
+        }
         if (this.parentScreen != null && this.minecraft != null) {
-            this.minecraft.setScreen(this.parentScreen);
+            InputUtil.setScreen(this.parentScreen);
         } else {
             super.onClose();
         }
@@ -551,7 +562,7 @@ public class ModernPlayerModelScreen extends Screen {
         switch (STATE.activeTab) {
             case MODEL -> renderModelTab(g, mainMouseX, mainMouseY, partialTick);
             case RESOURCE -> renderResourceTab(g, mainMouseX, mainMouseY, partialTick);
-            case ACCOUNT -> renderCloudAccountPanel(g, mainMouseX, mainMouseY, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, partialTick);
+            case ACCOUNT, INSTANCE -> renderCloudAccountPanel(g, mainMouseX, mainMouseY, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, partialTick);
             case SETTINGS -> renderSettingsTab(g, mainMouseX, mainMouseY);
         }
         renderFooter(g);
@@ -568,14 +579,16 @@ public class ModernPlayerModelScreen extends Screen {
             renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, railX, y, railW, th, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
             renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, railX, y + th + 4, railW, th, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
             renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.ACCOUNT, railX, y + (th + 4) * 2, railW, th, IconGlyph.LOCK, Component.translatable("gui.sparkle_morpher.cloud.manage.account_management"));
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, railX, y + (th + 4) * 3, railW, th, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.INSTANCE, railX, y + (th + 4) * 3, railW, th, IconGlyph.RESOURCE, cloudText("instance_management"));
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, railX, y + (th + 4) * 4, railW, th, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
             return;
         }
-        int tabWidth = this.layout.width / 4;
+        int tabWidth = this.layout.width / 5;
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, this.layout.left, tabWidth, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, this.layout.left + tabWidth, tabWidth, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.ACCOUNT, this.layout.left + tabWidth * 2, tabWidth, IconGlyph.LOCK, Component.translatable("gui.sparkle_morpher.cloud.manage.account_management"));
-        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, this.layout.left + tabWidth * 3, this.layout.width - tabWidth * 3, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.INSTANCE, this.layout.left + tabWidth * 3, tabWidth, IconGlyph.RESOURCE, cloudText("instance_management"));
+        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, this.layout.left + tabWidth * 4, this.layout.width - tabWidth * 4, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
     }
 
     private void renderTab(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelPanelState.Tab tab, int x, int w, IconGlyph icon, Component label) {
@@ -601,7 +614,12 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void switchTab(ModelPanelState.Tab tab) {
         if (STATE.activeTab != tab) {
+            closeCloudForm();
             STATE.activeTab = tab;
+            if (tab == ModelPanelState.Tab.ACCOUNT) cloudAccountPage = CloudAccountPage.ACCOUNT;
+            if (tab == ModelPanelState.Tab.INSTANCE) cloudAccountPage = CloudAccountPage.INSTANCES;
+            cloudAccountScroll = 0;
+            cloudDetailScroll = 0;
             STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
             if (tab == ModelPanelState.Tab.RESOURCE) {
                 STATE.resourceLoaded = false;
@@ -689,11 +707,13 @@ public class ModernPlayerModelScreen extends Screen {
 
     private int secondaryPanelW() {
         int max = Math.max(120, this.layout.width - 32);
+        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) return Math.min(420, max);
         return clamp(this.layout.width * 2 / 3, Math.min(520, max), max);
     }
 
     private int secondaryPanelH() {
         int max = Math.max(96, this.layout.height - 32);
+        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) return Math.min(236, max);
         return clamp(this.layout.height * 2 / 3, Math.min(300, max), max);
     }
 
@@ -825,14 +845,14 @@ public class ModernPlayerModelScreen extends Screen {
                     () -> STATE.cloudTabOffset = Math.min(Math.max(0, profiles.size() - visible), STATE.cloudTabOffset + 1));
         }
         renderTextButton(g, mouseX, mouseY, x + localW + cloudW + navW, y, addW, 18, Component.literal("+"),
-                this::openCloudAccount);
+                this::openCloudInstanceForm);
     }
 
     private void renderCloudBrowserTab(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w,
                                        Component label, boolean selected, Runnable action) {
         boolean hover = inside(mouseX, mouseY, x, y, w, 18);
-        fill(g, x + 1, y + 1, w - 2, 17, selected ? 0xCC34424A : hover ? PANEL_HOVER : 0x50303030);
-        fill(g, x + 1, y, w - 2, 1, selected ? RED : 0x55FFFFFF);
+        fill(g, x + 1, y + 1, w - 2, 17, selected ? 0xEE344C5C : hover ? 0xCC435B6B : 0xCC27333D);
+        fill(g, x + 1, y, w - 2, 1, selected ? RED : 0x99D5E5EF);
         fill(g, x, y + 2, 1, 16, 0x55FFFFFF);
         fill(g, x + w - 1, y + 2, 1, 16, 0x55FFFFFF);
         if (!selected) fill(g, x + 1, y + 17, w - 2, 1, 0x55FFFFFF);
@@ -955,14 +975,17 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderCloudViewTabs(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
         if (STATE.modelSource == ModelPanelState.ModelSource.COMMUNITY_CLOUD) {
-            renderChip(g, x, y, Math.min(86, w), Component.translatable("gui.sparkle_morpher.model_source.all_models"), true, this::ensureCloudPageLoaded);
+            renderCloudBrowserTab(g, mouseX, mouseY, x, y, Math.min(100, w), Component.translatable("gui.sparkle_morpher.model_source.all_models"), true, this::ensureCloudPageLoaded);
             return;
         }
-        int chipW = Math.max(48, (w - 12) / 4);
-        renderChip(g, x, y, chipW, Component.translatable("gui.sparkle_morpher.model_source.recent"), STATE.cloudView == ModelPanelState.CloudView.RECENT, () -> switchCloudView(ModelPanelState.CloudView.RECENT));
-        renderChip(g, x + chipW + 4, y, chipW, Component.translatable("gui.sparkle_morpher.model_source.favorites"), STATE.cloudView == ModelPanelState.CloudView.FAVORITES, () -> switchCloudView(ModelPanelState.CloudView.FAVORITES));
-        renderChip(g, x + (chipW + 4) * 2, y, chipW, Component.translatable("gui.sparkle_morpher.model_source.mine"), STATE.cloudView == ModelPanelState.CloudView.MINE, () -> switchCloudView(ModelPanelState.CloudView.MINE));
-        renderChip(g, x + (chipW + 4) * 3, y, w - (chipW + 4) * 3, Component.translatable("gui.sparkle_morpher.model_source.public"), STATE.cloudView == ModelPanelState.CloudView.PUBLIC, () -> switchCloudView(ModelPanelState.CloudView.PUBLIC));
+        ModelPanelState.CloudView[] views = ModelPanelState.CloudView.values();
+        String[] labels = {"recent", "favorites", "mine", "public"};
+        int tabW = w / views.length;
+        for (int i = 0; i < views.length; i++) {
+            var view = views[i];
+            renderCloudBrowserTab(g, mouseX, mouseY, x + i * tabW, y, i == views.length - 1 ? w - i * tabW : tabW,
+                    Component.translatable("gui.sparkle_morpher.model_source." + labels[i]), STATE.cloudView == view, () -> switchCloudView(view));
+        }
     }
 
     private void switchCloudView(ModelPanelState.CloudView view) {
@@ -2024,7 +2047,7 @@ public class ModernPlayerModelScreen extends Screen {
         secondaryGlassPanel(g, x, y, w, h);
         border(g, x, y, w, h, BORDER);
         renderIconButton(g, mouseX, mouseY, x + w - 24, y + 6, IconGlyph.CLOSE, Component.translatable("gui.sparkle_morpher.model_panel.close"), () -> {
-            STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
+            closeCloudForm();
             init();
             if (afterCloudLogin != null) {
                 Screen next = afterCloudLogin;
@@ -2036,87 +2059,73 @@ public class ModernPlayerModelScreen extends Screen {
             case SITES -> renderSitesPanel(g, mouseX, mouseY, x, y, w, h, partialTick);
             case CATEGORIES -> renderCategoryPanel(g, mouseX, mouseY, x, y, w, h, partialTick);
             case IMPORT -> renderImportPanel(g, mouseX, mouseY, x, y, w, h);
+            case CLOUD_LOGIN, CLOUD_INSTANCE -> renderCloudForm(g, mouseX, mouseY, x, y, w, h, partialTick);
             default -> {
             }
         }
     }
 
     private void renderCloudAccountPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        var management = CloudManagementScreen.management();
-        var selected = management.registry().selected();
-        String name = selected.map(CloudManagementScreen::displayName).orElse("—");
+        var selected = CloudManagementScreen.management().registry().selected();
         String instanceId = selected.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("");
         boolean connected = CloudClientRuntime.state(instanceId) != null;
-        boolean official = selected.map(CloudInstanceRegistry::isBuiltinOfficial).orElse(false);
         AccountPanelLayout panels = accountPanelLayout();
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account_management"), x + 8, y + 10);
-        drawMuted(g, Component.literal(trim(name + "  ·  " + CloudManagementScreen.text(
-                connected ? "connected" : "disconnected"), w - 130)), x + 118, y + 12);
+        drawTitle(g, cloudText(STATE.activeTab == ModelPanelState.Tab.ACCOUNT ? "account_management" : "instance_management"), x + 8, y + 10);
+        drawMuted(g, Component.literal(trim(selected.map(CloudManagementScreen::displayName).orElse("—") + "  ·  "
+                + CloudManagementScreen.text(connected ? "connected" : "disconnected"), w - 132)), x + 126, y + 12);
         glassPanel(g, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight());
         glassPanel(g, panels.detailX(), panels.detailY(), panels.detailWidth(), panels.detailHeight());
-        renderRowButton(g, mouseX, mouseY, panels.listX() + 8, panels.listY() + 10,
-                panels.listWidth() - 16, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.account"),
-                cloudAccountPage == CloudAccountPage.ACCOUNT, () -> setCloudAccountPage(CloudAccountPage.ACCOUNT));
-        renderRowButton(g, mouseX, mouseY, panels.listX() + 8, panels.listY() + 34,
-                panels.listWidth() - 16, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.instances"),
-                cloudAccountPage == CloudAccountPage.INSTANCES, () -> setCloudAccountPage(CloudAccountPage.INSTANCES));
-        renderRowButton(g, mouseX, mouseY, panels.listX() + 8, panels.listY() + 58,
-                panels.listWidth() - 16, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.scopes"),
-                cloudAccountPage == CloudAccountPage.SCOPES, () -> setCloudAccountPage(CloudAccountPage.SCOPES));
         renderCloudAccountList(g, mouseX, mouseY, panels);
+        var details = cloudDetailLayout();
+        int firstDetailHit = this.hits.size();
+        g.enableScissor(panels.detailX(), panels.detailY(), panels.detailX() + panels.detailWidth(), panels.detailY() + panels.detailHeight());
         switch (cloudAccountPage) {
-            case ACCOUNT -> renderCloudAccountDetails(g, mouseX, mouseY, panels, connected, official, partialTick);
-            case INSTANCES -> renderCloudInstances(g, mouseX, mouseY, panels, partialTick);
-            case SCOPES -> renderCloudScopes(g, mouseX, mouseY, panels, partialTick);
+            case ACCOUNT -> renderCloudAccountDetails(g, mouseX, mouseY, details, connected, selected.map(CloudInstanceRegistry::isBuiltinOfficial).orElse(false), partialTick);
+            case INSTANCES -> renderCloudInstances(g, mouseX, mouseY, details, partialTick);
+            case SCOPES -> renderCloudScopes(g, mouseX, mouseY, details, partialTick);
         }
-        drawMuted(g, Component.literal(trim(cloudPanelStatus.getString(), w - 16)), x + 8, y + h - 18);
+        g.disableScissor();
+        this.hits.subList(firstDetailHit, this.hits.size()).removeIf(hit -> hit.y() < panels.detailY() || hit.y() + hit.h() > panels.detailY() + panels.detailHeight());
+        int detailContentHeight = cloudAccountPage == CloudAccountPage.SCOPES ? 268 : cloudAccountPage == CloudAccountPage.INSTANCES ? 232 : 180;
+        if (detailContentHeight > panels.detailHeight()) renderScrollbar(g, mouseX, mouseY, panels.detailX() + panels.detailWidth() - 6, panels.detailY() + 4, 4, panels.detailHeight() - 8, detailContentHeight, panels.detailHeight(), cloudDetailScroll);
+        drawText(g, Component.literal(trim(cloudPanelStatus.getString(), w - 16)), x + 8, y + h - 18);
     }
 
     private void renderCloudAccountList(GuiGraphicsExtractor g, int mouseX, int mouseY, AccountPanelLayout panels) {
-        int x = panels.listX();
-        int y = panels.listY();
-        int w = panels.listWidth();
-        int listY = y + 112;
+        int x = panels.listX(), y = panels.listY(), w = panels.listWidth();
+        int listY = y + 38;
         int rows = panels.listRows();
         var management = CloudManagementScreen.management();
+        drawTitle(g, cloudText(cloudAccountPage == CloudAccountPage.ACCOUNT ? "multi_account" : cloudAccountPage == CloudAccountPage.SCOPES ? "scopes" : "instances"), x + 10, y + 12);
         if (cloudAccountPage == CloudAccountPage.SCOPES) {
-            drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scopes"), x + 8, y + 91);
             var scopes = management.snapshot().scopes();
             cloudAccountScroll = clamp(cloudAccountScroll, 0, Math.max(0, scopes.size() - rows));
             for (int i = 0; i < rows && cloudAccountScroll + i < scopes.size(); i++) {
                 var scope = scopes.get(cloudAccountScroll + i);
-                renderRowButton(g, mouseX, mouseY, x + 8, listY + i * 24, w - 16, 20,
-                        Component.literal(trim(scope.name() + "  [" + scope.scopeId() + "]", w - 28)),
-                        management.snapshot().selectedScope() != null
-                                && management.snapshot().selectedScope().scopeId().equals(scope.scopeId()),
-                        () -> selectCloudScope(scope.scopeId()));
+                renderRowButton(g, mouseX, mouseY, x + 8, listY + i * 36, w - 16, 30,
+                        Component.literal(trim(scope.name(), w - 28)), management.snapshot().selectedScope() != null && management.snapshot().selectedScope().scopeId().equals(scope.scopeId()), () -> selectCloudScope(scope.scopeId()));
             }
-            if (scopes.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4,
-                    panels.listHeight() - 120, scopes.size(), rows, cloudAccountScroll);
+            if (scopes.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4, panels.listHeight() - 46, scopes.size(), rows, cloudAccountScroll);
             return;
         }
-        drawSection(g, Component.translatable(cloudAccountPage == CloudAccountPage.ACCOUNT
-                ? "gui.sparkle_morpher.cloud.manage.multi_account"
-                : "gui.sparkle_morpher.cloud.manage.instances"), x + 8, y + 91);
         var profiles = management.registry().profiles();
         cloudAccountScroll = clamp(cloudAccountScroll, 0, Math.max(0, profiles.size() - rows));
         for (int i = 0; i < rows && cloudAccountScroll + i < profiles.size(); i++) {
             var profile = profiles.get(cloudAccountScroll + i);
+            int rowY = listY + i * 36;
+            boolean active = management.registry().selected().map(current -> current.instanceId().equals(profile.instanceId())).orElse(false);
+            boolean hover = inside(mouseX, mouseY, x + 8, rowY, w - 16, 32);
+            fill(g, x + 8, rowY, w - 16, 32, active ? 0xCC344C5C : hover ? PANEL_HOVER : 0x8827333D);
+            if (active) fill(g, x + 8, rowY, 2, 32, RED);
+            drawText(g, Component.literal(trim(CloudManagementScreen.displayName(profile), w - 32)), x + 16, rowY + 5);
             String account = management.accountId(profile.instanceId());
-            String suffix = cloudAccountPage == CloudAccountPage.ACCOUNT
-                    ? (account.isBlank() ? CloudManagementScreen.text("disconnected") : account)
+            String detail = cloudAccountPage == CloudAccountPage.ACCOUNT
+                    ? (CloudClientRuntime.state(profile.instanceId()) == null ? CloudManagementScreen.text("disconnected") : account)
                     : profile.instance().origin().toString();
-            String label = CloudManagementScreen.displayName(profile) + "  ·  " + suffix;
-            renderRowButton(g, mouseX, mouseY, x + 8, listY + i * 24, w - 16, 20,
-                    Component.literal(trim(label, w - 28)),
-                    management.registry().selected().map(current -> current.instanceId().equals(profile.instanceId())).orElse(false),
-                    () -> selectCloudInstance(profile));
+            drawMuted(g, Component.literal(trim(detail, w - 32)), x + 16, rowY + 19);
+            hit(x + 8, rowY, w - 16, 32, Component.literal(CloudManagementScreen.displayName(profile) + " · " + detail), () -> selectCloudInstance(profile));
         }
-        if (profiles.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4,
-                panels.listHeight() - 120, profiles.size(), rows, cloudAccountScroll);
+        if (profiles.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4, panels.listHeight() - 46, profiles.size(), rows, cloudAccountScroll);
     }
 
     private void renderCloudAccountDetails(GuiGraphicsExtractor g, int mouseX, int mouseY,
@@ -2141,9 +2150,8 @@ public class ModernPlayerModelScreen extends Screen {
             renderTextButton(g, mouseX, mouseY, x + half + 6, y + 82, half, 20,
                     Component.translatable("gui.sparkle_morpher.cloud.manage.switch_account"), () -> {
                         CloudManagementScreen.management().logout();
-                        manualCloudAccount = true;
                         resetCloudPage();
-                        init();
+                        openCloudLoginForm(false);
                     });
             renderTextButton(g, mouseX, mouseY, x, y + 116, w, 20,
                     Component.translatable("gui.sparkle_morpher.cloud.manage.identity.bind_current"), () -> {
@@ -2161,58 +2169,37 @@ public class ModernPlayerModelScreen extends Screen {
             renderTextButton(g, mouseX, mouseY, x, y + 144, w, 20,
                     Component.translatable("gui.sparkle_morpher.cloud.manage.identities"),
                     () -> InputUtil.setScreen(new CloudIdentityManagementScreen(this, CloudManagementScreen.management())));
-        } else if (!manualCloudAccount) {
-            drawMuted(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, y + 42);
-            renderTextButton(g, mouseX, mouseY, x, y + 66, w, 24,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.quick_connect"),
-                    () -> runCloudAccount(CloudManagementScreen.connectOfficialAccount(), "quick_success"));
-            renderTextButton(g, mouseX, mouseY, x, y + 98, w, 20,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.manual_account"), () -> {
-                        manualCloudAccount = true;
-                        init();
-                    });
         } else {
-            drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, panels.fieldY(0) - 14);
-            drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.password"), x, panels.fieldY(1) - 14);
-            if (cloudAccountBox != null) cloudAccountBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-            if (cloudPasswordBox != null) cloudPasswordBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+            drawMuted(g, Component.literal(trim(cloudText("account_intro").getString(), w)), x, y + 40);
+            renderTextButton(g, mouseX, mouseY, x, y + 66, w, 24, cloudText("quick_connect"),
+                    () -> { if (!cloudFormBusy) runCloudAccount(CloudManagementScreen.connectOfficialAccount(), "quick_success"); });
             int half = panels.buttonWidth(2);
-            renderTextButton(g, mouseX, mouseY, x, panels.actionY(2), half, 20,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.login"), () -> submitCloudAccount(false));
-            renderTextButton(g, mouseX, mouseY, x + half + 6, panels.actionY(2), half, 20,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.register"), () -> submitCloudAccount(true));
+            renderTextButton(g, mouseX, mouseY, x, y + 102, half, 20, cloudText("login"), () -> openCloudLoginForm(false));
+            renderTextButton(g, mouseX, mouseY, x + half + 6, y + 102, half, 20, cloudText("register_short"), () -> openCloudLoginForm(true));
         }
     }
 
-    private void renderCloudInstances(GuiGraphicsExtractor g, int mouseX, int mouseY,
-                                      AccountPanelLayout panels, float partialTick) {
-        int x = panels.fieldX();
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.cloud.manage.instances"), x, panels.detailY() + 12);
-        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.instance_id"), x, panels.fieldY(0) - 14);
-        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.name"), x, panels.fieldY(1) - 14);
-        drawSection(g, Component.literal("URL"), x, panels.fieldY(2) - 14);
-        if (cloudInstanceIdBox != null) cloudInstanceIdBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        if (cloudInstanceNameBox != null) cloudInstanceNameBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        if (cloudOriginBox != null) cloudOriginBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        int bw = panels.buttonWidth(3);
-        int buttonY = panels.actionY(3);
-        renderTextButton(g, mouseX, mouseY, x, buttonY, bw, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.add_instance"), () -> {
-                    cloudInstanceIdBox.setValue("");
-                    cloudInstanceNameBox.setValue("");
-                    cloudOriginBox.setValue("");
-                    setFocused(cloudInstanceIdBox);
-                });
-        renderTextButton(g, mouseX, mouseY, x + bw + 6, buttonY, bw, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.save_instance"), this::saveCloudInstance);
-        renderTextButton(g, mouseX, mouseY, x + (bw + 6) * 2, buttonY, bw, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.remove_instance"), this::removeCloudInstance);
+    private void renderCloudInstances(GuiGraphicsExtractor g, int mouseX, int mouseY, AccountPanelLayout panels, float partialTick) {
+        int x = panels.fieldX(), y = panels.detailY(), w = panels.fieldWidth();
+        drawTitle(g, cloudText("instance_management"), x, y + 12);
+        var selected = CloudManagementScreen.management().registry().selected();
+        if (selected.isPresent()) {
+            var profile = selected.get();
+            drawText(g, Component.literal(trim(CloudManagementScreen.displayName(profile), w)), x, y + 40);
+            drawMuted(g, Component.literal(trim(profile.instance().origin().toString(), w)), x, y + 58);
+            boolean connected = CloudClientRuntime.state(profile.instanceId()) != null;
+            drawText(g, cloudText(connected ? "connected" : "disconnected"), x, y + 80);
+            renderTextButton(g, mouseX, mouseY, x, y + 106, w, 22, cloudText("manage_account"), this::openCloudAccount);
+            if (!CloudInstanceRegistry.isBuiltinOfficial(profile)) renderTextButton(g, mouseX, mouseY, x, y + 136, w, 20, cloudText("remove_instance"), this::removeCloudInstance);
+        }
+        renderTextButton(g, mouseX, mouseY, x, y + 166, w, 22, cloudText("add_instance"), this::openCloudInstanceForm);
+        renderTextButton(g, mouseX, mouseY, x, y + 196, w, 20, cloudText("scopes"), () -> setCloudAccountPage(CloudAccountPage.SCOPES));
     }
 
     private void renderCloudScopes(GuiGraphicsExtractor g, int mouseX, int mouseY,
                                    AccountPanelLayout panels, float partialTick) {
         int x = panels.fieldX();
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scopes"), x, panels.detailY() + 12);
+        renderTextButton(g, mouseX, mouseY, x, panels.detailY() + 8, panels.fieldWidth(), 20, cloudText("back_instances"), () -> setCloudAccountPage(CloudAccountPage.INSTANCES));
         drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scope_id"), x, panels.fieldY(0) - 14);
         drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scope_name"), x, panels.fieldY(1) - 14);
         drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.world_epoch"), x, panels.fieldY(2) - 14);
@@ -2239,12 +2226,14 @@ public class ModernPlayerModelScreen extends Screen {
         if (cloudAccountPage == page) return;
         cloudAccountPage = page;
         cloudAccountScroll = 0;
+        cloudDetailScroll = 0;
         cloudPanelStatus = Component.empty();
         init();
     }
 
     private void selectCloudInstance(CloudInstanceRegistry.CloudInstanceProfile profile) {
         try {
+            closeCloudForm();
             switchCloudInstance(profile);
             CloudManagementScreen.management().saveInstances();
             cloudPanelStatus = Component.literal(CloudManagementScreen.text("selected", CloudManagementScreen.displayName(profile)));
@@ -2254,15 +2243,37 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void saveCloudInstance() {
+        if (cloudFormBusy || cloudOriginBox == null || cloudInstanceNameBox == null) return;
+        cloudAddressDraft = cloudOriginBox.getValue().trim();
+        cloudNameDraft = cloudInstanceNameBox.getValue().trim();
+        if (cloudAddressDraft.isBlank()) { cloudPanelStatus = cloudText("address_required"); return; }
+        cloudFormBusy = true;
+        long generation = ++cloudFormGeneration;
+        cloudPanelStatus = cloudText("checking_instance");
         try {
-            var config = com.micaftic.morpher.cloud.CloudInstanceConfig.v1(
-                    cloudInstanceIdBox.getValue().trim(), java.net.URI.create(cloudOriginBox.getValue().trim()));
-            String name = cloudInstanceNameBox.getValue().trim();
-            var profile = new CloudInstanceRegistry.CloudInstanceProfile(config, name.isBlank() ? config.instanceId() : name);
-            CloudManagementScreen.management().registry().addOrReplace(profile);
-            CloudManagementScreen.management().saveInstances();
-            selectCloudInstance(profile);
-        } catch (java.io.IOException | RuntimeException failure) {
+            com.micaftic.morpher.cloud.client.CloudHttpClient.discoverProfile(cloudAddressDraft, cloudNameDraft)
+                    .whenComplete((profile, failure) -> Minecraft.getInstance().execute(() -> {
+                        if (generation != cloudFormGeneration || STATE.secondaryPanel != ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) return;
+                        cloudFormBusy = false;
+                        if (failure != null) { cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure)); return; }
+                        var registry = CloudManagementScreen.management().registry();
+                        var existing = registry.find(profile.instanceId());
+                        if (existing.isPresent() && !existing.get().instance().origin().equals(profile.instance().origin())) {
+                            cloudPanelStatus = cloudText("instance_conflict");
+                            return;
+                        }
+                        try {
+                            if (existing.isEmpty()) registry.addOrReplace(profile);
+                            CloudManagementScreen.management().saveInstances();
+                            closeCloudForm();
+                            selectCloudInstance(existing.orElse(profile));
+                            cloudPanelStatus = cloudText("instance_added");
+                        } catch (java.io.IOException | RuntimeException error) {
+                            cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(error));
+                        }
+                    }));
+        } catch (RuntimeException failure) {
+            cloudFormBusy = false;
             cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
         }
     }
@@ -2325,7 +2336,7 @@ public class ModernPlayerModelScreen extends Screen {
             cloudPanelStatus = failure == null
                     ? Component.literal(CloudManagementScreen.text(successKey))
                     : Component.literal(CloudManagementScreen.errorText(failure));
-            if (failure == null && STATE.activeTab == ModelPanelState.Tab.ACCOUNT) init();
+            if (failure == null && (STATE.activeTab == ModelPanelState.Tab.ACCOUNT || STATE.activeTab == ModelPanelState.Tab.INSTANCE)) init();
         }));
     }
 
@@ -2336,12 +2347,13 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     void openCloudAccount() {
+        closeCloudForm();
         STATE.activeTab = ModelPanelState.Tab.ACCOUNT;
         STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
         cloudAccountPage = CloudAccountPage.ACCOUNT;
         cloudAccountScroll = 0;
         cloudPanelStatus = Component.empty();
-        manualCloudAccount = false;
+        registerCloudAccount = false;
         init();
     }
 
@@ -2355,8 +2367,12 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void submitCloudAccount(boolean register) {
         if (cloudAccountBox == null || cloudPasswordBox == null) return;
+        if (cloudFormBusy) return;
         String account = cloudAccountBox.getValue().trim();
+        cloudAccountDraft = account;
         String password = cloudPasswordBox.getValue();
+        if (account.isBlank() || password.isEmpty()) { cloudPanelStatus = cloudText("credentials_required"); return; }
+        if (register && password.length() < 8) { cloudPanelStatus = cloudText("register_hint"); return; }
         cloudPasswordBox.setValue("");
         try {
             runCloudAccount(CloudManagementScreen.submitAccount(register, account, password),
@@ -2366,17 +2382,22 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
-    private void runCloudAccount(CompletableFuture<?> request, String successKey) {
+    private void runCloudAccount(java.util.concurrent.CompletableFuture<?> request, String successKey) {
         var context = CloudManagementScreen.accountContext();
+        long generation = cloudFormGeneration;
+        cloudFormBusy = true;
         cloudPanelStatus = Component.translatable("gui.sparkle_morpher.cloud.manage.working");
         request.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
             try { context.check(); } catch (java.util.concurrent.CancellationException stale) { return; }
+            if (generation != cloudFormGeneration) return;
+            cloudFormBusy = false;
             if (failure != null) {
                 cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
             } else {
                 if (ignored instanceof com.micaftic.morpher.cloud.client.CloudSession session) {
                     try { context.checkSession(session); } catch (java.util.concurrent.CancellationException stale) { return; }
                 }
+                closeCloudForm();
                 resetCloudPage();
                 var runtime = context.runtime();
                 CloudManagementScreen.currentIdentityBound(context).whenComplete((bound, identityFailure) -> Minecraft.getInstance().execute(() -> {
@@ -2390,7 +2411,7 @@ public class ModernPlayerModelScreen extends Screen {
                         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.requestIdentityRefresh(runtime);
                         if (afterCloudLogin != null) {
                             Screen next = afterCloudLogin; afterCloudLogin = null;
-                            Minecraft.getInstance().setScreen(next);
+                            InputUtil.setScreen(next);
                             return;
                         }
                     }
@@ -2519,27 +2540,22 @@ public class ModernPlayerModelScreen extends Screen {
         if (button == 0 && beginResourceScrollDrag(mouseX, mouseY)) {
             return true;
         }
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudAccountBox != null
+        if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE && this.cloudAccountBox != null
                 && this.cloudAccountBox.mouseClicked(event, flag)) {
             setFocused(this.cloudAccountBox);
             return true;
         }
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudPasswordBox != null
+        if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE && this.cloudPasswordBox != null
                 && this.cloudPasswordBox.mouseClicked(event, flag)) {
             setFocused(this.cloudPasswordBox);
             return true;
         }
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudInstanceIdBox != null
-                && this.cloudInstanceIdBox.mouseClicked(event, flag)) {
-            setFocused(this.cloudInstanceIdBox);
-            return true;
-        }
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudInstanceNameBox != null
+        if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE && this.cloudInstanceNameBox != null
                 && this.cloudInstanceNameBox.mouseClicked(event, flag)) {
             setFocused(this.cloudInstanceNameBox);
             return true;
         }
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudOriginBox != null
+        if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE && this.cloudOriginBox != null
                 && this.cloudOriginBox.mouseClicked(event, flag)) {
             setFocused(this.cloudOriginBox);
             return true;
@@ -2558,6 +2574,10 @@ public class ModernPlayerModelScreen extends Screen {
                 && this.cloudWorldEpochBox.mouseClicked(event, flag)) {
             setFocused(this.cloudWorldEpochBox);
             return true;
+        }
+        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) {
+            if (this.cloudOriginBox != null && this.cloudOriginBox.mouseClicked(event, flag)) { setFocused(this.cloudOriginBox); return true; }
+            if (this.cloudInstanceNameBox != null && this.cloudInstanceNameBox.mouseClicked(event, flag)) { setFocused(this.cloudInstanceNameBox); return true; }
         }
         if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE) {
             if (this.siteEditBox != null && this.siteEditBox.mouseClicked(event, flag)) {
@@ -2612,8 +2632,15 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         int delta = scrollY > 0 ? -1 : 1;
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT) {
+        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) return true;
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT || STATE.activeTab == ModelPanelState.Tab.INSTANCE) {
             AccountPanelLayout panels = accountPanelLayout();
+            if (inside(mouseX, mouseY, panels.detailX(), panels.detailY(), panels.detailWidth(), panels.detailHeight())) {
+                cloudDetailScroll += delta * 24;
+                cloudDetailLayout();
+                if (cloudAccountPage == CloudAccountPage.SCOPES) init();
+                return true;
+            }
             if (!inside(mouseX, mouseY, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight())) {
                 return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
             }
@@ -2649,7 +2676,7 @@ public class ModernPlayerModelScreen extends Screen {
                 }
             }
             case RESOURCE -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll + delta);
-            case ACCOUNT -> { }
+            case ACCOUNT, INSTANCE -> { }
             case SETTINGS -> STATE.settingsScroll = Math.max(0, STATE.settingsScroll + delta);
         }
         return true;
@@ -4128,5 +4155,75 @@ public class ModernPlayerModelScreen extends Screen {
                         applySelectedTexture();
                     }));
         }
+
+    private Component cloudText(String key) {
+        return Component.translatable("gui.sparkle_morpher.cloud.manage." + key);
     }
-    
+
+    private int cloudFormFieldY(int index) {
+        return secondaryPanelY() + 64 + index * (secondaryPanelH() < 210 ? 30 : 40);
+    }
+
+    private void closeCloudForm() {
+        cloudFormGeneration++;
+        cloudFormBusy = false;
+        if (cloudPasswordBox != null) cloudPasswordBox.setValue("");
+        STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
+    }
+
+    private void openCloudLoginForm(boolean register) {
+        if (cloudAccountBox != null) cloudAccountDraft = cloudAccountBox.getValue().trim();
+        else cloudAccountDraft = CloudManagementScreen.management().registry().selected()
+                .map(profile -> CloudManagementScreen.management().accountId(profile.instanceId())).orElse("");
+        closeCloudForm();
+        registerCloudAccount = register;
+        cloudPanelStatus = Component.empty();
+        STATE.secondaryPanel = ModelPanelState.SecondaryPanel.CLOUD_LOGIN;
+        init();
+    }
+
+    private void openCloudInstanceForm() {
+        closeCloudForm();
+        cloudAddressDraft = "";
+        cloudNameDraft = "";
+        cloudPanelStatus = Component.empty();
+        STATE.secondaryPanel = ModelPanelState.SecondaryPanel.CLOUD_INSTANCE;
+        init();
+    }
+
+    private void renderCloudForm(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
+        boolean login = STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN;
+        renderTextButton(g, mouseX, mouseY, x + 16, y + 8, 44, 18, cloudText("back"), () -> { closeCloudForm(); init(); });
+        drawTitle(g, cloudText(login ? (registerCloudAccount ? "register_short" : "login") : "add_instance"), x + 70, y + 12);
+        if (login) {
+            int tabW = (w - 32) / 2;
+            renderCloudBrowserTab(g, mouseX, mouseY, x + 16, y + 30, tabW, cloudText("login"), !registerCloudAccount, () -> { if (!cloudFormBusy) openCloudLoginForm(false); });
+            renderCloudBrowserTab(g, mouseX, mouseY, x + 16 + tabW, y + 30, w - 32 - tabW, cloudText("register_short"), registerCloudAccount, () -> { if (!cloudFormBusy) openCloudLoginForm(true); });
+            drawSection(g, cloudText("account"), x + 16, cloudFormFieldY(0) - 12);
+            drawSection(g, cloudText("password"), x + 16, cloudFormFieldY(1) - 12);
+            if (cloudAccountBox != null) cloudAccountBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+            if (cloudPasswordBox != null) cloudPasswordBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        } else {
+            drawMuted(g, cloudText("instance_intro"), x + 16, y + 32);
+            drawSection(g, cloudText("address"), x + 16, cloudFormFieldY(0) - 12);
+            drawSection(g, cloudText("optional_name"), x + 16, cloudFormFieldY(1) - 12);
+            if (cloudOriginBox != null) cloudOriginBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+            if (cloudInstanceNameBox != null) cloudInstanceNameBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        }
+        int buttonY = cloudFormFieldY(1) + 26;
+        renderTextButton(g, mouseX, mouseY, x + 16, buttonY, w - 32, 22,
+                cloudText(cloudFormBusy ? "working" : login ? (registerCloudAccount ? "register_and_login" : "login") : "add_instance"),
+                () -> { if (!cloudFormBusy) { if (login) submitCloudAccount(registerCloudAccount); else saveCloudInstance(); } });
+        String hint = cloudPanelStatus.getString().isBlank() ? (login ? CloudManagementScreen.text(registerCloudAccount ? "register_hint" : "login_hint") : "https://cloud.example.com") : cloudPanelStatus.getString();
+        drawText(g, Component.literal(trim(hint, w - 32)), x + 16, y + h - 14);
+        hit(x + 16, y + h - 16, w - 32, 14, Component.literal(hint), () -> { });
+    }
+
+    private AccountPanelLayout cloudDetailLayout() {
+        var panels = accountPanelLayout();
+        int requiredHeight = cloudAccountPage == CloudAccountPage.SCOPES ? 268 : cloudAccountPage == CloudAccountPage.INSTANCES ? 232 : 180;
+        cloudDetailScroll = clamp(cloudDetailScroll, 0, Math.max(0, requiredHeight - panels.detailHeight()));
+        return new AccountPanelLayout(panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight(),
+                panels.detailX(), panels.detailY() - cloudDetailScroll, panels.detailWidth(), panels.detailHeight());
+    }
+}

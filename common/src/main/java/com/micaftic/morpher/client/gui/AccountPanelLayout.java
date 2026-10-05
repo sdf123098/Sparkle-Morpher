@@ -16,7 +16,7 @@ public record AccountPanelLayout(int listX, int listY, int listWidth, int listHe
     }
 
     public int listRows() {
-        return Math.max(1, (listHeight - 130) / 24);
+        return Math.max(1, (listHeight - 48) / 36);
     }
 
     public int fieldX() {

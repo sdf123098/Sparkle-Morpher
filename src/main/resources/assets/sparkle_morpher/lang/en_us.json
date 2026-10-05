@@ -1076,5 +1076,22 @@
   "gui.sparkle_morpher.cloud.entity.share_hint": "Applying a model shares it through Cloud with clients observing this entity.",
   "gui.sparkle_morpher.cloud.manage.registration_disabled": "This Cloud has disabled self-registration. Sign in with an account supplied by its operator, then bind your game identity.",
   "gui.sparkle_morpher.cloud.manage.identity.binding_required": "Signed in to Cloud. Bind your current game account to enable multiplayer synchronization.",
-  "gui.sparkle_morpher.cloud.manage.registration_account_exists": "This Cloud account already exists. Sign in with the existing account."
+  "gui.sparkle_morpher.cloud.manage.registration_account_exists": "This Cloud account already exists. Sign in with the existing account.",
+  "gui.sparkle_morpher.cloud.manage.instance_management": "Instances",
+  "gui.sparkle_morpher.cloud.manage.register_short": "Register",
+  "gui.sparkle_morpher.cloud.manage.account_intro": "Sign in with your game account or use a Cloud account.",
+  "gui.sparkle_morpher.cloud.manage.manage_account": "Manage account",
+  "gui.sparkle_morpher.cloud.manage.back_instances": "Back to instances",
+  "gui.sparkle_morpher.cloud.manage.address": "Cloud address",
+  "gui.sparkle_morpher.cloud.manage.optional_name": "Name (optional)",
+  "gui.sparkle_morpher.cloud.manage.instance_intro": "Enter the address provided by the server owner.",
+  "gui.sparkle_morpher.cloud.manage.checking_instance": "Checking Cloud address…",
+  "gui.sparkle_morpher.cloud.manage.instance_conflict": "This ID belongs to another address. Ask the owner to set a unique instance ID.",
+  "gui.sparkle_morpher.cloud.manage.instance_added": "Cloud instance added",
+  "gui.sparkle_morpher.cloud.manage.back": "Back",
+  "gui.sparkle_morpher.cloud.manage.register_and_login": "Register and sign in",
+  "gui.sparkle_morpher.cloud.manage.register_hint": "Use letters or numbers for the account; password: at least 8 characters.",
+  "gui.sparkle_morpher.cloud.manage.login_hint": "Use the account and password registered on this Cloud.",
+  "gui.sparkle_morpher.cloud.manage.address_required": "Enter a Cloud address.",
+  "gui.sparkle_morpher.cloud.manage.credentials_required": "Enter your account and password."
 }
