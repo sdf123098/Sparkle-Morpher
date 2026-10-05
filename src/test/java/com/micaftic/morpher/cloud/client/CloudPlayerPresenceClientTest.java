@@ -42,13 +42,19 @@ class CloudPlayerPresenceClientTest {
     }
 
     @Test void sendsAuthenticatedObservedUuidCasAndUtf8TextureOverHttp() throws Exception {
+        var state = new CloudPlayerMotionState();
+        state.play("坐", 1000); state.roaming(Map.of("bq", 4f));
+        state.controller("player.post_main", "长时间待机", 1200, Map.of("idle_random2", 1f));
+        var motion = state.snapshot();
         var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         var requests=new java.util.concurrent.CopyOnWriteArrayList<String[]>();
         server.createContext("/v1/players",exchange -> {
             String body=new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8);
             requests.add(new String[]{exchange.getRequestMethod(),exchange.getRequestURI().toString(),exchange.getRequestHeaders().getFirst("Authorization"),body});
+            var responseSelection = JsonParser.parseString(selection("fuxuan","贴图二")).getAsJsonObject();
+            responseSelection.add("motion", motion.toJson());
             String result=exchange.getRequestURI().getPath().endsWith("/query")
-                ? "{\"entries\":[{\"entity_uuid\":\""+b+"\",\"selection\":"+selection("fuxuan","贴图二")+"}]}"
+                ? "{\"entries\":[{\"entity_uuid\":\""+b+"\",\"revision\":7,\"selection\":"+responseSelection+"}]}"
                 : "{\"revision\":7}";
             byte[] bytes=result.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200,bytes.length); exchange.getResponseBody().write(bytes); exchange.close();
@@ -61,8 +67,12 @@ class CloudPlayerPresenceClientTest {
             assertEquals(7L,client.revision("identity_current").get(10,TimeUnit.SECONDS));
             var ref=new CloudAssetRef("fuxuan",2,"a".repeat(64));
             var selected=new CloudPlayerSelection("official",CloudAssetCache.sha256(instance.origin().toString().getBytes(StandardCharsets.UTF_8)),ref,"ysm","贴图二");
-            assertEquals(7L,client.publish("identity_current",UUID.fromString(b),6,selected).get(10,TimeUnit.SECONDS));
-            assertEquals("贴图二",client.query(List.of(UUID.fromString(b))).get(10,TimeUnit.SECONDS).get(UUID.fromString(b)).textureId());
+            assertEquals(7L,client.publish("identity_current",UUID.fromString(b),6,selected,null,motion).get(10,TimeUnit.SECONDS));
+            var observed = client.query(List.of(UUID.fromString(b))).get(10,TimeUnit.SECONDS).get(UUID.fromString(b));
+            assertEquals("贴图二",observed.textureId());
+            assertEquals(motion, observed.motion());
+            assertEquals(7L, observed.appearanceRevision());
+            assertEquals(selected, observed.withoutMotion());
             client.publish("identity_current",UUID.fromString(b),7,null,JsonParser.parseString("{\"value\":\"public-signed-property\",\"signature\":\"public-signature\"}").getAsJsonObject()).get(10,TimeUnit.SECONDS);
             assertEquals("GET",requests.get(0)[0]);
             assertEquals("/v1/players/me/appearance?identity_id=identity_current",requests.get(0)[1]);
@@ -72,9 +82,12 @@ class CloudPlayerPresenceClientTest {
             assertEquals(b,publication.get("entity_uuid").getAsString());
             assertEquals(6,publication.get("expected_revision").getAsInt());
             assertEquals("贴图二",publication.get("texture_id").getAsString());
+            assertTrue(publication.has("motion"), "Cloud player publications must include an explicit motion envelope, including clears");
+            assertEquals(motion, CloudPlayerMotion.fromJson(publication.get("motion")));
             assertEquals("POST",requests.get(2)[0]);
             assertEquals(b,JsonParser.parseString(requests.get(2)[3]).getAsJsonObject().getAsJsonArray("entity_uuids").get(0).getAsString());
             assertTrue(JsonParser.parseString(requests.get(3)[3]).getAsJsonObject().get("asset_id").isJsonNull());
+            assertTrue(JsonParser.parseString(requests.get(3)[3]).getAsJsonObject().get("motion").isJsonNull());
             assertEquals("public-signed-property",JsonParser.parseString(requests.get(3)[3]).getAsJsonObject().getAsJsonObject("profile_name_proof").get("value").getAsString());
         } finally {server.stop(0);}
     }

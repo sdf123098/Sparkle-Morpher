@@ -1,13 +1,12 @@
 package com.micaftic.morpher.client.input;
 
+import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.event.AnimationLockEvent;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SPlayAnimationPacket;
 import com.micaftic.morpher.resource.models.ModelProperties;
 import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.data.OrderedStringMap;
@@ -94,7 +93,7 @@ public final class ExtraAnimationKey {
             if (map.size() > index) {
                 String rouletteKey = map.getKeyAt(index);
                 if ("#return".equals(rouletteKey)) {
-                    NetworkHandler.sendToServer(C2SPlayAnimationPacket.createDefault());
+                    CloudPlayerMotionSync.stop(cap);
                     return;
                 }
                 if (rouletteKey.startsWith("#") && modelProperties.getExtraAnimationClassify().containsKey(rouletteKey.substring(1))) {
@@ -102,7 +101,7 @@ public final class ExtraAnimationKey {
                     com.micaftic.morpher.util.InputUtil.setScreen(new UnifiedRouletteScreen(cap.getModelId(), modelAssembly, cap));
                     return;
                 }
-                NetworkHandler.sendToServer(new C2SPlayAnimationPacket(index, StringPool.EMPTY, rouletteKey));
+                CloudPlayerMotionSync.play(cap, rouletteKey);
             }
         });
     }

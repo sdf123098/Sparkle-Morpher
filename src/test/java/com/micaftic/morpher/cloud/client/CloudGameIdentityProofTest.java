@@ -24,6 +24,31 @@ class CloudGameIdentityProofTest {
     }
 
     @Test
+    void validatesWholeChallengeWithoutCertificateKeys() {
+        var valid = challenge(official.origin().toString(), "login", uuid);
+        assertEquals(valid.profileKeyPayload(), CloudGameIdentityProof.validateChallenge(valid, official, "login", uuid));
+        var link = challenge(official.origin().toString(), "link", uuid);
+        assertEquals(link.profileKeyPayload(), CloudGameIdentityProof.validateChallenge(link, official, "link", uuid));
+        for (var invalid : new CloudIdentityClient.CloudIdentityChallenge[]{
+                challenge("https://other.example", "login", uuid),
+                challenge(official.origin().toString(), "link", uuid),
+                challenge(official.origin().toString(), "login", UUID.randomUUID()),
+                new CloudIdentityClient.CloudIdentityChallenge("challenge_1", "littleskin", "nonce_1", 120, valid.profileKeyPayload()),
+                new CloudIdentityClient.CloudIdentityChallenge("challenge_2", "official", "nonce_1", 120, valid.profileKeyPayload()),
+                new CloudIdentityClient.CloudIdentityChallenge("challenge_1", "official", "nonce_2", 120, valid.profileKeyPayload()),
+                new CloudIdentityClient.CloudIdentityChallenge("challenge_1", "official", "nonce_1", 120, valid.profileKeyPayload() + "\nextra"),
+                new CloudIdentityClient.CloudIdentityChallenge("challenge_1", "official", "nonce_1", 120, valid.profileKeyPayload().replace("SPM-CLOUD-GAME-IDENTITY-V1", "BAD-MAGIC")),
+                new CloudIdentityClient.CloudIdentityChallenge("challenge_1", "official", "nonce_1", 120, valid.profileKeyPayload().replace("\nlogin\n\n", "\nlogin\nother_account\n")),
+                new CloudIdentityClient.CloudIdentityChallenge("challenge_1", "official", "nonce_1", 120, link.profileKeyPayload().replace("cloud_account", "bad/account")),
+        }) {
+            assertThrows(IllegalArgumentException.class, () -> CloudGameIdentityProof.validateChallenge(invalid, official, "login", uuid));
+        }
+        var unsafeLink = new CloudIdentityClient.CloudIdentityChallenge("challenge_1", "official", "nonce_1", 120,
+                link.profileKeyPayload().replace("cloud_account", "bad/account"));
+        assertThrows(IllegalArgumentException.class, () -> CloudGameIdentityProof.validateChallenge(unsafeLink, official, "link", uuid));
+    }
+
+    @Test
     void signsChallengeAndSendsOnlyPublicCertificate() throws Exception {
         var generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
