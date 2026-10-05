@@ -62,6 +62,7 @@ public final class ClientTickEvent {
         LocalPlayer localPlayer = client.player;
         if (localPlayer != null) {
             PlayerCapability.get(localPlayer).ifPresent(cap -> cap.tickAnimations());
+            com.micaftic.morpher.cloud.client.CloudPlayerMotionSync.tickOwner();
         }
         // 在无模组服务器上，自动恢复之前持久化的模型选择
         ClientModelManager.restorePersistedModelSelectionOnVanillaServer();

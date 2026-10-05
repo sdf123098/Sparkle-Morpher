@@ -1,5 +1,6 @@
 package com.micaftic.morpher.capability;
 
+import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingSyncBatch;
 import net.fabricmc.api.EnvType;
@@ -20,8 +21,6 @@ import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import com.micaftic.morpher.molang.runtime.Struct;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SCompleteFeedbackPacket;
 import com.micaftic.morpher.network.message.FeedbackData;
 import dev.architectury.injectables.annotations.ExpectPlatform;
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
@@ -309,31 +308,36 @@ public final class PlayerCapability extends CustomPlayerEntity {
         }
     }
 
+    /** Called on the render thread while the first-person camera hides the body. */
+    public void advanceCloudMotion() {
+        awaitAsyncResult();
+        captureFrameRenderState(this.entity.yBodyRot, 0);
+        processAnimationImpl(0, false);
+    }
+
     public void tickAnimations() {
         if (isLocalPlayerModel() && this.currentModelHashId != 0) {
             Struct struct = this.serverVarContainer;
             if (struct instanceof RoamingStruct roamingStruct) {
+                java.util.Map<String, Float> current = new java.util.HashMap<>();
+                roamingStruct.forEachVar(name -> {
+                    Object value = roamingStruct.getProperty(StringPool.computeIfAbsent(name));
+                    if (current.size() < RoamingStruct.MAX_VARS && !name.isBlank()
+                            && name.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH && value instanceof Number number
+                            && Float.isFinite(number.floatValue())) current.put(name, number.floatValue());
+                });
+                CloudPlayerMotionSync.roaming(this, current);
                 if (roamingStruct.hasPendingChanges()) {
                     RoamingSyncBatch syncBatch = roamingStruct.consumePendingBoneData();
                     LocalModelSettingsStore.save(getModelId(), syncBatch.changedVariables());
                     applyMolangDelta(syncBatch.modelHashId(), syncBatch.changedVariables());
-                    String[] strArr = new String[syncBatch.changedVariables().size()];
-                    float[] fArr = new float[syncBatch.changedVariables().size()];
-                    int i = 0;
-                    ObjectIterator it = Int2FloatMaps.fastIterable(syncBatch.changedVariables()).iterator();
-                    while (it.hasNext()) {
-                        Int2FloatMap.Entry entry = (Int2FloatMap.Entry) it.next();
-                        String str = StringPool.getString(entry.getIntKey());
-                        if (str.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH) {
-                            strArr[i] = str;
-                            fArr[i] = entry.getFloatValue();
-                        } else {
-                            strArr[i] = StringPool.EMPTY;
-                            fArr[i] = 0.0f;
-                        }
-                        i++;
+                    java.util.Map<String, Float> changes = new java.util.HashMap<>();
+                    for (Int2FloatMap.Entry entry : syncBatch.changedVariables().int2FloatEntrySet()) {
+                        String name = StringPool.getString(entry.getIntKey());
+                        if (!name.isBlank() && name.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH
+                                && Float.isFinite(entry.getFloatValue())) changes.put(name, entry.getFloatValue());
                     }
-                    NetworkHandler.sendToServer(new C2SCompleteFeedbackPacket(new FeedbackData(this.currentModelHashId, new Object2FloatArrayMap(strArr, fArr), null, this.entity.getId())));
+                    CloudPlayerMotionSync.roaming(this, changes);
                 }
             }
         }

@@ -16,7 +16,7 @@ public record CloudPlayerMotion(String eventId, String animationKey, long starte
         }
     }
     public record Controller(String state, long startedAtUnixMs, Map<String, Float> variables) {
-        public Controller { text(state, 128, false); timestamp(startedAtUnixMs); variables = numbers(variables, 64); }
+        public Controller { text(state, 128, true); timestamp(startedAtUnixMs); variables = numbers(variables, 64); }
     }
     public CloudPlayerMotion {
         text(eventId, 64, false); text(animationKey, 256, true); timestamp(startedAtUnixMs);

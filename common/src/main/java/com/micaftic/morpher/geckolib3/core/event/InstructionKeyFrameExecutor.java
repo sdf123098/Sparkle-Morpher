@@ -49,6 +49,10 @@ public class InstructionKeyFrameExecutor {
         return this.nextIndex >= this.list.size();
     }
 
+    public void skipBefore(float tick) {
+        while (!reachEnd() && this.list.get(this.nextIndex).getStartTick() < tick) this.nextIndex++;
+    }
+
     public void reset() {
         this.nextIndex = 0;
     }

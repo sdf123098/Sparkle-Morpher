@@ -18,9 +18,9 @@ final class CloudGameIdentityProof {
                 && challenge.profileKeyPayload().startsWith("SPM-CLOUD-GAME-IDENTITY-V1\n" + instance.origin() + "\n");
     }
 
-    static JsonObject sign(CloudIdentityClient.CloudIdentityChallenge challenge, CloudInstanceConfig instance,
-                           String purpose, UUID profileId, PrivateKey privateKey, PublicKey publicKey,
-                           long expiresAt, byte[] certificateSignature) throws GeneralSecurityException {
+    /** Validates the complete message before either certificate signing or Session Service fallback. */
+    static String validateChallenge(CloudIdentityClient.CloudIdentityChallenge challenge, CloudInstanceConfig instance,
+                                    String purpose, UUID profileId) {
         if (!supports(challenge, instance)) throw new IllegalArgumentException("Player key proof requires the selected Cloud origin");
         String[] fields = challenge.profileKeyPayload().split("\n", -1);
         if (fields.length != 8 || !("link".equals(purpose) || "login".equals(purpose))
@@ -29,9 +29,17 @@ final class CloudGameIdentityProof {
         }
         String expected = String.join("\n", "SPM-CLOUD-GAME-IDENTITY-V1", instance.origin().toString(), purpose,
                 fields[3], "official", profileId.toString(), challenge.challengeId(), challenge.serverId());
-        if (!expected.equals(challenge.profileKeyPayload()) || expiresAt <= System.currentTimeMillis()) {
+        if (!expected.equals(challenge.profileKeyPayload())) {
             throw new IllegalArgumentException("Cloud player key challenge does not match the active profile and operation");
         }
+        return expected;
+    }
+
+    static JsonObject sign(CloudIdentityClient.CloudIdentityChallenge challenge, CloudInstanceConfig instance,
+                           String purpose, UUID profileId, PrivateKey privateKey, PublicKey publicKey,
+                           long expiresAt, byte[] certificateSignature) throws GeneralSecurityException {
+        String expected = validateChallenge(challenge, instance, purpose, profileId);
+        if (expiresAt <= System.currentTimeMillis()) throw new IllegalArgumentException("Cloud player key certificate expired");
         Signature signer = Signature.getInstance("SHA256withRSA");
         signer.initSign(privateKey);
         signer.update(expected.getBytes(StandardCharsets.UTF_8));

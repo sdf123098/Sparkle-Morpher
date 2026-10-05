@@ -163,11 +163,8 @@ public final class CloudIdentityManagementScreen extends Screen {
     private void verify() {
         if (providers.isEmpty()) { setStatus(text("identity.refresh_first")); return; }
         try {
-            var profile = MinecraftSessionServiceJoiner.currentProfile();
-            var client = com.micaftic.morpher.cloud.client.CloudClientRuntime.state().identities();
             var provider = providers.get(Math.floorMod(providerIndex, providers.size()));
-            run(client.createChallenge(provider.providerId(), profile.name(), profile.profileId().toString())
-                    .thenCompose(challenge -> client.joinAndComplete(challenge, new MinecraftSessionServiceJoiner())),
+            run(CloudManagementScreen.bindProvider(provider.providerId()),
                     identity -> text("identity.verified", identity.displayName(), identity.identityId()));
         } catch (RuntimeException failure) { setStatus(error(failure)); }
     }
@@ -216,9 +213,12 @@ public final class CloudIdentityManagementScreen extends Screen {
 
     private <T> void run(CompletableFuture<T> future, Function<T, String> message) {
         long expected = generation;
+        var context = CloudManagementScreen.accountContext();
+        var runtime = context.runtime();
         setStatus(text("working"));
         future.whenComplete((value, failure) -> Minecraft.getInstance().execute(() -> {
             if (!active || expected != generation) return;
+            try { context.check(runtime); } catch (java.util.concurrent.CancellationException stale) { return; }
             setStatus(failure == null ? message.apply(value) : error(failure));
             if (failure == null && value instanceof CloudIdentityClient.CloudIdentity) refresh();
         }));

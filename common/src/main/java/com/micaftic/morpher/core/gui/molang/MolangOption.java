@@ -1,12 +1,11 @@
 package com.micaftic.morpher.core.gui.molang;
 
+import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.molang.parser.ParseException;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SRequestExecuteMolangPacket;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import com.micaftic.morpher.core.gui.Option;
@@ -64,8 +63,8 @@ public final class MolangOption {
     private static void execute(AnimatableEntity<?> animatable, String expr) {
         try {
             animatable.executeExpression(GeckoLibCache.parseSimpleExpression(expr), true, false, null);
-            if (!GeckoLibCache.isRoamingVariableAssignment(expr) && NetworkHandler.isClientConnected() && !ConfigPolicies.network().lowBandwidthUsage()) {
-                NetworkHandler.sendToServer(new C2SRequestExecuteMolangPacket(expr, animatable.getEntity().getId()));
+            if (!GeckoLibCache.isRoamingVariableAssignment(expr) && !ConfigPolicies.network().lowBandwidthUsage()) {
+                CloudPlayerMotionSync.expression(animatable, expr, java.util.List.of());
             }
         } catch (ParseException e) {
             YesSteveModel.LOGGER.error(e);

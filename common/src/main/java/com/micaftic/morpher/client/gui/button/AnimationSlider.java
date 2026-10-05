@@ -1,13 +1,12 @@
 package com.micaftic.morpher.client.gui.button;
 
+import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.ISpecialWidget;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.molang.parser.ParseException;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SRequestExecuteMolangPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -37,8 +36,8 @@ public class AnimationSlider extends RangedSliderWidget implements ISpecialWidge
         try {
             String str = this.controllerName + "=" + getValue();
             this.model.executeExpression(GeckoLibCache.parseSimpleExpression(str), true, false, null);
-            if (!GeckoLibCache.isRoamingVariableAssignment(str) && NetworkHandler.isClientConnected() && !ConfigPolicies.network().lowBandwidthUsage()) {
-                NetworkHandler.sendToServer(new C2SRequestExecuteMolangPacket(str, this.model.getEntity().getId()));
+            if (!GeckoLibCache.isRoamingVariableAssignment(str) && !ConfigPolicies.network().lowBandwidthUsage()) {
+                CloudPlayerMotionSync.expression(this.model, str, java.util.List.of());
             }
         } catch (ParseException e) {
             YesSteveModel.LOGGER.error(e);
