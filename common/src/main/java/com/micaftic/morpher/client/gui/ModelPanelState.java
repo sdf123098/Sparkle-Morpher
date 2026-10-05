@@ -12,6 +12,7 @@ final class ModelPanelState {
         MODEL,
         RESOURCE,
         ACCOUNT,
+        INSTANCE,
         SETTINGS
     }
 
@@ -49,6 +50,8 @@ final class ModelPanelState {
         SITES,
         CATEGORIES,
         IMPORT,
+        CLOUD_LOGIN,
+        CLOUD_INSTANCE,
         CONFIRM
     }
 
