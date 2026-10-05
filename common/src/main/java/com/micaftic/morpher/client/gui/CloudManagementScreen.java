@@ -28,7 +28,8 @@ public final class CloudManagementScreen {
     private static final String CLIENT_VERSION = "2.0.0";
     private static CloudManagementController management;
     private static long nextRealtimeReconnectMillis;
-    private static boolean autoResumeAttempted;
+    private static final com.micaftic.morpher.cloud.client.CloudAutoLoginGate AUTO_LOGIN =
+            new com.micaftic.morpher.cloud.client.CloudAutoLoginGate();
 
     public static void open(Screen parent) {
         try {
@@ -40,9 +41,9 @@ public final class CloudManagementScreen {
     }
 
     public static void tickConnections() {
-        CloudManagementController current = management;
-        if (current == null) return;
+        CloudManagementController current = management();
         current.tickConnections();
+        resumeOfficialAccount();
         long now = System.currentTimeMillis();
         if (now >= nextRealtimeReconnectMillis) {
             nextRealtimeReconnectMillis = now + 10_000L;
@@ -69,10 +70,15 @@ public final class CloudManagementScreen {
 
     /** Restores only the selected instance; automatic recovery never creates an account. */
     static void resumeOfficialAccount() {
-        if (autoResumeAttempted || management == null || management.registry().selected().isEmpty()) return;
-        autoResumeAttempted = true;
-        if (CloudClientRuntime.state(management.registry().selected().orElseThrow().instanceId()) == null)
-            connectOfficialAccount(false).exceptionally(failure -> null);
+        var current = management;
+        if (current == null || !current.autoLoginEnabled() || current.registry().selected().isEmpty()) return;
+        var selected = current.registry().selected().orElseThrow();
+        if (CloudClientRuntime.state(selected.instanceId()) != null) return;
+        var profile = MinecraftSessionServiceJoiner.currentProfile();
+        String key = selected.instanceId() + "\n" + selected.instance().origin() + "\n"
+                + profile.profileId() + "\n" + profile.name() + "\n" + current.accountGeneration();
+        if (!AUTO_LOGIN.begin(key, System.currentTimeMillis())) return;
+        connectOfficialAccount(false).whenComplete((session, failure) -> AUTO_LOGIN.finish());
     }
 
     record AccountContext(CloudManagementController controller,
@@ -194,15 +200,18 @@ public final class CloudManagementScreen {
         }).thenCompose(next -> next).thenCompose(providers -> {
             context.check();
             if (providers.isEmpty()) return CompletableFuture.failedFuture(new NoLinkedGameAccountException());
-            return tryLinkedProvider(context, providers, 0, MinecraftSessionServiceJoiner.currentProfile(), null);
+            return tryLinkedProvider(context, providers, 0, MinecraftSessionServiceJoiner.currentProfile(),
+                    new com.micaftic.morpher.cloud.client.CloudGameLoginFailures());
         });
     }
 
     private static CompletableFuture<CloudSession> tryLinkedProvider(AccountContext context,
             List<CloudIdentityClient.IdentityProvider> providers, int index,
-            MinecraftSessionServiceJoiner.IdentityProfile profile, Throwable unavailable) {
+            MinecraftSessionServiceJoiner.IdentityProfile profile,
+            com.micaftic.morpher.cloud.client.CloudGameLoginFailures failures) {
         context.check();
-        if (index >= providers.size()) return CompletableFuture.failedFuture(unavailable != null ? unavailable : new NoLinkedGameAccountException());
+        if (index >= providers.size()) return CompletableFuture.failedFuture(
+                failures.unavailable() != null ? failures.unavailable() : new NoLinkedGameAccountException());
         CompletableFuture<CloudSession> request;
         synchronized (context.controller()) {
             context.check();
@@ -211,10 +220,11 @@ public final class CloudManagementScreen {
         return request.thenApply(session -> { context.checkSession(session); return session; }).exceptionallyCompose(failure -> {
             context.check(); Throwable cause = unwrap(failure);
             if (cause instanceof CloudHttpException http) {
-                if (http.errorCode() == CloudErrorCode.IDENTITY_NOT_LINKED || http.errorCode() == CloudErrorCode.IDENTITY_PROFILE_MISMATCH)
-                    return tryLinkedProvider(context, providers, index + 1, profile, unavailable);
-                if (http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE)
-                    return tryLinkedProvider(context, providers, index + 1, profile, unavailable != null ? unavailable : cause);
+                if (http.errorCode() == CloudErrorCode.IDENTITY_NOT_LINKED || http.errorCode() == CloudErrorCode.IDENTITY_PROFILE_MISMATCH
+                        || http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) {
+                    failures.record(http);
+                    return tryLinkedProvider(context, providers, index + 1, profile, failures);
+                }
             }
             return CompletableFuture.failedFuture(cause);
         });

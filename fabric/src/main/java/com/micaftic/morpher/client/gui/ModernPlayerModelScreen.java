@@ -915,6 +915,7 @@ public class ModernPlayerModelScreen extends Screen {
         STATE.modelSource = CloudInstanceRegistry.isBuiltinOfficial(profile)
                 ? ModelPanelState.ModelSource.SPM_CLOUD : ModelPanelState.ModelSource.COMMUNITY_CLOUD;
         STATE.restoreCloudTab(profile.instanceId());
+        cloudVisibilityFilter = "";
         STATE.currentPath = "";
         STATE.modelScroll = 0;
         cloudImportGeneration++; pendingCloudImports.clear();
@@ -976,14 +977,14 @@ public class ModernPlayerModelScreen extends Screen {
             setStatus(Component.translatable("gui.sparkle_morpher.model_source.official_required"), ChatFormatting.YELLOW);
             return;
         }
-        if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && (STATE.cloudView == ModelPanelState.CloudView.RECENT || STATE.cloudView == ModelPanelState.CloudView.FAVORITES)) {
+        if (STATE.cloudView == ModelPanelState.CloudView.RECENT || STATE.cloudView == ModelPanelState.CloudView.FAVORITES) {
             STATE.cloudEntries.clear();
             STATE.cloudEntries.addAll(STATE.cloudView == ModelPanelState.CloudView.RECENT ? this.controller.recentCloudAssets() : this.controller.favoriteCloudAssets());
             STATE.cloudLoadedKey = key;
             STATE.cloudLoaded = true;
             return;
         }
-        if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && STATE.cloudView == ModelPanelState.CloudView.PUBLIC && STATE.cloudSearchText.trim().isBlank()) {
+        if (STATE.cloudSearchRequired()) {
             STATE.cloudEntries.clear();
             STATE.cloudLoadedKey = key;
             STATE.cloudLoaded = true;
@@ -997,7 +998,7 @@ public class ModernPlayerModelScreen extends Screen {
         String key = cloudPageKey();
         long generation = ++this.cloudRequestGeneration;
         String query = STATE.cloudSearchText.trim();
-        String scope = STATE.modelSource == ModelPanelState.ModelSource.COMMUNITY_CLOUD ? "accessible" : STATE.cloudView == ModelPanelState.CloudView.MINE ? "mine" : "public";
+        String scope = STATE.cloudCatalogScope();
         String cursor = append && !STATE.cloudCursor.isBlank() ? STATE.cloudCursor : null;
         STATE.cloudLoading = true;
         this.controller.listCloudAssets(scope, query, cursor, 40).whenComplete((page, failure) -> Minecraft.getInstance().execute(() -> {
@@ -1020,17 +1021,13 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderCloudViewTabs(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
-        if (STATE.modelSource == ModelPanelState.ModelSource.COMMUNITY_CLOUD) {
-            renderCloudBrowserTab(g, mouseX, mouseY, x, y, Math.min(100, w), Component.translatable("gui.sparkle_morpher.model_source.all_models"), true, this::ensureCloudPageLoaded);
-            return;
-        }
-        ModelPanelState.CloudView[] views = ModelPanelState.CloudView.values();
-        String[] labels = {"recent", "favorites", "mine", "public"};
-        int tabW = w / views.length;
-        for (int i = 0; i < views.length; i++) {
-            var view = views[i];
-            renderCloudBrowserTab(g, mouseX, mouseY, x + i * tabW, y, i == views.length - 1 ? w - i * tabW : tabW,
-                    Component.translatable("gui.sparkle_morpher.model_source." + labels[i]), STATE.cloudView == view, () -> switchCloudView(view));
+        List<ModelPanelState.CloudView> views = STATE.cloudViews();
+        int tabW = w / views.size();
+        for (int i = 0; i < views.size(); i++) {
+            var view = views.get(i);
+            String label = view == ModelPanelState.CloudView.ALL ? "all_models" : view.name().toLowerCase(Locale.ROOT);
+            renderCloudBrowserTab(g, mouseX, mouseY, x + i * tabW, y, i == views.size() - 1 ? w - i * tabW : tabW,
+                    Component.translatable("gui.sparkle_morpher.model_source." + label), STATE.cloudView == view, () -> switchCloudView(view));
         }
     }
 
@@ -1052,7 +1049,7 @@ public class ModernPlayerModelScreen extends Screen {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.cloud.loading"), x + w / 2, y + h / 2 - 4, MUTED);
             return;
         }
-        if (STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD && STATE.cloudView == ModelPanelState.CloudView.PUBLIC && STATE.cloudSearchText.trim().isBlank()) {
+        if (STATE.cloudSearchRequired()) {
             drawCentered(g, Component.translatable("gui.sparkle_morpher.model_source.public_search_required"), x + w / 2, y + h / 2 - 4, MUTED);
             return;
         }
@@ -1097,8 +1094,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private boolean canChangeCloudVisibility(CloudAssetSummary entry) {
-        return STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD &&
-                (STATE.cloudView == ModelPanelState.CloudView.MINE || ownedCloudAssetIds.contains(entry.ref().assetId()));
+        return STATE.canChangeCloudVisibility(ownedCloudAssetIds.contains(entry.ref().assetId()));
     }
 
     private String cloudEntryName(CloudAssetSummary entry) {
@@ -4049,7 +4045,7 @@ public class ModernPlayerModelScreen extends Screen {
         ownedCloudAssetIds.clear(); selectedCloudAssetIds.clear(); pendingVisibilityChanges.clear();
         focusedCloudAssetId = ""; cloudVisibilityBatchRunning = false; cloudTexturePage = 0;
         this.cloudRequestGeneration++; STATE.cloudLoading = false; STATE.cloudLoaded = false;
-        if (runtime != null && STATE.modelSource == ModelPanelState.ModelSource.SPM_CLOUD) requestCloudOwnership("", runtime);
+        if (runtime != null && STATE.modelSource != ModelPanelState.ModelSource.LOCAL) requestCloudOwnership("", runtime);
     }
 
     private void requestCloudOwnership(String cursor, CloudClientRuntime.RuntimeState expected) {

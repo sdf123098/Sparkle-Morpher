@@ -1,4 +1,4 @@
-﻿# Sparkle's Morpher
+# Sparkle's Morpher
 
 > **English** | [中文](README_zh.md) | [日本語](README_ja.md) | [한국어](README_ko.md)
 
@@ -41,6 +41,14 @@ Play model-bundled voice lines and sound effects triggered by skills or actions.
 - Server operators can define model manifests and push models to clients.
 - A configurable blacklist (`config/sparkle_morpher/blacklist.txt`) lets servers restrict specific models.
 - Client-server model state synchronization via Cardinal Components entity data.
+
+### SPM Cloud: Official and Self-hosted
+
+Use the official Cloud or run the independent [Rust backend](https://github.com/sdf123098/spm-cloud) with Docker Compose, native Linux or native Windows. Setup guides: [English](https://github.com/sdf123098/spm-cloud/blob/main/README.md) · [中文](https://github.com/sdf123098/spm-cloud/blob/main/README_zh.md).
+
+Updated clients sharing the same Cloud can see other players' public models, textures, model settings and wheel/idle actions on ordinary Minecraft servers after binding their game identities. Community Cloud has All Models, Recent, Favorites, My Models and Public Models views; All Models lists accessible models without a search term.
+
+Self-hosted external authentication supports a single complete `SPM_CLOUD_HAS_JOINED_URL` for a custom or all-in-one gateway, or `SPM_CLOUD_IDENTITY_PROVIDERS` for multiple services. Providers must be enabled by the Cloud operator. Bound accounts automatically restore login; failures retry at intervals, while manual logout disables automatic restoration until an instance is selected again. Cloud accounts, models and identities remain separate per instance; private models are not published to other players.
 
 ### Server Bandwidth Limit
 
