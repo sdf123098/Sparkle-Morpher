@@ -21,6 +21,7 @@ public final class CloudManagementController {
     private volatile List<CloudScopeClient.CloudAclEntry> acl = List.of();
     private volatile CloudScopeClient.CloudScope selectedScope;
     private volatile CloudScopeClient.CloudTarget selectedTarget;
+    private volatile boolean autoLoginEnabled = true;
 
     public CloudManagementController(
             CloudInstanceRegistry registry,
@@ -50,10 +51,13 @@ public final class CloudManagementController {
 
     public synchronized long accountGeneration() { return requestGeneration.current(); }
 
+    public boolean autoLoginEnabled() { return autoLoginEnabled; }
+
     public synchronized CloudInstanceRegistry.CloudInstanceProfile selectInstance(String instanceId) {
         CloudInstanceRegistry.CloudInstanceProfile next = registry.find(instanceId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown Cloud instance: " + instanceId));
         requestGeneration.advance();
+        autoLoginEnabled = true;
         registry.select(next.instanceId());
         connection.select(next);
         scopes = List.of();
@@ -109,6 +113,7 @@ public final class CloudManagementController {
 
     public synchronized void logout() {
         requestGeneration.advance();
+        autoLoginEnabled = false;
         connection.logout();
         scopes = List.of();
         targets = List.of();

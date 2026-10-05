@@ -42,7 +42,8 @@ final class ModelPanelState {
         RECENT,
         FAVORITES,
         MINE,
-        PUBLIC
+        PUBLIC,
+        ALL
     }
 
     enum SecondaryPanel {
@@ -87,6 +88,28 @@ final class ModelPanelState {
                          List<CloudAssetSummary> entries, boolean loaded, boolean hasMore,
                          int scroll, ModelPickerLayout.Style style) { }
 
+    List<CloudView> cloudViews() {
+        return modelSource == ModelSource.COMMUNITY_CLOUD
+                ? List.of(CloudView.ALL, CloudView.RECENT, CloudView.FAVORITES, CloudView.MINE, CloudView.PUBLIC)
+                : List.of(CloudView.RECENT, CloudView.FAVORITES, CloudView.MINE, CloudView.PUBLIC);
+    }
+
+    String cloudCatalogScope() {
+        return switch (cloudView) {
+            case MINE -> "mine";
+            case ALL -> "accessible";
+            default -> "public";
+        };
+    }
+
+    boolean cloudSearchRequired() {
+        return cloudView == CloudView.PUBLIC && cloudSearchText.trim().isBlank();
+    }
+
+    boolean canChangeCloudVisibility(boolean owned) {
+        return modelSource != ModelSource.LOCAL && (cloudView == CloudView.MINE || owned);
+    }
+
     void saveCloudTab() {
         if (selectedCloudInstanceId.isBlank()) return;
         cloudTabs.put(selectedCloudInstanceId, new CloudTabState(cloudView, cloudSearchText,
@@ -95,7 +118,9 @@ final class ModelPanelState {
 
     void restoreCloudTab(String instanceId) {
         CloudTabState saved = cloudTabs.get(instanceId);
-        cloudView = saved == null ? CloudView.RECENT : saved.view();
+        cloudView = saved == null
+                ? (modelSource == ModelSource.COMMUNITY_CLOUD ? CloudView.ALL : CloudView.RECENT)
+                : saved.view();
         cloudSearchText = saved == null ? "" : saved.search();
         cloudCursor = saved == null ? "" : saved.cursor();
         cloudLoadedKey = saved == null ? "" : saved.loadedKey();
