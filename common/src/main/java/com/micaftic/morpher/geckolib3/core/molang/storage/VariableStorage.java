@@ -68,6 +68,18 @@ public class VariableStorage implements IScopedVariableStorage, IForeignVariable
         }
     }
 
+    /** Named finite values, so controller choices do not depend on process-local StringPool ids. */
+    public java.util.Map<String, Float> numericSnapshot() {
+        java.util.Map<String, Float> values = new java.util.TreeMap<>();
+        forEachPropertyName(name -> {
+            Object value = getScoped(StringPool.computeIfAbsent(name));
+            if (!name.isBlank() && name.length() <= 64 && value instanceof Number number
+                    && Float.isFinite(number.floatValue())) values.put(name, number.floatValue());
+        });
+        while (values.size() > 64) values.remove(values.keySet().iterator().next());
+        return java.util.Map.copyOf(values);
+    }
+
     private static class VariableValueHolder {
         public Object value = null;
     }

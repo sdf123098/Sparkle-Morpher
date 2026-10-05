@@ -408,8 +408,7 @@ public class ModernPlayerModelScreen extends Screen {
             int fieldX = accountLayout.fieldX();
             int fieldW = accountLayout.fieldWidth();
             if (cloudAccountPage == CloudAccountPage.ACCOUNT
-                    && (manualCloudAccount || CloudManagementScreen.management().registry().selected()
-                    .map(profile -> !CloudInstanceRegistry.isBuiltinOfficial(profile)).orElse(true))) {
+                    && manualCloudAccount) {
                 this.cloudAccountBox = cloudField(fieldX, accountLayout.fieldY(0), fieldW, "account", 128);
                 this.cloudAccountBox.setValue(CloudManagementScreen.management().accountId(
                         CloudManagementScreen.management().registry().selected()
@@ -2146,18 +2145,23 @@ public class ModernPlayerModelScreen extends Screen {
                         resetCloudPage();
                         init();
                     });
-            if (official) renderTextButton(g, mouseX, mouseY, x, y + 116, w, 20,
+            renderTextButton(g, mouseX, mouseY, x, y + 116, w, 20,
                     Component.translatable("gui.sparkle_morpher.cloud.manage.identity.bind_current"), () -> {
+                        var context = CloudManagementScreen.accountContext();
+                        var runtime = context.runtime();
                         cloudPanelStatus = Component.translatable("gui.sparkle_morpher.cloud.manage.working");
                         CloudManagementScreen.bindCurrentGameAccount().whenComplete((identity, failure) ->
-                                Minecraft.getInstance().execute(() -> cloudPanelStatus = failure == null
-                                        ? Component.translatable("gui.sparkle_morpher.cloud.manage.identity.bound", identity.displayName())
-                                        : Component.literal(CloudManagementScreen.errorText(failure))));
+                                Minecraft.getInstance().execute(() -> {
+                                    try { context.check(runtime); } catch (java.util.concurrent.CancellationException stale) { return; }
+                                    cloudPanelStatus = failure == null
+                                            ? Component.translatable("gui.sparkle_morpher.cloud.manage.identity.bound", identity.displayName())
+                                            : Component.literal(CloudManagementScreen.errorText(failure));
+                                }));
                     });
-            renderTextButton(g, mouseX, mouseY, x, y + (official ? 144 : 116), w, 20,
+            renderTextButton(g, mouseX, mouseY, x, y + 144, w, 20,
                     Component.translatable("gui.sparkle_morpher.cloud.manage.identities"),
                     () -> InputUtil.setScreen(new CloudIdentityManagementScreen(this, CloudManagementScreen.management())));
-        } else if (official && !manualCloudAccount) {
+        } else if (!manualCloudAccount) {
             drawMuted(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, y + 42);
             renderTextButton(g, mouseX, mouseY, x, y + 66, w, 24,
                     Component.translatable("gui.sparkle_morpher.cloud.manage.quick_connect"),
@@ -2355,8 +2359,7 @@ public class ModernPlayerModelScreen extends Screen {
         String password = cloudPasswordBox.getValue();
         cloudPasswordBox.setValue("");
         try {
-            runCloudAccount(register ? CloudManagementScreen.management().register(account, password)
-                    : CloudManagementScreen.management().login(account, password),
+            runCloudAccount(CloudManagementScreen.submitAccount(register, account, password),
                     register ? "register_success" : "login_success");
         } catch (RuntimeException failure) {
             cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
@@ -2364,20 +2367,35 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void runCloudAccount(CompletableFuture<?> request, String successKey) {
+        var context = CloudManagementScreen.accountContext();
         cloudPanelStatus = Component.translatable("gui.sparkle_morpher.cloud.manage.working");
         request.whenComplete((ignored, failure) -> Minecraft.getInstance().execute(() -> {
+            try { context.check(); } catch (java.util.concurrent.CancellationException stale) { return; }
             if (failure != null) {
                 cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(failure));
             } else {
-                setStatus(Component.literal(CloudManagementScreen.text(successKey)), ChatFormatting.GREEN);
-                resetCloudPage();
-                if (afterCloudLogin != null) {
-                    Screen next = afterCloudLogin;
-                    afterCloudLogin = null;
-                    InputUtil.setScreen(next);
-                } else {
-                    init();
+                if (ignored instanceof com.micaftic.morpher.cloud.client.CloudSession session) {
+                    try { context.checkSession(session); } catch (java.util.concurrent.CancellationException stale) { return; }
                 }
+                resetCloudPage();
+                var runtime = context.runtime();
+                CloudManagementScreen.currentIdentityBound(context).whenComplete((bound, identityFailure) -> Minecraft.getInstance().execute(() -> {
+                    try { context.check(runtime); } catch (java.util.concurrent.CancellationException stale) { return; }
+                    if (identityFailure != null) {
+                        cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(identityFailure));
+                    } else if (!bound) {
+                        cloudPanelStatus = Component.translatable("gui.sparkle_morpher.cloud.manage.identity.binding_required");
+                    } else {
+                        setStatus(Component.literal(CloudManagementScreen.text(successKey)), ChatFormatting.GREEN);
+                        com.micaftic.morpher.cloud.client.CloudPlayerModelSync.requestIdentityRefresh(runtime);
+                        if (afterCloudLogin != null) {
+                            Screen next = afterCloudLogin; afterCloudLogin = null;
+                            Minecraft.getInstance().setScreen(next);
+                            return;
+                        }
+                    }
+                    init();
+                }));
             }
         }));
     }

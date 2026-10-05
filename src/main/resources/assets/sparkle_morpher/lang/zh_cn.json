@@ -903,7 +903,7 @@
   "gui.sparkle_morpher.cloud.manage.identities": "身份／离线身份",
   "gui.sparkle_morpher.cloud.manage.register": "手动注册账号",
   "gui.sparkle_morpher.cloud.manage.quick_connect": "游戏账号登录／创建 Cloud 账号",
-  "gui.sparkle_morpher.cloud.manage.quick_success": "已连接官方 Cloud 账号",
+  "gui.sparkle_morpher.cloud.manage.quick_success": "Cloud 账号已连接",
   "gui.sparkle_morpher.cloud.manage.official_only": "请先选择官方 Cloud 实例",
   "gui.sparkle_morpher.cloud.manage.targets_acl": "目标／权限",
   "gui.sparkle_morpher.cloud.manage.selected": "已选择 %s",
@@ -968,7 +968,7 @@
   "gui.sparkle_morpher.cloud.manage.identity.verified": "已验证 %s（%s）",
   "gui.sparkle_morpher.cloud.manage.identity.bind_current": "绑定当前游戏账号",
   "gui.sparkle_morpher.cloud.manage.identity.bound": "已绑定 %s，下次可在其他设备自动登录",
-  "gui.sparkle_morpher.cloud.manage.identity.no_matching_provider": "无法验证当前游戏账号，请确认官方 Cloud 已启用对应认证服务",
+  "gui.sparkle_morpher.cloud.manage.identity.no_matching_provider": "无法验证此游戏账号。请确认该 Cloud 已启用对应的身份认证提供方。",
   "gui.sparkle_morpher.cloud.manage.identity.already_linked": "这个游戏账号已绑定其他 Cloud 账号",
   "gui.sparkle_morpher.cloud.manage.identity.provider_unavailable": "游戏账号认证服务暂时不可用，请稍后重试",
   "gui.sparkle_morpher.cloud.manage.identity.pending": "待批准的离线身份：%s",
@@ -1073,5 +1073,8 @@
   "gui.sparkle_morpher.cloud.entity.privacy": "隐私模式下无法发布实体模型",
   "gui.sparkle_morpher.cloud.entity.fake_hint": "选择 Carpet 假人对应的玩家实体，修改权限由 Cloud 管理。",
   "gui.sparkle_morpher.cloud.entity.fake_empty": "当前没有可见的其他玩家实体。请靠近要管理的假人。",
-  "gui.sparkle_morpher.cloud.entity.share_hint": "应用后将通过 Cloud 向观察此实体的客户端分享模型。"
+  "gui.sparkle_morpher.cloud.entity.share_hint": "应用后将通过 Cloud 向观察此实体的客户端分享模型。",
+  "gui.sparkle_morpher.cloud.manage.registration_disabled": "此 Cloud 已关闭自主注册，请使用服主提供的账号登录后绑定游戏身份。",
+  "gui.sparkle_morpher.cloud.manage.identity.binding_required": "Cloud 账号已登录。请点击“绑定当前游戏账号”验证当前游戏身份后启用联机同步。",
+  "gui.sparkle_morpher.cloud.manage.registration_account_exists": "此 Cloud 账号已存在，请使用现有账号登录。"
 }
