@@ -1,5 +1,7 @@
 package com.micaftic.morpher.core.storage;
 
+import java.util.function.BooleanSupplier;
+
 /**
  * Small, testable boundary between committing an imported source and publishing its runtime candidate.
  * A publication failure cannot undo a committed source, so the outcome retains that source for recovery.
@@ -9,6 +11,7 @@ public final class ImportCommitFlow {
     private ImportCommitFlow() { }
 
     public enum State {
+        SUPERSEDED_BEFORE_COMMIT,
         FAILED_BEFORE_COMMIT,
         SOURCE_COMMITTED_PENDING_PUBLICATION,
         PUBLISHED
@@ -16,7 +19,7 @@ public final class ImportCommitFlow {
 
     public record Outcome<T>(State state, T committedSource, Exception failure) {
         public boolean sourceCommitted() {
-            return state != State.FAILED_BEFORE_COMMIT;
+            return state == State.SOURCE_COMMITTED_PENDING_PUBLICATION || state == State.PUBLISHED;
         }
     }
 
@@ -31,6 +34,15 @@ public final class ImportCommitFlow {
     }
 
     public static <T> Outcome<T> commitThenPublish(Committer<T> committer, Publisher<T> publisher) {
+        return commitThenPublish(() -> true, committer, publisher);
+    }
+
+    public static <T> Outcome<T> commitThenPublish(BooleanSupplier isCurrent,
+                                                   Committer<T> committer,
+                                                   Publisher<T> publisher) {
+        if (!isCurrent.getAsBoolean()) {
+            return new Outcome<>(State.SUPERSEDED_BEFORE_COMMIT, null, null);
+        }
         final T committedSource;
         try {
             committedSource = committer.commit();
