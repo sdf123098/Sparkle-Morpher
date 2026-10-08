@@ -1,0 +1,330 @@
+import groovy.json.JsonSlurper
+import org.gradle.api.tasks.bundling.AbstractArchiveTask
+import org.gradle.api.tasks.compile.JavaCompile
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
+
+def distributionName = rootProject.ext.distributionVariant.toString()
+def finalJarTaskName = project.name == 'fabric' && tasks.findByName('remapJar') != null ? 'remapJar' : 'jar'
+def finalJarProvider = tasks.named(finalJarTaskName, AbstractArchiveTask)
+def javaCompileTask = tasks.named('compileJava', JavaCompile).get()
+def javaInputs = new LinkedHashSet(javaCompileTask.source.files.findAll { it.isFile() && it.name.endsWith('.java') })
+rootProject.allprojects.each { candidate ->
+    def candidateCompile = candidate.tasks.findByName('compileJava')
+    if (candidateCompile instanceof JavaCompile) {
+        javaInputs.addAll(candidateCompile.source.files.findAll { it.isFile() && it.name.endsWith('.java') })
+    }
+}
+javaInputs = javaInputs.toList().sort { it.path }
+def commonRoot = rootProject.file('common/src/main/java').canonicalFile
+def isFa121 = rootProject.projectDir.name.toLowerCase().contains('fa1.21.1')
+def fa121CommonLoaderAllowlist = [
+        'net.fabricmc.api.EnvType',
+        'net.fabricmc.api.Environment',
+        'net.minecraftforge.common.ForgeConfigSpec',
+        'net.minecraftforge.fml.config.ModConfig'
+] as Set
+
+def stripComments = { String source ->
+    StringBuilder result = new StringBuilder(source.length())
+    int mode = 0 // 0 code, 1 line comment, 2 block comment, 3 string, 4 char
+    boolean escaped = false
+    for (int i = 0; i < source.length(); i++) {
+        char c = source.charAt(i)
+        char next = i + 1 < source.length() ? source.charAt(i + 1) : (char) 0
+        if (mode == 0) {
+            if (c == '/' && next == '/') { result.append('  '); i++; mode = 1 }
+            else if (c == '/' && next == '*') { result.append('  '); i++; mode = 2 }
+            else { result.append(c); if (c == '"') mode = 3; else if (c == '\'') mode = 4 }
+        } else if (mode == 1) {
+            if (c == '\n' || c == '\r') { result.append(c); mode = 0 } else result.append(' ')
+        } else if (mode == 2) {
+            if (c == '*' && next == '/') { result.append('  '); i++; mode = 0 }
+            else result.append(c == '\n' || c == '\r' ? c : ' ')
+        } else {
+            result.append(c)
+            if (escaped) escaped = false
+            else if (c == '\\') escaped = true
+            else if ((mode == 3 && c == '"') || (mode == 4 && c == '\'')) mode = 0
+        }
+    }
+    result.toString()
+}
+
+def findLoaderReferences = { String source, Set<String> allowedTypes ->
+    String code = stripComments(source)
+    def matcher = (code =~ /\b(?:net\.fabricmc|net\.neoforged|net\.minecraftforge)(?:\.[A-Za-z_$][\w$]*)+/)
+    Set<String> violations = [] as Set
+    matcher.each { match -> if (!allowedTypes.contains(match)) violations.add(match) }
+    violations
+}
+
+// Keep the scanner's contract checked at task execution so edits cannot silently
+// turn comments into false positives or miss qualified/reflective references.
+def verifyScannerExamples = {
+    if (!findLoaderReferences('/* import net.neoforged.fake.Commented; */ class Fine {}', [] as Set).isEmpty()) {
+        throw new GradleException('Source boundary scanner treated a comment as code')
+    }
+    if (findLoaderReferences('class Bad { net.neoforged.fake.LoaderType value; }', [] as Set).isEmpty()) {
+        throw new GradleException('Source boundary scanner missed a qualified loader API reference')
+    }
+    if (findLoaderReferences('class Reflective { String type = "net.fabricmc.fake.LoaderType"; }', [] as Set).isEmpty()) {
+        throw new GradleException('Source boundary scanner missed a reflective loader API string')
+    }
+    if (!findLoaderReferences('import net.fabricmc.api.Environment;', fa121CommonLoaderAllowlist).isEmpty()) {
+        throw new GradleException('Source boundary scanner rejected an exact Fa1.21.1 common API exception')
+    }
+}
+
+def coreArtifactEntryViolations = { List<String> entries, String metadataPath ->
+    List<String> errors = []
+    def duplicates = entries.groupBy { it }.findAll { name, occurrences -> occurrences.size() > 1 }.keySet().sort()
+    if (!duplicates.isEmpty()) errors.add("duplicate entries: ${duplicates}")
+    if (!entries.contains(metadataPath)) errors.add("missing ${metadataPath}")
+    ['com/micaftic/morpher/YesSteveModel.class',
+     'com/micaftic/morpher/client/ClientModelManager.class',
+     'com/micaftic/morpher/model/LocalModelService.class',
+     'com/micaftic/morpher/util/LocalModelSelectionStore.class',
+     'com/micaftic/morpher/model/catalog/LocalModelDefinitionCatalog.class',
+     'com/micaftic/morpher/cloud/client/CloudClientRuntime.class'].each { required ->
+        if (!entries.contains(required)) errors.add("missing ${required}")
+    }
+    def forbidden = entries.findAll { it ==~ /.*\/(BBModelTest|LetianerEndToEndTest)(\$.*)?\.class/ }
+    if (!forbidden.isEmpty()) errors.add("production self-check classes found: ${forbidden}")
+    errors
+}
+
+def verifyArtifactRuleExamples = {
+    List<String> required = [
+            'fabric.mod.json',
+            'com/micaftic/morpher/YesSteveModel.class',
+            'com/micaftic/morpher/client/ClientModelManager.class',
+            'com/micaftic/morpher/model/LocalModelService.class',
+            'com/micaftic/morpher/util/LocalModelSelectionStore.class',
+            'com/micaftic/morpher/model/catalog/LocalModelDefinitionCatalog.class',
+            'com/micaftic/morpher/cloud/client/CloudClientRuntime.class'
+    ]
+    if (!coreArtifactEntryViolations(required, 'fabric.mod.json').isEmpty()) {
+        throw new GradleException('Artifact audit rejected its valid minimal fixture')
+    }
+    if (!coreArtifactEntryViolations(required + ['fabric.mod.json', 'com/micaftic/morpher/resource/bbmodel/BBModelTest.class'], 'fabric.mod.json').any { it.contains('duplicate') }) {
+        throw new GradleException('Artifact audit missed a duplicate-entry fixture')
+    }
+    if (!coreArtifactEntryViolations(required - 'com/micaftic/morpher/YesSteveModel.class', 'fabric.mod.json').any { it.contains('YesSteveModel.class') }) {
+        throw new GradleException('Artifact audit missed a missing-entrypoint fixture')
+    }
+    if (!coreArtifactEntryViolations(required + ['com/micaftic/morpher/resource/bbmodel/BBModelTest.class'], 'fabric.mod.json').any { it.contains('self-check') }) {
+        throw new GradleException('Artifact audit missed a forbidden-class fixture')
+    }
+}
+
+def verifySourceInputs = tasks.register('verifyProductionSourceBoundary') {
+    group = 'verification'
+    description = 'Checks the effective production JavaCompile inputs for test code and common loader API leaks.'
+    inputs.files(javaInputs)
+    inputs.property('distribution', distributionName)
+    doLast {
+        verifyScannerExamples()
+        List<String> errors = []
+        javaInputs.each { File sourceFile ->
+            String relative = rootProject.projectDir.toPath().toAbsolutePath().normalize()
+                    .relativize(sourceFile.toPath().toAbsolutePath().normalize()).toString().replace('\\', '/')
+            if (sourceFile.name in ['BBModelTest.java', 'LetianerEndToEndTest.java']) {
+                errors.add("production self-check source: ${relative}")
+            }
+            String text = sourceFile.getText('UTF-8')
+            if (text =~ /\b(?:import\s+)?org\.junit(?:\.jupiter|\.platform)?\./) {
+                errors.add("test framework referenced by production source: ${relative}")
+            }
+            boolean commonMain = sourceFile.toPath().toAbsolutePath().normalize().startsWith(commonRoot.toPath())
+            if (commonMain) {
+                Set<String> allowed = isFa121 ? fa121CommonLoaderAllowlist : ([] as Set)
+                if (sourceFile.name == 'YsmCrypt.java' && relative.endsWith('/core/security/YsmCrypt.java')) {
+                    allowed = (allowed + ['net.neoforged.fml.ModList', 'net.fabricmc.loader.api.FabricLoader']) as Set
+                }
+                findLoaderReferences(text, allowed).each { ref -> errors.add("loader API ${ref} leaked into ${relative}") }
+            }
+        }
+        if (!errors.isEmpty()) throw new GradleException('Production source boundary violations:\n - ' + errors.join('\n - '))
+        logger.lifecycle("Production source boundary passed: ${javaInputs.size()} effective JavaCompile inputs (${distributionName}).")
+    }
+}
+
+def verifyJar = tasks.register('verifyDistributionArtifact') {
+    group = 'verification'
+    description = 'Audits the exact remapped/NeoForge release JAR selected by its archiveFile provider.'
+    inputs.file(finalJarProvider.flatMap { it.archiveFile })
+    inputs.file(rootProject.file('gradle/distribution-audit-allowlist.json'))
+    inputs.property('distribution', distributionName)
+    inputs.property('loader', project.name == 'fabric' ? 'fabric' : 'neoforge')
+    dependsOn(verifySourceInputs)
+    doLast {
+        verifyArtifactRuleExamples()
+        File artifact = finalJarProvider.get().archiveFile.get().asFile
+        if (!artifact.isFile()) throw new GradleException("Final distribution JAR is missing: ${artifact}")
+        ZipFile zip = new ZipFile(artifact)
+        try {
+            List<String> names = []
+            def enumeration = zip.entries()
+            while (enumeration.hasMoreElements()) names.add(enumeration.nextElement().name)
+            String metadataPath = project.name == 'fabric' ? 'fabric.mod.json' : 'META-INF/neoforge.mods.toml'
+            def coreErrors = coreArtifactEntryViolations(names, metadataPath)
+            if (!coreErrors.isEmpty()) throw new GradleException("Final JAR entry audit failed for ${artifact.name}: ${coreErrors}")
+            String repoTag = rootProject.projectDir.name.replaceFirst('(?i)^Sparkle-Morpher-', '').toLowerCase()
+            String artifactTag = repoTag in ['fa26.1.2', 'neo26.1.2'] ? repoTag.replace('26.1.2', '26.1.x') : repoTag
+            String suffix = distributionName == 'curseforge' ? '-curseforge.jar' : '.jar'
+            if (!artifact.name.startsWith("sparkle-morpher-${project.version}-${artifactTag}") || !artifact.name.endsWith(suffix)) {
+                throw new GradleException("Artifact filename does not match branch/distribution metadata: ${artifact.name} (expected ${artifactTag}, ${distributionName})")
+            }
+
+            def auditAllowlist = new JsonSlurper().parse(rootProject.file('gradle/distribution-audit-allowlist.json'))
+            Set<String> expectedOwnedShims = (auditAllowlist.temporaryOwnedUpstreamNamespaceClasses[repoTag] ?: []) as Set<String>
+            def registeredDependency = auditAllowlist.registeredThirdPartyNamespaceClasses[repoTag]
+            Set<String> expectedThirdPartyClasses = (registeredDependency?.classes ?: []) as Set<String>
+            def registeredEmbedded = auditAllowlist.registeredEmbeddedLibraries[repoTag]
+            if (registeredEmbedded == null) throw new GradleException("No embedded-library allowlist registered for ${repoTag}")
+            def buildScripts = rootProject.allprojects.collect { it.file('build.gradle') }.findAll { it.isFile() }.collect { it.getText('UTF-8') }
+            registeredEmbedded.coordinates.each { coordinate ->
+                if (!buildScripts.any { it.contains(coordinate.toString()) }) {
+                    throw new GradleException("Embedded dependency ${coordinate} has no source build declaration for ${repoTag}")
+                }
+            }
+            if (!expectedThirdPartyClasses.isEmpty()) {
+                String versionProperty = registeredDependency.versionProperty.toString()
+                def dependencyVersion = rootProject.findProperty(versionProperty)
+                File loaderBuild = project.name == 'fabric' ? project.file('build.gradle') : project.file('build.gradle')
+                String dependencyScript = loaderBuild.getText('UTF-8')
+                if (dependencyVersion == null || !dependencyScript.contains(registeredDependency.coordinate.toString())) {
+                    throw new GradleException("Registered third-party namespace classes have no matching dependency coordinate/version: ${registeredDependency.coordinate}:${dependencyVersion}")
+                }
+            }
+
+            Set<String> directNamespaceClasses = names.findAll {
+                it.endsWith('.class') && it ==~ /(?:net\/minecraft|com\/mojang|net\/neoforged|net\/minecraftforge)\/.*/
+            } as Set<String>
+            Set<String> nestedSpmClasses = [] as Set<String>
+            Set<String> nestedSpmNamespaceClasses = [] as Set<String>
+            Set<String> outerSpmClasses = names.findAll { it.startsWith('com/micaftic/morpher/') && it.endsWith('.class') } as Set<String>
+            Set<String> allSeenSpmClasses = new LinkedHashSet<>(outerSpmClasses)
+            List<String> nestedJarPaths = names.findAll { (it.startsWith('META-INF/jars/') || it.startsWith('META-INF/jarjar/')) && it.endsWith('.jar') }.sort()
+            List<String> nestedBasenames = nestedJarPaths.collect { it.substring(it.lastIndexOf('/') + 1) }
+            List<String> unregisteredNested = nestedBasenames.findAll { basename -> !registeredEmbedded.patterns.any { pattern -> basename ==~ ('.*' + pattern.toString()) } }
+            if (!unregisteredNested.isEmpty()) throw new GradleException("Unregistered embedded JARs in ${artifact.name}: ${unregisteredNested}")
+            def missingEmbedded = registeredEmbedded.patterns.findAll { pattern -> nestedBasenames.count { it ==~ ('.*' + pattern.toString()) } != 1 }
+            if (!missingEmbedded.isEmpty()) throw new GradleException("Registered embedded JAR is missing or duplicated in ${artifact.name}: ${missingEmbedded}")
+            nestedJarPaths.each { nestedPath ->
+                def nestedEntry = zip.getEntry(nestedPath)
+                if (nestedEntry == null) throw new GradleException("Declared nested JAR entry is missing: ${nestedPath}")
+                List<String> nestedNames = []
+                ZipInputStream nestedZip = new ZipInputStream(zip.getInputStream(nestedEntry))
+                try {
+                    def nested = nestedZip.getNextEntry()
+                    while (nested != null) {
+                        nestedNames.add(nested.name)
+                        nested = nestedZip.getNextEntry()
+                    }
+                } finally {
+                    nestedZip.close()
+                }
+                if (nestedNames.isEmpty()) throw new GradleException("Nested JAR is empty or unreadable: ${nestedPath}")
+                def nestedDuplicates = nestedNames.groupBy { it }.findAll { name, occurrences -> occurrences.size() > 1 }.keySet()
+                if (!nestedDuplicates.isEmpty()) throw new GradleException("Duplicate entries in nested JAR ${nestedPath}: ${nestedDuplicates}")
+                if (nestedPath.contains('sparkle-morpher-')) {
+                    nestedNames.findAll { it ==~ /(?:net\/minecraft|com\/mojang|net\/neoforged|net\/minecraftforge)\/.+\.class/ }.each { nestedSpmNamespaceClasses.add(it) }
+                }
+                nestedNames.findAll { it.startsWith('com/micaftic/morpher/') && it.endsWith('.class') }.each { className ->
+                    if (!allSeenSpmClasses.add(className)) throw new GradleException("Duplicate SPM class across main/nested JARs: ${className} (${nestedPath})")
+                    nestedSpmClasses.add(className)
+                }
+            }
+            Set<String> actualNamespaceClasses = new LinkedHashSet<>(directNamespaceClasses)
+            Set<String> registeredNamespaceClasses = new LinkedHashSet<>(expectedOwnedShims)
+            registeredNamespaceClasses.addAll(expectedThirdPartyClasses)
+            if (!nestedSpmNamespaceClasses.isEmpty() || actualNamespaceClasses != registeredNamespaceClasses) {
+                Set<String> unregistered = new LinkedHashSet<>(actualNamespaceClasses); unregistered.removeAll(registeredNamespaceClasses)
+                Set<String> missing = new LinkedHashSet<>(registeredNamespaceClasses); missing.removeAll(actualNamespaceClasses)
+                throw new GradleException("Upstream-namespace class audit failed for ${repoTag}: unregistered=${unregistered}, registered-but-absent=${missing}, SPM-nested=${nestedSpmNamespaceClasses}")
+            }
+
+            def verifyMixinConfig = { String mixinPath ->
+                if (!names.contains(mixinPath)) throw new GradleException("Mixin config is missing: ${mixinPath}")
+                def mixinConfig = new JsonSlurper().parse(zip.getInputStream(zip.getEntry(mixinPath)))
+                String mixinPackage = mixinConfig.package?.toString() ?: ''
+                (['mixins', 'client', 'server'].collectMany { key -> mixinConfig[key] instanceof Collection ? mixinConfig[key] : [] } + (mixinConfig.plugin ? [mixinConfig.plugin] : [])).each { className ->
+                    String configuredClass = className.toString()
+                    String targetPath
+                    if (configuredClass.contains('/')) {
+                        String packagePath = mixinPackage.replace('.', '/')
+                        targetPath = (packagePath && !configuredClass.startsWith(packagePath + '/') ? packagePath + '/' : '') + configuredClass.replace('.', '/') + '.class'
+                    } else {
+                        String targetClass = !mixinPackage || configuredClass.startsWith(mixinPackage + '.') ? configuredClass : mixinPackage + '.' + configuredClass
+                        targetPath = targetClass.replace('.', '/') + '.class'
+                    }
+                    if (!names.contains(targetPath)) throw new GradleException("Mixin target class is missing from ${artifact.name}: ${mixinPath} -> ${targetPath}")
+                }
+            }
+
+            if (project.name == 'fabric') {
+                def fabricMetadata = new JsonSlurper().parse(zip.getInputStream(zip.getEntry(metadataPath)))
+                String expectedModId = rootProject.findProperty('mod_id')?.toString() ?: 'sparkle_morpher'
+                if (fabricMetadata.id != expectedModId) throw new GradleException("Fabric mod id ${fabricMetadata.id} does not match expected ${expectedModId} in ${artifact.name}")
+                if (fabricMetadata.version != project.version.toString()) throw new GradleException("Fabric version does not match ${project.version} in ${artifact.name}")
+                def entrypoints = fabricMetadata.entrypoints.values().flatten().collect { it instanceof Map ? it.value : it.toString() }
+                entrypoints.each { String className ->
+                    String classPath = className.replace('.', '/') + '.class'
+                    if (!names.contains(classPath)) throw new GradleException("Fabric entrypoint class is missing: ${classPath}")
+                }
+                (fabricMetadata.mixins ?: []).each { mixinPath ->
+                    verifyMixinConfig(mixinPath.toString())
+                }
+                if (fabricMetadata.accessWidener && !names.contains(fabricMetadata.accessWidener.toString())) throw new GradleException("Fabric access widener is missing: ${fabricMetadata.accessWidener}")
+                Set<String> declaredNested = (fabricMetadata.jars ?: []).collect { it.file?.toString() }.findAll { it } as Set<String>
+                if (declaredNested != (nestedJarPaths as Set<String>)) throw new GradleException("Fabric nested-JAR metadata does not match actual entries: declared=${declaredNested}, actual=${nestedJarPaths}")
+            } else {
+                String toml = zip.getInputStream(zip.getEntry(metadataPath)).getText('UTF-8')
+                String expectedModId = rootProject.findProperty('mod_id')?.toString()
+                if (!(toml =~ /(?m)^modId\s*=\s*"${java.util.regex.Pattern.quote(expectedModId)}"\s*$/)) throw new GradleException("NeoForge metadata mod id does not match ${expectedModId}")
+                if (!(toml =~ /(?m)^version\s*=\s*"${java.util.regex.Pattern.quote(project.version.toString())}"\s*$/)) throw new GradleException("NeoForge metadata version does not match ${project.version}")
+                def mixinConfigs = (toml =~ /(?m)^config\s*=\s*"([^"]+)"/).collect { it[1] }
+                mixinConfigs.each { mixinPath -> verifyMixinConfig(mixinPath) }
+                if (!nestedJarPaths.isEmpty()) {
+                    String jarJarMetadataPath = 'META-INF/jarjar/metadata.json'
+                    if (!names.contains(jarJarMetadataPath)) throw new GradleException("NeoForge jar-in-jar metadata is missing in ${artifact.name}")
+                    def jarJarMetadata = new JsonSlurper().parse(zip.getInputStream(zip.getEntry(jarJarMetadataPath)))
+                    Set<String> declaredNested = (jarJarMetadata.jars ?: []).collect { it.path?.toString() }.findAll { it } as Set<String>
+                    if (declaredNested != (nestedJarPaths as Set<String>)) throw new GradleException("NeoForge jar-in-jar metadata does not match actual entries: declared=${declaredNested}, actual=${nestedJarPaths}")
+                }
+            }
+
+            boolean containsNative = names.any { it.startsWith('natives/') || it == 'native-manifest.json' }
+            if (distributionName == 'curseforge') {
+                def nativeEntries = names.findAll { it.startsWith('natives/') || it == 'native-manifest.json' || it ==~ /.*\.(dll|so|dylib|jnilib|exe)/ }
+                if (!nativeEntries.isEmpty()) throw new GradleException("CurseForge artifact contains native resources: ${nativeEntries.take(20)}")
+            } else {
+                if (!names.contains('native-manifest.json')) throw new GradleException("Native artifact lacks native-manifest.json: ${artifact.name}")
+                def manifestEntry = zip.getEntry('native-manifest.json')
+                def manifest = new JsonSlurper().parse(zip.getInputStream(manifestEntry))
+                if (!(manifest.artifacts instanceof Collection) || manifest.artifacts.isEmpty()) throw new GradleException('native-manifest.json has no native entries')
+                manifest.artifacts.each { nativeInfo ->
+                    String nativePath = "natives/${nativeInfo.platform}/${nativeInfo.filename}"
+                    def nativeEntry = zip.getEntry(nativePath)
+                    if (nativeEntry == null) throw new GradleException("Native manifest entry is missing from artifact: ${nativePath}")
+                    MessageDigest digest = MessageDigest.getInstance('SHA-256')
+                    zip.getInputStream(nativeEntry).withCloseable { stream ->
+                        byte[] buffer = new byte[8192]
+                        int read
+                        while ((read = stream.read(buffer)) != -1) digest.update(buffer, 0, read)
+                    }
+                    String actual = digest.digest().collect { String.format('%02X', it & 0xff) }.join()
+                    if (!actual.equalsIgnoreCase(nativeInfo.sha256.toString())) throw new GradleException("Native JAR digest mismatch: ${nativePath}")
+                }
+            }
+            logger.lifecycle("Final artifact audit passed: ${artifact.canonicalPath} (${names.size()} entries, ${distributionName}, nativeResources=${containsNative}).")
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named('check') { dependsOn(verifyJar) }
