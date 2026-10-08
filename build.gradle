@@ -146,3 +146,5 @@ processResources {
         rootProject.ext.distributionResourceExcludes(delegate)
     }
 }
+
+apply from: rootProject.file('gradle/verify-distribution.gradle')
