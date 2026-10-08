@@ -122,6 +122,16 @@ class LocalModelCatalogTest {
     }
 
     @Test
+    void fingerprint_keepsCatalogUsableWhileExternalDependencyIsMissing() throws IOException {
+        Path file = tempDir.resolve("missing-dependency.gltf");
+        write(file, "{\"asset\":{\"version\":\"2.0\"},\"images\":[{\"uri\":\"later.bin\"}]}");
+        long missing = LocalModelCatalog.fingerprint(file);
+        write(tempDir.resolve("later.bin"), "ready");
+        long restored = LocalModelCatalog.fingerprint(file);
+        assertNotEquals(missing, restored, "依赖恢复后必须触发来源更新");
+    }
+
+    @Test
     void fingerprint_aggregatesDirectoryContents() throws IOException {
         Path dir = tempDir.resolve("pack");
         write(dir.resolve("a.txt"), "a1");
