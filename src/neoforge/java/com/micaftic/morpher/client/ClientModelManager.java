@@ -710,16 +710,19 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 ModelMemoryProfiler.logBytes("local-import-read", modelKey, importData);
                 try (LocalModelImportStore.PreparedImport prepared = LOCAL_IMPORT_STORE.prepare(modelKey, fileName, importData)) {
                     if (prepared == null) throw new IOException("Failed to prepare local import");
-                    if (isGltfFileName(fileName)) {
-                        // Picked bytes have no authorized project root; never resolve siblings from customRoot.
-                        GltfModel gltfModel = GltfLoader.load(importData, null, fileName);
-                        preparedAssembly = buildGltfAssembly(gltfModel, modelKey);
-                    } else {
-                        RawYsmModel rawModel = parseImportModel(fileName, importData);
+                    com.micaftic.morpher.core.importing.ParsedImport parsedImport =
+                            com.micaftic.morpher.core.importing.ImportCoordinator.parsePickedBytes(
+                                    fileName, importData, () -> parseImportModel(fileName, importData));
+                    if (parsedImport.payload() instanceof com.micaftic.morpher.core.importing.ParsedImport.GltfPayload gltfPayload) {
+                        preparedAssembly = buildGltfAssembly(gltfPayload.result().model(), modelKey);
+                    } else if (parsedImport.payload() instanceof com.micaftic.morpher.core.importing.ParsedImport.LegacyRawPayload legacyPayload) {
+                        RawYsmModel rawModel = legacyPayload.model();
                         ModelMemoryProfiler.log("local-import-parsed", modelKey);
                         ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
                         ModelMemoryProfiler.log("local-import-mapped", modelKey);
                         preparedAssembly = ModelAssemblyFactory.buildAssembly(parsedBundle, false, false);
+                    } else {
+                        throw new IllegalStateException("Unsupported parsed import payload: " + parsedImport.payload().getClass().getName());
                     }
                     if (preparedAssembly == null) throw new IllegalStateException("Failed to build local model");
                     synchronized (MODEL_RUNTIME_STOP_LOCK) {
