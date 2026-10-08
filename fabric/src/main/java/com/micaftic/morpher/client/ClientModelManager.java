@@ -698,7 +698,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 try (LocalModelImportStore.PreparedImport prepared = LOCAL_IMPORT_STORE.prepare(modelKey, fileName, importData)) {
                     if (prepared == null) throw new IOException("Failed to prepare local import");
                     if (isGltfFileName(fileName)) {
-                        GltfModel gltfModel = GltfLoader.load(prepared.path());
+                        // Picked bytes have no authorized project root; never resolve siblings from customRoot.
+                        GltfModel gltfModel = GltfLoader.load(importData, null, fileName);
                         preparedAssembly = buildGltfAssembly(gltfModel, modelKey);
                     } else {
                         RawYsmModel rawModel = parseImportModel(fileName, importData);
