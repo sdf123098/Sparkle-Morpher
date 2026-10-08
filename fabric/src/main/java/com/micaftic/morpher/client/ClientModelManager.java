@@ -22,6 +22,7 @@ import com.micaftic.morpher.core.model.lifecycle.GpuCacheTrimCoordinator;
 import com.micaftic.morpher.core.model.lifecycle.KeyedRequestLeaseRegistry;
 import com.micaftic.morpher.core.model.lifecycle.ModelScanRevision;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
+import com.micaftic.morpher.core.storage.ImportCommitFlow;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
@@ -713,14 +714,29 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                         if (importGeneration != MODEL_TASK_GENERATION.get()) {
                             throw new CancellationException("Client model runtime is stopping");
                         }
-                        LocalModelImportStore.CommitResult commit = prepared.commit();
-                        Path persisted = commit.persistedPath();
+                        ModelAssembly candidate = preparedAssembly;
+                        ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> outcome = ImportCommitFlow.commitThenPublish(
+                                prepared::commit,
+                                committed -> publishImportedAssembly(modelKey, candidate, committed.persistedPath()));
+                        if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
+                            throw outcome.failure();
+                        }
+                        LocalModelImportStore.CommitResult commit = outcome.committedSource();
                         if (!commit.cleanupPending().isEmpty()) {
                             YesSteveModel.LOGGER.warn("[SM] Import committed with {} stale sibling file(s) awaiting cleanup: {}",
                                     commit.cleanupPending().size(), commit.cleanupPending());
                         }
-                        publishImportedAssembly(modelKey, preparedAssembly, persisted);
-                        preparedAssembly = null;
+                        if (outcome.state() == ImportCommitFlow.State.SOURCE_COMMITTED_PENDING_PUBLICATION) {
+                            YesSteveModel.LOGGER.error("[SM] Import source committed but runtime publication failed; scheduling catalog recovery",
+                                    outcome.failure());
+                            try {
+                                reloadLocalModels(null, false);
+                            } catch (RuntimeException recoveryFailure) {
+                                YesSteveModel.LOGGER.error("[SM] Failed to schedule recovery for committed import {}", modelKey, recoveryFailure);
+                            }
+                        } else {
+                            preparedAssembly = null;
+                        }
                     }
                 }
                 ((Executor) Minecraft.getInstance()).execute(ClientModelManager::flushPendingModels);
@@ -733,7 +749,13 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             }
             if (callback != null) {
                 Component result = error;
-                ((Executor) Minecraft.getInstance()).execute(() -> callback.accept(result));
+                ((Executor) Minecraft.getInstance()).execute(() -> {
+                    try {
+                        callback.accept(result);
+                    } catch (RuntimeException callbackFailure) {
+                        YesSteveModel.LOGGER.error("[SM] Local import completion callback failed for {}", modelKey, callbackFailure);
+                    }
+                });
             }
         });
     }
@@ -972,14 +994,20 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     private static void publishImportedAssembly(String modelId, ModelAssembly runtimeModel, Path persisted) throws IOException {
+        long fingerprint = LocalModelCatalog.fingerprint(persisted);
+        LocalModelCatalog.Entry sourceEntry = new LocalModelCatalog.Entry(
+                persisted, null, false, false, fingerprint, null, null);
         localOnlyModelIds.add(modelId);
         touchModel(modelId);
-        runPendingModelCallback();
         ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
-        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, -1L, null, null));
         localModelSourcePaths.put(modelId, persisted.toAbsolutePath().normalize());
-        lazyModelSources.put(modelId, new LocalModelCatalog.Entry(
-                persisted, null, false, false, LocalModelCatalog.fingerprint(persisted), null, null));
+        lazyModelSources.put(modelId, sourceEntry);
+        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, -1L, null, null));
+        try {
+            runPendingModelCallback();
+        } catch (RuntimeException callbackFailure) {
+            YesSteveModel.LOGGER.error("[SM] Pending model callback failed after import publication for {}", modelId, callbackFailure);
+        }
     }
 
     private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth) throws Exception {
