@@ -90,4 +90,6 @@ remapJar {
     archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-fa1.21.1")
 }
 
+apply from: rootProject.file('gradle/verify-distribution.gradle')
+
 
