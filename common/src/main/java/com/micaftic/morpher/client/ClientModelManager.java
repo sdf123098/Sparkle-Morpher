@@ -1186,7 +1186,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                                            @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
         if (scanRevision >= 0L && !LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return;
         if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
-        com.micaftic.morpher.resource.gltf.GltfLoadResult parsed = GltfLoader.loadWithManifest(source);
+        com.micaftic.morpher.core.importing.ParsedImport parsedImport =
+                com.micaftic.morpher.core.importing.ImportCoordinator.parseLocalGltf(source);
+        com.micaftic.morpher.resource.gltf.GltfLoadResult parsed =
+                ((com.micaftic.morpher.core.importing.ParsedImport.GltfPayload) parsedImport.payload()).result();
         ModelAssembly runtimeModel = buildGltfAssembly(parsed.model(), modelId);
         if (scanRevision >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)
                 || sourceEntry == null || parsed.sourceFingerprint() != sourceEntry.fingerprint)) {
@@ -1207,7 +1210,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth,
                                            long scanRevision, @Nullable LocalModelCatalog.Entry sourceEntry) throws Exception {
         if (scanRevision >= 0L && !LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return;
-        com.micaftic.morpher.resource.gltf.GltfLoadResult parsed = GltfLoader.loadWithManifest(source);
+        com.micaftic.morpher.core.importing.ParsedImport parsedImport =
+                com.micaftic.morpher.core.importing.ImportCoordinator.parseLocalGltf(source);
+        com.micaftic.morpher.resource.gltf.GltfLoadResult parsed =
+                ((com.micaftic.morpher.core.importing.ParsedImport.GltfPayload) parsedImport.payload()).result();
         ModelAssembly runtimeModel = buildGltfAssembly(parsed.model(), modelId);
         if (scanRevision >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)
                 || sourceEntry == null || parsed.sourceFingerprint() != sourceEntry.fingerprint)) {
