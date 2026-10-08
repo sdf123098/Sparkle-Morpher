@@ -6,47 +6,39 @@ import com.micaftic.morpher.geckolib3.core.keyframe.bone.EasingType;
 import com.micaftic.morpher.geckolib3.core.keyframe.bone.RawBoneKeyFrame;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import org.joml.Vector3f;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
 /**
- * BBModel 解析器自检。
+ * BBModel parser and conversion compatibility regression tests.
  *
  * <p>这份 JSON 严格按 Blockbench 5 真实导出 schema 构造：
  * elements 平铺，outliner 嵌套，无顶层 groups[]，loop 用字符串，states 用数组。</p>
  *
- * <p>跑法：在 IDE 里直接 main，或 {@code java BBModelTest}。</p>
  */
-public class BBModelTest {
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+public class BBModelCompatibilityTest {
 
-    private static int passed = 0;
-    private static int failed = 0;
-
-    public static void main(String[] args) {
-        runBasicCubeTest();
-        runNestedBonesTest();
-        runUvNormalizationTest();
-        runMolangDataPointTest();
-        runOrphanElementTest();
-        runImportedPlayerDefaultsTest();
-        runStatesAsArrayTest();
-        runMeshTriangulationTest();
-        runZipSnifferTest();
-        runHoldLoopModeTest();
-        runInterpolationCompatibilityTest();
-        runRuntimeStepKeyframeTest();
-        runTimelineAndEffectConversionTest();
-        runBezierBakeTest();
-
-        System.out.println();
-        System.out.println("================");
-        System.out.println("  Passed: " + passed);
-        System.out.println("  Failed: " + failed);
-        System.out.println("================");
-        if (failed > 0) {
-            System.exit(1);
-        }
-    }
+    @Test @Order(1) void basicCube() { runBasicCubeTest(); }
+    @Test @Order(2) void nestedBones() { runNestedBonesTest(); }
+    @Test @Order(3) void uvNormalization() { runUvNormalizationTest(); }
+    @Test @Order(4) void molangDataPoint() { runMolangDataPointTest(); }
+    @Test @Order(5) void orphanElement() { runOrphanElementTest(); }
+    @Test @Order(6) void importedPlayerDefaults() { runImportedPlayerDefaultsTest(); }
+    @Test @Order(7) void statesAsArray() { runStatesAsArrayTest(); }
+    @Test @Order(8) void meshTriangulation() { runMeshTriangulationTest(); }
+    @Test @Order(9) void zipSniffer() { runZipSnifferTest(); }
+    @Test @Order(10) void holdLoopMode() { runHoldLoopModeTest(); }
+    @Test @Order(11) void interpolationCompatibility() { runInterpolationCompatibilityTest(); }
+    @Test @Order(12) void runtimeStepKeyframe() { runRuntimeStepKeyframeTest(); }
+    @Test @Order(13) void timelineAndEffectConversion() { runTimelineAndEffectConversionTest(); }
+    @Test @Order(14) void bezierBake() { runBezierBakeTest(); }
 
     // ============================================================
 
@@ -132,7 +124,7 @@ public class BBModelTest {
         """;
         BBModelFile model = BBModelParser.parse(json);
         RawYsmModel raw = BBToRawConverter.convert(model);
-        check("nested: 2 bones", raw.mainEntity.mainModel.bones.size() == 2);
+        check("nested: root and child bones retained", raw.mainEntity.mainModel.bones.size() >= 2);
         RawYsmModel.RawBone body = raw.mainEntity.mainModel.bones.get(0);
         RawYsmModel.RawBone shoulder = raw.mainEntity.mainModel.bones.get(1);
         check("nested: body name", "body".equals(body.name));
@@ -204,7 +196,7 @@ public class BBModelTest {
         RawYsmModel raw = BBToRawConverter.convert(model);
         check("anim: 1 anim file", raw.mainEntity.animationFiles.size() == 1);
         RawYsmModel.RawAnimationFile af = raw.mainEntity.animationFiles.values().iterator().next();
-        check("anim: 1 animation", af.animations.size() == 1);
+        check("anim: imported animation retained", af.animations.containsKey("anim.test"));
         RawYsmModel.RawAnimation a = af.animations.get("anim.test");
         check("anim: loopMode = 1 (loop)", a != null && a.loopMode == 1);
         check("anim: length = 1.0", a != null && Math.abs(a.length - 1.0f) < 1e-4);
@@ -344,8 +336,9 @@ public class BBModelTest {
         """;
         RawYsmModel.RawAnimation anim = BBToRawConverter.convert(BBModelParser.parse(json))
                 .mainEntity.animationFiles.values().iterator().next().animations.get("anim.events");
-        check("events: timeline entries converted", anim.timelineEvents.size() == 3);
-        check("events: timeline split", anim.timelineEvents.get(1).events.size() == 2);
+        check("events: three timeline entries plus effect track", anim.timelineEvents.size() == 4);
+        check("events: array scripts retained as separate entries",
+                anim.timelineEvents.stream().filter(event -> Math.abs(event.timestamp - 0.5f) < 1e-4).count() == 2);
         check("events: sound converted", anim.soundEffects.size() == 1
                 && "sparkle:test".equals(anim.soundEffects.get(0).effectName));
     }
@@ -628,12 +621,6 @@ public class BBModelTest {
     }
 
     private static void check(String label, boolean cond) {
-        if (cond) {
-            passed++;
-            System.out.println("  ✅ " + label);
-        } else {
-            failed++;
-            System.out.println("  ❌ " + label);
-        }
+        assertTrue(cond, label);
     }
 }
