@@ -69,11 +69,13 @@ public final class GltfLoader {
         Path root = requested.getParent().toRealPath();
         Path normalized = requested.toRealPath();
         if (!normalized.startsWith(root)) throw error("glTF source escapes its source directory: " + file);
-        long sourceSize = Files.size(normalized);
+        BasicFileAttributes before = Files.readAttributes(normalized, BasicFileAttributes.class);
+        long sourceSize = before.size();
         if (sourceSize > MAX_SOURCE_BYTES) throw error("glTF source exceeds the size limit: " + sourceSize);
         byte[] source = readLimited(normalized, MAX_SOURCE_BYTES, "glTF source");
+        verifyUnchanged(normalized, before, "glTF source");
         ParsedContainer container = parseContainer(source, normalized.getFileName().toString());
-        return new Parser(container.json(), root, container.bin(), extensions).parseWithManifest();
+        return new Parser(container.json(), root, container.bin(), extensions).parseWithManifest(source);
     }
 
     /** Strong source identity for catalog invalidation, including every contained external buffer/image. */
@@ -135,7 +137,7 @@ public final class GltfLoader {
             }
             total += bytes.length;
             digest.update(relative.getBytes(StandardCharsets.UTF_8));
-            digest.update(bytes);
+            digest.update(java.util.HexFormat.of().formatHex(sha256(bytes)).getBytes(StandardCharsets.US_ASCII));
         }
         return ByteBuffer.wrap(digest.digest()).getLong();
     }
@@ -176,7 +178,7 @@ public final class GltfLoader {
         ParsedContainer container = parseContainer(source, name == null ? "model.gltf" : name);
         Path resolvedRoot = baseDirectory == null ? null : baseDirectory.toRealPath();
         return new Parser(container.json(), resolvedRoot,
-                container.bin(), extensions).parseWithManifest();
+                container.bin(), extensions).parseWithManifest(source);
     }
 
     private static ParsedContainer parseContainer(byte[] source, String name) throws GltfParseException {
@@ -265,7 +267,7 @@ public final class GltfLoader {
             this.dependencies = ResourceDependencyManifest.builder(baseDirectory);
         }
 
-        private GltfLoadResult parseWithManifest() throws IOException {
+        private GltfLoadResult parseWithManifest(byte[] sourceBytes) throws IOException {
             requireAssetVersion();
             extensions.apply(root);
             parseBuffers();
@@ -284,7 +286,8 @@ public final class GltfLoader {
             checkIndex(defaultScene, scenes.size(), "scene", true);
             GltfModel model = new GltfModel(string(asset(), "generator", null), scenes, defaultScene, nodes, meshes,
                     materials, images, textures, skins, animations);
-            return new GltfLoadResult(model, dependencies.build());
+            ResourceDependencyManifest manifest = dependencies.build();
+            return new GltfLoadResult(model, manifest, manifest.contentFingerprint(sourceBytes));
         }
 
         private JsonObject asset() throws GltfParseException {
@@ -854,6 +857,22 @@ public final class GltfLoader {
                 output.write(buffer, 0, read);
             }
             return output.toByteArray();
+        }
+    }
+
+    private static void verifyUnchanged(Path path, BasicFileAttributes before, String label) throws IOException {
+        BasicFileAttributes after = Files.readAttributes(path, BasicFileAttributes.class);
+        if (before.size() != after.size() || !before.lastModifiedTime().equals(after.lastModifiedTime())
+                || before.fileKey() != null && !before.fileKey().equals(after.fileKey())) {
+            throw error(label + " changed while glTF was being parsed: " + path);
+        }
+    }
+
+    private static byte[] sha256(byte[] bytes) {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
         }
     }
 
