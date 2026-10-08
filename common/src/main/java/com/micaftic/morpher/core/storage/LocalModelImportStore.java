@@ -144,7 +144,7 @@ public final class LocalModelImportStore {
             List<Path> cleanupPending = store.removeSiblingImportFilesBestEffort(modelId, persisted);
             try {
                 Files.deleteIfExists(stagedPath);
-            } catch (IOException cleanupFailure) {
+            } catch (IOException | SecurityException cleanupFailure) {
                 cleanupPending.add(stagedPath);
             }
             return new CommitResult(persisted, cleanupPending);
@@ -213,7 +213,7 @@ public final class LocalModelImportStore {
                     && !sibling.toAbsolutePath().normalize().equals(keepTarget.toAbsolutePath().normalize())) {
                 try {
                     siblingDelete.deleteIfExists(sibling);
-                } catch (IOException cleanupFailure) {
+                } catch (IOException | SecurityException cleanupFailure) {
                     cleanupPending.add(sibling);
                 }
             }
