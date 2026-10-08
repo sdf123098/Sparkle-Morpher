@@ -19,6 +19,7 @@ import com.micaftic.morpher.core.model.selection.EntityModelResolver;
 import com.micaftic.morpher.core.model.selection.ModelRevisionGuard;
 import com.micaftic.morpher.core.model.selection.ModelSelectionState;
 import com.micaftic.morpher.core.model.lifecycle.GpuCacheTrimCoordinator;
+import com.micaftic.morpher.core.model.lifecycle.KeyedRequestLeaseRegistry;
 import com.micaftic.morpher.core.model.lifecycle.ModelScanRevision;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
@@ -115,21 +116,31 @@ public class ClientModelManager {
     );
 
     static void submitModelTask(Runnable task) {
+        submitModelTask(task, () -> { });
+    }
+
+    static void submitModelTask(Runnable task, Runnable onDiscard) {
         int generation = MODEL_TASK_GENERATION.get();
-        modelTaskDispatcher.execute(() -> {
+        java.util.concurrent.atomic.AtomicBoolean discardSettled = new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable settleDiscard = () -> {
+            if (discardSettled.compareAndSet(false, true)) onDiscard.run();
+        };
+        try {
+            modelTaskDispatcher.execute(() -> {
             boolean acquired = false;
             try {
                 MODEL_PARSE_SLOTS.acquire();
                 acquired = true;
                 if (generation != MODEL_TASK_GENERATION.get()) {
-                    MODEL_PARSE_SLOTS.release();
-                    acquired = false;
+                    settleDiscard.run();
                     return;
                 }
                 modelPhraseExecutor.execute(() -> {
                     try {
                         if (generation == MODEL_TASK_GENERATION.get()) {
                             task.run();
+                        } else {
+                            settleDiscard.run();
                         }
                     } finally {
                         MODEL_PARSE_SLOTS.release();
@@ -138,14 +149,20 @@ public class ClientModelManager {
                 acquired = false;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                settleDiscard.run();
             } catch (RejectedExecutionException e) {
                 YesSteveModel.LOGGER.warn("[SM] Model parser rejected a queued task", e);
+                settleDiscard.run();
             } finally {
                 if (acquired) {
                     MODEL_PARSE_SLOTS.release();
                 }
             }
-        });
+            });
+        } catch (RejectedExecutionException e) {
+            YesSteveModel.LOGGER.warn("[SM] Model task dispatcher rejected a queued task", e);
+            settleDiscard.run();
+        }
     }
 
     private static final long MAX_LOCAL_MODEL_FILE_BYTES = LocalModelCatalog.DEFAULT_MAX_FILE_BYTES;
@@ -160,7 +177,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static final ConcurrentHashMap<String, Long> modelLastUsedAt = new ConcurrentHashMap<>();
     private static final GpuCacheTrimCoordinator<ModelAssembly> gpuCacheTrimCoordinator = new GpuCacheTrimCoordinator<>();
     static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
-    private static final Set<String> cpuReloadInFlight = ConcurrentHashMap.newKeySet();
+    private static final KeyedRequestLeaseRegistry<String> cpuReloadRequests = new KeyedRequestLeaseRegistry<>();
     private static final ConcurrentHashMap<String, LocalModelCatalog.Entry> lazyModelSources = new ConcurrentHashMap<>();
     private static final Set<ModelAssembly> deferredAssemblyReleases = ConcurrentHashMap.newKeySet();
     private static volatile Boolean lastLazyModelLoading;
@@ -191,7 +208,8 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static final ModelScanRevision LOCAL_MODEL_SCAN_REVISION = new ModelScanRevision();
     private static final ConcurrentLinkedQueue<PendingModelPublication> pendingModelQueue = new ConcurrentLinkedQueue<>();
     private record PendingModelPublication(ModelAssembly assembly, String modelId, long scanRevision,
-                                           @Nullable LocalModelCatalog.Entry source) { }
+                                           @Nullable LocalModelCatalog.Entry source,
+                                           @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) { }
     private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, Path> localModelSourcePaths = new ConcurrentHashMap<>();
     public static void loadDefaultModel() {
@@ -265,6 +283,11 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
 
 
     static void parseAndLoadModel(byte[] decompressed, String modelId, boolean isAuth) {
+        parseAndLoadModel(decompressed, modelId, isAuth, null);
+    }
+
+    private static void parseAndLoadModel(byte[] decompressed, String modelId, boolean isAuth,
+                                          @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) {
         modelId = LocalModelCatalog.canonicalKey(modelId);
         int memoryPermits = Math.max(1, Math.min(MODEL_PARSE_MEMORY_BUDGET_MIB,
                 (decompressed.length + 1024 * 1024 - 1) / (1024 * 1024)));
@@ -275,6 +298,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
             return;
         }
         try {
+            if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
 //            if (true) return;
             // IR
 
@@ -302,7 +326,9 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
                 ModelMemoryProfiler.log("client-map-start", modelId);
                 ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
                 ModelMemoryProfiler.log("client-map-finished", modelId);
-                onModelDataReceived(parsedBundle, modelId, false, isAuth);
+                if (requestLease == null || cpuReloadRequests.isCurrent(requestLease)) {
+                    onModelDataReceived(parsedBundle, modelId, false, isAuth, requestLease);
+                }
             }
         } catch (Exception e) {
             YesSteveModel.LOGGER.error("[SM] Failed to parse and load model: " + modelId, e);
@@ -354,7 +380,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
         if (modelKey == null) {
             return false;
         }
-        if (cpuReloadInFlight.contains(modelKey)) {
+        if (cpuReloadRequests.isInFlight(modelKey)) {
             return true;
         }
         ModelAssembly assembly = modelAssemblyMap.get(modelKey);
@@ -364,37 +390,45 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
 
     private static void scheduleCachedModelReload(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
-        if (modelKey == null || !cpuReloadInFlight.add(modelKey)) return;
+        if (modelKey == null) return;
+        KeyedRequestLeaseRegistry.Lease<String> requestLease = cpuReloadRequests.begin(modelKey);
+        if (requestLease == null) return;
         LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
         if (source == null) {
-            cpuReloadInFlight.remove(modelKey);
+            cpuReloadRequests.complete(requestLease);
             return;
         }
         submitModelTask(() -> {
             try {
-                if (lazyModelSources.get(modelKey) != source) return;
+                if (!cpuReloadRequests.isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
                 if (source.remote) {
                     if (source.cacheKey == null) return;
                     byte[] fileBytes = Files.readAllBytes(source.path);
                     byte[] decompressed = YsmCrypt.readInPlace(fileBytes, source.cacheKey);
-                    if (lazyModelSources.get(modelKey) != source) return;
-                    parseAndLoadModel(decompressed, modelKey, source.auth);
+                    if (!cpuReloadRequests.isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
+                    parseAndLoadModel(decompressed, modelKey, source.auth, requestLease);
                 } else {
-                    loadLocalModelSource(modelKey, source);
+                    loadLocalModelSource(modelKey, source, -1L, requestLease);
                 }
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to reload resident model: {}", modelKey, e);
             } finally {
-                // Keep the request in flight until the render thread publishes the assembly.
-                Minecraft.getInstance().execute(() -> {
-                    try {
-                        flushPendingModels();
-                    } finally {
-                        cpuReloadInFlight.remove(modelKey);
-                    }
-                });
+                // Keep this request in flight until its publication is accepted or discarded.
+                finishCachedModelReload(requestLease);
             }
-        });
+        }, () -> finishCachedModelReload(requestLease));
+    }
+
+    private static void finishCachedModelReload(KeyedRequestLeaseRegistry.Lease<String> requestLease) {
+        Runnable settle = () -> {
+            try {
+                flushPendingModels();
+            } finally {
+                cpuReloadRequests.complete(requestLease);
+            }
+        };
+        if (RenderSystem.isOnRenderThread()) settle.run();
+        else Minecraft.getInstance().execute(settle);
     }
 
     public static Set<String> getAvailableModelIds() {
@@ -428,6 +462,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     static void registerRemoteLazySource(String modelId, Path path, byte[] key, boolean isAuth) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey == null || path == null || key == null) return;
+        cpuReloadRequests.invalidate(modelKey);
         // 服务器已公布同名模型，本次会话中它不再是“仅本地”模型。
         localOnlyModelIds.remove(modelKey);
         localModelSourcePaths.remove(modelKey);
@@ -607,6 +642,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         localOnlyModelIds.remove(modelKey);
         localModelSourcePaths.remove(modelKey);
+        cpuReloadRequests.invalidate(modelKey);
     }
 
 
@@ -623,7 +659,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 localOnlyModelIds.remove(modelKey);
                 localModelSourcePaths.remove(modelKey);
                 lazyModelSources.computeIfPresent(modelKey, (key, source) -> source.remote ? source : null);
-                cpuReloadInFlight.remove(modelKey);
+                cpuReloadRequests.invalidate(modelKey);
                 if (sameRuntimeModelId(modelId, MODEL_SELECTION.localOnlyModelId())) {
                     MODEL_SELECTION.clearLocalOnly();
                 }
@@ -650,6 +686,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     public static void importLocalModel(String modelId, String fileName, byte[] data, @Nullable Consumer<Component> callback) {
         LOCAL_MODEL_SCAN_REVISION.invalidate();
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey != null) cpuReloadRequests.invalidate(modelKey);
         byte[] importData = data;
         submitModelTask(() -> {
             Component error = null;
@@ -770,6 +807,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     localModelSourcePaths.clear();
                     localModelSourcePaths.putAll(customSources);
                     LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
+                    for (String staleId : diff.staleIds()) cpuReloadRequests.invalidate(staleId);
                     flushPendingModels();
                     finalizeLocalModelCatalog(diff);
                     ClientRenderCompatibilityRegistry.flush();
@@ -893,6 +931,13 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
 
     static void onModelDataReceived(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) throws Exception {
+        onModelDataReceived(parsedBundle, modelId, isPrimary, isAuth, null);
+    }
+
+    private static void onModelDataReceived(@Nullable ClientModelInfo parsedBundle, String modelId,
+                                            boolean isPrimary, boolean isAuth,
+                                            @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
+        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
         if (isPrimary) {
             pendingModelCallback = () -> {
                 processModelData(parsedBundle, modelId, true, false);
@@ -900,7 +945,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         } else {
             localOnlyModelIds.remove(LocalModelCatalog.canonicalKey(modelId));
             runPendingModelCallback();
-            processModelData(parsedBundle, modelId, false, isAuth);
+            processModelData(parsedBundle, modelId, false, isAuth, -1L, null, requestLease);
         }
     }
 
@@ -933,19 +978,21 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
         localOnlyModelIds.add(modelId);
         touchModel(modelId);
-        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, -1L, null));
+        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, -1L, null, null));
         localModelSourcePaths.put(modelId, persisted.toAbsolutePath().normalize());
         lazyModelSources.put(modelId, new LocalModelCatalog.Entry(
                 persisted, null, false, false, LocalModelCatalog.fingerprint(persisted), null, null));
     }
 
     private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth) throws Exception {
-        loadLocalGltfModel(modelId, source, isAuth, -1L, null);
+        loadLocalGltfModel(modelId, source, isAuth, -1L, null, null);
     }
 
     private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth,
-                                           long scanRevision, @Nullable LocalModelCatalog.Entry sourceEntry) throws Exception {
+                                           long scanRevision, @Nullable LocalModelCatalog.Entry sourceEntry,
+                                           @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
         if (scanRevision >= 0L && !LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return;
+        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
         GltfModel gltfModel = GltfLoader.load(source);
         ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
         if (scanRevision >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)
@@ -953,11 +1000,15 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             releaseModelAssembly(modelId, runtimeModel);
             return;
         }
+        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) {
+            releaseModelAssembly(modelId, runtimeModel);
+            return;
+        }
         if (scanRevision < 0L) {
             localOnlyModelIds.add(modelId);
             touchModel(modelId);
         }
-        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, scanRevision, sourceEntry));
+        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, scanRevision, sourceEntry, requestLease));
     }
 
     private static ModelAssembly buildGltfAssembly(GltfModel model, String modelId) {
@@ -1257,14 +1308,20 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source) throws Exception {
-        loadLocalModelSource(modelId, source, -1L);
+        loadLocalModelSource(modelId, source, -1L, null);
     }
 
     private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source, long scanRevision) throws Exception {
+        loadLocalModelSource(modelId, source, scanRevision, null);
+    }
+
+    private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source, long scanRevision,
+                                             @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
         if (source.remote) return;
         if (scanRevision >= 0L && !isScanSourceCurrent(scanRevision, source)) return;
+        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
         if (!Files.isDirectory(source.path) && isGltfFileName(source.path.getFileName().toString())) {
-            loadLocalGltfModel(modelId, source.path, source.auth, scanRevision, source);
+            loadLocalGltfModel(modelId, source.path, source.auth, scanRevision, source, requestLease);
             return;
         }
         RawYsmModel rawModel;
@@ -1280,14 +1337,17 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             rawModel = parseImportModel(source.path.getFileName().toString(), data);
         }
         if (scanRevision >= 0L && !isScanSourceCurrent(scanRevision, source)) return;
-        loadLocalModel(modelId, rawModel, source.auth, scanRevision, source);
+        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
+        loadLocalModel(modelId, rawModel, source.auth, scanRevision, source, requestLease);
     }
 
     private static void loadLocalModel(String modelId, RawYsmModel rawModel, boolean isAuth,
-                                       long scanRevision, @Nullable LocalModelCatalog.Entry source) throws Exception {
+                                       long scanRevision, @Nullable LocalModelCatalog.Entry source,
+                                       @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
         modelId = LocalModelCatalog.canonicalKey(modelId);
         if (modelId == null || modelId.isBlank()
-                || (scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source)))) {
+                || (scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source)))
+                || (requestLease != null && !cpuReloadRequests.isCurrent(requestLease))) {
             return;
         }
         ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
@@ -1296,7 +1356,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             touchModel(modelId);
             runPendingModelCallback();
         }
-        if (!processModelData(parsedBundle, modelId, false, isAuth, scanRevision, source)) {
+        if (!processModelData(parsedBundle, modelId, false, isAuth, scanRevision, source, requestLease)) {
             if (scanRevision < 0L && !lazyModelSources.containsKey(modelId)) {
                 localOnlyModelIds.remove(modelId);
             }
@@ -1353,18 +1413,20 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     public static boolean processModelData(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) {
-        return processModelData(parsedBundle, modelId, isPrimary, isAuth, -1L, null);
+        return processModelData(parsedBundle, modelId, isPrimary, isAuth, -1L, null, null);
     }
 
     private static boolean processModelData(@Nullable ClientModelInfo parsedBundle, String modelId,
                                             boolean isPrimary, boolean isAuth, long scanRevision,
-                                            @Nullable LocalModelCatalog.Entry source) {
+                                            @Nullable LocalModelCatalog.Entry source,
+                                            @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) {
         modelId = LocalModelCatalog.canonicalKey(modelId);
         if (parsedBundle != null) {
             try {
                 ModelMemoryProfiler.log("assembly-build-start", modelId);
                 ModelAssembly runtimeModel = ModelAssemblyFactory.buildAssembly(parsedBundle, isPrimary, isAuth);
-                if (scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source))) {
+                if ((scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source)))
+                        || (requestLease != null && !cpuReloadRequests.isCurrent(requestLease))) {
                     releaseModelAssembly(modelId, runtimeModel);
                     return false;
                 }
@@ -1373,7 +1435,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 }
                 ModelMemoryProfiler.log("assembly-build-finished", modelId);
                 ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
-                pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, scanRevision, source));
+                pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, scanRevision, source, requestLease));
                 if (scanRevision < 0L) touchModel(modelId);
                 if (isPrimary) {
                     localModelContext = runtimeModel;
@@ -1406,8 +1468,9 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             PendingModelPublication pending = pendingModelQueue.poll();
             if (pending != null) {
                 String modelKey = LocalModelCatalog.canonicalKey(pending.modelId());
-                if (pending.scanRevision() >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(pending.scanRevision())
-                        || !isScanSourceCurrent(pending.scanRevision(), pending.source()))) {
+                if ((pending.scanRevision() >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(pending.scanRevision())
+                        || !isScanSourceCurrent(pending.scanRevision(), pending.source())))
+                        || (pending.requestLease() != null && !cpuReloadRequests.isCurrent(pending.requestLease()))) {
                     releaseModelAssembly(modelKey, pending.assembly());
                     continue;
                 }
