@@ -9,6 +9,8 @@
   },
   "client": [
     "client.ArrowEntityAccessor",
+    "client.ProjectileFiringInputMixin",
+    "client.ProjectileSpawnObservationMixin",
     "client.CameraAccessor",
     "client.CommandEncoderAccessor",
     "client.GpuDeviceAccessor",
@@ -27,8 +29,6 @@
     "client.WorldRendererMixin"
   ],
   "mixins": [
-    "AbstractArrowEntityMixin",
-    "ProjectileEntityMixin",
-    "compat.TouhouMaidEntityMixin"
+    "AbstractArrowEntityMixin"
   ]
 }

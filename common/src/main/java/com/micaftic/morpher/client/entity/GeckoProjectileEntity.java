@@ -18,6 +18,12 @@ import org.jetbrains.annotations.Nullable;
 public class GeckoProjectileEntity extends GeoEntity<Projectile> {
 
     private ProjectileModelBundle projectileModelContext;
+    private String displayBundleKey;
+
+    public void setDisplayBundleKey(String key) {
+        if (java.util.Objects.equals(this.displayBundleKey,key)) return;
+        awaitAsyncResult();this.displayBundleKey=key;clearModel();
+    }
 
     public GeckoProjectileEntity(Projectile projectile) {
         super(projectile, true);
@@ -48,6 +54,7 @@ public class GeckoProjectileEntity extends GeoEntity<Projectile> {
 
     @Nullable
     private ProjectileModelBundle resolveProjectileModel(ModelAssembly modelAssembly) {
+        if (this.displayBundleKey != null) return modelAssembly.getProjectileModels().get(com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(this.displayBundleKey));
         ProjectileModelBundle exactMatch = modelAssembly.getProjectileModels().get(getEntityTypeId());
         if (exactMatch != null) {
             return exactMatch;

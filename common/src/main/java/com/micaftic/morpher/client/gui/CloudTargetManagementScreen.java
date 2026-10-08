@@ -77,6 +77,10 @@ public final class CloudTargetManagementScreen extends Screen {
             init();
         }).bounds(left + (width + 6) * 2, 154, width, 20).build());
 
+        addRenderableWidget(Button.builder(Component.translatable("gui.sparkle_morpher.cloud.vehicle.bindings"), button ->
+                InputUtil.setScreen(new CloudVehicleBindingScreen(this, management)))
+                .bounds(left, 154, width, 20).build());
+
         var snapshot = management.snapshot();
         var entries = this.showingAcl ? snapshot.acl() : snapshot.targets();
         int rowsVisible = Math.max(1, (this.height - 32 - 178) / 21);

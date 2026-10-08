@@ -6,4 +6,7 @@ public interface ProjectileStateAccessor {
     int ysm$getInGroundTime();
 
     String ysm$getOwnerItemId();
+
+    /** Display metadata only; null means that historical equipment is unknown. */
+    void ysm$setDisplayFiringItem(String itemId);
 }

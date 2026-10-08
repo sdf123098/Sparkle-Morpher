@@ -2,7 +2,6 @@ package com.micaftic.morpher;
 
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.ModSoundEvents;
-import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.event.YsmEventBootstrap;
 import com.micaftic.morpher.util.obfuscate.Keep;
 import com.google.gson.Gson;
@@ -14,11 +13,11 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
-import net.minecraftforge.fml.config.ModConfig;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.config.ConfigRegistration;
+import net.minecraftforge.fml.config.ModConfig;
 
 import java.io.File;
 import java.io.IOException;
@@ -82,7 +81,6 @@ public class YesSteveModel {
             }
         }
         ConfigRegistration.register(MOD_ID, ModConfig.Type.CLIENT, GeneralConfig.buildSpec());
-        ConfigRegistration.register(MOD_ID, ModConfig.Type.SERVER, ServerConfig.buildSpec());
         if (!PlatformAPI.isServer()) {
             // MC 26.x: DeferredRegister.register now requires (String, Supplier) args
             // ModSoundEvents.REGISTER.register("", () -> SoundEvent.createVariableRangeEvent(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(MOD_ID, "")));

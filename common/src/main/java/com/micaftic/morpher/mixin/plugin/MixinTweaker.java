@@ -50,7 +50,7 @@ public class MixinTweaker implements IMixinConfigPlugin {
     }
 
     private static boolean isTouhouLittleMaidCompatMixin(String simpleName) {
-        return "TouhouMaidEntityMixin".equals(simpleName) || "TouhouLittleMaidYsmCompatMixin".equals(simpleName);
+        return "TouhouLittleMaidYsmCompatMixin".equals(simpleName);
     }
 
     private static boolean isTouhouLittleMaidPresent() {

@@ -1,6 +1,6 @@
 package com.micaftic.morpher.model;
 
-import com.micaftic.morpher.model.format.ServerModelData;
+import com.micaftic.morpher.model.format.LocalModelDefinition;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
@@ -18,18 +18,18 @@ public class ModelLoadResult {
     @Nullable
     private final Component errorMessage;
 
-    private final Map<String, ServerModelData> modelDefinitions;
+    private final Map<String, LocalModelDefinition> modelDefinitions;
 
     private final Set<String> authModelIds;
 
-    private final Map<String, ServerPackData> packs;
+    private final Map<String, LocalPackMetadata> packs;
 
-    public ModelLoadResult(boolean success, @Nullable Object errorMessage, Map<String, ServerModelData> map, String[] strArr) {
+    public ModelLoadResult(boolean success, @Nullable Object errorMessage, Map<String, LocalModelDefinition> map, String[] strArr) {
         this(success, errorMessage, map, strArr, null);
     }
 
-    public ModelLoadResult(boolean success, @Nullable Object errorMessage, Map<String, ServerModelData> map,
-                           String[] strArr, Map<String, ServerPackData> packs) {
+    public ModelLoadResult(boolean success, @Nullable Object errorMessage, Map<String, LocalModelDefinition> map,
+                           String[] strArr, Map<String, LocalPackMetadata> packs) {
         this.success = success;
         this.errorMessage = (Component) errorMessage;
         this.modelDefinitions = map == null ? Object2ReferenceMaps.emptyMap() : ImmutableMap.copyOf(map);
@@ -46,7 +46,7 @@ public class ModelLoadResult {
         return this.errorMessage;
     }
 
-    public Map<String, ServerModelData> getModelDefinitions() {
+    public Map<String, LocalModelDefinition> getModelDefinitions() {
         return this.modelDefinitions;
     }
 
@@ -54,7 +54,7 @@ public class ModelLoadResult {
         return this.authModelIds;
     }
 
-    public Map<String, ServerPackData> getPacks() {
+    public Map<String, LocalPackMetadata> getPacks() {
         return this.packs;
     }
 }

@@ -27,6 +27,18 @@ public class Int2FloatOpenHashMapStruct implements Struct {
         this.properties.putAll(int2FloatMap);
     }
 
+    /** Call after the owning capability has joined its render task. */
+    public java.util.Map<String, Float> snapshotNumbers(int limit) {
+        java.util.Map<String, Float> values = new java.util.LinkedHashMap<>();
+        for (Int2FloatMap.Entry entry : this.properties.int2FloatEntrySet()) {
+            String name = StringPool.getString(entry.getIntKey());
+            if (values.size() >= limit) break;
+            if (!name.isBlank() && name.length() <= 128 && !name.chars().anyMatch(Character::isISOControl)
+                    && Float.isFinite(entry.getFloatValue())) values.put(name, entry.getFloatValue());
+        }
+        return java.util.Map.copyOf(values);
+    }
+
     @Override
     public Struct copy() {
         HashMapStruct hashMapStruct = new HashMapStruct(true);

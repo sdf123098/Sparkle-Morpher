@@ -16,7 +16,7 @@ import java.util.Locale;
 import java.util.function.Predicate;
 
 /**
- * R8 LocalModelScanner — 本地模型来源遍历发现（从 ServerModelManager.scanDirectoryModels 抽取）。
+ * LocalModelScanner — discovers model sources in the local model folders.
  *
  * <p>职责：遍历本地模型 baseDir（builtin/custom/auth），发现模型文件夹与模型文件
  * （.ysm/.zip/.bbmodel/.gltf/.glb），归一 modelId 后逐条回调 {@link Sink}。解析与缓存由调用方

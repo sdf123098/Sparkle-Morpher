@@ -1,13 +1,14 @@
 package com.micaftic.morpher.compat.caustica;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.client.compat.ClientRenderCompatibility;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
 import com.micaftic.morpher.compat.caustica.mixin.CausticaMinecraftAccessor;
 import com.micaftic.morpher.compat.caustica.mixin.CausticaPackRepositoryAccessor;
-import com.micaftic.morpher.model.ServerModelManager;
+
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -62,7 +63,7 @@ public final class CausticaDynamicPbrResources implements ClientRenderCompatibil
     private static final Map<Identifier, byte[]> RESOURCES = new ConcurrentHashMap<>();
     /** Ref-counted live claimants per content-addressed location (multiple model assemblies may share one). */
     private static final Map<Identifier, Integer> ACTIVE_TEXTURES = new ConcurrentHashMap<>();
-    private static final Path CACHE_DIRECTORY = ServerModelManager.CACHE.resolve("dynamic_pbr");
+    private static final Path CACHE_DIRECTORY = ModelStoragePaths.cache().resolve("dynamic_pbr");
     private static final byte[] FINGERPRINT_SCHEMA =
             "sparkle-morpher-pbr-material-v1".getBytes(StandardCharsets.UTF_8);
     private static final ExecutorService CACHE_WRITER = Executors.newSingleThreadExecutor(runnable -> {

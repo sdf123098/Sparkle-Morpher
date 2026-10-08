@@ -73,10 +73,6 @@ dependencies {
     modImplementation "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"
     include "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"
 
-    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
-    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
-    include "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
-    include "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
 
     implementation "com.electronwill.night-config:core:3.9.0"
     implementation "com.electronwill.night-config:toml:3.9.0"

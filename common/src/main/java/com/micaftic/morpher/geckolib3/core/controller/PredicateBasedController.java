@@ -55,7 +55,7 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
 
     private boolean needsReset;
 
-    private String synchronizedAction;
+    private final com.micaftic.morpher.cloud.client.CloudActionMotionCursor synchronizedAction = new com.micaftic.morpher.cloud.client.CloudActionMotionCursor();
 
     public PredicateBasedController(T animatable, String name, float transitionLengthTicks, IAnimationPredicate<T> predicate) {
         this(animatable, name, transitionLengthTicks, predicate, false);
@@ -74,6 +74,14 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
     @Override
     public void process(AnimationEvent<T> event, ExpressionEvaluator<AnimationContext<?>> evaluator, boolean isMoving) {
         event.setController(this);
+        if (com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController.CAP_CONTROLLER_KEY.equals(this.name)) {
+            var motion = com.micaftic.morpher.cloud.client.CloudMotionSources.motion(event.getAnimatable());
+            if (this.synchronizedAction.update(motion)) {
+                this.transitionInterpolator.cancelAnimation();
+                if (!motion.animationKey().isEmpty()) this.transitionInterpolator.seekFromElapsedTicks(
+                        com.micaftic.morpher.cloud.client.CloudMotionSources.elapsedTicks(motion.startedAtUnixMs()));
+            }
+        }
         PlayState playState;
         try {
             boolean forceSwingPredicate = shouldForceSwingPredicate();
@@ -86,14 +94,6 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
             event.setController(null);
         }
         if (playState == PlayState.CONTINUE) {
-            if (com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController.CAP_CONTROLLER_KEY.equals(this.name)
-                    && !com.micaftic.morpher.cloud.client.CloudPlayerMotionSync.isOwner(event.getAnimatable())) {
-                var motion = com.micaftic.morpher.cloud.client.CloudPlayerMotionSync.motion(event.getAnimatable());
-                if (motion != null && !motion.animationKey().isEmpty() && !motion.eventId().equals(this.synchronizedAction)) {
-                    this.transitionInterpolator.seekFromElapsedTicks(com.micaftic.morpher.cloud.client.CloudPlayerMotionSync.elapsedTicks(motion.startedAtUnixMs()));
-                    this.synchronizedAction = motion.eventId();
-                }
-            }
             this.transitionInterpolator.process(event.currentTick, evaluator, isMoving);
             this.needsReset = false;
         } else if (playState == PlayState.STOP) {
@@ -236,7 +236,7 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
     @Override
     public void reset() {
         this.transitionInterpolator.fullReset();
-        this.synchronizedAction = null;
+        this.synchronizedAction.clear();
         this.soundIValue = null;
     }
 
