@@ -98,6 +98,7 @@ public class ClientModelManager {
     private static final int MODEL_PARSE_THREAD_COUNT = 2;
     private static final int MODEL_PARSE_QUEUE_CAPACITY = 8;
     private static final int MODEL_PARSE_MEMORY_BUDGET_MIB = 256;
+    private static final Object MODEL_RUNTIME_STOP_LOCK = new Object();
     private static final AtomicInteger MODEL_PARSE_THREAD_IDS = new AtomicInteger(1);
     private static final Semaphore MODEL_PARSE_SLOTS = new Semaphore(MODEL_PARSE_THREAD_COUNT + MODEL_PARSE_QUEUE_CAPACITY, true);
     private static final Semaphore MODEL_PARSE_MEMORY = new Semaphore(MODEL_PARSE_MEMORY_BUDGET_MIB, true);
@@ -690,6 +691,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey != null) cpuReloadRequests.invalidate(modelKey);
         byte[] importData = data;
+        int importGeneration = MODEL_TASK_GENERATION.get();
         submitModelTask(() -> {
             Component error = null;
             ModelAssembly preparedAssembly = null;
@@ -708,9 +710,14 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                         preparedAssembly = ModelAssemblyFactory.buildAssembly(parsedBundle, false, false);
                     }
                     if (preparedAssembly == null) throw new IllegalStateException("Failed to build local model");
-                    Path persisted = prepared.commit();
-                    publishImportedAssembly(modelKey, preparedAssembly, persisted);
-                    preparedAssembly = null;
+                    synchronized (MODEL_RUNTIME_STOP_LOCK) {
+                        if (importGeneration != MODEL_TASK_GENERATION.get()) {
+                            throw new CancellationException("Client model runtime is stopping");
+                        }
+                        Path persisted = prepared.commit();
+                        publishImportedAssembly(modelKey, preparedAssembly, persisted);
+                        preparedAssembly = null;
+                    }
                 }
                 ((Executor) Minecraft.getInstance()).execute(ClientModelManager::flushPendingModels);
                 YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
@@ -953,16 +960,6 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     public static boolean isGltfFileName(@Nullable String fileName) {
         String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
         return lower.endsWith(".gltf") || lower.endsWith(".glb");
-    }
-
-    private static void importLocalGltfModel(String modelId, String fileName, byte[] data) throws Exception {
-        try (LocalModelImportStore.PreparedImport prepared = LOCAL_IMPORT_STORE.prepare(modelId, fileName, data)) {
-            if (prepared == null) throw new IOException("Failed to prepare glTF import");
-            GltfModel gltfModel = GltfLoader.load(prepared.path());
-            ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
-            Path persisted = prepared.commit();
-            publishImportedAssembly(modelId, runtimeModel, persisted);
-        }
     }
 
     private static void publishImportedAssembly(String modelId, ModelAssembly runtimeModel, Path persisted) throws IOException {
@@ -1493,6 +1490,31 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
            }
        }
    }
+
+    /** Invalidates queued model work and releases runtime assemblies while the render context is still alive. */
+    public static void onClientStopping() {
+        synchronized (MODEL_RUNTIME_STOP_LOCK) {
+            MODEL_TASK_GENERATION.incrementAndGet();
+            LOCAL_MODEL_SCAN_REVISION.invalidate();
+            cpuReloadRequests.clearAll();
+            gpuCacheTrimCoordinator.clearAll();
+
+            Set<ModelAssembly> assemblies = Collections.newSetFromMap(new IdentityHashMap<>());
+            PendingModelPublication pending;
+            while ((pending = pendingModelQueue.poll()) != null) assemblies.add(pending.assembly());
+            assemblies.addAll(modelAssemblyMap.values());
+            assemblies.addAll(deferredAssemblyReleases);
+            deferredAssemblyReleases.clear();
+            modelAssemblyMap = Object2ReferenceMaps.emptyMap();
+            localModelContext = null;
+            pendingModelCallback = null;
+            modelLastUsedAt.clear();
+            localOnlyModelIds.clear();
+            localModelSourcePaths.clear();
+            lazyModelSources.clear();
+            assemblies.forEach(ClientModelManager::releaseModelAssembly);
+        }
+    }
 
     private static void releaseModelAssembly(ModelAssembly assembly) {
         releaseModelAssembly(null, assembly);
