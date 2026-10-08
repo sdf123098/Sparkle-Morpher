@@ -690,46 +690,33 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         byte[] importData = data;
         submitModelTask(() -> {
             Component error = null;
+            ModelAssembly preparedAssembly = null;
             try {
                 ModelMemoryProfiler.logBytes("local-import-read", modelKey, importData);
-                if (isGltfFileName(fileName)) {
-                    importLocalGltfModel(modelKey, fileName, importData);
-                    Minecraft.getInstance().execute(ClientModelManager::flushPendingModels);
-                    YesSteveModel.LOGGER.info("[SM] Imported local glTF model: {}", modelKey);
-                    if (callback != null) Minecraft.getInstance().execute(() -> callback.accept(null));
-                    return;
-                }
-                RawYsmModel rawModel = parseImportModel(fileName, importData);
-                ModelMemoryProfiler.log("local-import-parsed", modelKey);
-                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
-                ModelMemoryProfiler.log("local-import-mapped", modelKey);
-                localOnlyModelIds.add(modelKey);
-                touchModel(modelKey);
-                runPendingModelCallback();
-                if (!processModelData(parsedBundle, modelKey, false, false)) {
-                    localOnlyModelIds.remove(modelKey);
-                    throw new IllegalStateException("Failed to build local model");
-                }
-                Path persisted = LOCAL_IMPORT_STORE.persist(modelKey, fileName, importData);
-                localModelSourcePaths.put(modelKey, persisted.toAbsolutePath().normalize());
-                if (persisted != null) {
-                    LocalModelCatalog.Entry previousSource = lazyModelSources.get(modelKey);
-                    ModelMetadata prevInfo = previousSource == null ? null : previousSource.modelInfo;
-                    String prevName = previousSource == null ? null : previousSource.displayName;
-                    if (prevName == null) {
-                        prevName = LocalModelCatalog.displayNameFromInfo(prevInfo);
+                try (LocalModelImportStore.PreparedImport prepared = LOCAL_IMPORT_STORE.prepare(modelKey, fileName, importData)) {
+                    if (prepared == null) throw new IOException("Failed to prepare local import");
+                    if (isGltfFileName(fileName)) {
+                        GltfModel gltfModel = GltfLoader.load(prepared.path());
+                        preparedAssembly = buildGltfAssembly(gltfModel, modelKey);
+                    } else {
+                        RawYsmModel rawModel = parseImportModel(fileName, importData);
+                        ModelMemoryProfiler.log("local-import-parsed", modelKey);
+                        ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
+                        ModelMemoryProfiler.log("local-import-mapped", modelKey);
+                        preparedAssembly = ModelAssemblyFactory.buildAssembly(parsedBundle, false, false);
                     }
-                    if (prevName == null) {
-                        prevName = LocalModelCatalog.sniffName(persisted);
-                    }
-                    lazyModelSources.put(modelKey, new LocalModelCatalog.Entry(persisted, null, false, false,
-                            LocalModelCatalog.fingerprint(persisted), prevInfo, prevName));
+                    if (preparedAssembly == null) throw new IllegalStateException("Failed to build local model");
+                    Path persisted = prepared.commit();
+                    publishImportedAssembly(modelKey, preparedAssembly, persisted);
+                    preparedAssembly = null;
                 }
                 ((Executor) Minecraft.getInstance()).execute(ClientModelManager::flushPendingModels);
                 YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelKey, e);
                 error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            } finally {
+                if (preparedAssembly != null) releaseModelAssembly(modelKey, preparedAssembly);
             }
             if (callback != null) {
                 Component result = error;
@@ -972,12 +959,20 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     private static void importLocalGltfModel(String modelId, String fileName, byte[] data) throws Exception {
-        Path persisted = LOCAL_IMPORT_STORE.persist(modelId, fileName, data);
-        if (persisted == null) throw new IOException("Failed to persist glTF import");
-        GltfModel gltfModel = GltfLoader.load(persisted);
-        ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
+        try (LocalModelImportStore.PreparedImport prepared = LOCAL_IMPORT_STORE.prepare(modelId, fileName, data)) {
+            if (prepared == null) throw new IOException("Failed to prepare glTF import");
+            GltfModel gltfModel = GltfLoader.load(prepared.path());
+            ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
+            Path persisted = prepared.commit();
+            publishImportedAssembly(modelId, runtimeModel, persisted);
+        }
+    }
+
+    private static void publishImportedAssembly(String modelId, ModelAssembly runtimeModel, Path persisted) throws IOException {
         localOnlyModelIds.add(modelId);
         touchModel(modelId);
+        runPendingModelCallback();
+        ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
         pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, -1L, null, null));
         localModelSourcePaths.put(modelId, persisted.toAbsolutePath().normalize());
         lazyModelSources.put(modelId, new LocalModelCatalog.Entry(
