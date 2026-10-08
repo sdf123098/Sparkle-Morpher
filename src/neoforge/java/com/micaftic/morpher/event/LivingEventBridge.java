@@ -10,24 +10,8 @@ public final class LivingEventBridge {
     private LivingEventBridge() {}
 
     public static void register() {
-        NeoForge.EVENT_BUS.addListener(LivingEventBridge::onMobEffectAdded);
-        NeoForge.EVENT_BUS.addListener(LivingEventBridge::onMobEffectRemoved);
         NeoForge.EVENT_BUS.addListener(LivingEventBridge::onLivingShieldBlock);
         NeoForge.EVENT_BUS.addListener(LivingEventBridge::onEntityTickPost);
-    }
-
-    private static void onMobEffectAdded(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Added event) {
-        if (!YesSteveModel.isAvailable() || event.getEffectInstance() == null) {
-            return;
-        }
-        ServerLivingEventHooks.onEffectAdded(event.getEntity(), event.getEffectInstance().getEffect().value(), event.getEffectInstance().getAmplifier());
-    }
-
-    private static void onMobEffectRemoved(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Remove event) {
-        if (!YesSteveModel.isAvailable() || event.getEffect() == null) {
-            return;
-        }
-        ServerLivingEventHooks.onEffectRemoved(event.getEntity(), event.getEffect().value());
     }
 
     private static void onLivingShieldBlock(LivingShieldBlockEvent event) {

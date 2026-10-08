@@ -91,8 +91,10 @@ class YsmCryptGoldenTest {
 
     /** byte-for-byte 锁定：2026-08-10 记录的 packet 加密输出（appendNextKey=false，KEY_IV=0x5A×56，payload="Hello YSM golden protocol"）。 */
     private static final String GOLDEN_PACKET_B64 = "IGQSY+7MxH+8hYIYksrxJitS4H7573PCvSJGVr2FAuxO";
-    /** byte-for-byte 锁定：NeoForge 1.21.1、mod_version=2.0.0 单测环境的 calculateModelHashes("model-abc", SERVER_KEY)。 */
-    private static final long[] GOLDEN_HASHES = {2129038222764920386L, 959001548499694060L};
+    /** The retained 2.0.0 identity must continue to locate existing encrypted files. */
+    private static final long[] GOLDEN_HASHES_2_0 = {2129038222764920386L, 959001548499694060L};
+    /** NeoForge 1.21.1 test metadata uses the workspace's existing mod_version=2.1.0. */
+    private static final long[] GOLDEN_HASHES = {-8944236874905801733L, 6059545122705836171L};
 
     @Test
     void packetEncrypt_goldenBytes() throws Exception {
@@ -103,6 +105,8 @@ class YsmCryptGoldenTest {
 
     @Test
     void calculateModelHashes_goldenValues() {
+        assertArrayEquals(GOLDEN_HASHES_2_0, ModelCacheKeyDerivation.hashes("model-abc", SERVER_KEY,
+                "sparkle_morpher:model_cache\nmodVersion=2.0.0"), "legacy identity must remain readable");
         long[] hashes = YsmCrypt.calculateModelHashes("model-abc", SERVER_KEY);
         assertArrayEquals(GOLDEN_HASHES, hashes, "model hashes 必须与 golden 向量一致");
     }

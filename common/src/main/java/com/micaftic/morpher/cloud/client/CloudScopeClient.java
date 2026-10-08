@@ -36,6 +36,32 @@ public final class CloudScopeClient {
         return http.postJson("/v1/scopes", body.toString()).thenApply(CloudScopeClient::parseScope);
     }
 
+    public CompletableFuture<CloudScopePermissions> ownPermissions(String scopeId) {
+        return http.getJson("/v1/scopes/" + segment(scopeId) + "/permissions")
+                .thenApply(CloudScopeClient::parsePermissions);
+    }
+
+    private static CloudScopePermissions parsePermissions(String body) {
+        try {
+            JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+            return new CloudScopePermissions(root.get("scope_id").getAsString(),
+                    root.get("role").getAsString(), root.get("offline_policy").getAsString());
+        } catch (RuntimeException failure) {
+            throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed scope permissions");
+        }
+    }
+
+    public record CloudScopePermissions(String scopeId, String role, String offlinePolicy) {
+        public CloudScopePermissions {
+            segment(scopeId);
+            if (!List.of("viewer", "editor", "manage", "owner").contains(role)
+                    || !List.of("STRICT_APPROVAL", "CLAIM_CODE", "FIRST_CLAIM", "DISABLED").contains(offlinePolicy))
+                throw new IllegalArgumentException("Invalid scope permissions");
+        }
+        public boolean canEdit() { return !"viewer".equals(role); }
+        public boolean canManage() { return "manage".equals(role) || "owner".equals(role); }
+    }
+
     public CompletableFuture<List<CloudTarget>> listTargets(String scopeId) {
         return http.getJson("/v1/scopes/" + segment(scopeId) + "/targets").thenApply(CloudScopeClient::parseTargets);
     }

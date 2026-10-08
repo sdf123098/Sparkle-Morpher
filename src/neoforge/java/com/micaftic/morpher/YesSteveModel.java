@@ -45,11 +45,10 @@ public class YesSteveModel {
         java.io.File old = net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("sparkle_morpher-common.toml").toFile();
         if (old.isFile()) { java.io.File f2 = net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("sparkle_morpher-client.toml").toFile(); if (!f2.isFile()) old.renameTo(f2); else old.delete(); }
         ConfigRegistration.register(MOD_ID, ModConfig.Type.CLIENT, GeneralConfig.buildSpec());
-        ConfigRegistration.register(MOD_ID, ModConfig.Type.SERVER, ServerConfig.buildSpec());
     }
     public static void registerModBusEvents(net.neoforged.bus.api.IEventBus bus) {
         ModSoundEvents.REGISTER.register(bus);
-        com.micaftic.morpher.neoforge.capability.NeoForgeCapabilities.register(bus);
+
     }
     @Keep public static boolean isAvailable() { return RuntimeAccelerationLoader.isAvailable(); }
     public static boolean isOnAndroid() { return RuntimeAccelerationLoader.isOnAndroid(); }

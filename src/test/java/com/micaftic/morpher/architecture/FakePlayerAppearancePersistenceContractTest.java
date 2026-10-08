@@ -6,40 +6,47 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FakePlayerAppearancePersistenceContractTest {
     @Test
-    void modelCatalogReloadDoesNotReintroduceServerModelSync() throws IOException {
-        Path repository = locateRepository();
-        String manager = Files.readString(
-                repository.resolve("src/neoforge/java/com/micaftic/morpher/model/ServerModelManager.java"),
-                StandardCharsets.UTF_8);
-        assertTrue(manager.contains("loadModels("));
-        assertTrue(!manager.contains("nativeSyncModels"));
-        assertTrue(!manager.contains("LegacyModelSyncProtocol"));
+    void localModelReloadUsesTheDedicatedLocalService() throws IOException {
+        String service = readFirstExisting(
+                Path.of("common/src/main/java/com/micaftic/morpher/model/LocalModelService.java"),
+                Path.of("../common/src/main/java/com/micaftic/morpher/model/LocalModelService.java"));
+        String manager = readFirstExisting(
+                Path.of("fabric/src/main/java/com/micaftic/morpher/client/ClientModelManager.java"),
+                Path.of("common/src/main/java/com/micaftic/morpher/client/ClientModelManager.java"),
+                Path.of("src/neoforge/java/com/micaftic/morpher/client/ClientModelManager.java"));
+
+        assertTrue(service.contains("LocalModelDefinitionCatalog"));
+        assertTrue(service.contains("scanDirectoryModels"));
+        assertTrue(manager.contains("reloadLocalModels("));
+        assertTrue(!manager.contains("ServerModelManager"));
     }
 
     @Test
-    void levelChangeResynchronizesThePlayerAppearance() throws IOException {
-        Path repository = locateRepository();
-        String capabilityEvent = Files.readString(
-                repository.resolve("src/neoforge/java/com/micaftic/morpher/event/CapabilityEvent.java"),
-                StandardCharsets.UTF_8);
-        assertTrue(capabilityEvent.contains("LAST_PLAYER_LEVELS"));
-        assertTrue(capabilityEvent.contains("LAST_PLAYER_LEVELS.remove("));
-        assertTrue(capabilityEvent.contains("syncPlayerModelToSelf(serverPlayer)") || capabilityEvent.contains("syncPlayerModelToSelf(sp)"));
-        assertTrue(capabilityEvent.contains("syncPlayerModelToTracking(serverPlayer, false)") || capabilityEvent.contains("syncPlayerModelToTracking(sp, false)"));
+    void fakePlayerTargetsUseCloudClientState() throws IOException {
+        String sync = readFirstExisting(
+                Path.of("common/src/main/java/com/micaftic/morpher/cloud/client/CloudEntityModelSync.java"),
+                Path.of("../common/src/main/java/com/micaftic/morpher/cloud/client/CloudEntityModelSync.java"));
+
+        assertTrue(sync.contains("refreshFakeTargets"));
+        assertTrue(sync.contains("FakePlayerListCache.replace(rows)"));
+        assertTrue(sync.contains("applySelection"));
+        assertTrue(sync.contains("CloudEntityPresenceClient"));
     }
 
-    private static Path locateRepository() {
-        Path current = Paths.get("").toAbsolutePath();
-        while (current != null && !Files.isRegularFile(current.resolve(".github/workflows/ci.yml"))) {
-            current = current.getParent();
+    private static String readFirstExisting(Path... candidates) throws IOException {
+        for (Path base = Path.of("").toAbsolutePath(); base != null; base = base.getParent()) {
+            for (Path candidate : candidates) {
+                Path source = base.resolve(candidate).normalize();
+                if (Files.isRegularFile(source)) {
+                    return Files.readString(source, StandardCharsets.UTF_8);
+                }
+            }
         }
-        if (current == null) throw new IllegalStateException("Could not locate repository root");
-        return current;
+        throw new IOException("Required source file not found");
     }
 }

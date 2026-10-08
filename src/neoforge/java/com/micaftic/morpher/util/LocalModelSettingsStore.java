@@ -91,8 +91,7 @@ public final class LocalModelSettingsStore {
             return new JsonObject();
         }
         try {
-            JsonElement parsed = JsonParser.parseString(Files.readString(FILE, StandardCharsets.UTF_8));
-            return parsed.isJsonObject() ? parsed.getAsJsonObject() : new JsonObject();
+            return com.micaftic.morpher.core.storage.LocalJsonDocumentStore.readObject(FILE);
         } catch (Exception e) {
             YesSteveModel.LOGGER.warn("[SM] Failed to load local model settings: {}", e.getMessage());
             return new JsonObject();
@@ -111,15 +110,7 @@ public final class LocalModelSettingsStore {
 
     private static void writeRoot(JsonObject root) {
         try {
-            Path parent = FILE.getParent();
-            Files.createDirectories(parent);
-            Path temp = parent.resolve("local_model_settings.json.tmp");
-            Files.writeString(temp, root.toString(), StandardCharsets.UTF_8);
-            try {
-                Files.move(temp, FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, FILE, StandardCopyOption.REPLACE_EXISTING);
-            }
+            com.micaftic.morpher.core.storage.LocalJsonDocumentStore.saveObject(FILE, root);
         } catch (IOException e) {
             YesSteveModel.LOGGER.warn("[SM] Failed to save local model settings: {}", e.getMessage());
         }

@@ -7,6 +7,33 @@ import net.minecraft.world.entity.LivingEntity;
 
 public final class RenderLivingBridge {
     private RenderLivingBridge() {}
-    public static boolean firePre(LivingEntity entity, LivingEntityRenderer<?, ?> renderer, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) { return false; }
-    public static void firePost(LivingEntity entity, LivingEntityRenderer<?, ?> renderer, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {}
+
+    /** Loader-owned event dispatch, installed during client initialization. */
+    public interface Dispatcher {
+        boolean firePre(LivingEntity entity, LivingEntityRenderer<?, ?> renderer, float partialTick,
+                        PoseStack poseStack, MultiBufferSource bufferSource, int packedLight);
+
+        void firePost(LivingEntity entity, LivingEntityRenderer<?, ?> renderer, float partialTick,
+                      PoseStack poseStack, MultiBufferSource bufferSource, int packedLight);
+    }
+
+    private static volatile Dispatcher dispatcher;
+
+    public static void install(Dispatcher dispatcher) {
+        RenderLivingBridge.dispatcher = dispatcher;
+    }
+
+    public static boolean firePre(LivingEntity entity, LivingEntityRenderer<?, ?> renderer, float partialTick,
+                                  PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
+        Dispatcher current = dispatcher;
+        return current != null && current.firePre(entity, renderer, partialTick, poseStack, bufferSource, packedLight);
+    }
+
+    public static void firePost(LivingEntity entity, LivingEntityRenderer<?, ?> renderer, float partialTick,
+                                PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
+        Dispatcher current = dispatcher;
+        if (current != null) {
+            current.firePost(entity, renderer, partialTick, poseStack, bufferSource, packedLight);
+        }
+    }
 }

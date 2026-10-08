@@ -21,6 +21,7 @@ public class MixinTweaker implements IMixinConfigPlugin {
 
     @Keep
     public boolean shouldApplyMixin(String str, String str2) {
+        if (net.neoforged.fml.loading.FMLEnvironment.dist != net.neoforged.api.distmarker.Dist.CLIENT) return false;
         String simpleName = str2 == null ? "" : str2.substring(str2.lastIndexOf('.') + 1);
         if (isTouhouLittleMaidCompatMixin(simpleName) && !isTouhouLittleMaidPresent()) {
             System.out.println("[Sparkle Morpher] TouhouLittleMaid not installed, skipping compat mixin: " + str2);
@@ -30,7 +31,7 @@ public class MixinTweaker implements IMixinConfigPlugin {
     }
 
     private static boolean isTouhouLittleMaidCompatMixin(String simpleName) {
-        return "TouhouMaidEntityMixin".equals(simpleName) || "TouhouLittleMaidYsmCompatMixin".equals(simpleName);
+        return "TouhouLittleMaidYsmCompatMixin".equals(simpleName);
     }
 
     private static boolean isTouhouLittleMaidPresent() {

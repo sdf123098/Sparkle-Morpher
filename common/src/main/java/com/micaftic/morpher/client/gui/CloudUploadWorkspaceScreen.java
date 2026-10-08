@@ -6,7 +6,7 @@ import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudInstanceRegistry;
-import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import net.minecraft.Util;
 import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
@@ -169,8 +169,8 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
     }
     private void openFolder() {
         try {
-            Files.createDirectories(ServerModelManager.CUSTOM);
-            Util.getPlatform().openFile(ServerModelManager.CUSTOM.toFile());
+            Files.createDirectories(ModelStoragePaths.custom());
+            Util.getPlatform().openFile(ModelStoragePaths.custom().toFile());
         } catch (IOException error) {
             status = Component.translatable("gui.sparkle_morpher.import.error.open_folder", error.getMessage());
         }
@@ -237,9 +237,7 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
             }
         } catch (RuntimeException error) {
             if (prepared != null) prepared.cleanUp();
-            Throwable cause = error;
-            while (cause.getCause() != null) cause = cause.getCause();
-            fail(Component.literal(cause.getMessage() == null ? cause.toString() : cause.getMessage()));
+            fail(Component.literal(CloudManagementScreen.errorText(error)));
         }
     }
     private void fail(Component reason) { states.put(activeId, "failed"); failures.put(activeId, reason); startNext(); }

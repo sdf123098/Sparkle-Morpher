@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.gui.button;
 
-import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.cloud.client.CloudMotionSources;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.ISpecialWidget;
 import com.micaftic.morpher.core.config.ConfigPolicies;
@@ -35,9 +35,10 @@ public class AnimationSlider extends RangedSliderWidget implements ISpecialWidge
     protected void applyValue() {
         try {
             String str = this.controllerName + "=" + getValue();
+            CloudMotionSources.beginEdit(this.model);
             this.model.executeExpression(GeckoLibCache.parseSimpleExpression(str), true, false, null);
-            if (!GeckoLibCache.isRoamingVariableAssignment(str) && !ConfigPolicies.network().lowBandwidthUsage()) {
-                CloudPlayerMotionSync.expression(this.model, str, java.util.List.of());
+            if (!GeckoLibCache.isRoamingVariableAssignment(str)) {
+                CloudMotionSources.expression(this.model, str, java.util.List.of());
             }
         } catch (ParseException e) {
             YesSteveModel.LOGGER.error(e);

@@ -141,6 +141,54 @@ public final class CloudHttpClient {
                 });
     }
 
+    /** Bounded metadata transport for negotiated entity capabilities. */
+    CompletableFuture<String> visualJson(String method, String path, String jsonBody, int maxResponseBytes) {
+        if (!java.util.Set.of("POST", "PUT", "DELETE").contains(method)
+                || maxResponseBytes < 1 || maxResponseBytes > 16 * 1024 * 1024) {
+            throw new IllegalArgumentException("Invalid visual request budget");
+        }
+        HttpRequest request = requestBuilder(path).timeout(REQUEST_TIMEOUT)
+                .header("Accept", "application/json").header("Content-Type", "application/json")
+                .method(method, HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8)).build();
+        return httpClient.sendAsync(request, info -> new BoundedJsonSubscriber(maxResponseBytes)).thenCompose(response -> {
+            if (response.statusCode() < 200 || response.statusCode() >= 300) return CompletableFuture.failedFuture(httpFailure(response));
+            try {
+                String text = StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                        .decode(java.nio.ByteBuffer.wrap(response.body())).toString();
+                return CompletableFuture.completedFuture(text);
+            } catch (java.nio.charset.CharacterCodingException error) { return CompletableFuture.failedFuture(error); }
+        });
+    }
+
+    static final class BoundedJsonSubscriber implements HttpResponse.BodySubscriber<byte[]> {
+        private final int maximum;
+        private final java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        private final CompletableFuture<byte[]> result = new CompletableFuture<>();
+        private java.util.concurrent.Flow.Subscription subscription;
+        BoundedJsonSubscriber(int maximum) { this.maximum = maximum; }
+        public java.util.concurrent.CompletionStage<byte[]> getBody() { return result; }
+        public void onSubscribe(java.util.concurrent.Flow.Subscription next) { subscription = next; next.request(1); }
+        public void onNext(java.util.List<java.nio.ByteBuffer> buffers) {
+            long size = bytes.size();
+            for (var buffer : buffers) size += buffer.remaining();
+            if (size > maximum) {
+                subscription.cancel();
+                result.completeExceptionally(new CloudHttpException(200, CloudErrorCode.MESSAGE_TOO_LARGE, "Visual response exceeded its negotiated budget"));
+                return;
+            }
+            for (var buffer : buffers) {
+                byte[] chunk = new byte[Math.min(8192, buffer.remaining())];
+                while (buffer.hasRemaining()) {
+                    int length = Math.min(chunk.length, buffer.remaining());
+                    buffer.get(chunk, 0, length); bytes.write(chunk, 0, length);
+                }
+            }
+            subscription.request(1);
+        }
+        public void onError(Throwable error) { result.completeExceptionally(error); }
+        public void onComplete() { result.complete(bytes.toByteArray()); }
+    }
+
     public CompletableFuture<HttpResponse<byte[]>> uploadAsset(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256) {
         return uploadAsset(content, assetId, assetName, assetFormat, rawSha256, java.util.UUID.randomUUID().toString());
     }
@@ -244,6 +292,21 @@ public final class CloudHttpClient {
         return httpClient.sendAsync(builder.GET().build(), HttpResponse.BodyHandlers.ofByteArray());
     }
 
+    /** Rechecks ACL before accepting a resident resource; never buffers model bytes. */
+    public CompletableFuture<Boolean> authorizeAsset(String path, String sha256) {
+        String etag = "\"" + sha256 + "\"";
+        var request = requestBuilder(path).timeout(REQUEST_TIMEOUT)
+                .header("If-None-Match", etag).GET().build();
+        return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()).thenApply(response -> {
+            try (var body = response.body()) {
+                return (response.statusCode() == 304 || response.statusCode() == 200)
+                        && etag.equals(response.headers().firstValue("ETag").orElse(null));
+            } catch (IOException failure) {
+                return false;
+            }
+        });
+    }
+
     private HttpRequest.Builder requestBuilder(String path) {
         HttpRequest.Builder builder = HttpRequest.newBuilder(instance.apiUri(path));
         if (accessToken != null) {
@@ -281,6 +344,14 @@ public final class CloudHttpClient {
                 throw new CloudHttpException(200, CloudErrorCode.PROTOCOL_UNSUPPORTED, "Cloud instance protocol is unsupported");
             }
             JsonObject limits = root.has("limits") && root.get("limits").isJsonObject() ? root.getAsJsonObject("limits") : new JsonObject();
+            java.util.Set<String> capabilities = new java.util.HashSet<>();
+            if (root.has("capabilities")) {
+                if (!root.get("capabilities").isJsonArray() || root.getAsJsonArray("capabilities").size() > 128) throw new IllegalArgumentException("Invalid capabilities");
+                for (JsonElement value : root.getAsJsonArray("capabilities")) {
+                    if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString() || value.getAsString().length() > 128) throw new IllegalArgumentException("Invalid capability");
+                    capabilities.add(value.getAsString());
+                }
+            }
             return new CloudInstanceInfo(
                     advertised,
                     positiveLimit(limits, "max_message_bytes", 64 * 1024),
@@ -290,10 +361,11 @@ public final class CloudHttpClient {
                     positiveLimit(limits, "max_subscriptions", 128),
                     positiveLimit(limits, "heartbeat_interval_seconds", 15),
                     positiveLimit(limits, "heartbeat_ttl_seconds", 45),
-                    root.has("capabilities") && root.get("capabilities").isJsonArray()
-                            && java.util.stream.StreamSupport.stream(root.getAsJsonArray("capabilities").spliterator(), false)
-                            .anyMatch(value -> value.isJsonPrimitive() && "player_motion_v1".equals(value.getAsString())),
-                    parseAuthCapabilities(root));
+                    capabilities.contains("player_motion_v1"),
+                    parseAuthCapabilities(root),
+                    positiveLimit(limits, "max_entity_query_count", 64), capabilities,
+                    positiveLimit(limits, "max_visual_state_bytes", 8192),
+                    nonnegativeLimit(limits, "max_visual_variables", 32));
         } catch (CloudHttpException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -324,14 +396,20 @@ public final class CloudHttpClient {
     }
 
     private static long positiveLimit(JsonObject object, String name, long fallback) {
-        if (!object.has(name) || !object.get(name).isJsonPrimitive()) {
-            return fallback;
-        }
-        long value = object.get(name).getAsLong();
-        if (value <= 0) {
+        long value = nonnegativeLimit(object, name, fallback);
+        if (value == 0) {
             throw new IllegalArgumentException("Cloud limit must be positive: " + name);
         }
         return value;
+    }
+
+    private static long nonnegativeLimit(JsonObject object, String name, long fallback) {
+        if (!object.has(name)) return fallback;
+        JsonElement value = object.get(name);
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) throw new IllegalArgumentException("Invalid Cloud limit: " + name);
+        long number = value.getAsBigDecimal().longValueExact();
+        if (number < 0) throw new IllegalArgumentException("Negative Cloud limit: " + name);
+        return number;
     }
 
     private static CloudErrorCode errorCodeFrom(Throwable failure) {

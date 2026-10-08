@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * R8 LocalModelScanner 测试：本地模型来源遍历发现（文件夹/文件）+ id 归一 + kind 判定。
  *
- * <p>从 ServerModelManager.scanDirectoryModels 的遍历骨架抽取；解析/缓存留在调用方。
+ * <p>本地模型来源扫描只负责遍历发现；解析与缓存留在调用方。
  * 模型文件夹判定以 Predicate 注入（YSMFolderDeserializer.isModelFolder 语义）。</p>
  */
 class LocalModelScannerTest {

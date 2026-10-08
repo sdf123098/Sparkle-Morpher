@@ -25,6 +25,7 @@ class CloudEntityClientCoordinatorTest {
         CloudEntityClientCoordinator coordinator = new CloudEntityClientCoordinator(
                 resolver, appearances, worldGeneration::get, Runnable::run);
         coordinator.register(provider);
+        coordinator.activate("scope", "epoch", 8L);
 
         assertTrue(coordinator.applyAppearance("scope", "epoch", 8L, "target"));
         assertEquals(1, provider.applied.size());
@@ -46,6 +47,7 @@ class CloudEntityClientCoordinatorTest {
         CloudEntityClientCoordinator coordinator = new CloudEntityClientCoordinator(
                 resolver, appearances, () -> 1L, Runnable::run);
         coordinator.register(maid);
+        coordinator.activate("scope", "epoch", 1L);
 
         assertFalse(coordinator.applyAppearance("scope", "epoch", 1L, "target"));
         assertFalse(coordinator.applyAppearance("scope", "epoch", 1L, "missing"));
@@ -70,6 +72,33 @@ class CloudEntityClientCoordinatorTest {
         provider.available = false;
         assertEquals(CloudEntityObservationCoordinator.ObservationState.NOT_VISIBLE,
                 coordinator.collectObservations().get(0).state());
+    }
+
+    @Test
+    void queuedAppearanceCannotSurviveScopeExitOrReentry() {
+        CloudEntityBindingResolver resolver = new CloudEntityBindingResolver();
+        resolver.replace("scope", "epoch", List.of(binding(1L)));
+        CloudAppearanceStore appearances = new CloudAppearanceStore();
+        appearances.apply("scope", appearance(1L));
+        java.util.ArrayList<Runnable> queue = new java.util.ArrayList<>();
+        RecordingProvider provider = new RecordingProvider(CloudEntityProvider.Kind.PLAYER);
+        CloudEntityClientCoordinator coordinator = new CloudEntityClientCoordinator(
+                resolver, appearances, () -> 1L, queue::add);
+        coordinator.register(provider);
+        assertFalse(coordinator.applyAppearance("scope", "epoch", 1L, "target"));
+        coordinator.activate("scope", "epoch", 1L);
+        assertTrue(coordinator.applyAppearance("scope", "epoch", 1L, "target"));
+        coordinator.deactivate();
+        queue.remove(0).run();
+        assertTrue(provider.applied.isEmpty());
+        coordinator.activate("scope", "epoch", 1L);
+        coordinator.applyAppearance("scope", "epoch", 1L, "target");
+        coordinator.activate("scope", "epoch", 1L);
+        queue.remove(0).run();
+        assertTrue(provider.applied.isEmpty(), "reentering the same scope must invalidate the old task");
+        coordinator.applyAppearance("scope", "epoch", 1L, "target");
+        queue.remove(0).run();
+        assertEquals(1, provider.applied.size());
     }
 
     private static CloudScopeClient.CloudEntityBinding binding(long revision) {

@@ -1,15 +1,14 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.capability.VehicleModelCapability;
 import com.micaftic.morpher.client.entity.GeoEntity;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.molang.parser.ParseException;
-import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import com.micaftic.morpher.molang.runtime.Struct;
+import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -29,6 +28,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     private Struct serverVars;
     private String rouletteAnimation = "";
     private boolean cloudModelStateApplied;
+    private Map<String, Float> displayMotionVariables;
     private boolean officialYsmStateApplied;
     private boolean syncedModelStateApplied;
 
@@ -71,22 +71,6 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
         setForceDisabled(false);
     }
 
-    public void applySyncedState(VehicleModelCapability state, Int2FloatOpenHashMap values) {
-        if (this.cloudModelStateApplied) {
-            return;
-        }
-        this.officialYsmStateApplied = false;
-        this.syncedModelStateApplied = state.isInitialized();
-        if (!state.isInitialized()) {
-            this.rouletteAnimation = "";
-            this.serverVars = null;
-            resetModel();
-            return;
-        }
-        this.serverVars = new Int2FloatOpenHashMapStruct(values);
-        this.rouletteAnimation = state.getRouletteAnimation();
-        initModelWithTexture(state.getOwnerModelId(), state.getOwnerTexture());
-    }
 
     /**
      * The official Touhou Little Maid integration stores YSM state on the maid
@@ -122,6 +106,27 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
 
     public String getRouletteAnimation() {
         return this.rouletteAnimation;
+    }
+
+    /** Client display values only. Does not change the maid's native AI or equipment. */
+    public void applyDisplayMotion(String animation, Map<String, Float> variables) {
+        if (this.serverVars != null && java.util.Objects.equals(this.displayMotionVariables, variables)
+                && this.rouletteAnimation.equals(animation)) return;
+        awaitAsyncResult();
+        var values = new Int2FloatOpenHashMap();
+        variables.forEach((name, value) -> values.put(
+            com.micaftic.morpher.geckolib3.core.molang.util.StringPool.computeIfAbsent(name), value.floatValue()));
+        this.serverVars = new Int2FloatOpenHashMapStruct(values);
+        this.displayMotionVariables = Map.copyOf(variables);
+        this.rouletteAnimation = animation;
+    }
+
+    public void clearDisplayMotion() {
+        if (this.displayMotionVariables == null) return;
+        awaitAsyncResult();
+        this.displayMotionVariables = null;
+        this.serverVars = null;
+        this.rouletteAnimation = "";
     }
 
     public void executeMolang(String expression) {

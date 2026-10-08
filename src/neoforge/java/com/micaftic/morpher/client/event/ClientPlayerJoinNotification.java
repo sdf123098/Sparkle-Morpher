@@ -16,7 +16,7 @@ public final class ClientPlayerJoinNotification {
         if (notified) return;
         PrivacyMode.beginSession(); ClientModelManager.runPendingModelCallback(); notified = true;
         if (!YesSteveModel.isAvailable()) { YesSteveModel.sendUnavailableMessage(); return; }
-        if (PrivacyMode.isActive()) { ClientModelManager.enterPrivacyMode(); return; }
+        if (PrivacyMode.isActive()) { ClientModelManager.reloadLocalModelsAfterPrivacyMode(); return; }
         ClientModelManager.reloadLocalModels(error -> ClientModelManager.restorePersistedModelSelection());
     }
     @SubscribeEvent public static void onQuit(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
@@ -24,7 +24,6 @@ public final class ClientPlayerJoinNotification {
         notified = false;
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.disconnect();
         PrivacyMode.endSession();
-        ClientModelManager.resetSync();
         if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);
         }

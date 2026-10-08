@@ -13,12 +13,22 @@ public final class PlayerCapabilityClientStore {
 
     private static final ConcurrentMap<UUID, PlayerCapability> STORE = new ConcurrentHashMap<>();
 
+    private static final java.util.concurrent.atomic.AtomicLong LAST_CLEANUP_NANOS = new java.util.concurrent.atomic.AtomicLong();
+
     private PlayerCapabilityClientStore() {
     }
 
     public static Optional<PlayerCapability> get(Player player) {
         if (!(player instanceof AbstractClientPlayer)) {
             return Optional.empty();
+        }
+        long now = System.nanoTime();
+        if (!STORE.isEmpty() && now - LAST_CLEANUP_NANOS.get() > 1_000_000_000L) {
+            var level = net.minecraft.client.Minecraft.getInstance().level;
+            if (level != null) {
+                STORE.values().removeIf(cap -> cap.entity == null || level.getEntity(cap.entity.getId()) != cap.entity);
+                LAST_CLEANUP_NANOS.set(now);
+            }
         }
         UUID uuid = player.getUUID();
         PlayerCapability existing = STORE.get(uuid);

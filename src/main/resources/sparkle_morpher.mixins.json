@@ -9,6 +9,8 @@
   },
   "client": [
     "client.ArrowEntityAccessor",
+    "client.ProjectileFiringInputMixin",
+    "client.ProjectileSpawnObservationMixin",
     "client.BufferSourceMixin",
     "client.EntityRenderDispatcherMixin",
     "client.FishingHookAccessor",
@@ -23,8 +25,6 @@
   ],
   "mixins": [
     "AbstractArrowEntityMixin",
-    "ProjectileEntityMixin",
-    "compat.TouhouMaidEntityMixin",
     "compat.TouhouLittleMaidYsmCompatMixin"
   ]
 }
