@@ -542,8 +542,8 @@ class ImportPipelineGoldenTest {
         BBModelFile bb = BBModelParser.parse(BBMODEL_JSON);
         byte[] skin = pngOf(32, 32, 0xFF88CC44);
         RawYsmModel raw = BBToRawConverter.convert(bb, Map.of("skin", skin));
-        // 生产路径（ServerModelManager.parseBbModelImport / importToModelData）在装配前必须补上
-        // import cache sha256——ServerModelInfo 由它派生 hashId。此处按同一顺序复现，保证走的是
+        // 生产路径（LocalModelService 导入/装配）在装配前必须补上
+        // import cache sha256——ModelMetadata 由它派生 hashId。此处按同一顺序复现，保证走的是
         // 完整导入管线而非半截。
         raw.properties.sha256 = BBToRawConverter.importCacheSha256(BBMODEL_JSON.getBytes(StandardCharsets.UTF_8));
         ClientModelInfo info = ClientModelBundleAssembler.buildParsedBundle(raw, "golden_bb");

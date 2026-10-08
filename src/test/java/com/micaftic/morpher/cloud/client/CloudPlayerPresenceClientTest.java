@@ -91,7 +91,7 @@ class CloudPlayerPresenceClientTest {
             assertEquals("public-signed-property",JsonParser.parseString(requests.get(3)[3]).getAsJsonObject().getAsJsonObject("profile_name_proof").get("value").getAsString());
         } finally {server.stop(0);}
     }
-    private static final class LoopbackClient extends HttpClient {
+    static final class LoopbackClient extends HttpClient {
         private final HttpClient delegate;
         private final URI origin;
         LoopbackClient(HttpClient delegate, URI origin) { this.delegate = delegate; this.origin = origin; }

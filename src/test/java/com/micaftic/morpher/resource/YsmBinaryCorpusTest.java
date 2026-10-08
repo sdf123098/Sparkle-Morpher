@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * R0.2 corpus：YSM binary 序列化链路 round-trip（合成最小模型，无第三方版权资产）。
  *
- * 真实配对（ServerModelManager:878 → ClientModelManager:737）：
+ * 实际配对（LocalModelService → ClientModelManager）：
  *   RawYsmModel → YSMBinarySerializer.serialize(model, 32, true)
  *     → YsmCrypt.encryptServerCache（服务端缓存）
  *     → YsmCrypt.transcodeServerDataToClientCache + read（客户端还原明文）

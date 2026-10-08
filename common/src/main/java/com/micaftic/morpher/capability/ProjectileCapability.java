@@ -11,7 +11,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Optional;
 public class ProjectileCapability extends GeckoProjectileEntity {
 
-    private static final java.util.Map<Entity, ProjectileCapability> STORE = new java.util.WeakHashMap<>();
+    private static final java.util.Map<Entity, java.lang.ref.WeakReference<ProjectileCapability>> STORE = new java.util.WeakHashMap<>();
 
     public static Optional<ProjectileCapability> get(Entity entity) {
         if (!(entity instanceof Projectile projectile)) {
@@ -20,8 +20,12 @@ public class ProjectileCapability extends GeckoProjectileEntity {
         return get(projectile);
     }
 
-    public static Optional<ProjectileCapability> get(Projectile projectile) {
-        return Optional.of(STORE.computeIfAbsent(projectile, entity -> new ProjectileCapability((Projectile) entity)));
+    public static synchronized Optional<ProjectileCapability> get(Projectile projectile) {
+        if (!projectile.level().isClientSide()) return Optional.empty();
+        var reference = STORE.get(projectile);
+        var cap = reference == null ? null : reference.get();
+        if (cap == null) { cap = new ProjectileCapability(projectile); STORE.put(projectile, new java.lang.ref.WeakReference<>(cap)); }
+        return Optional.of(cap);
     }
 
     @Nullable
