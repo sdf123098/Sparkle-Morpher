@@ -5,6 +5,7 @@ import com.micaftic.morpher.resource.gltf.GltfLoader;
 import com.micaftic.morpher.resource.gltf.GltfLoadResult;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
@@ -27,5 +28,18 @@ public final class ImportCoordinator {
         }
         RawYsmModel model = legacyParser.parse();
         return new ParsedImport(source, new ParsedImport.LegacyRawPayload(model), List.of());
+    }
+
+    /** Parses a local glTF file with its explicitly authorized source directory. */
+    public static ParsedImport parseLocalGltf(Path sourcePath) throws IOException {
+        Objects.requireNonNull(sourcePath, "sourcePath");
+        Path normalized = sourcePath.toAbsolutePath().normalize();
+        Path root = normalized.getParent();
+        if (root == null) throw new IOException("Local glTF source has no parent directory: " + sourcePath);
+        ImportSource source = new ImportSource(normalized.getFileName().toString(),
+                ImportSource.formatFromName(normalized.getFileName().toString()), ImportSource.Kind.LOCAL_PATH, root);
+        if (!source.isGltf()) throw new IOException("Local glTF parser received a non-glTF source: " + sourcePath);
+        GltfLoadResult result = GltfLoader.loadWithManifest(normalized);
+        return new ParsedImport(source, new ParsedImport.GltfPayload(result), List.of());
     }
 }
