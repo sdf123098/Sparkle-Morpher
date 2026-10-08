@@ -34,6 +34,11 @@ public final class KeyedRequestLeaseRegistry<K> {
         return inFlight.containsKey(Objects.requireNonNull(key, "key"));
     }
 
+    /** Invalidates all request owners, for example when the client runtime is stopping. */
+    public void clearAll() {
+        inFlight.clear();
+    }
+
     public static final class Lease<K> {
         private final K key;
         private final long id;

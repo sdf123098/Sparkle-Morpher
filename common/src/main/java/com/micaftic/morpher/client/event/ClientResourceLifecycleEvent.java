@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.entity.EntityRenderCache;
 import com.micaftic.morpher.client.upload.CloudUploadRuntime;
 import com.micaftic.morpher.core.gpu.BlurStack;
 import com.micaftic.morpher.core.gpu.GpuRenderPath;
@@ -16,9 +17,16 @@ public final class ClientResourceLifecycleEvent {
         // 能力存储（CapabilityClientStore）的清理由各自平台模块处理（fabric 在 FabricClientResourceLifecycle 中注册）。
         ClientPlayerEvent.CLIENT_PLAYER_QUIT.register(player -> cleanup("client disconnect"));
         ClientLifecycleEvent.CLIENT_STOPPING.register(client -> {
-            cleanup("client stopping");
+            onClientStopping();
             CloudUploadRuntime.clear();
         });
+    }
+
+    public static void onClientStopping() {
+        EntityRenderCache.clear();
+        ClientModelManager.onClientStopping();
+        cleanup("client stopping");
+        CloudUploadRuntime.clear();
     }
 
     private static void cleanup(String reason) {
