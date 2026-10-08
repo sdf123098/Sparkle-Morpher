@@ -38,4 +38,18 @@ class KeyedRequestLeaseRegistryTest {
         assertFalse(requests.complete(request));
         assertFalse(requests.isInFlight("model"));
     }
+
+    @Test
+    void shutdownInvalidatesEveryRequestLease() {
+        KeyedRequestLeaseRegistry<String> requests = new KeyedRequestLeaseRegistry<>();
+        KeyedRequestLeaseRegistry.Lease<String> first = requests.begin("first");
+        KeyedRequestLeaseRegistry.Lease<String> second = requests.begin("second");
+
+        requests.clearAll();
+
+        assertFalse(requests.isCurrent(first));
+        assertFalse(requests.isCurrent(second));
+        assertFalse(requests.isInFlight("first"));
+        assertFalse(requests.isInFlight("second"));
+    }
 }

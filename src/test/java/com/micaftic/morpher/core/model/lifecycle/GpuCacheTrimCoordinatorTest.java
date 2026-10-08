@@ -99,4 +99,22 @@ class GpuCacheTrimCoordinatorTest {
         assertEquals(1, releases.get());
         assertTrue(coordinator.isTrimmed("model", assembly));
     }
+
+    @Test
+    void shutdownClearCancelsQueuedTrimAndSettlesTracker() {
+        GpuCacheTrimCoordinator<Object> coordinator = new GpuCacheTrimCoordinator<>();
+        Object assembly = new Object();
+        ArrayDeque<Runnable> renderQueue = new ArrayDeque<>();
+        AtomicBoolean onRenderThread = new AtomicBoolean();
+        AtomicInteger releases = new AtomicInteger();
+
+        coordinator.request("model", assembly, onRenderThread::get, renderQueue::add,
+                candidate -> true, candidate -> releases.incrementAndGet());
+        coordinator.clearAll();
+        onRenderThread.set(true);
+        renderQueue.remove().run();
+
+        assertEquals(0, releases.get());
+        assertFalse(coordinator.isTrimmed("model", assembly));
+    }
 }

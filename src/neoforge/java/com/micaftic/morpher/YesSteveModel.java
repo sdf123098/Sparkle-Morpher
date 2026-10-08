@@ -10,6 +10,7 @@ import com.micaftic.morpher.core.architectury.platform.Platform;
 import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import net.minecraft.network.chat.Component;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.neoforge.common.NeoForge;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.micaftic.morpher.core.api.PlatformAPI;
@@ -47,6 +48,7 @@ public class YesSteveModel {
         } else {
             initConfig();
         }
+        NeoForge.EVENT_BUS.addListener(com.micaftic.morpher.client.event.NeoClientShutdownEvent::onClientStopping);
         YsmEventBootstrap.register();
     }
 
