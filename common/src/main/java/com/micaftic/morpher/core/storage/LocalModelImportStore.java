@@ -5,6 +5,8 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -25,9 +27,34 @@ public final class LocalModelImportStore {
     private static final String[] IMPORT_EXTENSIONS = {".ysm", ".zip", ".bbmodel", ".gltf", ".glb"};
 
     private final Path customRoot;
+    private final MoveAction preparedMove;
+    private final DeleteAction siblingDelete;
 
     public LocalModelImportStore(Path customRoot) {
+        this(customRoot, LocalModelImportStore::moveAtomically, Files::deleteIfExists);
+    }
+
+    LocalModelImportStore(Path customRoot, MoveAction preparedMove, DeleteAction siblingDelete) {
         this.customRoot = customRoot;
+        this.preparedMove = preparedMove;
+        this.siblingDelete = siblingDelete;
+    }
+
+    @FunctionalInterface
+    interface MoveAction {
+        void move(Path source, Path target) throws IOException;
+    }
+
+    @FunctionalInterface
+    interface DeleteAction {
+        boolean deleteIfExists(Path path) throws IOException;
+    }
+
+    /** A committed source plus any old sibling paths whose cleanup can be retried. */
+    public record CommitResult(Path persistedPath, List<Path> cleanupPending) {
+        public CommitResult {
+            cleanupPending = List.copyOf(cleanupPending);
+        }
     }
 
     /**
@@ -110,12 +137,17 @@ public final class LocalModelImportStore {
         }
 
         /** Persist validated bytes and apply the existing sibling replacement policy. */
-        public Path commit() throws IOException {
+        public CommitResult commit() throws IOException {
             if (finished) throw new IllegalStateException("Prepared import is already finished");
-            Path persisted = store.persist(modelId, fileName, Files.readAllBytes(stagedPath));
+            Path persisted = store.commitPrepared(modelId, fileName, stagedPath);
             finished = true;
-            Files.deleteIfExists(stagedPath);
-            return persisted;
+            List<Path> cleanupPending = store.removeSiblingImportFilesBestEffort(modelId, persisted);
+            try {
+                Files.deleteIfExists(stagedPath);
+            } catch (IOException cleanupFailure) {
+                cleanupPending.add(stagedPath);
+            }
+            return new CommitResult(persisted, cleanupPending);
         }
 
         @Override
@@ -124,6 +156,23 @@ public final class LocalModelImportStore {
                 finished = true;
                 Files.deleteIfExists(stagedPath);
             }
+        }
+    }
+
+    private Path commitPrepared(String modelId, String fileName, Path stagedPath) throws IOException {
+        String extension = importExtension(fileName);
+        if (extension.isBlank()) extension = ".ysm";
+        Path target = customRoot.resolve(modelId + extension).normalize();
+        if (!isInside(customRoot, target)) throw new IOException("Invalid import target: " + modelId);
+        preparedMove.move(stagedPath, target);
+        return target;
+    }
+
+    private static void moveAtomically(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -154,5 +203,21 @@ public final class LocalModelImportStore {
                 Files.deleteIfExists(sibling);
             }
         }
+    }
+
+    private List<Path> removeSiblingImportFilesBestEffort(String modelId, Path keepTarget) {
+        List<Path> cleanupPending = new ArrayList<>();
+        for (String extension : IMPORT_EXTENSIONS) {
+            Path sibling = customRoot.resolve(modelId + extension).normalize();
+            if (isInside(customRoot, sibling)
+                    && !sibling.toAbsolutePath().normalize().equals(keepTarget.toAbsolutePath().normalize())) {
+                try {
+                    siblingDelete.deleteIfExists(sibling);
+                } catch (IOException cleanupFailure) {
+                    cleanupPending.add(sibling);
+                }
+            }
+        }
+        return cleanupPending;
     }
 }
