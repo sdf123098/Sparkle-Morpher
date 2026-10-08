@@ -2,8 +2,7 @@ package com.micaftic.morpher.client.gui.resource.download;
 
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
-import com.micaftic.morpher.model.ServerModelManager;
-import com.micaftic.morpher.network.NetworkHandler;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -101,9 +100,9 @@ public final class ResourceImportCoordinator {
         if (data == null || data.length == 0) {
             throw new IOException("Empty model file");
         }
-        Path customRoot = ServerModelManager.CUSTOM.toAbsolutePath().normalize();
+        Path customRoot = ModelStoragePaths.custom().toAbsolutePath().normalize();
         String extension = extensionForFileName(fileName);
-        Path target = ServerModelManager.CUSTOM.resolve(modelId + extension).normalize();
+        Path target = ModelStoragePaths.custom().resolve(modelId + extension).normalize();
         Path absoluteTarget = target.toAbsolutePath().normalize();
         if (!absoluteTarget.startsWith(customRoot)) {
             throw new IOException("Rejected model path");
@@ -129,7 +128,7 @@ public final class ResourceImportCoordinator {
 
     static void removeSiblingModelFiles(Path customRoot, String modelId, Path keepTarget) throws IOException {
         for (String extension : new String[]{".ysm", ".zip", ".bbmodel", ".gltf", ".glb"}) {
-            Path sibling = ServerModelManager.CUSTOM.resolve(modelId + extension).toAbsolutePath().normalize();
+            Path sibling = ModelStoragePaths.custom().resolve(modelId + extension).toAbsolutePath().normalize();
             if (sibling.startsWith(customRoot) && !sibling.equals(keepTarget)) {
                 Files.deleteIfExists(sibling);
             }

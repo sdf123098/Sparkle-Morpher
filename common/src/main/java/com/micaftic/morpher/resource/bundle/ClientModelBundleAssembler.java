@@ -16,7 +16,7 @@ import com.micaftic.morpher.geckolib3.file.ModelExtraResourcesFile;
 import com.micaftic.morpher.geckolib3.file.ProjectileModelFiles;
 import com.micaftic.morpher.geckolib3.file.VehicleModelFiles;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
-import com.micaftic.morpher.model.format.ServerModelInfo;
+import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.data.OrderedStringMap;
@@ -117,7 +117,7 @@ public final class ClientModelBundleAssembler {
 
         MainModelData mainModelData = new MainModelData(meshes, animations, controllersList.toArray(new AnimationControllerFile[0]), textureMap, specialHandLocatorProfile);
 
-        ServerModelInfo modelInfo = GuiConfigMapper.buildModelInfo(raw);
+        ModelMetadata modelInfo = GuiConfigMapper.buildModelInfo(raw);
         ModelExtraResourcesFile extraResources = buildExtraResources(raw);
         ProjectileModelFiles[] extraItemModels = buildExtraItemModels(raw, context, raw.properties.mergeMultilineExpr);
         VehicleModelFiles[] extraEntityModels = buildExtraEntityModels(raw, context, raw.properties.mergeMultilineExpr);
@@ -279,7 +279,10 @@ public final class ClientModelBundleAssembler {
             String name = entry.getKey();
             byte[] data = entry.getValue().data;
             AudioTrackData track = AudioResourceMapper.parseAudioTrackData(data);
-            if (track != null) sounds.put(name, track);
+            if (track != null) {
+                if(com.micaftic.morpher.client.LocalDisplayPreferences.snapshot().acceptsSound(data.length,track.getDuration(),track.getSampleRate()))sounds.put(name,track);
+                else track.close();
+            }
         }
 
         Map<String, IValue> functions = new LinkedHashMap<>();

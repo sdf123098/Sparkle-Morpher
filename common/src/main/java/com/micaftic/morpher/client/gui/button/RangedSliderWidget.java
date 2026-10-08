@@ -7,7 +7,7 @@ import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
-import org.lwjgl.glfw.GLFW;
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
 
 import java.text.DecimalFormat;
 
@@ -92,8 +92,8 @@ public class RangedSliderWidget extends AbstractSliderButton {
 
     @Override
     public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
-        boolean flag = event.key() == GLFW.GLFW_KEY_LEFT;
-        if (flag || event.key() == GLFW.GLFW_KEY_RIGHT) {
+        boolean flag = event.key() == InputCodeAdapter.SDL_SCANCODE_LEFT;
+        if (flag || event.key() == InputCodeAdapter.SDL_SCANCODE_RIGHT) {
             if (this.minValue > this.maxValue) flag = !flag;
             float f = flag ? -1F : 1F;
             if (stepSize <= 0D) this.setSliderValue(this.value + (f / (this.width - 8)));
@@ -153,7 +153,8 @@ public class RangedSliderWidget extends AbstractSliderButton {
         blitWithBorder(guiGraphics, SLIDER_LOCATION, handleX, this.getY(), 0, getHandleTextureY(), 8, this.height, 200, 20, 2, 3, 2, 2);
 
         int color = this.active ? 16777215 : 10526880;
-/*         GuiGraphicsExtractor.renderScrollingString(mc.getFont(), getMessage(), getX() + 2, getY(), getX() + getWidth() - 2, getY() + getHeight(), color | Mth.ceil(this.alpha * 255.0F) << 24); */
+/*         GuiGraphicsExtractor.renderScrollingString(mc.getFont(), getMessage(), getX() + 2, getY(), getX() + getWidth() - 2, getY() + getHeight(), color | Mth.ceil(this.alpha * 255.0F) << 24);
+ */
     }
 
     //https://github.com/MinecraftForge/MinecraftForge/blob/26.1.2/src/main/java/net/minecraftforge/client/extensions/IForgeGuiGraphicsExtractor.java#L71

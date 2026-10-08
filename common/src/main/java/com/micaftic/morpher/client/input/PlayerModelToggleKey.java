@@ -11,10 +11,11 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
 
 public final class PlayerModelToggleKey {
 
-    public static final KeyMapping KEY_MAPPING = KeyMappingFactory.createInGameAlt("key.sparkle_morpher.player_model.desc", InputConstants.Type.KEYSYM, 89, "key.category.sparkle_morpher");
+    public static final KeyMapping KEY_MAPPING = KeyMappingFactory.createInGameAlt("key.sparkle_morpher.player_model.desc", InputConstants.Type.KEYBOARD, InputCodeAdapter.SDL_SCANCODE_Y, "key.category.sparkle_morpher");
 
     private PlayerModelToggleKey() {
     }

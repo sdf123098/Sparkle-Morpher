@@ -1,15 +1,16 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.mojang.blaze3d.GpuFormat;
-import com.mojang.blaze3d.PrimitiveTopology;
-import com.mojang.blaze3d.pipeline.BindGroupLayout;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.DepthStencilState;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.shaders.UniformType;
-import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
+import com.mojang.renderpearl.api.pipeline.BindGroupLayout;
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.DepthStencilState;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.UniformType;
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.vertex.VertexFormat;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
@@ -44,8 +45,8 @@ public final class Blaze3DBoneSkinPipeline {
             return;
         }
         try {
-            device.precompilePipeline(PIPELINE);
-            device.precompilePipeline(TRANSLUCENT_PIPELINE);
+            RenderSystem.getCompiledPipeline(PIPELINE);
+            RenderSystem.getCompiledPipeline(TRANSLUCENT_PIPELINE);
             pipelinesPrecompiled.set(true);
         } catch (Throwable t) {
             if (precompileWarned.compareAndSet(false, true)) {

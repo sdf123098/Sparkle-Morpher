@@ -6,6 +6,7 @@ import com.micaftic.morpher.client.event.AnimationLockEvent;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
 import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
@@ -32,10 +33,10 @@ import net.minecraft.client.Minecraft;
 public final class AnimationRouletteKey {
 
     public static final KeyMapping KEY_ROULETTE = KeyMappingFactory.createInGameNone(
-            "key.sparkle_morpher.animation_roulette.desc", InputConstants.Type.KEYSYM, 90, "key.category.sparkle_morpher");
+            "key.sparkle_morpher.animation_roulette.desc", InputConstants.Type.KEYBOARD, InputCodeAdapter.SDL_SCANCODE_Z, "key.category.sparkle_morpher");
 
     public static final KeyMapping KEY_LOCK = KeyMappingFactory.createInGameAlt(
-            "key.sparkle_morpher.lock_roulette.desc", InputConstants.Type.KEYSYM, 76, "key.category.sparkle_morpher");
+            "key.sparkle_morpher.lock_roulette.desc", InputConstants.Type.KEYBOARD, InputCodeAdapter.SDL_SCANCODE_L, "key.category.sparkle_morpher");
 
     private AnimationRouletteKey() {
     }

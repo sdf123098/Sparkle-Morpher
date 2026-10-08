@@ -67,11 +67,13 @@ Figura 팩에서는 모델과 텍스처를 읽으며 Figura Lua 실행 환경은
 | Sparkle-Morpher-Fa1.21.1 | Fabric | 1.21.1 | `main` |
 | Sparkle-Morpher-Fa26.1.2 | Fabric | 26.1.2 | `fa26.1.2` |
 | Sparkle-Morpher-Fa26.2 | Fabric | 26.2 | `fa26.2` |
+| Sparkle-Morpher-Fa26.3 | Fabric | 26.3 | `fa26.3` |
 | Sparkle-Morpher-Neo1.21.1 | NeoForge | 1.21.1 | `neo1.21.1` |
 | Sparkle-Morpher-Neo26.1.2 | NeoForge | 26.1.2 | `neo26.1.2` |
 | Sparkle-Morpher-Neo26.2 | NeoForge | 26.2 | `neo26.2` |
+| Sparkle-Morpher-Neo26.3 | NeoForge | 26.3 | `neo26.3` |
 
-Minecraft 1.21.1에는 Java 21, Minecraft 26.1.2 / 26.2에는 Java 25를 사용하세요. 의존성은 해당 릴리스의 요구 사항을 따르세요. 함께 플레이할 때는 Cloud 프로토콜이 호환되는 빌드를 사용하세요.
+Minecraft 1.21.1에는 Java 21, Minecraft 26.1.2 / 26.2 / 26.3에는 Java 25를 사용하세요. 의존성은 해당 릴리스의 요구 사항을 따르세요. 함께 플레이할 때는 Cloud 프로토콜이 호환되는 빌드를 사용하세요.
 
 <a id="spm-cloud"></a>
 ## SPM Cloud: 공식 또는 자체 호스팅

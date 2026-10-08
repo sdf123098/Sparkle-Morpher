@@ -2,7 +2,7 @@ modLoader="javafml"
 loaderVersion="[1,)"
 license="${mod_license}"
 issueTrackerURL="https://github.com/sdf123098/Sparkle-Morpher/issues"
-logoFile="sparkle_morpher.png"
+iconFile="sparkle_morpher.png"
 
 [[mods]]
 modId="${mod_id}"
@@ -10,7 +10,7 @@ version="${mod_version}"
 displayName="${mod_name}"
 displayURL="https://github.com/sdf123098/Sparkle-Morpher"
 authors="${mod_authors}"
-logoFile="sparkle_morpher.png"
+iconFile="sparkle_morpher.png"
 credits=""
 description='''${mod_description}'''
 
@@ -27,7 +27,7 @@ side="BOTH"
 [[dependencies.${mod_id}]]
 modId="minecraft"
 type="required"
-versionRange="[26.2,26.3)"
+versionRange="[26.3,26.4)"
 ordering="NONE"
 side="BOTH"
 

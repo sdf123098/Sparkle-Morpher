@@ -158,8 +158,8 @@ public class HandRenderFunction extends LivingEntityFunction {
                 id,
                 itemId,
                 itemType,
-                entity.swinging,
-                entity.swingTime,
+                entity.isSwinging(),
+                InputStateKey.getSwingTicks(entity, 0.0f),
                 InputStateKey.getAttackProgress(entity, 0.0f),
                 InputStateKey.getLocalSwingPulseTicks(),
                 InputStateKey.getLocalSwingPulseAge());

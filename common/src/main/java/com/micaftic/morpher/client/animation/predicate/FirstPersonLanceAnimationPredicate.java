@@ -66,7 +66,8 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<P
         if (InputStateKey.isLocalSwinging(InteractionHand.MAIN_HAND) && InputStateKey.getLocalSwingPulseAge() <= 1) {
             return true;
         }
-        return player.swingTime == 0 && player.swingingArm == InteractionHand.MAIN_HAND;
+        return InputStateKey.getSwingTicks(player, 0.0f) < 1.0f
+                && InputStateKey.getSwingingHand(player) == InteractionHand.MAIN_HAND;
     }
 
     private boolean isLanceLike(WeaponKind kind) {

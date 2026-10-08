@@ -15,7 +15,7 @@ public final class RenderUtils {
 
     public static void rotateMatrixAroundBone(PoseStack poseStack, IBone bone) {
         if (bone.getRotationZ() != 0.0F || bone.getRotationY() != 0.0F || bone.getRotationX() != 0.0F) {
-            poseStack.mulPose(new Quaternionf().rotateZYX(bone.getRotationZ(), bone.getRotationY(), bone.getRotationX()));
+            poseStack.rotate(new Quaternionf().rotateZYX(bone.getRotationZ(), bone.getRotationY(), bone.getRotationX()));
         }
     }
 

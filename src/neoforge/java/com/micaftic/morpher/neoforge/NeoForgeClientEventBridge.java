@@ -88,7 +88,7 @@ public final class NeoForgeClientEventBridge {
         ClientRawInputEvent.KEY_PRESSED.fireEventResult(handler -> handler.keyPressed(
                 Minecraft.getInstance(),
                 event.getKey(),
-                event.getScanCode(),
+                event.getKeycode(),
                 event.getAction(),
                 event.getModifiers()
         ));
@@ -158,7 +158,7 @@ public final class NeoForgeClientEventBridge {
     }
 
     @SubscribeEvent
-    public static void onRenderArm(RenderArmEvent<?> event) {
+    public static void onRenderArm(RenderArmEvent event) {
         if (ReplacePlayerHandRenderEvent.onRenderArm(
                 Minecraft.getInstance().player,
                 event.getArm(),

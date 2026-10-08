@@ -1,7 +1,6 @@
 package com.micaftic.morpher.neoforge;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.network.NetworkHandler;
 import com.micaftic.morpher.core.architectury.event.events.common.LifecycleEvent;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -10,11 +9,11 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLEnvironment;
 import com.micaftic.morpher.core.api.config.ConfigRegistration;
 
-@Mod(YesSteveModel.MOD_ID)
+@Mod(value = YesSteveModel.MOD_ID, dist = Dist.CLIENT)
 public final class YesSteveModelNeoForge {
     public YesSteveModelNeoForge(IEventBus modBus, ModContainer container) {
         ConfigRegistration.setContainer(container);
-        NeoForgeCapabilityTypes.register(modBus);
+
         NeoForgeEventBridge.register(modBus);
         if (FMLEnvironment.getDist() == Dist.CLIENT) {
             initClient(modBus, container);

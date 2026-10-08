@@ -37,6 +37,16 @@ class CloudManagementFailureTest {
         assertEquals("error.connection", CloudManagementScreen.errorKey(new CompletionException(connection)));
     }
 
+    @Test
+    void registrationValidationSelectsLocalizedMessagesThroughAsyncFailures() {
+        var account = new com.micaftic.morpher.cloud.client.CloudValidationException(
+                com.micaftic.morpher.cloud.client.CloudValidationException.Reason.INVALID_ACCOUNT_ID);
+        var password = new com.micaftic.morpher.cloud.client.CloudValidationException(
+                com.micaftic.morpher.cloud.client.CloudValidationException.Reason.INVALID_PASSWORD);
+        assertEquals("validation.account_id", CloudManagementScreen.errorKey(new CompletionException(account)));
+        assertEquals("validation.password", CloudManagementScreen.errorKey(new ExecutionException(password)));
+    }
+
     private static Throwable unwrap(Throwable failure) throws Exception {
         Method unwrap = CloudManagementScreen.class.getDeclaredMethod("unwrap", Throwable.class);
         unwrap.setAccessible(true);

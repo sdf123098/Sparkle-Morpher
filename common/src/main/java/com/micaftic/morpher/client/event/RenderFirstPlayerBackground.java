@@ -89,7 +89,7 @@ public class RenderFirstPlayerBackground {
         float walkPhase = 0f;
         float fLerp = 0f;
         poseStack.translate(0.0d, 0.0d, 0.0d);
-        poseStack.mulPose(Axis.ZN.rotationDegrees(0f));
-        poseStack.mulPose(Axis.XN.rotationDegrees(0f));
+        poseStack.rotate(Axis.ZN.rotationDegrees(0f));
+        poseStack.rotate(Axis.XN.rotationDegrees(0f));
     }
 }

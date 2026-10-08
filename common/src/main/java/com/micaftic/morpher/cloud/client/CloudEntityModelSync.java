@@ -135,9 +135,24 @@ public final class CloudEntityModelSync {
         context();
         Minecraft client = Minecraft.getInstance();
         if (runtime == null || worldKey == null || client.level == null) return;
+        // Explicit scope bindings are owned by the permission-checked provider.
+        // The compatibility path must not overwrite its fallback after revocation.
+        String scope = runtime.scopeLifecycle().activeScopeId();
+        String epoch = runtime.scopeLifecycle().activeWorldEpoch();
+        Set<UUID> explicitlyBound = new HashSet<>();
+        if (scope != null && epoch != null) for (var binding : runtime.bindingResolver().snapshot(scope, epoch)) {
+            try { explicitlyBound.add(UUID.fromString(binding.entityUuid())); }
+            catch (IllegalArgumentException ignored) { }
+        }
+        for (UUID id : explicitlyBound) {
+            ENTRIES.remove(id);
+            ATTEMPTS.remove(id);
+            APPLY_GUARD.remove(id);
+        }
         List<Entity> visible = new ArrayList<>();
         for (Entity entity : client.level.entitiesForRendering()) {
-            if (entity != client.player && (entity instanceof Player || MaidCapability.get(entity).isPresent())) visible.add(entity);
+            if (entity != client.player && !explicitlyBound.contains(entity.getUUID())
+                    && (entity instanceof Player || MaidCapability.get(entity).isPresent())) visible.add(entity);
         }
         Set<UUID> visibleIds = new HashSet<>();
         visible.forEach(entity -> visibleIds.add(entity.getUUID()));
@@ -165,7 +180,8 @@ public final class CloudEntityModelSync {
         var ids = entities.stream().map(Entity::getUUID).distinct().toList();
         var api = new CloudEntityPresenceClient(expected.http());
         List<CompletableFuture<Map<UUID, CloudEntityPresenceClient.Entry>>> requests = new ArrayList<>();
-        for (int i = 0; i < ids.size(); i += 64) requests.add(api.query(key, ids.subList(i, Math.min(i + 64, ids.size()))));
+        int batch = expected.instanceInfo() == null ? 64 : (int) expected.instanceInfo().maxEntityQueryCount();
+        for (int i = 0; i < ids.size(); i += batch) requests.add(api.query(key, ids.subList(i, Math.min(i + batch, ids.size()))));
         CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, expected, key)) return;
             polling = false;

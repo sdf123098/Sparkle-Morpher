@@ -38,7 +38,7 @@ public final class ForgeAttributes {
 
     @Nullable
     public static Attribute nametagDistance() {
-        return NeoForgeMod.NAMETAG_DISTANCE.value();
+        return net.minecraft.world.entity.ai.attributes.Attributes.NAME_TAG_DISTANCE.value();
     }
 
     public static double getValue(LivingEntity entity, @Nullable Attribute attribute, double defaultValue) {

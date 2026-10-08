@@ -7,7 +7,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.render.pip.GuiEntityRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeStorage;
-import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.state.gui.pip.GuiEntityRenderState;
 import org.joml.Vector3fc;
 import org.spongepowered.asm.mixin.Mixin;
@@ -23,11 +22,12 @@ public abstract class GuiEntityRendererMixin {
         poseStack.pushPose();
         Vector3fc translation = state.translation();
         poseStack.translate(translation.x(), translation.y(), translation.z());
-        poseStack.mulPose(state.rotation());
-        FeatureRenderDispatcher featureDispatcher = Minecraft.getInstance().gameRenderer.featureRenderDispatcher();
-        SubmitNodeStorage submitNodeStorage = collector instanceof SubmitNodeStorage storage ? storage : new SubmitNodeStorage();
+        poseStack.rotate(state.rotation());
+        if (!(collector instanceof SubmitNodeStorage submitNodeStorage)) {
+            poseStack.popPose();
+            return;
+        }
         if (ModelPreviewRenderer.renderQueuedGuiPreview(state.renderState(), poseStack, submitNodeStorage, MultiBufferSource.submit(submitNodeStorage, poseStack))) {
-            featureDispatcher.renderAllFeatures(submitNodeStorage);
             poseStack.popPose();
             ModelPreviewRenderer.setPreviewMode(false);
             ci.cancel();

@@ -67,11 +67,13 @@ Figura 包导入读取模型与贴图，不提供 Figura Lua 运行环境。支�
 | Sparkle-Morpher-Fa1.21.1 | Fabric | 1.21.1 | `main` |
 | Sparkle-Morpher-Fa26.1.2 | Fabric | 26.1.2 | `fa26.1.2` |
 | Sparkle-Morpher-Fa26.2 | Fabric | 26.2 | `fa26.2` |
+| Sparkle-Morpher-Fa26.3 | Fabric | 26.3 | `fa26.3` |
 | Sparkle-Morpher-Neo1.21.1 | NeoForge | 1.21.1 | `neo1.21.1` |
 | Sparkle-Morpher-Neo26.1.2 | NeoForge | 26.1.2 | `neo26.1.2` |
 | Sparkle-Morpher-Neo26.2 | NeoForge | 26.2 | `neo26.2` |
+| Sparkle-Morpher-Neo26.3 | NeoForge | 26.3 | `neo26.3` |
 
-Minecraft 1.21.1 使用 Java 21，Minecraft 26.1.2 / 26.2 使用 Java 25。具体依赖以对应发行包的要求为准。一起游玩时，请使用 Cloud 协议兼容的构建。
+Minecraft 1.21.1 使用 Java 21，Minecraft 26.1.2 / 26.2 / 26.3 使用 Java 25。具体依赖以对应发行包的要求为准。一起游玩时，请使用 Cloud 协议兼容的构建。
 
 <a id="spm-cloud"></a>
 ## SPM Cloud：官方或自建

@@ -1,11 +1,11 @@
 # SparkleMorpher 1.2.x §10 CI / Regression Gate
-# 同一份模板同步到六分支（作为 §4.6 同步清单的一部分维护）。
+# 同一份模板同步到八分支（作为 §4.6 同步清单的一部分维护）。
 # 每分支独立 job：common tests（含依赖方向边界测试）→ compile → build → artifact smoke。
 name: CI
 
 on:
   push:
-    branches: [main, fa26.1.2, fa26.2, neo1.21.1, neo26.1.2, neo26.2]
+    branches: [main, fa26.1.2, fa26.2, fa26.3, neo1.21.1, neo26.1.2, neo26.2, neo26.3]
   workflow_dispatch:
   schedule:
     - cron: '17 2 * * *'
@@ -37,6 +37,11 @@ jobs:
             gradle_task: ':fabric:build'
             jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa26.2.jar'
             mod_meta: 'fabric.mod.json'
+          - branch: fa26.3
+            java: '25'
+            gradle_task: ':fabric:build'
+            jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa26.3.jar'
+            mod_meta: 'fabric.mod.json'
           - branch: neo1.21.1
             java: '21'
             gradle_task: ':build'
@@ -51,6 +56,11 @@ jobs:
             java: '25'
             gradle_task: ':build'
             jar_glob: 'build/libs/sparkle-morpher-*-neo26.2.jar'
+            mod_meta: 'META-INF/neoforge.mods.toml'
+          - branch: neo26.3
+            java: '25'
+            gradle_task: ':build'
+            jar_glob: 'build/libs/sparkle-morpher-*-neo26.3.jar'
             mod_meta: 'META-INF/neoforge.mods.toml'
 
     steps:

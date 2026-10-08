@@ -9,7 +9,7 @@ import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
-import net.minecraft.client.renderer.ItemInHandRenderer;
+import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.HumanoidArm;
@@ -21,9 +21,9 @@ import java.util.List;
 
 /** NeoForge's independent held-item layer for replaced Touhou Little Maid models. */
 public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> implements HeldItemLayer {
-    private final ItemInHandRenderer itemRenderer;
+    private final ItemModelResolver itemModelResolver;
 
-    public MaidItemInHandLayer(ItemInHandRenderer itemRenderer) { this.itemRenderer = itemRenderer; }
+    public MaidItemInHandLayer(ItemModelResolver itemModelResolver) { this.itemModelResolver = itemModelResolver; }
 
     @Override
     public void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
@@ -67,7 +67,8 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
 
     private void renderItem(LivingEntity entity, ItemStack item, ItemDisplayContext displayContext, PoseStack poseStack, int packedLight) {
         SubmitNodeCollector collector = SubmitRenderContext.get();
-        if (collector != null) itemRenderer.renderItem(entity, item, displayContext, poseStack, collector, packedLight);
+        com.micaftic.morpher.client.renderer.ItemRenderBridge.renderLivingItem(
+                itemModelResolver, entity, item, displayContext, poseStack, collector, packedLight);
     }
 
     private boolean applyItemBoneTransform(HumanoidArm arm, PoseStack poseStack, AnimatedGeoModel model, ItemStack item, HandLocatorProfile profile) {
@@ -91,7 +92,7 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
         List<List<com.micaftic.morpher.geckolib3.core.processor.IBone>> chains = arm == HumanoidArm.LEFT ? model.leftHandChains() : model.rightHandChains();
         return chains.stream().anyMatch(chain -> chain != null && !chain.isEmpty());
     }
-    private void applyFallbackHandTransform(PoseStack poseStack) { poseStack.translate(0.0d, -0.0625d, -0.1d); poseStack.mulPose(Axis.XP.rotationDegrees(-90.0f)); }
+    private void applyFallbackHandTransform(PoseStack poseStack) { poseStack.translate(0.0d, -0.0625d, -0.1d); poseStack.rotate(Axis.XP.rotationDegrees(-90.0f)); }
 
     @Override
     public void renderGltfThirdPersonItem(LivingEntity livingEntity, ItemStack itemStack, HumanoidArm humanoidArm, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, float partialTick) {

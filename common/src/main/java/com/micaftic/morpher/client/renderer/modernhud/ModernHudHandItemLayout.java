@@ -32,8 +32,8 @@ public final class ModernHudHandItemLayout {
         PoseStack poseStack = new PoseStack();
         poseStack.translate(originX, originY, 0.0f);
         poseStack.scale(-scale, scale, -scale);
-        poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f + 0.1f));
-        poseStack.mulPose(Axis.YP.rotationDegrees(180.0f + yawOffset));
+        poseStack.rotate(Axis.ZP.rotationDegrees(180.0f + 0.1f));
+        poseStack.rotate(Axis.YP.rotationDegrees(180.0f + yawOffset));
 
         if (locator != null && !locator.isEmpty()) {
             boolean hidden = profile != null && profile.usesEquipmentLocatorTransform()
@@ -50,4 +50,3 @@ public final class ModernHudHandItemLayout {
         return new Vector3f(originX + side * scale * 0.35f, originY + scale * 0.95f, 0.0f);
     }
 }
-

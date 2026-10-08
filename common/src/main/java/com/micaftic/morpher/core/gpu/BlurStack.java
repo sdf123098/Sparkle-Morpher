@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.mojang.blaze3d.opengl.GlStateManager;
+import com.mojang.renderpearl.backend.opengl.GlStateManager;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;

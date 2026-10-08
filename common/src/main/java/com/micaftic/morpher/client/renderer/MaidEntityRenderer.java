@@ -18,7 +18,7 @@ import org.jetbrains.annotations.NotNull;
 public final class MaidEntityRenderer extends GeoReplacedEntityRenderer<LivingEntity, MaidCapability> {
     public MaidEntityRenderer(EntityRendererProvider.Context context) {
         super(context);
-        addLayerRenderer(new MaidItemInHandLayer(context.getEntityRenderDispatcher().getItemInHandRenderer()));
+        addLayerRenderer(new MaidItemInHandLayer(context.getItemModelResolver()));
     }
 
     @Override

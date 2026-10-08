@@ -501,7 +501,7 @@ public class ImportedVanillaPoseController implements IAnimationController<Custo
 
     private static float getSwingProgress(Player player, InteractionHand hand, float partialTick) {
         if (InputStateKey.isLocalPlayerEntity(player) && hand == InteractionHand.MAIN_HAND) {
-            return player.getAttackAnim(partialTick);
+            return InputStateKey.getAttackProgress(player, partialTick);
         }
         float attack = InputStateKey.getAttackProgress(player, partialTick);
         if (attack > 0.0f && (InputStateKey.getSwingingHand(player) == hand

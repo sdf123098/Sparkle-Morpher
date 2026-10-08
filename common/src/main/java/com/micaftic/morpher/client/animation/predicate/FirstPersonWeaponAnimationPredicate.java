@@ -43,7 +43,7 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
         }
         if (!player.isSleeping() && InputStateKey.isAnyHandSwinging(player)) {
             InteractionHand swingingHand = InputStateKey.getSwingingHand(player);
-            boolean swingStart = player.swingTime == 0
+            boolean swingStart = InputStateKey.getSwingTicks(player, event.getPartialTick()) < 1.0f
                     && animatable.getPositionTracker().markProcessed(SWING_START_MARKER);
             if (swingStart) {
                 event.getController().stopTransition();

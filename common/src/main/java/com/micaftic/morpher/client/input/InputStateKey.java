@@ -15,6 +15,7 @@ import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import com.micaftic.morpher.core.api.PlatformAPI;
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
 
 public class InputStateKey {
 
@@ -60,8 +61,8 @@ public class InputStateKey {
         if (PlatformAPI.isServer()) {
             return;
         }
-        ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
-            onKeyInput(keyCode, action);
+        ClientRawInputEvent.KEY_PRESSED.register((client, keyboardCode, keycode, action, modifiers) -> {
+            onKeyInput(keyboardCode, action);
             return EventResult.pass();
         });
         ClientRawInputEvent.MOUSE_CLICKED_PRE.register((client, button, action, mods) -> {
@@ -70,25 +71,27 @@ public class InputStateKey {
         });
     }
 
-    private static void onKeyInput(int keyCode, int action) {
-        if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && 32 <= keyCode && keyCode <= 348) {
+    private static void onKeyInput(int sdlScancode, int action) {
+        int legacyKeyCode = InputCodeAdapter.legacyKeyCodeFromSdlScancode(sdlScancode);
+        if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && legacyKeyCode >= 0 && legacyKeyCode < keyStates.length) {
             if (action == 1) {
-                keyStates[keyCode] = true;
+                keyStates[legacyKeyCode] = true;
             } else if (action == 0) {
-                keyStates[keyCode] = false;
+                keyStates[legacyKeyCode] = false;
             }
         }
     }
 
     private static void onMouseInput(int button, int action) {
-        if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && 0 <= button && button <= 7) {
+        int legacyButton = InputCodeAdapter.legacyMouseButtonFromSdlButton(button);
+        if (YesSteveModel.isAvailable() && InputUtil.isPlayerReady() && legacyButton >= 0 && legacyButton < mouseStates.length) {
             if (action == 1) {
-                mouseStates[button] = true;
+                mouseStates[legacyButton] = true;
             } else if (action == 0) {
-                mouseStates[button] = false;
+                mouseStates[legacyButton] = false;
             }
-            logInputSnapshot("mouse button=" + button + " action=" + action);
-            triggerHandAnimation(button, action);
+            logInputSnapshot("mouse button=" + legacyButton + " action=" + action);
+            triggerHandAnimation(legacyButton, action);
         }
     }
 
@@ -167,8 +170,8 @@ public class InputStateKey {
         if (isUsingLocalOffhandShield(entity)) {
             return 0.0f;
         }
-        if (entity.swinging) {
-            return Math.max(0.0f, entity.swingTime + partialTick);
+        if (entity.isSwinging() && entity.getCurrentSwing() != null) {
+            return Math.max(0.0f, entity.getSwingAnimation(partialTick) * entity.getCurrentSwing().durationTicks());
         }
         if (isLocalPlayer(entity) && swingPulseTicks > 0) {
             return Math.max(1.0f, swingPulseAge + partialTick);
@@ -187,7 +190,7 @@ public class InputStateKey {
         if (isUsingLocalOffhandShield(entity)) {
             return 0.0f;
         }
-        float attackAnim = entity.getAttackAnim(partialTick);
+        float attackAnim = entity.getSwingAnimation(partialTick);
         if (attackAnim > 0.0f) {
             return attackAnim;
         }
@@ -215,18 +218,15 @@ public class InputStateKey {
         if (hand == InteractionHand.MAIN_HAND && isUsingLocalOffhandShield(entity)) {
             return false;
         }
-        if (entity.swinging && entity.swingingArm == hand) {
-            return true;
-        }
-        if (!isLocalPlayer(entity) && hand == InteractionHand.MAIN_HAND && entity.getAttackAnim(0.0f) > 0.0f) {
+        if (entity.isSwinging() && entity.getCurrentSwing() != null && entity.getCurrentSwing().hand() == hand) {
             return true;
         }
         return isLocalPlayer(entity) && swingPulseTicks > 0 && swingPulseHand == hand;
     }
 
     public static InteractionHand getSwingingHand(LivingEntity entity) {
-        if (entity.swinging) {
-            return entity.swingingArm;
+        if (entity != null && entity.getCurrentSwing() != null) {
+            return entity.getCurrentSwing().hand();
         }
         return swingPulseHand;
     }
@@ -267,7 +267,7 @@ public class InputStateKey {
         LocalPlayer player = Minecraft.getInstance().player;
         return (player != null && hasValidUsePulse(player, usePulseHand))
                 || swingPulseTicks > 0
-                || (player != null && (player.isUsingItem() || player.swinging));
+                || (player != null && (player.isUsingItem() || player.isSwinging()));
     }
 
     private static void triggerHandAnimation(int button, int action) {
@@ -375,9 +375,9 @@ public class InputStateKey {
                 mouseStates[1],
                 minecraft.options.keyAttack.isDown(),
                 minecraft.options.keyUse.isDown(),
-                player.swinging,
-                player.swingingArm,
-                player.getAttackAnim(0.0f),
+                player.isSwinging(),
+                player.getCurrentSwing() == null ? null : player.getCurrentSwing().hand(),
+                player.getSwingAnimation(0.0f),
                 player.isUsingItem(),
                 player.isUsingItem() ? player.getUsedItemHand() : "none",
                 usePulseTicks,

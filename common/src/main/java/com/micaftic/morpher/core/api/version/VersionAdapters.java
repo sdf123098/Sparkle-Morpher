@@ -3,7 +3,7 @@ package com.micaftic.morpher.core.api.version;
 /** Version adapter selected by this source branch. */
 public final class VersionAdapters {
     private static final MinecraftVersionAdapter CURRENT = new MinecraftVersionAdapter() {
-        public String minecraftVersion() { return "26.2"; }
+        public String minecraftVersion() { return "26.3"; }
         public boolean supportsSubmitNodeCollector() { return true; }
         public boolean supportsBlaze3dGpuPipeline() { return true; }
         public boolean supportsGuiGraphicsExtractor() { return true; }

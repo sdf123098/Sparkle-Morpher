@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.ProjectileCapability;
+import com.micaftic.morpher.client.input.InputStateKey;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
@@ -40,7 +41,7 @@ public class CustomFishingHookRenderer {
         if (!ToolActionBridge.canFishingRodCast(player.getMainHandItem())) {
             hand = -hand;
         }
-        float swingProgressSqrt = Mth.sin(Mth.sqrt(player.getAttackAnim(partialTick)) * 3.1415927f);
+        float swingProgressSqrt = Mth.sin(Mth.sqrt(InputStateKey.getAttackProgress(player, partialTick)) * 3.1415927f);
         float yawOffset = Mth.lerp(partialTick, player.yBodyRotO, player.yBodyRot) * 0.017453292f;
         double dSin = Mth.sin(yawOffset);
         double dCos = Mth.cos(yawOffset);

@@ -1,6 +1,6 @@
 plugins {
     id "java"
-    id "net.neoforged.moddev" version "2.0.141"
+    id "net.neoforged.moddev" version "2.0.148"
 }
 
 apply from: rootProject.file('gradle/verify-native-abi.gradle')
@@ -12,14 +12,18 @@ apply from: rootProject.file('gradle/distribution.gradle')
 def isCurseForgeDist = rootProject.ext.isCurseForgeDist
 
 base {
-    archivesName = "sparkle-morpher-${project.version}-neo26.2"
+    archivesName = "sparkle-morpher-${project.version}-neo26.3"
 }
 
 tasks.named("jar") {
-    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo26.2")
+    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo26.3")
 }
 
 repositories {
+    maven {
+        name = "NeoForge Releases"
+        url = "https://maven.neoforged.net/releases"
+    }
     maven { url = "https://jitpack.io" }
     mavenCentral()
 
@@ -44,7 +48,7 @@ repositories {
     }
 }
 
-["BMCLAPI Minecraft Libraries", "Aliyun Central", "Aliyun Public", "Project Local Maven"].each { repoName ->
+ ["BMCLAPI Minecraft Libraries", "Aliyun Central", "Aliyun Public", "Project Local Maven", "NeoForge Releases"].each { repoName ->
     def repo = repositories.findByName(repoName)
     if (repo != null) {
         repositories.remove(repo)

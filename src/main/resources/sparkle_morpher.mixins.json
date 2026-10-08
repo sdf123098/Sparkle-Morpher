@@ -8,9 +8,10 @@
     "defaultRequire": 1
   },
   "client": [
-    "client.GpuDeviceAccessor",
     "client.LevelRendererAccessor",
     "client.ArrowEntityAccessor",
+    "client.ProjectileFiringInputMixin",
+    "client.ProjectileSpawnObservationMixin",
     "client.CameraAccessor",
     "client.MinecraftAccessor",
     "client.ClientPacketListenerMixin",
@@ -24,12 +25,12 @@
     "client.ScreenAccessor",
     "client.ThrowableItemProjectileAccessor",
     "client.WingsLayerMixin",
-    "client.WorldRendererMixin"
+    "client.WorldRendererMixin",
+    "client.OptionsKeyMappingMixin",
+    "client.GpuDeviceAccessor"
   ],
   "mixins": [
     "AbstractArrowEntityMixin",
-    "ProjectileEntityMixin",
-    "compat.TouhouMaidEntityMixin",
     "compat.TouhouLittleMaidYsmCompatMixin"
   ]
 }

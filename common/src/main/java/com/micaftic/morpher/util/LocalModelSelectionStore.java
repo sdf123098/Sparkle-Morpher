@@ -2,13 +2,11 @@ package com.micaftic.morpher.util;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
 import com.micaftic.morpher.core.architectury.platform.Platform;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -22,9 +20,6 @@ import java.nio.file.Path;
  */
 public final class LocalModelSelectionStore {
 
-    private static final Path FILE = Platform.getConfigFolder()
-            .resolve(YesSteveModel.MOD_ID)
-            .resolve("local_model_selection.json");
     private static final String MODEL_ID = "model_id";
     private static final String TEXTURE_ID = "texture_id";
 
@@ -36,28 +31,24 @@ public final class LocalModelSelectionStore {
      */
     public static void save(@Nullable String modelId, @Nullable String textureId) {
         try {
-            if (modelId == null || modelId.equals("default") || modelId.isBlank()) {
-                // 玩家选择了 default 或清空了选择，删除文件
-                if (Files.exists(FILE)) {
-                    Files.deleteIfExists(FILE);
-                }
-                return;
-            }
-            JsonObject json = new JsonObject();
-            json.addProperty(MODEL_ID, modelId);
-            json.addProperty(TEXTURE_ID, textureId != null ? textureId : "default");
-            Path parent = FILE.getParent();
-            if (!Files.exists(parent)) {
-                Files.createDirectories(parent);
-            }
-            // 先写入临时文件再原子替换，避免写入中断导致文件损坏
-            Path temp = parent.resolve("local_model_selection.json.tmp");
-            Files.writeString(temp, json.toString(), StandardCharsets.UTF_8);
-            Files.move(temp, FILE, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            save(file(), modelId, textureId);
         } catch (IOException e) {
-            YesSteveModel.LOGGER.warn("[SM] Failed to save local model selection: {}", e.getMessage());
+            YesSteveModel.LOGGER.warn("[SM] Failed to save local model selection; existing data was preserved: {}", e.getMessage());
         }
+    }
+
+    public static void save(Path file, @Nullable String modelId, @Nullable String textureId) throws IOException {
+        if (modelId == null || modelId.equals("default") || modelId.isBlank()) {
+            Files.deleteIfExists(file); // An explicit default/clear selection removes the persisted choice.
+            return;
+        }
+        if (!validId(modelId, 512)) throw new IOException("Invalid local model selection ID");
+        String savedTexture = textureId == null || textureId.isBlank() ? "default" : textureId;
+        if (!validId(savedTexture, 256)) throw new IOException("Invalid local model selection texture ID");
+        JsonObject json = new JsonObject();
+        json.addProperty(MODEL_ID, modelId);
+        json.addProperty(TEXTURE_ID, savedTexture);
+        com.micaftic.morpher.core.storage.LocalJsonDocumentStore.saveObject(file, json);
     }
 
     /**
@@ -66,22 +57,26 @@ public final class LocalModelSelectionStore {
      */
     @Nullable
     public static Pair<String, String> load() {
-        if (!Files.exists(FILE)) {
-            return null;
-        }
         try {
-            String content = Files.readString(FILE, StandardCharsets.UTF_8);
-            JsonObject json = JsonParser.parseString(content).getAsJsonObject();
-            String modelId = json.has(MODEL_ID) ? json.get(MODEL_ID).getAsString() : null;
-            String textureId = json.has(TEXTURE_ID) ? json.get(TEXTURE_ID).getAsString() : "default";
-            if (modelId == null || modelId.isBlank() || modelId.equals("default")) {
-                return null;
-            }
-            return Pair.of(modelId, textureId);
-        } catch (Exception e) {
-            YesSteveModel.LOGGER.warn("[SM] Failed to load local model selection: {}", e.getMessage());
+            return load(file());
+        } catch (IOException e) {
+            YesSteveModel.LOGGER.warn("[SM] Failed to load local model selection; original file retained: {}", e.getMessage());
             return null;
         }
+    }
+
+    public static Pair<String, String> load(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            return null;
+        }
+        JsonObject json = com.micaftic.morpher.core.storage.LocalJsonDocumentStore.readObject(file);
+        String modelId = json.has(MODEL_ID) && json.get(MODEL_ID).isJsonPrimitive() && json.get(MODEL_ID).getAsJsonPrimitive().isString()
+                ? json.get(MODEL_ID).getAsString() : null;
+        String textureId = json.has(TEXTURE_ID) && json.get(TEXTURE_ID).isJsonPrimitive() && json.get(TEXTURE_ID).getAsJsonPrimitive().isString()
+                ? json.get(TEXTURE_ID).getAsString() : "default";
+        if (!validId(modelId, 512) || modelId.equals("default") || !validId(textureId, 256))
+            throw new IOException("Invalid local model selection; original file retained");
+        return Pair.of(modelId, textureId);
     }
 
     /**
@@ -89,9 +84,18 @@ public final class LocalModelSelectionStore {
      */
     public static void clear() {
         try {
-            Files.deleteIfExists(FILE);
+            Files.deleteIfExists(file());
         } catch (IOException e) {
             YesSteveModel.LOGGER.warn("[SM] Failed to clear local model selection: {}", e.getMessage());
         }
+    }
+
+    private static boolean validId(@Nullable String value, int maxLength) {
+        return value != null && !value.isBlank() && value.length() <= maxLength
+                && value.chars().noneMatch(Character::isISOControl);
+    }
+
+    private static Path file() {
+        return Platform.getConfigFolder().resolve(YesSteveModel.MOD_ID).resolve("local_model_selection.json");
     }
 }
