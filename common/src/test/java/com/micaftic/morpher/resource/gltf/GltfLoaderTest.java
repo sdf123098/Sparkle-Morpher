@@ -82,6 +82,25 @@ class GltfLoaderTest {
     }
 
     @Test
+    void rejectsExternalResourcesThatEscapeTheModelDirectory() {
+        String json = """
+                {"asset":{"version":"2.0"},"images":[{"uri":"../outside.png"}]}
+                """;
+        assertThrows(GltfLoader.GltfParseException.class,
+                () -> GltfLoader.load(json.getBytes(StandardCharsets.UTF_8), tempDir, "escape.gltf"));
+    }
+
+    @Test
+    void bytesImportCannotResolveSiblingFilesWithoutAnAuthorizedRoot() throws Exception {
+        Files.write(tempDir.resolve("texture.bin"), new byte[]{4, 5, 6});
+        String json = """
+                {"asset":{"version":"2.0"},"images":[{"uri":"texture.bin"}]}
+                """;
+        assertThrows(GltfLoader.GltfParseException.class,
+                () -> GltfLoader.load(json.getBytes(StandardCharsets.UTF_8), null, "picked.gltf"));
+    }
+
+    @Test
     void loadsSkinInverseBindMatricesAndStepAnimation() throws Exception {
         byte[] bin = skinAnimationBuffer();
         String uri = "data:application/octet-stream;base64," + Base64.getEncoder().encodeToString(bin);
