@@ -1,6 +1,8 @@
 package com.micaftic.morpher.resource.gltf;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -41,6 +43,21 @@ public final class ResourceDependencyManifest {
 
     public List<Entry> entries() {
         return entries;
+    }
+
+    /** Content identity for the exact source bytes and external bytes parsed in the same load. */
+    public long contentFingerprint(byte[] sourceBytes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(sourceBytes);
+            for (Entry entry : entries) {
+                digest.update(entry.relativePath().getBytes(StandardCharsets.UTF_8));
+                digest.update(entry.sha256().getBytes(StandardCharsets.US_ASCII));
+            }
+            return ByteBuffer.wrap(digest.digest()).getLong();
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
     }
 
     static Builder builder(Path root) {

@@ -1038,10 +1038,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                                            @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
         if (scanRevision >= 0L && !LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return;
         if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
-        GltfModel gltfModel = GltfLoader.load(source);
-        ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
+        com.micaftic.morpher.resource.gltf.GltfLoadResult parsed = GltfLoader.loadWithManifest(source);
+        ModelAssembly runtimeModel = buildGltfAssembly(parsed.model(), modelId);
         if (scanRevision >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)
-                || sourceEntry == null || LocalModelCatalog.fingerprint(source) != sourceEntry.fingerprint)) {
+                || sourceEntry == null || parsed.sourceFingerprint() != sourceEntry.fingerprint)) {
             releaseModelAssembly(modelId, runtimeModel);
             return;
         }
