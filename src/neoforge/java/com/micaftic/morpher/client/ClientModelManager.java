@@ -177,6 +177,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static final GpuCacheTrimCoordinator<ModelAssembly> gpuCacheTrimCoordinator = new GpuCacheTrimCoordinator<>();
     static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
     private static final KeyedRequestLeaseRegistry<String> cpuReloadRequests = new KeyedRequestLeaseRegistry<>();
+    private static final KeyedRequestLeaseRegistry<String> localImportRequests = new KeyedRequestLeaseRegistry<>();
     private static final ConcurrentHashMap<String, LocalModelCatalog.Entry> lazyModelSources = new ConcurrentHashMap<>();
     private static final Set<ModelAssembly> deferredAssemblyReleases = ConcurrentHashMap.newKeySet();
     private static volatile Boolean lastLazyModelLoading;
@@ -687,11 +688,21 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     public static void importLocalModel(String modelId, String fileName, byte[] data, @Nullable Consumer<Component> callback) {
-        LOCAL_MODEL_SCAN_REVISION.invalidate();
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
-        if (modelKey != null) cpuReloadRequests.invalidate(modelKey);
+        final KeyedRequestLeaseRegistry.Lease<String> importLease;
+        final int importGeneration;
+        synchronized (MODEL_RUNTIME_STOP_LOCK) {
+            LOCAL_MODEL_SCAN_REVISION.invalidate();
+            if (modelKey == null) {
+                importLease = null;
+            } else {
+                cpuReloadRequests.invalidate(modelKey);
+                localImportRequests.invalidate(modelKey);
+                importLease = localImportRequests.begin(modelKey);
+            }
+            importGeneration = MODEL_TASK_GENERATION.get();
+        }
         byte[] importData = data;
-        int importGeneration = MODEL_TASK_GENERATION.get();
         submitModelTask(() -> {
             Component error = null;
             ModelAssembly preparedAssembly = null;
@@ -717,8 +728,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                         }
                         ModelAssembly candidate = preparedAssembly;
                         ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> outcome = ImportCommitFlow.commitThenPublish(
+                                () -> importLease == null || localImportRequests.isCurrent(importLease),
                                 prepared::commit,
                                 committed -> publishImportedAssembly(modelKey, candidate, committed.persistedPath()));
+                        if (outcome.state() == ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT) return;
                         if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
                             throw outcome.failure();
                         }
@@ -746,6 +759,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelKey, e);
                 error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             } finally {
+                if (importLease != null) localImportRequests.complete(importLease);
                 if (preparedAssembly != null) releaseModelAssembly(modelKey, preparedAssembly);
             }
             if (callback != null) {
@@ -758,6 +772,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     }
                 });
             }
+        }, () -> {
+            if (importLease != null) localImportRequests.complete(importLease);
         });
     }
 
@@ -1531,6 +1547,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
             MODEL_TASK_GENERATION.incrementAndGet();
             LOCAL_MODEL_SCAN_REVISION.invalidate();
             cpuReloadRequests.clearAll();
+            localImportRequests.clearAll();
             gpuCacheTrimCoordinator.clearAll();
 
             Set<ModelAssembly> assemblies = Collections.newSetFromMap(new IdentityHashMap<>());
