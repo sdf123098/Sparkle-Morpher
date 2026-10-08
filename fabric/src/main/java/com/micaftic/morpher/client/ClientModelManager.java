@@ -1050,7 +1050,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 String json = new String(sniff.bbmodelBytes, java.nio.charset.StandardCharsets.UTF_8);
                 com.micaftic.morpher.resource.bbmodel.BBModelFile bbmodel =
                         com.micaftic.morpher.resource.bbmodel.BBModelParser.parse(json);
-                RawYsmModel rawModel = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.convert(bbmodel, sniff.sideTextures);
+                RawYsmModel rawModel = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.convertStructure(bbmodel, sniff.sideTextures);
+                com.micaftic.morpher.resource.bbmodel.BBToRawConverter.applyPlayerImportPolicy(rawModel);
                 rawModel.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(data);
                 return rawModel;
             }
@@ -1226,7 +1227,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         try {
             String json = new String(data, java.nio.charset.StandardCharsets.UTF_8);
             com.micaftic.morpher.resource.bbmodel.BBModelFile bbmodel = com.micaftic.morpher.resource.bbmodel.BBModelParser.parse(json);
-            RawYsmModel rawModel = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.convert(bbmodel);
+            RawYsmModel rawModel = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.convertStructure(bbmodel);
+            com.micaftic.morpher.resource.bbmodel.BBToRawConverter.applyPlayerImportPolicy(rawModel);
             rawModel.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(data);
             return rawModel;
         } catch (Exception e) {
