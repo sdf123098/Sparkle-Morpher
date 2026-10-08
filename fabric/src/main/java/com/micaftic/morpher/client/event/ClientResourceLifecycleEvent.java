@@ -31,12 +31,16 @@ public final class ClientResourceLifecycleEvent {
     public static void register() {
         ClientPlayerEvent.CLIENT_DISCONNECT.register(client -> cleanup("client disconnect"));
         ClientLifecycleEvent.CLIENT_STOPPING.register(client -> {
-            EntityRenderCache.clear();
-            ClientModelManager.onClientStopping();
-            cleanup("client stopping");
-            CloudUploadRuntime.clear();
+            onClientStopping();
         });
         ClientLevelEvents.AFTER_CLIENT_LEVEL_CHANGE.register((client, level) -> cleanupAfterWorldChange("client level changed"));
+    }
+
+    public static void onClientStopping() {
+        EntityRenderCache.clear();
+        ClientModelManager.onClientStopping();
+        cleanup("client stopping");
+        CloudUploadRuntime.clear();
     }
 
     private static void cleanup(String reason) {
