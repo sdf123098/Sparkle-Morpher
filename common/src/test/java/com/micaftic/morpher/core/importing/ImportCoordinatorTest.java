@@ -163,6 +163,46 @@ class ImportCoordinatorTest {
     }
 
     @Test
+    void legacyAndGltfCandidatesSharePreparedCommitAndPublicationFlow() throws Exception {
+        Path customRoot = tempDir.resolve("shared-flow");
+        LocalModelImportStore store = new LocalModelImportStore(customRoot);
+        Path oldSource = store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
+        List<String> events = new ArrayList<>();
+
+        byte[] legacyBytes = {1};
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.bbmodel", legacyBytes)) {
+            ParsedImport parsed = ImportCoordinator.parsePickedBytes("avatar.bbmodel", legacyBytes, RawYsmModel::new);
+            String candidate = ImportCoordinator.buildCandidate(parsed,
+                    raw -> { events.add("legacy-build"); return "legacy-candidate"; },
+                    result -> { events.add("unexpected-gltf-build"); return "unexpected"; });
+            var outcome = ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                    () -> { events.add("legacy-commit"); return prepared.commit(); },
+                    (built, committed) -> events.add("legacy-publish:" + committed.persistedPath().getFileName()),
+                    ignored -> events.add("legacy-release"));
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.PUBLISHED, outcome.state());
+        }
+
+        byte[] gltfBytes = "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8);
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", gltfBytes)) {
+            ParsedImport parsed = ImportCoordinator.parsePickedBytes("avatar.gltf", gltfBytes, RawYsmModel::new);
+            String candidate = ImportCoordinator.buildCandidate(parsed,
+                    raw -> { events.add("unexpected-legacy-build"); return "unexpected"; },
+                    result -> { events.add("gltf-build"); return "gltf-candidate"; });
+            var outcome = ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                    () -> { events.add("gltf-commit"); return prepared.commit(); },
+                    (built, committed) -> events.add("gltf-publish:" + committed.persistedPath().getFileName()),
+                    ignored -> events.add("gltf-release"));
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.PUBLISHED, outcome.state());
+        }
+
+        assertEquals(List.of("legacy-build", "legacy-commit", "legacy-publish:avatar.bbmodel",
+                "gltf-build", "gltf-commit", "gltf-publish:avatar.gltf"), events);
+        assertFalse(Files.exists(oldSource));
+        assertFalse(Files.exists(customRoot.resolve("avatar.bbmodel")));
+        assertTrue(Files.exists(customRoot.resolve("avatar.gltf")));
+    }
+
+    @Test
     void pickedGltfWithMissingExternalDependencyCannotReplaceExistingImport() throws Exception {
         Path customRoot = tempDir.resolve("custom");
         LocalModelImportStore store = new LocalModelImportStore(customRoot);
@@ -174,6 +214,12 @@ class ImportCoordinatorTest {
         try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", invalidGltf)) {
             assertThrows(Exception.class, () -> ImportCoordinator.parsePickedBytes("avatar.gltf", invalidGltf,
                     () -> { throw new AssertionError("glTF must not reach the legacy parser"); }));
+            assertEquals("old-source", Files.readString(existing));
+            assertFalse(Files.exists(customRoot.resolve("avatar.gltf")));
+        }
+
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", invalidGltf)) {
+            assertThrows(java.io.IOException.class, () -> ImportCoordinator.parseLocalGltf(prepared.path()));
             assertEquals("old-source", Files.readString(existing));
             assertFalse(Files.exists(customRoot.resolve("avatar.gltf")));
         }
