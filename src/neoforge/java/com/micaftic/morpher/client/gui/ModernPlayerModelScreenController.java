@@ -4,7 +4,9 @@ import com.micaftic.morpher.cloud.client.CloudAssetPage;
 import com.micaftic.morpher.cloud.client.CloudAssetSummary;
 import com.micaftic.morpher.cloud.client.CloudAssetImportName;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
+import com.micaftic.morpher.core.model.lifecycle.ScreenGenerationGate;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
+import com.micaftic.morpher.core.model.lifecycle.ScreenGenerationGate;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudModelSelectionStore;
 import com.micaftic.morpher.capability.PlayerCapability;
@@ -110,7 +112,7 @@ public final class ModernPlayerModelScreenController {
     private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
     private final Queue<FilePickerCoordinator.PickedFile> pendingImports = new ArrayDeque<>();
     private boolean localImportInProgress;
-    private int screenGeneration;
+    private final ScreenGenerationGate screenGeneration = new ScreenGenerationGate();
 
     public ModernPlayerModelScreenController(ModelPanelState state, Host host) {
         this.state = state;
@@ -202,7 +204,7 @@ public final class ModernPlayerModelScreenController {
      */
     public void refreshResources(boolean manual) {
         int requestId = ++this.state.resourceRequestId;
-        int generation = this.screenGeneration;
+        long generation = this.screenGeneration.capture();
         ResourceStationConfig.State config = this.resourceConfig;
         this.state.resourceLoading = true;
         this.state.resourceLoaded = false;
@@ -220,7 +222,7 @@ public final class ModernPlayerModelScreenController {
             }
         }, RESOURCE_EXECUTOR).orTimeout(Math.max(15_000L, config.timeoutMs() * 3L), TimeUnit.MILLISECONDS).whenComplete((result, error) ->
                 ((Executor) Minecraft.getInstance()).execute(() -> {
-                    if (generation != this.screenGeneration || requestId != this.state.resourceRequestId) {
+                    if (!this.screenGeneration.isCurrent(generation) || requestId != this.state.resourceRequestId) {
                         return;
                     }
                     this.state.resourceLoading = false;
@@ -373,11 +375,11 @@ public final class ModernPlayerModelScreenController {
 
     /** 标记当前代际失效（原 {@code removed()} 中的 {@code screenGeneration++}）。 */
     public void invalidateGeneration() {
-        this.screenGeneration++;
+        this.screenGeneration.invalidate();
     }
 
     public int generation() {
-        return this.screenGeneration;
+        return (int) this.screenGeneration.capture();
     }
 
     /** 取消系统文件选择框（原 {@code removed()} 中的 cancelPicking）。 */
@@ -432,14 +434,17 @@ public final class ModernPlayerModelScreenController {
             return;
         }
         this.localImportInProgress = true;
+        long generation = this.screenGeneration.capture();
         this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_importing", modelId), ChatFormatting.YELLOW);
         ClientModelManager.importLocalModel(modelId, fileName, file.data(), error -> {
             this.localImportInProgress = false;
-            if (error != null) {
-                this.host.postStatus(error, ChatFormatting.RED);
-                return;
-            }
-            this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
+            this.screenGeneration.completeIfCurrent(generation, () -> {
+                if (error != null) {
+                    this.host.postStatus(error, ChatFormatting.RED);
+                    return;
+                }
+                this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
+            });
         });
     }
 
@@ -506,7 +511,9 @@ public final class ModernPlayerModelScreenController {
     }
 
     public void reloadLocalModels(Consumer<Component> callback) {
-        ClientModelManager.reloadLocalModels(callback);
+        long generation = this.screenGeneration.capture();
+        ClientModelManager.reloadLocalModels(error ->
+                this.screenGeneration.completeIfCurrent(generation, () -> callback.accept(error)));
     }
 
     /** 打开本地模型目录，并按原行为回写 GRAY/RED 状态栏文案。 */
@@ -628,7 +635,7 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
         return cloudIdentity(runtime, summary).runtimeModelId();
     }
     public void importCloudAsset(CloudAssetSummary summary, Consumer<Component> callback) {
-        int generation = this.screenGeneration;
+        long generation = this.screenGeneration.capture();
         String instanceId = cloudInstanceId();
         CloudClientRuntime.RuntimeState expectedRuntime = CloudClientRuntime.state(instanceId);
         if (expectedRuntime == null) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
@@ -643,11 +650,11 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
         materialized.thenApplyAsync(path -> {
             try { return Files.readAllBytes(path); } catch (IOException e) { throw new java.util.concurrent.CompletionException(e); }
         }).whenComplete((bytes, failure) -> Minecraft.getInstance().execute(() -> {
-            if (generation != this.screenGeneration) return;
+            if (!this.screenGeneration.isCurrent(generation)) return;
             if (CloudClientRuntime.state(instanceId) != expectedRuntime) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
             if (failure != null) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.search_failed", rootMessage(failure))); return; }
             ClientModelManager.importLocalModel(modelId, CloudAssetImportName.fileName(summary), bytes, error -> {
-                if (generation != this.screenGeneration) return;
+                if (!this.screenGeneration.isCurrent(generation)) return;
                 if (CloudClientRuntime.state(instanceId) != expectedRuntime) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
                 callback.accept(error);
             });
@@ -824,7 +831,9 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
         if (message.equals(cloudStoreFailure)) return;
         cloudStoreFailure = message;
         com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM] Cloud favorites could not be saved or loaded", error);
-        Minecraft.getInstance().execute(() -> this.host.postStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud.favorite_failed", message), ChatFormatting.RED));
+        long generation = this.screenGeneration.capture();
+        Minecraft.getInstance().execute(() -> this.screenGeneration.completeIfCurrent(generation,
+                () -> this.host.postStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud.favorite_failed", message), ChatFormatting.RED)));
     }
     private void refreshCloudSelectionMetadata(String instanceId, List<CloudAssetSummary> entries) {
         try { CloudModelSelectionStore.refreshSummaries(instanceId, entries); }
