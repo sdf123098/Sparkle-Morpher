@@ -41,8 +41,7 @@ def nativeSha256 = { File nativeFile ->
     digest.digest().collect { String.format('%02X', it & 0xff) }.join()
 }
 
-// The native binaries are the source of truth. Refresh the checked-in manifest
-// before resources are copied, so a SIMD rebuild cannot leave stale digests.
+// Explicit maintainer action to refresh checked-in digests; verification stays read-only.
 tasks.register('updateNativeManifest') {
     group = 'build setup'
     description = 'Refreshes native-manifest.json and NATIVE_SOURCES.md from the native binaries.'
@@ -116,6 +115,7 @@ tasks.register('verifyNativeAbi') {
 
     onlyIf { isNativeAbiVerificationEnabled() }
     inputs.files(nativeAbiDirs)
+    inputs.files(nativeAbiDirs.collect { new File(it.parentFile, 'native-manifest.json') })
 
     doLast {
         if (nativeAbiDirs.isEmpty()) {
@@ -179,8 +179,4 @@ tasks.register('verifyNativeAbi') {
 
 tasks.named('processResources') {
     dependsOn tasks.named('verifyNativeAbi')
-}
-
-tasks.named('verifyNativeAbi') {
-    dependsOn tasks.named('updateNativeManifest')
 }
