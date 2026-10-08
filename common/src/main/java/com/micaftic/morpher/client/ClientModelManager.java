@@ -762,7 +762,12 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                         if (importGeneration != MODEL_TASK_GENERATION.get()) {
                             throw new CancellationException("Client model runtime is stopping");
                         }
-                        Path persisted = prepared.commit();
+                LocalModelImportStore.CommitResult commit = prepared.commit();
+                Path persisted = commit.persistedPath();
+                if (!commit.cleanupPending().isEmpty()) {
+                    YesSteveModel.LOGGER.warn("[SM] Import committed with {} stale sibling file(s) awaiting cleanup: {}",
+                            commit.cleanupPending().size(), commit.cleanupPending());
+                }
                         publishImportedAssembly(modelKey, preparedAssembly, persisted);
                         preparedAssembly = null;
                     }
