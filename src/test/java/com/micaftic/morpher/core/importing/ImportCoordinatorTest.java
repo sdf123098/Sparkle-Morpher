@@ -87,6 +87,44 @@ class ImportCoordinatorTest {
     }
 
     @Test
+    void pickedAndLocalGltfUseTheSameBackendAdapterAndIdentity() throws Exception {
+        byte[] bytes = "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8);
+        Path source = Files.write(tempDir.resolve("same.gltf"), bytes);
+        ParsedImport picked = ImportCoordinator.parsePickedBytes("same.gltf", bytes, RawYsmModel::new);
+        ParsedImport local = ImportCoordinator.parseLocalGltf(source);
+        List<String> adapters = new ArrayList<>();
+
+        String pickedCandidate = ImportCoordinator.buildCandidate(picked,
+                raw -> { adapters.add("legacy"); return "legacy"; },
+                result -> { adapters.add("gltf"); return Long.toUnsignedString(result.sourceFingerprint()); });
+        String localCandidate = ImportCoordinator.buildCandidate(local,
+                raw -> { adapters.add("legacy"); return "legacy"; },
+                result -> { adapters.add("gltf"); return Long.toUnsignedString(result.sourceFingerprint()); });
+
+        assertEquals(List.of("gltf", "gltf"), adapters);
+        assertEquals(pickedCandidate, localCandidate);
+    }
+
+    @Test
+    void legacyAndGltfPayloadsReachOnlyTheirOwnBackendAdapter() throws Exception {
+        ParsedImport legacy = ImportCoordinator.parsePickedBytes("same.bbmodel", new byte[]{1}, RawYsmModel::new);
+        ParsedImport gltf = ImportCoordinator.parsePickedBytes("same.gltf",
+                "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8), RawYsmModel::new);
+        List<String> adapters = new ArrayList<>();
+
+        String legacyCandidate = ImportCoordinator.buildCandidate(legacy,
+                raw -> { adapters.add("legacy"); return "legacy-candidate"; },
+                result -> { adapters.add("gltf"); return "unexpected-gltf-candidate"; });
+        String gltfCandidate = ImportCoordinator.buildCandidate(gltf,
+                raw -> { adapters.add("legacy"); return "unexpected-legacy-candidate"; },
+                result -> { adapters.add("gltf"); return "gltf-candidate"; });
+
+        assertEquals("legacy-candidate", legacyCandidate);
+        assertEquals("gltf-candidate", gltfCandidate);
+        assertEquals(List.of("legacy", "gltf"), adapters);
+    }
+
+    @Test
     void commitBuiltCandidatePublishesBeforeTransferringOwnership() {
         Object candidate = new Object();
         List<String> events = new ArrayList<>();
