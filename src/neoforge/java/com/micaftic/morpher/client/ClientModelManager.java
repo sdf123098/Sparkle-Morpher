@@ -1620,6 +1620,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
     private static boolean canTrimGpuCache(String modelId, ModelAssembly assembly, Set<String> protectedModels, long now, long ttlMillis) {
         modelId = LocalModelCatalog.canonicalKey(modelId);
         if (modelId == null || assembly == null || "default".equals(modelId) || protectedModels.contains(modelId)
+                || EntityRenderCache.isModelAssemblyInUse(assembly)
                 || gpuCacheTrimCoordinator.isTrimmed(modelId, assembly)) {
             return false;
         }
