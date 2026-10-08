@@ -21,6 +21,7 @@ import com.micaftic.morpher.core.model.catalog.LocalModelCatalog;
 import com.micaftic.morpher.core.model.selection.EntityModelResolver;
 import com.micaftic.morpher.core.model.selection.ModelRevisionGuard;
 import com.micaftic.morpher.core.model.selection.ModelSelectionState;
+import com.micaftic.morpher.core.model.lifecycle.GpuCacheTrimCoordinator;
 import com.micaftic.morpher.core.model.ModelRetention;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
@@ -158,7 +159,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, Path> localModelSourcePaths = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Long> modelLastUsedAt = new ConcurrentHashMap<>();
-    private static final Set<String> gpuCacheTrimmedModels = ConcurrentHashMap.newKeySet();
+    private static final GpuCacheTrimCoordinator<ModelAssembly> gpuCacheTrimCoordinator = new GpuCacheTrimCoordinator<>();
     static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
     private static final Set<String> cpuReloadInFlight = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, LocalModelCatalog.Entry> lazyModelSources = new ConcurrentHashMap<>();
@@ -636,7 +637,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     MODEL_SELECTION.clear();
                 }
                 modelLastUsedAt.remove(modelKey);
-                gpuCacheTrimmedModels.remove(modelKey);
+                gpuCacheTrimCoordinator.clear(modelKey);
                 ModelAssembly assembly = map.remove(modelKey);
                 if (assembly != null) {
                     removed.add(Pair.of(modelKey, assembly));
@@ -683,7 +684,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             modelAssemblyMap = retained;
             for (Pair<String, ModelAssembly> pair : released) {
                 modelLastUsedAt.remove(pair.getLeft());
-                gpuCacheTrimmedModels.remove(pair.getLeft());
+                gpuCacheTrimCoordinator.clear(pair.getLeft());
                 releaseModelAssembly(pair.getLeft(), pair.getRight());
             }
             ModelMemoryProfiler.log("server-models-released reason=" + reason + " count=" + released.size(), null);
@@ -1265,7 +1266,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                 }
             }
             modelLastUsedAt.remove(staleId);
-            gpuCacheTrimmedModels.remove(staleId);
+            gpuCacheTrimCoordinator.clear(staleId);
         }
         if (removedAssemblies.isEmpty()) {
             return;
@@ -1373,7 +1374,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                     }
                 }
                 touchModel(modelKey);
-                gpuCacheTrimmedModels.remove(modelKey);
+                gpuCacheTrimCoordinator.clear(modelKey);
                 if (previous == localModelContext) {
                     localModelContext = pairPoll.getLeft();
                 }
@@ -1445,7 +1446,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         ModelMemoryProfiler.log("lru-check", null);
        modelAssemblyMap.entrySet().stream()
                 .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
-               .filter(entry -> canTrimGpuCache(entry.getKey(), protectedModels, now, ttlMillis))
+               .filter(entry -> canTrimGpuCache(entry.getKey(), entry.getValue(), protectedModels, now, ttlMillis))
                .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
                 .limit(Math.max(1L, residentGpuModels - maxCachedGpuModels))
                .forEach(entry -> trimGpuCache(entry.getKey(), entry.getValue()));
@@ -1492,7 +1493,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                 source.displayName = name;
             }
             map.put(entry.getKey(), new LazyModelAssembly(entry.getKey(), source));
-            gpuCacheTrimmedModels.remove(entry.getKey());
+            gpuCacheTrimCoordinator.clear(entry.getKey());
             released.add(Pair.of(entry.getKey(), entry.getValue()));
         }
         if (released.isEmpty()) return;
@@ -1511,14 +1512,15 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         if (EntityRenderCache.isModelAssemblyInUse(assembly)) return;
         // R10.4：完整确定性释放收拢到装配自身（保留装配外壳供懒加载重建）。
         assembly.close();
-        gpuCacheTrimmedModels.remove(modelId);
+        gpuCacheTrimCoordinator.clear(modelId);
         ModelMemoryProfiler.log("cpu-model-unloaded", modelId);
         }
     }
 
-    private static boolean canTrimGpuCache(String modelId, Set<String> protectedModels, long now, long ttlMillis) {
+    private static boolean canTrimGpuCache(String modelId, ModelAssembly assembly, Set<String> protectedModels, long now, long ttlMillis) {
         modelId = LocalModelCatalog.canonicalKey(modelId);
-        if (modelId == null || "default".equals(modelId) || protectedModels.contains(modelId) || gpuCacheTrimmedModels.contains(modelId)) {
+        if (modelId == null || assembly == null || "default".equals(modelId) || protectedModels.contains(modelId)
+                || gpuCacheTrimCoordinator.isTrimmed(modelId, assembly)) {
             return false;
         }
         long lastUsed = modelLastUsedAt.getOrDefault(modelId, 0L);
@@ -1566,24 +1568,30 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
     }
 
     private static void trimGpuCache(String modelId, ModelAssembly assembly) {
-        if (assembly == null || !assembly.isRuntimeResident() || !gpuCacheTrimmedModels.add(modelId)) {
-           return;
-       }
-        if (!RenderSystem.isOnRenderThread()) {
-            Minecraft.getInstance().execute(() -> trimGpuCache(modelId, assembly));
-            return;
-        }
-        // R10.4：仅释放 GPU mesh（native 缓存保留，模型可立即重渲染），收拢到装配自身。
-        assembly.releaseGpuMeshes();
-        ModelMemoryProfiler.log("gpu-cache-trimmed liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
-                + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelId);
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey == null || assembly == null) return;
+        gpuCacheTrimCoordinator.request(modelKey, assembly, RenderSystem::isOnRenderThread,
+                Minecraft.getInstance()::execute,
+                candidate -> {
+                    Minecraft minecraft = Minecraft.getInstance();
+                    long now = System.currentTimeMillis();
+                    long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
+                    Set<String> protectedModels = collectProtectedModelIds(minecraft);
+                    return modelAssemblyMap.get(modelKey) == candidate && candidate.isRuntimeResident()
+                            && canTrimGpuCache(modelKey, candidate, protectedModels, now, ttlMillis);
+                }, candidate -> {
+            // R10.4：仅释放 GPU mesh（native 缓存保留，模型可立即重渲染），收拢到装配自身。
+                    candidate.releaseGpuMeshes();
+                    ModelMemoryProfiler.log("gpu-cache-trimmed liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
+                            + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelKey);
+                });
     }
 
     private static void touchModel(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey != null && !modelKey.isBlank()) {
             modelLastUsedAt.put(modelKey, System.currentTimeMillis());
-            gpuCacheTrimmedModels.remove(modelKey);
+            gpuCacheTrimCoordinator.clear(modelKey);
         }
     }
 
@@ -1613,7 +1621,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
 
     public static boolean isGpuCacheTrimmed(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
-        return modelKey != null && gpuCacheTrimmedModels.contains(modelKey);
+        return modelKey != null && gpuCacheTrimCoordinator.isTrimmed(modelKey);
     }
 
     private static void touchAssembly(ModelAssembly assembly) {
