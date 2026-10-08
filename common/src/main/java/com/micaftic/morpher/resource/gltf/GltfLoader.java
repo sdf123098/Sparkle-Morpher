@@ -3,6 +3,8 @@ package com.micaftic.morpher.resource.gltf;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
 import java.io.IOException;
@@ -17,6 +19,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Collections;
 import java.util.List;
 
@@ -63,6 +69,60 @@ public final class GltfLoader {
         byte[] source = readLimited(normalized, MAX_SOURCE_BYTES, "glTF source");
         ParsedContainer container = parseContainer(source, normalized.getFileName().toString());
         return new Parser(container.json(), root, container.bin(), extensions).parse();
+    }
+
+    /** Strong source identity for catalog invalidation, including every contained external buffer/image. */
+    public static long sourceFingerprint(Path file) throws IOException {
+        Path requested = file.toAbsolutePath().normalize();
+        Path root = requested.getParent().toRealPath();
+        Path sourcePath = requested.toRealPath();
+        if (!sourcePath.startsWith(root)) throw error("glTF source escapes its source directory: " + file);
+        byte[] source = readLimited(sourcePath, MAX_SOURCE_BYTES, "glTF source");
+        ParsedContainer container = parseContainer(source, sourcePath.getFileName().toString());
+        java.security.MessageDigest digest;
+        try {
+            digest = java.security.MessageDigest.getInstance("SHA-256");
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+        digest.update(source);
+        LinkedHashSet<String> uris = new LinkedHashSet<>();
+        JsonElement parsed = JsonParser.parseString(container.json());
+        if (parsed.isJsonObject()) {
+            JsonObject rootObject = parsed.getAsJsonObject();
+            collectExternalUris(rootObject.getAsJsonArray("buffers"), uris);
+            collectExternalUris(rootObject.getAsJsonArray("images"), uris);
+        }
+        List<String> orderedUris = new ArrayList<>(uris);
+        orderedUris.sort(Comparator.naturalOrder());
+        java.util.Map<Path, String> dependencies = new java.util.HashMap<>();
+        for (String uri : orderedUris) {
+            if (!uri.startsWith("data:")) dependencies.putIfAbsent(resolveExternalPath(root, uri, "dependency"), uri);
+        }
+        if (dependencies.size() > MAX_EXTERNAL_RESOURCE_COUNT) throw error("glTF has too many external resources");
+        List<Path> orderedDependencies = new ArrayList<>(dependencies.keySet());
+        orderedDependencies.sort(Comparator.comparing(path -> root.relativize(path).toString().replace('\\', '/')));
+        long total = 0;
+        for (Path dependency : orderedDependencies) {
+            long size = Files.size(dependency);
+            if (size > MAX_RESOLVED_RESOURCE_BYTES - total) throw error("Resolved glTF resources exceed the aggregate size limit");
+            byte[] bytes = readLimited(dependency, Math.min(size, MAX_RESOLVED_RESOURCE_BYTES - total), "glTF dependency");
+            total += bytes.length;
+            digest.update(root.relativize(dependency).toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8));
+            digest.update(bytes);
+        }
+        return ByteBuffer.wrap(digest.digest()).getLong();
+    }
+
+    private static void collectExternalUris(JsonArray values, LinkedHashSet<String> uris) {
+        if (values == null) return;
+        for (JsonElement value : values) {
+            if (!value.isJsonObject()) continue;
+            JsonElement uri = value.getAsJsonObject().get("uri");
+            if (uri != null && uri.isJsonPrimitive() && uri.getAsJsonPrimitive().isString()) {
+                uris.add(uri.getAsString());
+            }
+        }
     }
 
     /** Loads JSON glTF/GLB bytes with external resources resolved relative to {@code baseDirectory}. */
@@ -608,26 +668,7 @@ public final class GltfLoader {
             if (uri.startsWith("data:")) return countResolvedResource(
                     decodeDataUri(uri, remainingResourceBudget()).bytes(), context);
             if (baseDirectory == null) throw error("External " + context + " cannot be resolved without a base directory: " + uri);
-            Path relative;
-            try {
-                URI reference = new URI(uri);
-                if (reference.isAbsolute() || reference.getRawAuthority() != null
-                        || reference.getRawQuery() != null || reference.getRawFragment() != null
-                        || uri.indexOf('\\') >= 0) {
-                    throw error("External " + context + " URI must be a relative file path: " + uri);
-                }
-                String decoded = percentDecode(uri);
-                relative = Path.of(decoded);
-            } catch (URISyntaxException | java.nio.file.InvalidPathException invalid) {
-                throw error("Invalid external " + context + " URI: " + uri);
-            }
-            if (relative.isAbsolute()) throw error("External " + context + " URI must be relative: " + uri);
-            Path root = baseDirectory.toRealPath();
-            Path candidate = root.resolve(relative).normalize();
-            if (!candidate.startsWith(root)) throw error("External " + context + " escapes its source directory: " + uri);
-            Path resolved = candidate.toRealPath();
-            if (!resolved.startsWith(root)) throw error("External " + context + " escapes its source directory: " + uri);
-            if (!Files.isRegularFile(resolved)) throw error("External " + context + " is not a regular file: " + uri);
+            Path resolved = resolveExternalPath(baseDirectory.toRealPath(), uri, context);
             long size = Files.size(resolved);
             if (size > MAX_RESOLVED_RESOURCE_BYTES) {
                 throw error("External " + context + " exceeds the size limit: " + uri);
@@ -725,6 +766,28 @@ public final class GltfLoader {
 
     private static String percentDecode(String value) {
         return new String(percentDecodeBytes(value), StandardCharsets.UTF_8);
+    }
+
+    private static Path resolveExternalPath(Path root, String uri, String context) throws IOException {
+        Path relative;
+        try {
+            URI reference = new URI(uri);
+            if (reference.isAbsolute() || reference.getRawAuthority() != null
+                    || reference.getRawQuery() != null || reference.getRawFragment() != null
+                    || uri.indexOf('\\') >= 0) {
+                throw error("External " + context + " URI must be a relative file path: " + uri);
+            }
+            relative = Path.of(percentDecode(uri));
+        } catch (URISyntaxException | IllegalArgumentException invalid) {
+            throw error("Invalid external " + context + " URI: " + uri);
+        }
+        if (relative.isAbsolute()) throw error("External " + context + " URI must be relative: " + uri);
+        Path candidate = root.resolve(relative).normalize();
+        if (!candidate.startsWith(root)) throw error("External " + context + " escapes its source directory: " + uri);
+        Path resolved = candidate.toRealPath();
+        if (!resolved.startsWith(root)) throw error("External " + context + " escapes its source directory: " + uri);
+        if (!Files.isRegularFile(resolved)) throw error("External " + context + " is not a regular file: " + uri);
+        return resolved;
     }
 
     private static byte[] readLimited(Path file, long maxBytes, String description) throws IOException {
