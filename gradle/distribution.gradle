@@ -10,7 +10,7 @@ ext.isNativeDist = selected == "native"
 ext.isModrinthDist = requested == "modrinth"
 ext.isCurseForgeDist = selected == "curseforge"
 ext.distributionArchiveName = { String baseName -> selected == "native" ? "${baseName}.jar" : "${baseName}-${selected}.jar" }
-ext.distributionResourceExcludes = { spec -> spec.exclude 'natives/**'; spec.exclude '**/*.dll'; spec.exclude '**/*.so'; spec.exclude '**/*.dylib'; spec.exclude '**/*.jnilib'; spec.exclude '**/*.exe' }
+ext.distributionResourceExcludes = { spec -> spec.exclude 'natives/**'; spec.exclude 'native-manifest.json'; spec.exclude '**/*.dll'; spec.exclude '**/*.so'; spec.exclude '**/*.dylib'; spec.exclude '**/*.jnilib'; spec.exclude '**/*.exe' }
 // Native-only Java sources live under a dedicated source root. CurseForge builds
 // intentionally omit that root and use the matching src/curseforge/java variants.
 ext.distributionNativeJavaSourceDir = rootProject.file('common/src/native/java')

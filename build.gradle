@@ -191,3 +191,5 @@ tasks.register("printRepositories") {
         }
     }
 }
+
+apply from: rootProject.file('gradle/verify-distribution.gradle')
