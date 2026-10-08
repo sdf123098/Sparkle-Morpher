@@ -11,6 +11,8 @@
     "client.GpuDeviceAccessor",
     "client.LevelRendererAccessor",
     "client.ArrowEntityAccessor",
+    "client.ProjectileFiringInputMixin",
+    "client.ProjectileSpawnObservationMixin",
     "client.CameraAccessor",
     "client.MinecraftAccessor",
     "client.ClientPacketListenerMixin",
@@ -28,8 +30,6 @@
   ],
   "mixins": [
     "AbstractArrowEntityMixin",
-    "ProjectileEntityMixin",
-    "compat.TouhouMaidEntityMixin",
     "compat.TouhouLittleMaidYsmCompatMixin"
   ]
 }

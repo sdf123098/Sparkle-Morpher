@@ -30,7 +30,7 @@ public final class ClientPlayerJoinNotification {
             return;
         }
         if (PrivacyMode.isActive()) {
-            ClientModelManager.enterPrivacyMode();
+            ClientModelManager.reloadLocalModelsAfterPrivacyMode();
             return;
         }
         // 懒加载模式下，冷启动时模型目录尚未建立；先扫描目录，再恢复上次选择。
@@ -42,7 +42,6 @@ public final class ClientPlayerJoinNotification {
         notified = false;
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.disconnect();
         PrivacyMode.endSession();
-        ClientModelManager.resetSync();
         if (reloadLocalModels) {
             ClientModelManager.reloadLocalModels(null);
         }

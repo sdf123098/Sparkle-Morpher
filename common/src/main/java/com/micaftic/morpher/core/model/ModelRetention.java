@@ -10,7 +10,7 @@ import java.util.function.Predicate;
 /**
  * R7.3 ModelRetention — 跨会话模型装配保留筛选（从 ClientModelManager.resetClientState 抽取）。
  *
- * <p>断线/换服时，服务端模型装配（含纹理源 byte[] 与 GPU/native 资源）必须释放，
+ * <p>断线/换服时，运行时模型装配（含纹理源 byte[] 与 GPU/native 资源）必须释放，
  * 否则会被 modelAssemblyMap 强引用跨会话累积（主要内存泄漏源）。保留规则：</p>
  * <ul>
  *   <li>localContext（默认模型装配，引用相等判定）</li>

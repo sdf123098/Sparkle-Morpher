@@ -52,7 +52,7 @@ class ModelSelectionStateTest {
         state.remember("cirno", "tex-b", false, true);
         assertEquals("cirno", state.selectedModelId());
         assertEquals("tex-b", state.selectedTextureId());
-        assertNull(state.localOnlyModelId(), "切换为服务器模型后 localOnly 轨应清除");
+        assertNull(state.localOnlyModelId(), "切换为Cloud/runtime 模型后 localOnly 轨应清除");
         assertNull(state.localOnlyTextureId());
     }
 

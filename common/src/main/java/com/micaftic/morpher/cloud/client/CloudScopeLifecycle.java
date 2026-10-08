@@ -106,6 +106,7 @@ public final class CloudScopeLifecycle implements AutoCloseable {
     public long recoveryCursor() {
         return recoveryCursor;
     }
+    public long contextGeneration() { return generations.get(); }
 
     private CompletableFuture<Void> connectAndRecover(ScopeContext context, int attempt) {
         if (!isCurrent(context)) {

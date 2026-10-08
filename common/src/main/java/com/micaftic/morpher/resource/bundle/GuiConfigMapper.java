@@ -5,7 +5,7 @@ import com.micaftic.morpher.client.gui.custom.ExtraAnimationButtons;
 import com.micaftic.morpher.client.gui.custom.configs.CheckboxConfig;
 import com.micaftic.morpher.client.gui.custom.configs.RadioConfig;
 import com.micaftic.morpher.client.gui.custom.configs.RangeConfig;
-import com.micaftic.morpher.model.format.ServerModelInfo;
+import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.MainModelInfo;
 import com.micaftic.morpher.resource.models.Metadata;
@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * 1.2.7 §24.1：从 {@code YSMClientMapper} 外提的元数据 / GUI 配置映射职责（行为等价，纯搬运）。
  *
- * 将 raw YSM 的 metadata、properties、footer 映射为运行时的 {@link ServerModelInfo}
+ * 将 raw YSM 的 metadata、properties、footer 映射为运行时的 {@link ModelMetadata}
  * （作者、许可、额外动画按钮表单、分类、模型统计等）。不含几何或动画装配。
  */
 public final class GuiConfigMapper {
@@ -30,7 +30,7 @@ public final class GuiConfigMapper {
     private GuiConfigMapper() {
     }
 
-    public static ServerModelInfo buildModelInfo(RawYsmModel raw) {
+    public static ModelMetadata buildModelInfo(RawYsmModel raw) {
         RawYsmModel.RawMetadata rm = raw.metadata;
         List<AuthorInfo> authors = new ArrayList<>();
         for (RawYsmModel.RawMetadata.Author a : rm.authors) {
@@ -77,7 +77,7 @@ public final class GuiConfigMapper {
         MainModelInfo stats = new MainModelInfo(bones, cubes, faces);
 
         RawYsmModel.RawFooter footer = raw.footer;
-        return new ServerModelInfo(extraInfo,
+        return new ModelMetadata(extraInfo,
                 properties,
                 stats,
                 footer.version,

@@ -11,31 +11,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MaidAppearancePersistenceContractTest {
     @Test
-    void baseModelCallbackDoesNotClearPersistedStateBeforeMaidIsLoadedIntoLevel() throws IOException {
-        String source = readFirstExisting(
-                Path.of("common/src/main/java/com/micaftic/morpher/core/compat/touhoulittlemaid/MaidModelSync.java"),
-                Path.of("../common/src/main/java/com/micaftic/morpher/core/compat/touhoulittlemaid/MaidModelSync.java"));
-        assertTrue(source.contains("maid.level().getEntity(maid.getId()) != maid"));
-    }
-
-    @Test
-    void loadedMaidStateIsResentToTrackingClients() throws IOException {
+    void maidAppearanceUsesTheCloudClientPathAndKeepsClientCompat() throws IOException {
         String sync = readFirstExisting(
-                Path.of("common/src/main/java/com/micaftic/morpher/core/compat/touhoulittlemaid/MaidModelSync.java"),
-                Path.of("../common/src/main/java/com/micaftic/morpher/core/compat/touhoulittlemaid/MaidModelSync.java"));
-        String capabilityEvent = readFirstExisting(
-                Path.of("common/src/main/java/com/micaftic/morpher/event/CapabilityEvent.java"),
-                Path.of("../common/src/main/java/com/micaftic/morpher/event/CapabilityEvent.java"),
-                Path.of("src/neoforge/java/com/micaftic/morpher/event/CapabilityEvent.java"),
-                Path.of("../src/neoforge/java/com/micaftic/morpher/event/CapabilityEvent.java"));
-        assertTrue(sync.contains("onEntityLoaded"));
-        assertTrue(sync.contains("sendToTrackingEntity"));
-        assertTrue(capabilityEvent.contains("MaidModelSync.onEntityLoaded("));
+                Path.of("common/src/main/java/com/micaftic/morpher/cloud/client/CloudEntityModelSync.java"),
+                Path.of("../common/src/main/java/com/micaftic/morpher/cloud/client/CloudEntityModelSync.java"));
+        String compat = readFirstExisting(
+                Path.of("common/src/main/java/com/micaftic/morpher/client/compat/touhoulittlemaid/TouhouLittleMaidClientCompat.java"),
+                Path.of("../common/src/main/java/com/micaftic/morpher/client/compat/touhoulittlemaid/TouhouLittleMaidClientCompat.java"));
+
+        assertTrue(sync.contains("MaidCapability.get(entity).ifPresent(cap -> cap.applyCloudState"));
+        assertTrue(sync.contains("MaidCapability.get(entity).ifPresent(cap -> cap.clearCloudState()"));
+        assertTrue(compat.contains("handleMaidInteraction"));
+        assertTrue(compat.contains("registerMaidAnimStates"));
     }
 
     private static String readFirstExisting(Path... candidates) throws IOException {
-        for (Path candidate : candidates) {
-            if (Files.isRegularFile(candidate)) return Files.readString(candidate, StandardCharsets.UTF_8);
+        for (Path base = Path.of("").toAbsolutePath(); base != null; base = base.getParent()) {
+            for (Path candidate : candidates) {
+                Path source = base.resolve(candidate).normalize();
+                if (Files.isRegularFile(source)) {
+                    return Files.readString(source, StandardCharsets.UTF_8);
+                }
+            }
         }
         throw new IOException("Required source file not found");
     }

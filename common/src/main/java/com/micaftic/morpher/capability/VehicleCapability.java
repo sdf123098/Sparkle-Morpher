@@ -14,10 +14,14 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Optional;
 public class VehicleCapability extends GeckoVehicleEntity {
 
-    private static final java.util.Map<Entity, VehicleCapability> STORE = new java.util.WeakHashMap<>();
+    private static final java.util.Map<Entity, java.lang.ref.WeakReference<VehicleCapability>> STORE = new java.util.WeakHashMap<>();
 
-    public static Optional<VehicleCapability> get(Entity entity) {
-        return Optional.of(STORE.computeIfAbsent(entity, VehicleCapability::new));
+    public static synchronized Optional<VehicleCapability> get(Entity entity) {
+        if (!entity.level().isClientSide()) return Optional.empty();
+        var reference = STORE.get(entity);
+        var cap = reference == null ? null : reference.get();
+        if (cap == null) { cap = new VehicleCapability(entity); STORE.put(entity, new java.lang.ref.WeakReference<>(cap)); }
+        return Optional.of(cap);
     }
 
     @Nullable

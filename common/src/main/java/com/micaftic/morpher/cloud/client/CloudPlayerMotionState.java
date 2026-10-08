@@ -7,6 +7,7 @@ public final class CloudPlayerMotionState {
     private CloudPlayerMotion snapshot = new CloudPlayerMotion(UUID.randomUUID().toString(), "", 0, Map.of(), List.of(), Map.of());
     private void replaceSnapshot(CloudPlayerMotion candidate) { candidate.toJson(); snapshot = candidate; }
     public synchronized CloudPlayerMotion snapshot() { return snapshot; }
+    public synchronized void adopt(CloudPlayerMotion current) { replaceSnapshot(Objects.requireNonNull(current)); }
     public synchronized void play(String key, long now) {
         replaceSnapshot(new CloudPlayerMotion(UUID.randomUUID().toString(), key, now, snapshot.roaming(), snapshot.expressions(), snapshot.controllers()));
     }

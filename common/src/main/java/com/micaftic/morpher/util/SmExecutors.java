@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>{@link Pool#DOWNLOAD_IO} — Resource Station 下载，单线程，队列 16</li>
  *   <li>{@link Pool#SYNC_NETWORK} — legacy 模型协议顺序解码，单线程，队列 1</li>
  *   <li>{@link Pool#BACKGROUND} — 通用后台任务，线程数 2，队列 256</li>
- *   <li>{@link Pool#MODEL_RELOAD} — 服务端模型重载，单线程，队列 1，不回退到调用线程</li>
+ *   <li>{@link Pool#MODEL_RELOAD} — 本地模型定义重载，单线程，队列 1，不回退到调用线程</li>
  * </ul>
  *
  * 背压策略（R2.2）：普通池队列满时任务退回提交线程执行（CallerRunsPolicy），不丢弃、不 OOM。

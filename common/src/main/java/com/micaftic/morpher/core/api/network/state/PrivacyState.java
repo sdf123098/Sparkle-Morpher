@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.api.network.state;
 
 /**
- * 隐私模式状态（R9.2 从 NetworkHandler.isClientConnected() / ClientNetworkBridge 拆出）。
+ * 隐私模式状态，与已删除的 Minecraft 同步状态解耦。
  *
  * <p>纯状态持有者，双标志：{@code sessionActive}（本次游戏会话内激活）与 {@code configured}
  * （配置开关已开启）。任一为真即视为隐私模式激活。

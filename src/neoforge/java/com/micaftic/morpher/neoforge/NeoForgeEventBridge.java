@@ -77,20 +77,6 @@ public final class NeoForgeEventBridge {
     }
 
     @SubscribeEvent
-    public static void onMobEffectAdded(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Added event) {
-        if (event.getEffectInstance() != null) {
-            ServerLivingEventHooks.onEffectAdded(event.getEntity(), event.getEffectInstance().getEffect().value(), event.getEffectInstance().getAmplifier());
-        }
-    }
-
-    @SubscribeEvent
-    public static void onMobEffectRemoved(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Remove event) {
-        if (event.getEffect() != null) {
-            ServerLivingEventHooks.onEffectRemoved(event.getEntity(), event.getEffect().value());
-        }
-    }
-
-    @SubscribeEvent
     public static void onLivingShieldBlock(LivingShieldBlockEvent event) {
         if (event.getBlocked()) {
             ServerLivingEventHooks.onShieldBlock(event.getEntity());

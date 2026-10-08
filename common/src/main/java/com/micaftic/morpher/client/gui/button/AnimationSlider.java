@@ -1,9 +1,8 @@
 package com.micaftic.morpher.client.gui.button;
 
-import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.cloud.client.CloudMotionSources;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.ISpecialWidget;
-import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.molang.parser.ParseException;
@@ -35,9 +34,10 @@ public class AnimationSlider extends RangedSliderWidget implements ISpecialWidge
     protected void applyValue() {
         try {
             String str = this.controllerName + "=" + getValue();
+            CloudMotionSources.beginEdit(this.model);
             this.model.executeExpression(GeckoLibCache.parseSimpleExpression(str), true, false, null);
-            if (!GeckoLibCache.isRoamingVariableAssignment(str) && !ServerConfig.LOW_BANDWIDTH_USAGE.get().booleanValue()) {
-                CloudPlayerMotionSync.expression(this.model, str, java.util.List.of());
+            if (!GeckoLibCache.isRoamingVariableAssignment(str)) {
+                CloudMotionSources.expression(this.model, str, java.util.List.of());
             }
         } catch (ParseException e) {
             YesSteveModel.LOGGER.error(e);

@@ -3,7 +3,7 @@ package com.micaftic.morpher.client;
 import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
-import com.micaftic.morpher.capability.ModelInfoCapability;
+
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.entity.EntityRenderCache;
@@ -29,13 +29,13 @@ import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.model.catalog.LocalModelCatalog;
-import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.resource.YSMBinaryDeserializer;
 import com.micaftic.morpher.resource.bundle.ClientModelBundleAssembler;
 import com.micaftic.morpher.resource.YSMFolderDeserializer;
 import com.micaftic.morpher.resource.gltf.GltfLoader;
 import com.micaftic.morpher.resource.gltf.GltfModel;
-import com.micaftic.morpher.model.format.ServerModelInfo;
+import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.resource.models.ModelPackData;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
@@ -44,7 +44,6 @@ import com.micaftic.morpher.util.FileTypeUtil;
 import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.LocalModelSelectionStore;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
-import com.micaftic.morpher.util.NetworkOnlineDebugLog;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.micaftic.morpher.util.YSMThreadPool;
 import com.micaftic.morpher.util.data.OrderedStringMap;
@@ -59,7 +58,6 @@ import com.micaftic.morpher.mixin.client.MinecraftAccessor;
 import java.util.concurrent.Executor;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.AbstractTexture;
-import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
@@ -69,7 +67,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
 import com.micaftic.morpher.legacy.compat.LegacyCompatModelFormat;
-import com.micaftic.morpher.legacy.compat.LegacyCompatState;
 
 import com.micaftic.morpher.core.security.YSMByteBuf;
 import com.micaftic.morpher.core.security.YSMClientCache;
@@ -80,13 +77,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
@@ -94,20 +89,7 @@ import java.util.zip.ZipFile;
 
 @OnlyIn(Dist.CLIENT)
 public class ClientModelManager {
-    static final AtomicInteger pendingModelsCount = new AtomicInteger(0);
-    static final AtomicBoolean syncCompletionScheduled = new AtomicBoolean(false);
-    static final AtomicInteger failedSyncModelsCount = new AtomicInteger(0);
-    private static final AtomicBoolean syncFailureScheduled = new AtomicBoolean(false);
-    static volatile boolean syncManifestProcessed = false;
 
-    // ---- 同步超时看门狗 ----
-    // 记录最近一次同步活动（开始同步 / 收到分片 / 完成一个模型）的时间戳。
-    // 当同步过程中长时间没有任何进度时（例如服务端因缓存文件被清理而跳过了
-    // 某个被请求模型的分片，或客户端在重连竞态下漏掉了 decrement），
-    // pendingModelsCount 会永远归不了零、onSyncComplete 永不触发，导致加载弹窗
-    // 卡死。看门狗在超时后强制结束同步，避免 UI 永久停在某一进度。
-    private static volatile long lastSyncActivityMillis = 0L;
-    private static final long SYNC_WATCHDOG_TIMEOUT_MILLIS = 20000L;
 
     private static final int MODEL_PARSE_THREAD_COUNT = 2;
     private static final int MODEL_PARSE_QUEUE_CAPACITY = 8;
@@ -165,10 +147,7 @@ public class ClientModelManager {
     }
 
     private static final long MAX_LOCAL_MODEL_FILE_BYTES = LocalModelCatalog.DEFAULT_MAX_FILE_BYTES;
-
-    static final Map<UUID, ServerModelContext> serverModels = new ConcurrentHashMap<>();
-
-    static final java.security.SecureRandom SECURE_RANDOM = new java.security.SecureRandom();
+static final java.security.SecureRandom SECURE_RANDOM = new java.security.SecureRandom();
     private static volatile ModelAssembly localModelContext;
     private static volatile Runnable pendingModelCallback;
     private static IResourceLocatable defaultTexture;
@@ -203,52 +182,13 @@ public class ClientModelManager {
      * R7.1：本地模型导入持久化（原子写 + 路径沙箱 + sibling 清理），
      * 从 ClientModelManager 抽取为独立可测组件。
      */
-    private static final LocalModelImportStore LOCAL_IMPORT_STORE = new LocalModelImportStore(ServerModelManager.CUSTOM);
+    private static final LocalModelImportStore LOCAL_IMPORT_STORE = new LocalModelImportStore(ModelStoragePaths.custom());
     private static final LocalModelCatalog LOCAL_MODEL_CATALOG = new LocalModelCatalog();
     private static final long MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS = 5L * 60L * 1000L;
 
     private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
     private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, Path> localModelSourcePaths = new ConcurrentHashMap<>();
-    private static final SyncStatus syncState = new SyncStatus();
-
-    public enum SyncState {
-        WAITING, LOADING, IDLE, PREPARING, SYNCING
-    }
-
-    public static class ServerModelContext {
-        public final UUID uuid;
-        public final long hash1;
-        public final long hash2;
-        public final String modelId;
-        public final String modelKey;
-        public final boolean isAuth;
-        public final int isCustomSkinModel;
-        public final int version;
-        /** R5.1 试点：服务器下发模型的来源语义（LEGACY_SERVER）；modelId 为空时 null。 */
-        public final ModelRef ref;
-
-        public byte[] fileBuffer;
-        public int totalSize;
-        public int bytesReceived;
-        public boolean fileBufferReserved;
-        public boolean transferTerminal;
-
-        public ServerModelContext(long hash1, long hash2, String modelId, boolean isAuth, int isCustomSkinModel, int version) {
-            this.uuid = new UUID(hash1, hash2);
-            this.hash1 = hash1;
-            this.hash2 = hash2;
-            this.modelId = modelId;
-            this.modelKey = LocalModelCatalog.canonicalKey(modelId);
-            this.isAuth = isAuth;
-            this.isCustomSkinModel = isCustomSkinModel;
-            this.version = version;
-            this.ref = (modelId != null && !modelId.isEmpty())
-                    ? ModelRef.of(ModelSourceType.LEGACY_SERVER, modelId)
-                    : null;
-        }
-    }
-
     public static void loadDefaultModel() {
         if (localModelContext != null || defaultModelLoadAttempted) {
             return;
@@ -264,7 +204,7 @@ public class ClientModelManager {
             URL probeUrl = YesSteveModel.class.getResource(resourcePath + probeFile);
             if (probeUrl == null) {
                 YesSteveModel.LOGGER.warn("[SM] Builtin default model not found in classpath: " + resourcePath
-                        + " (client will rely on server-provided models)");
+                        + " (client will rely on local models)");
                 return;
             }
             URI uri = probeUrl.toURI();
@@ -277,7 +217,7 @@ public class ClientModelManager {
                 int bang = inner.indexOf('!');
                 if (bang <= 0) {
                     YesSteveModel.LOGGER.warn("[SM] Malformed union URL: " + probeUrl
-                            + " (client will rely on server-provided models)");
+                            + " (client will rely on local models)");
                     return;
                 }
                 String filePart = inner.substring(0, bang).replaceAll("%23\\d+$", "");
@@ -298,7 +238,7 @@ public class ClientModelManager {
                 defaultPath = Paths.get(uri).getParent();
             } else {
                 YesSteveModel.LOGGER.warn("[SM] Unsupported builtin default model resource URL scheme: " + probeUrl
-                        + " (client will rely on server-provided models)");
+                        + " (client will rely on local models)");
                 return;
             }
 
@@ -376,80 +316,9 @@ public class ClientModelManager {
         );
     }
 
-    static void resetClientState() {
-        MODEL_TASK_GENERATION.incrementAndGet();
-        modelTaskDispatcher.getQueue().clear();
-
-        int discardedModelTasks = modelPhraseExecutor.getQueue().size();
-        modelPhraseExecutor.getQueue().clear();
-        MODEL_PARSE_SLOTS.release(discardedModelTasks);
-
-        pendingModelsCount.set(0);
-        failedSyncModelsCount.set(0);
-        syncManifestProcessed = false;
-        syncCompletionScheduled.set(false);
 
 
-        serverModels.clear();
-        cachedModelFiles.clear();
-        cpuReloadInFlight.clear();
-        lazyModelSources.entrySet().removeIf(entry -> entry.getValue().remote);
-
-        // 断线/换服：释放过期服务端模型装配（含纹理源 byte[] 与 GPU/native 资源），
-        // 否则它们会被 modelAssemblyMap 强引用跨会话累积（主要内存泄漏源）。
-        // 保留 localModelContext（默认模型）与本地导入模型：reloadLocalModels 会重建后者。
-        // R7.3：保留/释放判定集中到 ModelRetention（纯函数，单测覆盖）。
-        if (!modelAssemblyMap.isEmpty()) {
-            ModelRetention.Split<ModelAssembly> retention = ModelRetention.partition(
-                    new ArrayList<>(modelAssemblyMap.entrySet()), localOnlyModelIds::contains, localModelContext);
-            Object2ReferenceOpenHashMap<String, ModelAssembly> survivors = new Object2ReferenceOpenHashMap<>();
-            for (Map.Entry<String, ModelAssembly> entry : retention.survivors()) {
-                survivors.put(entry.getKey(), entry.getValue());
-            }
-            modelAssemblyMap = survivors;
-            for (ModelAssembly asm : retention.toRelease()) {
-                releaseModelAssembly(asm);
-            }
-        }
-
-        Map<String, ModelPackData> oldPreviews = modelPackMap;
-        if (oldPreviews != null && !oldPreviews.isEmpty()) {
-            for (ModelPackData preview : oldPreviews.values()) {
-                if (preview.getTexture() != null) {
-                    Identifier loc = FileTypeUtil.getPackIconLocation(preview.getPath());
-                    ((Executor) Minecraft.getInstance()).execute(() -> {
-                        ((MinecraftAccessor) Minecraft.getInstance()).ysm$getTextureManager().release(loc);
-                    });
-                }
-            }
-        }
-
-        modelPackMap = new Object2ReferenceOpenHashMap<>();
-        if (localModelContext != null) {
-            pendingModelCallback = null;
-        } else if (pendingModelCallback == null) {
-            defaultModelLoadAttempted = false;
-        }
-        pendingModelQueue.clear();
-        localOnlyModelIds.clear();
-        localModelSourcePaths.clear();
-        modelLastUsedAt.clear();
-        gpuCacheTrimmedModels.clear();
-        lastModelTrimMillis = 0L;
-
-        forEachGuiWidget(l -> {
-            try {
-                l.onSyncBegin();
-            } catch (Throwable t) {
-                t.printStackTrace();
-            }
-        });
-    }
-
-    public static SyncStatus getSyncStatus() {
-        return syncState;
-    }
-
+    
     public static Map<String, ModelAssembly> getModelAssemblyMap() {
         return modelAssemblyMap;
     }
@@ -527,13 +396,12 @@ public class ClientModelManager {
     public static Set<String> getAvailableModelIds() {
         LinkedHashSet<String> ids = new LinkedHashSet<>(modelAssemblyMap.keySet());
         ids.addAll(lazyModelSources.keySet());
-        serverModels.values().forEach(context -> ids.add(context.modelKey));
         return Collections.unmodifiableSet(ids);
     }
 
     /**
      * Display name for a model that exists only in the lazy catalog (not yet fully loaded).
-     * Prefer sniffed/cached metadata name, then {@link ServerModelInfo} metadata, else {@code null}.
+     * Prefer sniffed/cached metadata name, then {@link ModelMetadata} metadata, else {@code null}.
      */
     @Nullable
     public static String getLazyModelDisplayName(String modelId) {
@@ -559,7 +427,7 @@ public class ClientModelManager {
         localOnlyModelIds.remove(modelKey);
         localModelSourcePaths.remove(modelKey);
         LocalModelCatalog.Entry previous = lazyModelSources.get(modelKey);
-        ServerModelInfo modelInfo = previous == null ? null : previous.modelInfo;
+        ModelMetadata modelInfo = previous == null ? null : previous.modelInfo;
         String prevName = previous == null ? null : previous.displayName;
         if (prevName == null) {
             prevName = LocalModelCatalog.displayNameFromInfo(modelInfo);
@@ -575,20 +443,13 @@ public class ClientModelManager {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey == null) return false;
         LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
-        return (source != null && source.auth) || serverModels.values().stream()
-                .anyMatch(value -> modelKey.equals(value.modelKey) && value.isAuth);
+        return source != null && source.auth;
     }
 
     public static boolean isLocalOnlyModel(String modelId) {
         return modelId != null && localOnlyModelIds.contains(LocalModelCatalog.canonicalKey(modelId));
     }
-
-    public static boolean isServerModel(String modelId) {
-        String modelKey = LocalModelCatalog.canonicalKey(modelId);
-        return modelKey != null && serverModels.values().stream().anyMatch(value -> modelKey.equals(value.modelKey));
-    }
-
-    public static Optional<Path> getLocalModelSourcePath(String modelId) {
+public static Optional<Path> getLocalModelSourcePath(String modelId) {
         if (modelId == null || modelId.isBlank()) {
             return Optional.empty();
         }
@@ -747,23 +608,7 @@ public class ClientModelManager {
         localModelSourcePaths.remove(modelKey);
     }
 
-    public static void resendSelectedServerModel() {
-        String modelId = MODEL_SELECTION.selectedModelId();
-        String textureId = MODEL_SELECTION.selectedTextureId();
 
-        if (modelId == null || modelId.isBlank() || textureId == null) {
-            NetworkOnlineDebugLog.info("resendSelected: EARLY_RETURN (null/blank selection)");
-            return;
-        }
-        ((Executor) Minecraft.getInstance()).execute(() -> {
-            String currentModelId = MODEL_SELECTION.selectedModelId();
-            String currentTextureId = MODEL_SELECTION.selectedTextureId();
-            if (!sameRuntimeModelId(modelId, currentModelId) || currentTextureId == null || !containsRuntimeModel(modelId)) {
-                return;
-            }
-            com.micaftic.morpher.cloud.client.CloudPlayerModelSync.publishCurrentSelection();
-        });
-    }
 
     public static void removeLocalModels(Collection<String> modelIds) {
         if (modelIds == null || modelIds.isEmpty()) {
@@ -830,7 +675,7 @@ public class ClientModelManager {
                 localModelSourcePaths.put(modelKey, persisted.toAbsolutePath().normalize());
                 if (persisted != null) {
                     LocalModelCatalog.Entry previousSource = lazyModelSources.get(modelKey);
-                    ServerModelInfo prevInfo = previousSource == null ? null : previousSource.modelInfo;
+                    ModelMetadata prevInfo = previousSource == null ? null : previousSource.modelInfo;
                     String prevName = previousSource == null ? null : previousSource.displayName;
                     if (prevName == null) {
                         prevName = LocalModelCatalog.displayNameFromInfo(prevInfo);
@@ -864,9 +709,9 @@ public class ClientModelManager {
             try {
                 localModelSourcePaths.clear();
                 LinkedHashMap<String, LocalModelCatalog.Entry> catalog = new LinkedHashMap<>();
-                scanLocalModelSources(ServerModelManager.BUILT, false, catalog);
-                scanLocalModelSources(ServerModelManager.CUSTOM, false, catalog);
-                scanLocalModelSources(ServerModelManager.AUTH, true, catalog);
+                scanLocalModelSources(ModelStoragePaths.built(), false, catalog);
+                scanLocalModelSources(ModelStoragePaths.custom(), false, catalog);
+                scanLocalModelSources(ModelStoragePaths.auth(), true, catalog);
                 LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
                 Set<String> staleIds = new HashSet<>(diff.staleIds());
                 List<String> failedModelIds = new ArrayList<>();
@@ -961,26 +806,17 @@ public class ClientModelManager {
         GuiWidgetRegistry.forEach(consumer);
     }
 
-    public static synchronized void resetSync() {
+    
+    public static void reloadLocalModelsAfterPrivacyMode() {
 
         ((Executor) Minecraft.getInstance()).execute(() -> {
-            syncState.setState(SyncState.IDLE);
-        });
-    }
-
-    public static void enterPrivacyMode() {
-
-        ((Executor) Minecraft.getInstance()).execute(() -> {
-            syncState.setState(SyncState.LOADING);
-            markSyncActivity();
-            forEachGuiWidget(IGuiWidget::onSyncBegin);
+            forEachGuiWidget(IGuiWidget::onLocalModelsReloadBegin);
         });
         reloadLocalModels(error -> {
-            syncState.setState(SyncState.IDLE);
             restorePersistedModelSelection();
             forEachGuiWidget(guiWidget -> {
                 guiWidget.onModelsLoaded(modelAssemblyMap);
-                guiWidget.onSyncComplete();
+                guiWidget.onLocalModelsReloadComplete();
             });
         });
     }
@@ -995,129 +831,11 @@ public class ClientModelManager {
 
     // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
 
-    public static void startSync(Connection connection, ByteBuffer byteBuffer) {
-        // Minecraft server sync has been removed.
-    }
 
 
-    public static void onSyncConnected() {
-        // The handshake is not model transfer. Wait for the manifest before showing progress.
-        syncState.setState(SyncState.IDLE);
-        forEachGuiWidget(IGuiWidget::onSyncBegin);
-    }
 
-    /**
-     * 在加入服务器一段时间后，如果 YSM 握手仍未完成（服务器没有安装本模组），
-     * 将同步状态从 WAITING 重置为 IDLE，避免加载状态 UI 一直卡在“等待中”。
-     */
-    public static void markVanillaServerIfNoHandshake() {
-        if (syncState.getCurrentState() == SyncState.WAITING) {
-            syncState.setState(SyncState.IDLE);
-        }
-    }
 
-    static void onSyncProgress(int totalModels) {
-        if (totalModels == -1) {
-            ((Executor) Minecraft.getInstance()).execute(() -> {
-                markSyncActivity();
-                syncState.setState(SyncState.PREPARING);
-                forEachGuiWidget(IGuiWidget::onSyncError);
-            });
-        } else {
-            ((Executor) Minecraft.getInstance()).execute(() -> {
-                if (totalModels > 0) {
-                    syncState.startSyncing(totalModels);
-                } else {
-                    syncState.setState(SyncState.IDLE);
-                }
-                forEachGuiWidget(guiWidget -> guiWidget.onSyncProgress(totalModels, 0));
-            });
-        }
-    }
 
-    static void onModelPacksReceived(ModelPackData[] packDataArr) {
-        Object2ReferenceOpenHashMap<String, ModelPackData> newPackMap = new Object2ReferenceOpenHashMap<>();
-
-        for (ModelPackData packData : packDataArr) {
-            if (StringUtils.isBlank(packData.getName())) {
-                packData = new ModelPackData(packData.getPath(), FileTypeUtil.getFinalPathSegment(packData.getPath()), packData.getDescription(), packData.getTexture(), packData.getTranslations());
-            }
-            newPackMap.put(packData.getPath(), packData);
-                OuterFileTexture iconTexture = packData.getTexture();
-                if (iconTexture != null) {
-                    Identifier location2 = FileTypeUtil.getPackIconLocation(packData.getPath());
-                    ((Executor) Minecraft.getInstance()).execute(() -> {
-                        iconTexture.doLoad();
-                        ((MinecraftAccessor) Minecraft.getInstance()).ysm$getTextureManager().register(location2, iconTexture);
-                    });
-                }
-            }
-
-        for (ModelPackData packData : modelPackMap.values()) {
-            if (!newPackMap.containsKey(packData.getPath()) && packData.getTexture() != null) {
-                Identifier location = FileTypeUtil.getPackIconLocation(packData.getPath());
-                ((Executor) Minecraft.getInstance()).execute(() -> ((MinecraftAccessor) Minecraft.getInstance()).ysm$getTextureManager().release(location));
-            }
-        }
-        modelPackMap = newPackMap;
-    }
-
-    static void onModelContextsUpdated(String[] removedModelIds, String[] previousModelIds, String[] updatedModelIds, boolean[] isModelReady) {
-        ((Executor) Minecraft.getInstance()).execute(() -> {
-            Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
-            if (removedModelIds != null) {
-                ArrayList<Pair<String, ModelAssembly>> removed = new ArrayList<>(removedModelIds.length);
-                for (String str : removedModelIds) {
-                    String modelKey = LocalModelCatalog.canonicalKey(str);
-                    if (localOnlyModelIds.contains(modelKey)) {
-                        continue;
-                    }
-                    if (sameRuntimeModelId(str, MODEL_SELECTION.localOnlyModelId())) {
-                        MODEL_SELECTION.clearLocalOnly();
-                    }
-                    if (sameRuntimeModelId(str, MODEL_SELECTION.selectedModelId())) {
-                        MODEL_SELECTION.clear();
-                    }
-                    ModelAssembly assembly = map.remove(modelKey);
-                    if (assembly != null) {
-                        removed.add(Pair.of(modelKey, assembly));
-                    }
-                }
-                ((Executor) Minecraft.getInstance()).execute(() -> {
-                    for (Pair<String, ModelAssembly> entry : removed) {
-                        releaseModelAssembly(entry.getLeft(), entry.getRight());
-                    }
-                });
-            }
-            if (previousModelIds != null) {
-                ModelAssembly[] modelAssemblies = new ModelAssembly[previousModelIds.length];
-                for (int i = 0; i < previousModelIds.length; i++) {
-                    String previousKey = LocalModelCatalog.canonicalKey(previousModelIds[i]);
-                    localOnlyModelIds.remove(previousKey);
-                    if (sameRuntimeModelId(previousModelIds[i], MODEL_SELECTION.localOnlyModelId())) {
-                        MODEL_SELECTION.clearLocalOnly();
-                    }
-                    if (sameRuntimeModelId(previousModelIds[i], MODEL_SELECTION.selectedModelId())) {
-                        MODEL_SELECTION.setSelectedId(updatedModelIds[i]);
-                    }
-                    modelAssemblies[i] = map.remove(previousKey);
-                }
-                for (int i = 0; i < modelAssemblies.length; i++) {
-                    ModelAssembly modelAssembly = modelAssemblies[i];
-                    if (modelAssembly != null) {
-                        modelAssembly.getTextureRegistry().setAuthModel(isModelReady[i]);
-                        map.put(LocalModelCatalog.canonicalKey(updatedModelIds[i]), modelAssembly);
-                    }
-                }
-            }
-            modelAssemblyMap = map;
-            if ((removedModelIds != null && removedModelIds.length > 0) || (previousModelIds != null && previousModelIds.length > 0)) {
-                forEachGuiWidget(guiWidget -> {
-                    guiWidget.onModelsLoaded(map);
-                });
-            }
-        });
-    }
 
     static void onModelDataReceived(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) throws Exception {
         if (isPrimary) {
@@ -1408,7 +1126,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
                                               Map<String, LocalModelCatalog.Entry> catalog) throws IOException {
         LocalModelCatalog.ScanResult result = LOCAL_MODEL_CATALOG.scan(baseDir, isAuth,
                 YSMFolderDeserializer::isModelFolder, lazyModelSources, catalog);
-        if (!samePath(baseDir, ServerModelManager.CUSTOM)) {
+        if (!samePath(baseDir, ModelStoragePaths.custom())) {
             return;
         }
         for (Map.Entry<String, Path> source : result.sources().entrySet()) {
@@ -1570,138 +1288,10 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         return parsedBundle != null;
     }
 
-    static void markSyncModelProcessed() {
-        ((Executor) Minecraft.getInstance()).execute(() -> {
-            if (syncState.currentState != SyncState.SYNCING) {
-                return;
-            }
-            markSyncActivity();
-            syncState.syncedModels = Math.min(syncState.totalModels, syncState.syncedModels + 1);
-            int processed = syncState.syncedModels;
-            forEachGuiWidget(guiWidget -> guiWidget.onSyncProgress(syncState.getTotalModels(), processed));
-        });
-    }
-
-    static void markSyncActivity() {
-        lastSyncActivityMillis = System.currentTimeMillis();
-    }
-
-    static void finishPendingModelLoad() {
-        pendingModelsCount.updateAndGet(value -> Math.max(0, value - 1));
-        markSyncModelProcessed();
-        scheduleSyncCompleteIfReady();
-    }
-
-    static void finishPendingModelFailure() {
-        failedSyncModelsCount.incrementAndGet();
-        finishPendingModelLoad();
-    }
-
-    static void failSync(Component reason) {
-        if (!syncFailureScheduled.compareAndSet(false, true)) {
-            return;
-        }
-        Minecraft.getInstance().execute(() -> {
-            try {
-                resetClientState();
-                syncState.finishFailure(reason);
-                forEachGuiWidget(IGuiWidget::onSyncError);
-            } finally {
-                syncFailureScheduled.set(false);
-            }
-        });
-    }
-
-    static void scheduleSyncCompleteIfReady() {
-        if (!syncManifestProcessed || pendingModelsCount.get() != 0
-                || !syncCompletionScheduled.compareAndSet(false, true)) {
-            return;
-        }
-        submitModelTask(() -> {
-            YesSteveModel.LOGGER.info("[SM] All server models loaded; handshake complete!");
-            onSyncComplete();
-        });
-    }
-
-    /**
-     * 若同步处于进行中（还有待下载模型或仍在 SYNCING）且超过
-     * {@link #SYNC_WATCHDOG_TIMEOUT_MILLIS} 没有任何进度，则强制结束同步，
-     * 防止加载弹窗永久卡在某一进度。
-     */
-    public static void tickSyncWatchdog() {
-        long last = lastSyncActivityMillis;
-        if (last == 0L) {
-            return;
-        }
-        boolean active = pendingModelsCount.get() > 0 || syncState.getCurrentState() == SyncState.SYNCING
-                || syncState.getCurrentState() == SyncState.PREPARING
-                || syncState.getCurrentState() == SyncState.LOADING;
-        if (!active) {
-            lastSyncActivityMillis = 0L;
-            return;
-        }
-        if (System.currentTimeMillis() - last > SYNC_WATCHDOG_TIMEOUT_MILLIS) {
-            lastSyncActivityMillis = 0L;
-            int dropped = pendingModelsCount.get();
-            YesSteveModel.LOGGER.warn(
-                    "[SM] 模型同步超时（{}ms 无进度），中止本次同步；有 {} 个模型分片未收齐。",
-                    SYNC_WATCHDOG_TIMEOUT_MILLIS, dropped);
-            failSync(Component.literal("SPM model synchronization timed out"));
-        }
-    }
-
-    private static void onSyncComplete() {
-        NetworkOnlineDebugLog.info("onSyncComplete: selectedModelId={} selectedTextureId={} assemblyMapSize={}",
-                MODEL_SELECTION.selectedModelId(), MODEL_SELECTION.selectedTextureId(), modelAssemblyMap.size());
-        int failedModels = failedSyncModelsCount.getAndSet(0);
 
 
-        lastSyncActivityMillis = 0L;
-        syncManifestProcessed = false;
 
-        ((Executor) Minecraft.getInstance()).execute(() -> {
-            flushPendingModels();
-            ClientRenderCompatibilityRegistry.flush();
-            if (failedModels == 0) {
-                syncState.finishSuccess();
-            } else {
-                syncState.finishFailure(Component.literal("SPM failed to transfer " + failedModels + " model(s)"));
-            }
-            // 远端懒加载目录到此才完整，补做一次持久化选择恢复。
-            restorePersistedModelSelection();
-            NetworkOnlineDebugLog.info("onSyncComplete: calling resendSelectedServerModel");
-            resendSelectedServerModel();
-            if (failedModels == 0) {
-                forEachGuiWidget(IGuiWidget::onSyncComplete);
-            } else {
-                forEachGuiWidget(IGuiWidget::onSyncError);
-            }
-        });
-    }
 
-    public static void setAllowUpload(boolean allowUpload) {
-        LegacyCompatState.setAllowUpload(allowUpload);
-    }
-
-    public static void setOysmServer(boolean isOysmServer) {
-        LegacyCompatState.setOysmServer(isOysmServer);
-    }
-
-    private static void onSyncError(@Nullable Object obj) {
-        lastSyncActivityMillis = 0L;
-        ((Executor) Minecraft.getInstance()).execute(() -> {
-            syncState.finishFailure(obj instanceof Component component ? component : null);
-            forEachGuiWidget(guiWidget -> {
-                guiWidget.onSyncMessage(obj == null ? null : (Component) obj);
-            });
-            if (obj instanceof Component component) {
-                if (Minecraft.getInstance().player != null) {
-                    Minecraft.getInstance().player.sendSystemMessage(component);
-                }
-                YesSteveModel.LOGGER.error(component.getString(256));
-            }
-        });
-    }
 
     public static void flushPendingModels() {
         if (pendingModelQueue.isEmpty())
@@ -1892,7 +1482,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         }
         if (minecraft.level != null) {
             for (Player player : minecraft.level.players()) {
-                ModelInfoCapability.get(player).ifPresent(cap -> {
+                PlayerCapability.get(player).ifPresent(cap -> {
                     String modelId = cap.getModelId();
                     if (modelId != null && !modelId.isBlank()) {
                         protectedModels.add(LocalModelCatalog.canonicalKey(modelId));
@@ -2037,7 +1627,7 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         }
 
         @Override
-        public ServerModelInfo getModelData() {
+        public ModelMetadata getModelData() {
             ModelAssembly assembly = loadedAssembly();
             return assembly == null ? source.modelInfo : assembly.getModelData();
         }
@@ -2059,74 +1649,6 @@ private static RawYsmModel parseBbModelImport(byte[] data, String source) throws
         return pendingModelQueue.size();
     }
 
-    public static class SyncStatus {
-        // Cloud models load on demand; joining a world does not await a server manifest.
-        private SyncState currentState = SyncState.IDLE;
+    
 
-        private int totalModels = -1;
-
-        private int syncedModels = -1;
-
-        private long terminalSinceMillis = 0L;
-
-        @Nullable
-        private Component message = null;
-
-        public SyncState getCurrentState() {
-            return this.currentState;
-        }
-
-        public int getSyncedModels() {
-            return this.syncedModels;
-        }
-
-        public int getTotalModels() {
-            return this.totalModels;
-        }
-
-        public long getTerminalSinceMillis() {
-            return this.terminalSinceMillis;
-        }
-
-        @Nullable
-        public Component getMessage() {
-            return this.message;
-        }
-
-        public void setState(SyncState syncState) {
-            this.currentState = syncState;
-            this.totalModels = -1;
-            this.syncedModels = -1;
-            this.terminalSinceMillis = 0L;
-            this.message = null;
-        }
-
-        public void startSyncing(int totalModels) {
-            this.currentState = SyncState.SYNCING;
-            this.totalModels = totalModels;
-            this.syncedModels = 0;
-            this.terminalSinceMillis = 0L;
-            this.message = null;
-        }
-
-        public void finishSuccess() {
-            this.currentState = SyncState.IDLE;
-            if (this.totalModels < 0) {
-                this.totalModels = Math.max(0, this.syncedModels);
-            }
-            this.syncedModels = this.totalModels;
-            this.terminalSinceMillis = System.currentTimeMillis();
-            this.message = null;
-        }
-
-        public void finishFailure(@Nullable Component message) {
-            this.currentState = SyncState.IDLE;
-            this.terminalSinceMillis = System.currentTimeMillis();
-            this.message = message;
-        }
-    }
-
-    public static void exportAllCachedModels(@Nullable String extra, @Nullable Consumer<ExportResult> callback) {
-        if (callback != null) callback.accept(new ExportResult(false, Component.literal("旧联机缓存导出已移除；请从 Cloud 下载原模型"), "", "", 0));
-    }
 }
