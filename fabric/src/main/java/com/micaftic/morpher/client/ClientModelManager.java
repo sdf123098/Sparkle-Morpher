@@ -19,6 +19,7 @@ import com.micaftic.morpher.core.model.selection.EntityModelResolver;
 import com.micaftic.morpher.core.model.selection.ModelRevisionGuard;
 import com.micaftic.morpher.core.model.selection.ModelSelectionState;
 import com.micaftic.morpher.core.model.lifecycle.GpuCacheTrimCoordinator;
+import com.micaftic.morpher.core.model.lifecycle.ModelScanRevision;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
@@ -187,7 +188,10 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static final LocalModelCatalog LOCAL_MODEL_CATALOG = new LocalModelCatalog();
     private static final long MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS = 5L * 60L * 1000L;
 
-    private static final ConcurrentLinkedQueue<Pair<ModelAssembly, String>> pendingModelQueue = new ConcurrentLinkedQueue<>();
+    private static final ModelScanRevision LOCAL_MODEL_SCAN_REVISION = new ModelScanRevision();
+    private static final ConcurrentLinkedQueue<PendingModelPublication> pendingModelQueue = new ConcurrentLinkedQueue<>();
+    private record PendingModelPublication(ModelAssembly assembly, String modelId, long scanRevision,
+                                           @Nullable LocalModelCatalog.Entry source) { }
     private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, Path> localModelSourcePaths = new ConcurrentHashMap<>();
     public static void loadDefaultModel() {
@@ -644,6 +648,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     public static void importLocalModel(String modelId, String fileName, byte[] data, @Nullable Consumer<Component> callback) {
+        LOCAL_MODEL_SCAN_REVISION.invalidate();
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         byte[] importData = data;
         submitModelTask(() -> {
@@ -701,23 +706,35 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     public static void reloadLocalModels(@Nullable Consumer<Component> callback, boolean restoreSelection) {
+        long scanRevision = LOCAL_MODEL_SCAN_REVISION.begin();
         submitModelTask(() -> {
             Component error = null;
             try {
-                localModelSourcePaths.clear();
                 LinkedHashMap<String, LocalModelCatalog.Entry> catalog = new LinkedHashMap<>();
-                scanLocalModelSources(ModelStoragePaths.built(), false, catalog);
-                scanLocalModelSources(ModelStoragePaths.custom(), false, catalog);
-                scanLocalModelSources(ModelStoragePaths.auth(), true, catalog);
-                LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
-                Set<String> staleIds = new HashSet<>(diff.staleIds());
+                LinkedHashMap<String, Path> customSources = new LinkedHashMap<>();
+                scanLocalModelSources(ModelStoragePaths.built(), false, catalog, customSources);
+                scanLocalModelSources(ModelStoragePaths.custom(), false, catalog, customSources);
+                scanLocalModelSources(ModelStoragePaths.auth(), true, catalog, customSources);
+                if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) {
+                    finishSupersededModelScan(callback);
+                    return;
+                }
+                if (!areScanSourcesCurrent(scanRevision, catalog)) {
+                    LOCAL_MODEL_SCAN_REVISION.invalidate();
+                    finishSupersededModelScan(callback);
+                    return;
+                }
+                LocalModelCatalog.Diff candidateDiff = LocalModelCatalog.diff(lazyModelSources, catalog);
+                Set<String> staleIds = new HashSet<>(candidateDiff.staleIds());
                 List<String> failedModelIds = new ArrayList<>();
                 if (!isLazyModelLoading()) {
                     for (Map.Entry<String, LocalModelCatalog.Entry> entry : catalog.entrySet()) {
+                        if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) break;
+                        if (!isScanSourceCurrent(scanRevision, entry.getValue())) continue;
                         ModelAssembly current = modelAssemblyMap.get(entry.getKey());
                         if (staleIds.contains(entry.getKey()) || current == null || !current.isRuntimeResident()) {
                             try {
-                                loadLocalModelSource(entry.getKey(), entry.getValue());
+                                loadLocalModelSource(entry.getKey(), entry.getValue(), scanRevision);
                             } catch (Exception e) {
                                 failedModelIds.add(entry.getKey());
                                 YesSteveModel.LOGGER.warn("[SM] Failed to reload local model {}, keeping previous assembly", entry.getKey(), e);
@@ -725,27 +742,62 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                         }
                     }
                 }
+                if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) {
+                    finishSupersededModelScan(callback);
+                    return;
+                }
+                if (!areScanSourcesCurrent(scanRevision, catalog)) {
+                    LOCAL_MODEL_SCAN_REVISION.invalidate();
+                    finishSupersededModelScan(callback);
+                    return;
+                }
                 if (!failedModelIds.isEmpty()) {
                     error = Component.translatable("gui.sparkle_morpher.import.error.local_reload_failed", String.join(", ", failedModelIds));
                 }
+                Component result = error;
                 ((Executor) Minecraft.getInstance()).execute(() -> {
+                    if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) {
+                        flushPendingModels();
+                        if (callback != null) callback.accept(supersededModelScanResult());
+                        return;
+                    }
+                    if (!areScanSourcesCurrent(scanRevision, catalog)) {
+                        LOCAL_MODEL_SCAN_REVISION.invalidate();
+                        flushPendingModels();
+                        if (callback != null) callback.accept(supersededModelScanResult());
+                        return;
+                    }
+                    localModelSourcePaths.clear();
+                    localModelSourcePaths.putAll(customSources);
+                    LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
                     flushPendingModels();
                     finalizeLocalModelCatalog(diff);
                     ClientRenderCompatibilityRegistry.flush();
                     forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
+                    if (restoreSelection) restorePersistedModelSelection();
+                    if (callback != null) callback.accept(result);
                 });
-                if (restoreSelection) {
-                    restorePersistedModelSelection();
-                }
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to reload local model folders", e);
                 error = Component.translatable("gui.sparkle_morpher.import.error.local_reload_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-            }
-            if (callback != null) {
                 Component result = error;
-                ((Executor) Minecraft.getInstance()).execute(() -> callback.accept(result));
+                ((Executor) Minecraft.getInstance()).execute(() -> {
+                    if (callback != null) callback.accept(
+                            LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision) ? result : supersededModelScanResult());
+                });
             }
         });
+    }
+
+    private static void finishSupersededModelScan(@Nullable Consumer<Component> callback) {
+        ((Executor) Minecraft.getInstance()).execute(() -> {
+            flushPendingModels();
+            if (callback != null) callback.accept(supersededModelScanResult());
+        });
+    }
+
+    private static Component supersededModelScanResult() {
+        return Component.literal("Local model scan superseded by a newer request");
     }
 
     public static ModelAssembly getLocalModelContext() {
@@ -881,18 +933,31 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
         localOnlyModelIds.add(modelId);
         touchModel(modelId);
-        pendingModelQueue.add(Pair.of(runtimeModel, modelId));
+        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, -1L, null));
         localModelSourcePaths.put(modelId, persisted.toAbsolutePath().normalize());
         lazyModelSources.put(modelId, new LocalModelCatalog.Entry(
                 persisted, null, false, false, LocalModelCatalog.fingerprint(persisted), null, null));
     }
 
     private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth) throws Exception {
+        loadLocalGltfModel(modelId, source, isAuth, -1L, null);
+    }
+
+    private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth,
+                                           long scanRevision, @Nullable LocalModelCatalog.Entry sourceEntry) throws Exception {
+        if (scanRevision >= 0L && !LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return;
         GltfModel gltfModel = GltfLoader.load(source);
         ModelAssembly runtimeModel = buildGltfAssembly(gltfModel, modelId);
-        localOnlyModelIds.add(modelId);
-        touchModel(modelId);
-        pendingModelQueue.add(Pair.of(runtimeModel, modelId));
+        if (scanRevision >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)
+                || sourceEntry == null || LocalModelCatalog.fingerprint(source) != sourceEntry.fingerprint)) {
+            releaseModelAssembly(modelId, runtimeModel);
+            return;
+        }
+        if (scanRevision < 0L) {
+            localOnlyModelIds.add(modelId);
+            touchModel(modelId);
+        }
+        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, scanRevision, sourceEntry));
     }
 
     private static ModelAssembly buildGltfAssembly(GltfModel model, String modelId) {
@@ -1126,15 +1191,31 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     private static void scanLocalModelSources(Path baseDir, boolean isAuth,
-                                              Map<String, LocalModelCatalog.Entry> catalog) throws IOException {
+                                              Map<String, LocalModelCatalog.Entry> catalog,
+                                              Map<String, Path> customSources) throws IOException {
         LocalModelCatalog.ScanResult result = LOCAL_MODEL_CATALOG.scan(baseDir, isAuth,
                 YSMFolderDeserializer::isModelFolder, lazyModelSources, catalog);
         if (!samePath(baseDir, ModelStoragePaths.custom())) {
             return;
         }
-        for (Map.Entry<String, Path> source : result.sources().entrySet()) {
-            localModelSourcePaths.put(source.getKey(), source.getValue());
+        customSources.putAll(result.sources());
+    }
+
+    private static boolean isScanSourceCurrent(long scanRevision, LocalModelCatalog.Entry source) {
+        if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision) || source == null || source.remote) return false;
+        try {
+            return LocalModelCatalog.fingerprint(source.path) == source.fingerprint;
+        } catch (IOException e) {
+            return false;
         }
+    }
+
+    private static boolean areScanSourcesCurrent(long scanRevision, Map<String, LocalModelCatalog.Entry> catalog) {
+        if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return false;
+        for (LocalModelCatalog.Entry source : catalog.values()) {
+            if (!isScanSourceCurrent(scanRevision, source)) return false;
+        }
+        return LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision);
     }
 
     private static LocalModelCatalog.Diff applyLocalModelCatalog(Map<String, LocalModelCatalog.Entry> catalog) {
@@ -1176,9 +1257,14 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source) throws Exception {
+        loadLocalModelSource(modelId, source, -1L);
+    }
+
+    private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source, long scanRevision) throws Exception {
         if (source.remote) return;
+        if (scanRevision >= 0L && !isScanSourceCurrent(scanRevision, source)) return;
         if (!Files.isDirectory(source.path) && isGltfFileName(source.path.getFileName().toString())) {
-            loadLocalGltfModel(modelId, source.path, source.auth);
+            loadLocalGltfModel(modelId, source.path, source.auth, scanRevision, source);
             return;
         }
         RawYsmModel rawModel;
@@ -1193,20 +1279,25 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             byte[] data = Files.readAllBytes(source.path);
             rawModel = parseImportModel(source.path.getFileName().toString(), data);
         }
-        loadLocalModel(modelId, rawModel, source.auth);
+        if (scanRevision >= 0L && !isScanSourceCurrent(scanRevision, source)) return;
+        loadLocalModel(modelId, rawModel, source.auth, scanRevision, source);
     }
 
-    private static void loadLocalModel(String modelId, RawYsmModel rawModel, boolean isAuth) throws Exception {
+    private static void loadLocalModel(String modelId, RawYsmModel rawModel, boolean isAuth,
+                                       long scanRevision, @Nullable LocalModelCatalog.Entry source) throws Exception {
         modelId = LocalModelCatalog.canonicalKey(modelId);
-        if (modelId == null || modelId.isBlank()) {
+        if (modelId == null || modelId.isBlank()
+                || (scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source)))) {
             return;
         }
         ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
-        localOnlyModelIds.add(modelId);
-        touchModel(modelId);
-        runPendingModelCallback();
-        if (!processModelData(parsedBundle, modelId, false, isAuth)) {
-            if (!lazyModelSources.containsKey(modelId)) {
+        if (scanRevision < 0L) {
+            localOnlyModelIds.add(modelId);
+            touchModel(modelId);
+            runPendingModelCallback();
+        }
+        if (!processModelData(parsedBundle, modelId, false, isAuth, scanRevision, source)) {
+            if (scanRevision < 0L && !lazyModelSources.containsKey(modelId)) {
                 localOnlyModelIds.remove(modelId);
             }
             throw new IllegalStateException("Failed to build local model");
@@ -1262,18 +1353,28 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     public static boolean processModelData(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) {
+        return processModelData(parsedBundle, modelId, isPrimary, isAuth, -1L, null);
+    }
+
+    private static boolean processModelData(@Nullable ClientModelInfo parsedBundle, String modelId,
+                                            boolean isPrimary, boolean isAuth, long scanRevision,
+                                            @Nullable LocalModelCatalog.Entry source) {
         modelId = LocalModelCatalog.canonicalKey(modelId);
         if (parsedBundle != null) {
             try {
                 ModelMemoryProfiler.log("assembly-build-start", modelId);
                 ModelAssembly runtimeModel = ModelAssemblyFactory.buildAssembly(parsedBundle, isPrimary, isAuth);
+                if (scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source))) {
+                    releaseModelAssembly(modelId, runtimeModel);
+                    return false;
+                }
                 if (modelId != null) {
                     MODEL_PROCESS_FAILURES.remove(modelId);
                 }
                 ModelMemoryProfiler.log("assembly-build-finished", modelId);
                 ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
-                pendingModelQueue.add(Pair.of(runtimeModel, modelId));
-                touchModel(modelId);
+                pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, scanRevision, source));
+                if (scanRevision < 0L) touchModel(modelId);
                 if (isPrimary) {
                     localModelContext = runtimeModel;
 
@@ -1302,13 +1403,18 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
         Object2ReferenceOpenHashMap<String, ModelAssembly> object2ReferenceOpenHashMap = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
         while (true) {
-            Pair<ModelAssembly, String> pairPoll = pendingModelQueue.poll();
-            if (pairPoll != null) {
-                String modelKey = LocalModelCatalog.canonicalKey(pairPoll.getRight());
-                ModelAssembly previous = object2ReferenceOpenHashMap.put(modelKey, pairPoll.getLeft());
+            PendingModelPublication pending = pendingModelQueue.poll();
+            if (pending != null) {
+                String modelKey = LocalModelCatalog.canonicalKey(pending.modelId());
+                if (pending.scanRevision() >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(pending.scanRevision())
+                        || !isScanSourceCurrent(pending.scanRevision(), pending.source()))) {
+                    releaseModelAssembly(modelKey, pending.assembly());
+                    continue;
+                }
+                ModelAssembly previous = object2ReferenceOpenHashMap.put(modelKey, pending.assembly());
                 LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
-                if (source != null && !(pairPoll.getLeft() instanceof LazyModelAssembly)) {
-                    source.modelInfo = pairPoll.getLeft().getModelData();
+                if (source != null && !(pending.assembly() instanceof LazyModelAssembly)) {
+                    source.modelInfo = pending.assembly().getModelData();
                     if (source.modelInfo != null) {
                         String name = LocalModelCatalog.displayNameFromInfo(source.modelInfo);
                         if (StringUtils.isNotBlank(name)) {
@@ -1319,9 +1425,9 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 touchModel(modelKey);
                 gpuCacheTrimCoordinator.clear(modelKey);
                 if (previous == localModelContext) {
-                    localModelContext = pairPoll.getLeft();
+                    localModelContext = pending.assembly();
                 }
-                if (previous != null && previous != pairPoll.getLeft()) {
+                if (previous != null && previous != pending.assembly()) {
                     releaseModelAssembly(modelKey, previous);
                 }
            } else {
