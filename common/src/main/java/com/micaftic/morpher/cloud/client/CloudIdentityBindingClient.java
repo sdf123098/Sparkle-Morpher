@@ -70,7 +70,7 @@ public final class CloudIdentityBindingClient {
     private static CloudBinding parseBinding(String body) {
         try {
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
-            return new CloudBinding(string(root, "binding_id"), string(root, "account_id"), string(root, "identity_id"), string(root, "target_id"), string(root, "scope_id"), string(root, "world_epoch"), string(root, "entity_uuid"), string(root, "verification_method"), string(root, "status"), root.has("approved_by") && !root.get("approved_by").isJsonNull() ? root.get("approved_by").getAsString() : null, root.get("revision").getAsLong());
+            return new CloudBinding(string(root, "binding_id"), string(root, "account_id"), string(root, "identity_id"), string(root, "target_id"), string(root, "scope_id"), string(root, "world_epoch"), string(root, "entity_uuid"), string(root, "verification_method"), string(root, "status"), root.has("approved_by") && !root.get("approved_by").isJsonNull() ? root.get("approved_by").getAsString() : null, root.get("revision").getAsLong(), optionalName(root, "identity_display_name"), optionalName(root, "target_display_name"));
         } catch (RuntimeException e) {
             throw new CloudHttpException(200, CloudErrorCode.MALFORMED_MESSAGE, "Malformed Cloud identity binding");
         }
@@ -94,7 +94,7 @@ public final class CloudIdentityBindingClient {
                 string(root, "target_id"), string(root, "scope_id"), string(root, "world_epoch"),
                 string(root, "entity_uuid"), string(root, "verification_method"), string(root, "status"),
                 root.has("approved_by") && !root.get("approved_by").isJsonNull() ? root.get("approved_by").getAsString() : null,
-                root.get("revision").getAsLong());
+                root.get("revision").getAsLong(), optionalName(root, "identity_display_name"), optionalName(root, "target_display_name"));
     }
 
     private static CloudClaimCode parseClaimCode(String body) {
@@ -116,6 +116,15 @@ public final class CloudIdentityBindingClient {
         return value;
     }
 
-    public record CloudBinding(String bindingId, String accountId, String identityId, String targetId, String scopeId, String worldEpoch, String entityUuid, String verificationMethod, String status, String approvedBy, long revision) {}
+    private static String optionalName(JsonObject root, String key) {
+        if (!root.has(key) || root.get(key).isJsonNull()) return null;
+        String name = root.get(key).getAsString();
+        return name.isBlank() ? null : name;
+    }
+    public record CloudBinding(String bindingId, String accountId, String identityId, String targetId, String scopeId, String worldEpoch, String entityUuid, String verificationMethod, String status, String approvedBy, long revision, String identityDisplayName, String targetDisplayName) {
+        public CloudBinding(String bindingId, String accountId, String identityId, String targetId, String scopeId, String worldEpoch, String entityUuid, String verificationMethod, String status, String approvedBy, long revision) {
+            this(bindingId, accountId, identityId, targetId, scopeId, worldEpoch, entityUuid, verificationMethod, status, approvedBy, revision, null, null);
+        }
+    }
     public record CloudClaimCode(String code, String scopeId, String worldEpoch, String targetId, String entityUuid, long expiresInSeconds) {}
 }

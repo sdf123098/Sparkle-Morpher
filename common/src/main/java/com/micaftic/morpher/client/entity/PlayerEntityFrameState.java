@@ -1,7 +1,10 @@
 package com.micaftic.morpher.client.entity;
 
-import com.micaftic.morpher.network.message.S2CSyncPlayerStatePacket;
-import it.unimi.dsi.fastutil.objects.Object2ByteOpenHashMap;
+import com.micaftic.morpher.core.display.PlayerDisplayState;
+import net.minecraft.core.registries.BuiltInRegistries;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
 import net.minecraft.core.Holder;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -12,25 +15,7 @@ public class PlayerEntityFrameState extends LivingEntityFrameState<Player> {
 
     private final boolean isLocalPlayer;
 
-    private final Object2ByteOpenHashMap<Holder<MobEffect>> effectAmplifiers;
-
-    private boolean isFlying;
-
-    private int experienceLevel;
-
-    private int health;
-
-    private int maxHealth;
-
-    private int foodLevel;
-
-    private float strafeInput;
-
-    private float verticalInput;
-
-    private float forwardInput;
-
-    private boolean isShieldBlocking;
+    private PlayerDisplayState displayState = PlayerDisplayState.UNKNOWN;
 
     private static float headYawDelta;
 
@@ -39,118 +24,60 @@ public class PlayerEntityFrameState extends LivingEntityFrameState<Player> {
     public PlayerEntityFrameState(Player player, boolean isLocalPlayer) {
         super(player);
         this.isLocalPlayer = isLocalPlayer;
-        this.effectAmplifiers = new Object2ByteOpenHashMap<>(8);
     }
 
     @Override
     public void reset() {
         super.reset();
-        this.effectAmplifiers.clear();
-        this.isFlying = false;
-        this.experienceLevel = 0;
-        this.health = 0;
-        this.maxHealth = 0;
-        this.foodLevel = 0;
-        this.strafeInput = 0.0f;
-        this.verticalInput = 0.0f;
-        this.forwardInput = 0.0f;
-        this.isShieldBlocking = false;
+        clearDisplayState();
     }
 
-    public void applySyncMessage(S2CSyncPlayerStatePacket message) {
-        if ((message.flags & 2) != 0) {
-            this.isFlying = message.isFlying;
-        }
-        if ((message.flags & 4) != 0) {
-            if (message.isFullSync()) {
-                this.effectAmplifiers.clear();
+    public void applyDisplayState(PlayerDisplayState state) {
+        if (!isLocalPlayer) displayState = Objects.requireNonNull(state);
+    }
+    public PlayerDisplayState displayState() { return displayState; }
+    public void clearDisplayState() { displayState = PlayerDisplayState.UNKNOWN; }
+
+    /** Only this client's own player can supply hidden display values. */
+    public PlayerDisplayState snapshot(int maxEffects) {
+        if (!isLocalPlayer) return PlayerDisplayState.UNKNOWN;
+        Map<String, Integer> effects = new LinkedHashMap<>();
+        for (MobEffectInstance effect : entity.getActiveEffects()) {
+            int amplifier = effect.getAmplifier();
+            if (amplifier < 0 || amplifier > 255 || effects.size() >= Math.min(256, maxEffects)) {
+                effects = null;
+                break;
             }
-            this.effectAmplifiers.putAll(message.effectAmplifiers);
+            effects.put(BuiltInRegistries.MOB_EFFECT.getKey(effect.getEffect().value()).toString(), amplifier + 1);
         }
-        if ((message.flags & 8) != 0) {
-            this.experienceLevel = message.experienceLevel;
+        return new PlayerDisplayState(Math.max(0, entity.experienceLevel), health(entity.getHealth()),
+                health(entity.getMaxHealth()), Mth.clamp(entity.getFoodData().getFoodLevel(), 0, 20),
+                effects, entity.getAbilities().flying, input(entity.xxa), input(entity.yya),
+                input(entity.zza), entity.isBlocking());
+    }
+    private static Float health(float value) {
+        return Float.isFinite(value) && value >= 0 && value <= 1_000_000 ? value : null;
+    }
+    private static Float input(float value) { return Float.isFinite(value) ? Mth.clamp(value, -1, 1) : null; }
+    private static float inputOrZero(Float value) { return value == null ? 0 : value; }
+    public boolean isFlying() { return isLocalPlayer ? entity.getAbilities().flying : Boolean.TRUE.equals(displayState.flying()); }
+    public int getExperienceLevel() { return isLocalPlayer ? entity.experienceLevel : displayState.experienceLevel() == null ? 0 : displayState.experienceLevel(); }
+    public int getHealth() { return (int) (isLocalPlayer ? entity.getHealth() : displayState.health() == null ? 0 : displayState.health()); }
+    public int getMaxHealth() { return (int) (isLocalPlayer ? entity.getMaxHealth() : displayState.maxHealth() == null ? 0 : displayState.maxHealth()); }
+    public int getFoodLevel() { return isLocalPlayer ? entity.getFoodData().getFoodLevel() : displayState.foodLevel() == null ? 0 : displayState.foodLevel(); }
+    public float getStrafeInput() { return inputOrZero(isLocalPlayer ? input(entity.xxa) : displayState.strafeInput()); }
+    public float getVerticalInput() { return inputOrZero(isLocalPlayer ? input(entity.yya) : displayState.verticalInput()); }
+    public float getForwardInput() { return inputOrZero(isLocalPlayer ? input(entity.zza) : displayState.forwardInput()); }
+    public boolean isLocalPlayer() { return isLocalPlayer; }
+    public boolean hasMovementInput() { return Math.abs(getStrafeInput()) > 1.0E-4f || Math.abs(getVerticalInput()) > 1.0E-4f || Math.abs(getForwardInput()) > 1.0E-4f; }
+    public boolean isShieldBlocking() { return isLocalPlayer ? entity.isBlocking() : Boolean.TRUE.equals(displayState.shieldBlocking()); }
+    public int getEffectAmplifier(Holder<MobEffect> mobEffect) {
+        if (isLocalPlayer) {
+            MobEffectInstance effect = entity.getEffect(mobEffect);
+            return effect == null ? 0 : Mth.clamp(effect.getAmplifier(), 0, 255) + 1;
         }
-        if ((message.flags & 16) != 0) {
-            this.foodLevel = message.foodLevel;
-        }
-        if ((message.flags & 32) != 0) {
-            this.health = message.health;
-        }
-        if ((message.flags & 64) != 0) {
-            this.maxHealth = message.maxHealth;
-        }
-        if ((message.flags & 128) != 0) {
-            this.strafeInput = message.strafeInput / 127.0f;
-        }
-        if ((message.flags & 256) != 0) {
-            this.verticalInput = message.verticalInput / 127.0f;
-        }
-        if ((message.flags & 512) != 0) {
-            this.forwardInput = message.forwardInput / 127.0f;
-        }
-        if ((message.flags & 1024) != 0) {
-            this.isShieldBlocking = message.shieldBlockCooldown;
-        }
-    }
-
-    public boolean isFlying() {
-        if (this.isLocalPlayer) {
-            return this.entity.getAbilities().flying;
-        }
-        return this.isFlying;
-    }
-
-    public int getExperienceLevel() {
-        return this.experienceLevel;
-    }
-
-    public int getHealth() {
-        return this.health;
-    }
-
-    public int getMaxHealth() {
-        return this.maxHealth;
-    }
-
-    public int getFoodLevel() {
-        return this.foodLevel;
-    }
-
-    public float getStrafeInput() {
-        return this.strafeInput;
-    }
-
-    public float getVerticalInput() {
-        return this.verticalInput;
-    }
-
-    public float getForwardInput() {
-        return this.forwardInput;
-    }
-
-    public boolean isLocalPlayer() {
-        return this.isLocalPlayer;
-    }
-
-    public boolean hasMovementInput() {
-        return Math.abs(this.strafeInput) > 1.0E-4f
-                || Math.abs(this.verticalInput) > 1.0E-4f
-                || Math.abs(this.forwardInput) > 1.0E-4f;
-    }
-
-    public boolean isShieldBlocking() {
-        return this.isShieldBlocking;
-    }
-
-    public byte getEffectAmplifier(Holder<MobEffect> mobEffect) {
-        if (this.isLocalPlayer) {
-            MobEffectInstance effect = this.entity.getEffect(mobEffect);
-            if (effect != null) {
-                return (byte) (effect.getAmplifier() + 1);
-            }
-            return (byte) 0;
-        }
-        return this.effectAmplifiers.getOrDefault(mobEffect, (byte) 0);
+        var effects = displayState.effectAmplifiers();
+        return effects == null ? 0 : effects.getOrDefault(BuiltInRegistries.MOB_EFFECT.getKey(mobEffect.value()).toString(), 0);
     }
 
     @Override

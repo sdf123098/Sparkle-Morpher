@@ -2,7 +2,7 @@ package com.micaftic.morpher.client;
 
 import com.micaftic.morpher.geckolib3.file.ModelExtraResourcesFile;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
-import com.micaftic.morpher.model.format.ServerModelInfo;
+import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.client.model.MainModelData;
 import com.micaftic.morpher.geckolib3.file.VehicleModelFiles;
 import com.micaftic.morpher.geckolib3.file.ProjectileModelFiles;
@@ -21,13 +21,13 @@ public final class ClientModelInfo {
     private final ModelExtraResourcesFile extraResources;
 
     @NotNull
-    private final ServerModelInfo info;
+    private final ModelMetadata info;
 
     private final Map<String, OuterFileTexture> avatarTextures;
 
     private final Map<String, OuterFileTexture> guiTextures;
 
-    public ClientModelInfo(MainModelData mainModelData, ProjectileModelFiles[] projectileModelFiles, VehicleModelFiles[] vehicleModelFiles, ModelExtraResourcesFile extraResources, @NotNull ServerModelInfo info, Map<String, OuterFileTexture> avatarTextures, Map<String, OuterFileTexture> guiTextures) {
+    public ClientModelInfo(MainModelData mainModelData, ProjectileModelFiles[] projectileModelFiles, VehicleModelFiles[] vehicleModelFiles, ModelExtraResourcesFile extraResources, @NotNull ModelMetadata info, Map<String, OuterFileTexture> avatarTextures, Map<String, OuterFileTexture> guiTextures) {
         this.mainModelData = mainModelData;
         this.projectileModelFiles = projectileModelFiles;
         this.vehicleModelFiles = vehicleModelFiles;
@@ -62,7 +62,7 @@ public final class ClientModelInfo {
     }
 
     @NotNull
-    public ServerModelInfo getInfo() {
+    public ModelMetadata getInfo() {
         return this.info;
     }
 }

@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.config;
 
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.core.render.NativeSimdPolicy;
 import com.micaftic.morpher.core.render.NativeSimdValidationMode;
 import net.neoforged.neoforge.common.ModConfigSpec;
@@ -15,7 +14,7 @@ public final class ConfigPolicies {
     }
 
     public static Snapshot snapshot() {
-        return new Snapshot(render(), memory(), diagnostics(), privacy(), network());
+        return new Snapshot(render(), memory(), diagnostics(), privacy());
     }
 
     public static RenderPolicy render() {
@@ -61,18 +60,9 @@ public final class ConfigPolicies {
         return new PrivacyPolicy(bool(GeneralConfig.PRIVACY_MODE, false));
     }
 
-    public static NetworkPolicy network() {
-        return new NetworkPolicy(value(ServerConfig.DEFAULT_MODEL_ID, "default"), value(ServerConfig.DEFAULT_MODEL_TEXTURE, "default"),
-                bool(ServerConfig.CAN_SWITCH_MODEL, true), bool(ServerConfig.ALLOW_MODEL_UPLOAD, true),
-                integer(ServerConfig.MODEL_UPLOAD_MAX_MB, 128), integer(ServerConfig.MODEL_UPLOAD_CHUNKS_PER_TICK, 4),
-                List.copyOf(value(ServerConfig.CLIENT_NOT_DISPLAY_MODELS, List.of())), integer(ServerConfig.THREAD_COUNT, 0),
-                bool(ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT, false), integer(ServerConfig.BANDWIDTH_LIMIT, 5),
-                integer(ServerConfig.PLAYER_SYNC_TIMEOUT, 0), bool(ServerConfig.LOW_BANDWIDTH_USAGE, false),
-                integer(ServerConfig.ACCEPT_SOUND_FX, 0));
-    }
-
     public static GraphicsPolicy graphics() {
-        return new GraphicsPolicy(value(GeneralConfig.GRAPHICS_BACKEND_MODE, SmRenderBackendMode.AUTO),
+        return new GraphicsPolicy(
+                value(GeneralConfig.GRAPHICS_BACKEND_MODE, SmRenderBackendMode.AUTO),
                 bool(GeneralConfig.ENABLE_OPENGL_LEGACY_GPU_RENDERER, false),
                 bool(GeneralConfig.DISABLE_RAW_OPENGL_ON_NON_OPENGL, true),
                 bool(GeneralConfig.ENABLE_OPENGL_GUI_BLUR, false),
@@ -108,12 +98,11 @@ public final class ConfigPolicies {
     private static double decimal(ModConfigSpec.DoubleValue value, double fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
     private static <T> T value(ModConfigSpec.ConfigValue<T> value, T fallback) { try { T result = value == null ? null : value.get(); return result == null ? fallback : result; } catch (Exception ignored) { return fallback; } }
 
-    public record Snapshot(RenderPolicy render, MemoryPolicy memory, DiagnosticsPolicy diagnostics, PrivacyPolicy privacy, NetworkPolicy network) { }
+    public record Snapshot(RenderPolicy render, MemoryPolicy memory, DiagnosticsPolicy diagnostics, PrivacyPolicy privacy) { }
     public record RenderPolicy(boolean disableSelfModel, boolean disableOtherModel, boolean disableSelfHands, boolean disableProjectileModel, boolean disableVehicleModel, boolean disableExternalFirstPersonAnimation, boolean useCompatibilityRenderer, boolean useGpuRenderer, boolean disableModelGlowInShaderpack, boolean animationDistanceLod) { }
     public record MemoryPolicy(int audioCacheMaxBytes, int maxCachedGpuModels, boolean lazyModelLoading, int maxResidentCpuModels, int unusedModelTtlSeconds) { }
     public record DiagnosticsPolicy(boolean animationFrameProfiler, boolean animationDebugLog, boolean warnRepeatedAnimationEvaluation, boolean resourceStationMonitorLog, boolean networkOnlineDebugLog, boolean modelMemoryProfiler, boolean modelImportPerformanceLog, boolean inputStateDebugLog) { }
     public record PrivacyPolicy(boolean enabled) { }
-    public record NetworkPolicy(String defaultModelId, String defaultModelTexture, boolean canSwitchModel, boolean allowModelUpload, int modelUploadMaxMiB, int modelUploadChunksPerTick, List<String> clientNotDisplayModels, int threadCount, boolean globalBandwidthLimit, int bandwidthLimitMbps, int playerSyncTimeoutSeconds, boolean lowBandwidthUsage, int acceptSoundFx) { }
     public record GraphicsPolicy(SmRenderBackendMode backendMode, boolean openGlLegacyGpuRenderer, boolean disableRawOpenGlOnNonOpenGl, boolean openGlGuiBlur,
                                  NativeSimdPolicy nativeSimdPolicy, NativeSimdValidationMode nativeSimdValidationMode,
                                  boolean experimentalJavaVectorRenderer, boolean nativeSimdCompatibilityLog,

@@ -8,7 +8,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.function.LongUnaryOperator;
 
 /**
- * R8-2 AtomicFileMover — 原子替换目标文件（从 ServerModelManager.moveWithRetry 抽取）。
+ * AtomicFileMover — atomic replacement of local files with retry.
  *
  * <p>Windows 上目标文件被并发打开（读取/发送）时 REPLACE 会瞬时 AccessDenied，
  * 按指数退避重试几次；目标文件始终是完整内容（旧或新），不会出现半截文件。

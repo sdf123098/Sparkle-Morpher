@@ -22,6 +22,20 @@ class CloudAuthClientTest {
     }
 
     @Test
+    void invalidCredentialsCarryStableLocalizableReasons() {
+        for (String id : new String[] { null, "", "../admin", "_player", "a".repeat(129) }) {
+            assertEquals(CloudValidationException.Reason.INVALID_ACCOUNT_ID,
+                    assertThrows(CloudValidationException.class,
+                            () -> CloudAuthClient.registrationRequestForTest(id, "correct-horse")).reason());
+        }
+        for (String password : new String[] { null, "short", "a".repeat(1025), "password\n", "password\r" }) {
+            assertEquals(CloudValidationException.Reason.INVALID_PASSWORD,
+                    assertThrows(CloudValidationException.class,
+                            () -> CloudAuthClient.registrationRequestForTest("player", password)).reason());
+        }
+    }
+
+    @Test
     void parsesSessionWithoutPersistingOrTransformingTokens() {
         CloudSession session = CloudAuthClient.parseSession("""
                 {"access_token":"access-secret","refresh_token":"refresh-secret",

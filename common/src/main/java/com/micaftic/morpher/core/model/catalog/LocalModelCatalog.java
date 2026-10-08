@@ -2,7 +2,7 @@ package com.micaftic.morpher.core.model.catalog;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.micaftic.morpher.model.format.ServerModelInfo;
+import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.resource.models.Metadata;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
@@ -73,12 +73,12 @@ public final class LocalModelCatalog {
         public final boolean remote;
         public final boolean auth;
         public final long fingerprint;
-        public volatile ServerModelInfo modelInfo;
+        public volatile ModelMetadata modelInfo;
         @Nullable
         public volatile String displayName;
 
         public Entry(Path path, @Nullable byte[] cacheKey, boolean remote, boolean auth,
-                     long fingerprint, @Nullable ServerModelInfo modelInfo,
+                     long fingerprint, @Nullable ModelMetadata modelInfo,
                      @Nullable String displayName) {
             this.path = path.toAbsolutePath().normalize();
             this.cacheKey = cacheKey == null ? null : cacheKey.clone();
@@ -183,7 +183,7 @@ public final class LocalModelCatalog {
         }
         long fingerprint = fingerprint(sourcePath);
         Entry previous = previousState.get(modelKey);
-        ServerModelInfo modelInfo = previous == null ? null : previous.modelInfo;
+        ModelMetadata modelInfo = previous == null ? null : previous.modelInfo;
         String displayName = previous == null ? null : previous.displayName;
         if (displayName == null) {
             displayName = displayNameFromInfo(modelInfo);
@@ -418,9 +418,9 @@ public final class LocalModelCatalog {
         return null;
     }
 
-    /** 从 ServerModelInfo 的 metadata 提取展示名（可空）。 */
+    /** 从 ModelMetadata 的 metadata 提取展示名（可空）。 */
     @Nullable
-    public static String displayNameFromInfo(@Nullable ServerModelInfo modelInfo) {
+    public static String displayNameFromInfo(@Nullable ModelMetadata modelInfo) {
         if (modelInfo == null) {
             return null;
         }

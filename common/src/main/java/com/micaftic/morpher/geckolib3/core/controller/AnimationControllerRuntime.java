@@ -17,7 +17,7 @@ import com.micaftic.morpher.geckolib3.core.keyframe.ConstantPoint;
 import com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext;
 import com.micaftic.morpher.geckolib3.core.util.TransitionVector3f;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.cloud.client.CloudMotionSources;
 import com.micaftic.morpher.cloud.client.CloudControllerMotionCursor;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
@@ -89,8 +89,8 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
 
     /** The observer adopts the owner's state and random choices before evaluating clip conditions. */
     private boolean synchronizeEntry(ExpressionEvaluator<AnimationContext<?>> evaluator) {
-        if (CloudPlayerMotionSync.isOwner(this.animatable)) return false;
-        var motion = CloudPlayerMotionSync.motion(this.animatable);
+        if (CloudMotionSources.isOwner(this.animatable)) return false;
+        var motion = CloudMotionSources.motion(this.animatable);
         var entry = motion == null ? null : motion.controllers().get(cloudName());
         if (entry == null || entry.state().isEmpty()) { this.cloudCursor.clear(); return false; }
         AnimationState target = this.animationEntries.getStates().get(StringPool.computeIfAbsent(entry.state()));
@@ -99,7 +99,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
         if (transition) {
             updateDisplayName(target.getName());
             transitionToEntry(target, evaluator);
-            float elapsed = CloudPlayerMotionSync.elapsedTicks(entry.startedAtUnixMs());
+            float elapsed = CloudMotionSources.elapsedTicks(entry.startedAtUnixMs());
             for (int i = 0; i < this.activeSlotCount; i++) this.animationSlots.get(i).getResampler().seekFromElapsedTicks(elapsed);
         }
         if (transition || this.cloudCursor.needsVariables(entry))
@@ -360,7 +360,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
         }
         this.stateStartedAt = Math.max(System.currentTimeMillis(), this.stateStartedAt + 1);
         if (evaluator.entity().storage != null)
-            CloudPlayerMotionSync.controller(this.animatable, cloudName(), nextState == null ? "" : nextState.getName(),
+            CloudMotionSources.controller(this.animatable, cloudName(), nextState == null ? "" : nextState.getName(),
                     this.stateStartedAt, evaluator.entity().storage.numericSnapshot());
     }
 

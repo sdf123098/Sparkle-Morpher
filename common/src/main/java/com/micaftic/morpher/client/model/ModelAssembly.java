@@ -7,7 +7,7 @@ import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
-import com.micaftic.morpher.model.format.ServerModelInfo;
+import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.client.gui.ModelMetadataPresenter;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.resources.Identifier;
@@ -26,7 +26,7 @@ public class ModelAssembly {
 
     private volatile ModelResourceBundle expressionCache;
 
-    private final ServerModelInfo modelData;
+    private final ModelMetadata modelData;
 
     private final ModelDisplayAssets textureRegistry;
 
@@ -34,7 +34,7 @@ public class ModelAssembly {
 
     private volatile GltfModel gltfModel;
 
-    public ModelAssembly(PlayerModelBundle animationBundle, Map<Identifier, ProjectileModelBundle> projectileModels, Map<Identifier, VehicleModelBundle> vehicleModels, ModelResourceBundle expressionCache, ServerModelInfo modelData, ModelDisplayAssets textureRegistry, List<AbstractTexture> list) {
+    public ModelAssembly(PlayerModelBundle animationBundle, Map<Identifier, ProjectileModelBundle> projectileModels, Map<Identifier, VehicleModelBundle> vehicleModels, ModelResourceBundle expressionCache, ModelMetadata modelData, ModelDisplayAssets textureRegistry, List<AbstractTexture> list) {
         this.animationBundle = animationBundle;
         this.projectileModels = projectileModels;
         this.vehicleModels = vehicleModels;
@@ -107,7 +107,7 @@ public class ModelAssembly {
         return imageIndex >= 0 && imageIndex < textures.size() ? textures.get(imageIndex) : null;
     }
 
-    public ServerModelInfo getModelData() {
+    public ModelMetadata getModelData() {
         return this.modelData;
     }
 

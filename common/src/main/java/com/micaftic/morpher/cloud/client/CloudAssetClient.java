@@ -62,6 +62,10 @@ public final class CloudAssetClient {
         return http.getBytes(ref.contentPath(), range, ifNoneMatch);
     }
 
+    public CompletableFuture<Boolean> authorizeDisplay(CloudAssetRef ref) {
+        return http.authorizeAsset(ref.contentPath(), ref.rawSha256());
+    }
+
     public CompletableFuture<CloudAssetSummary> upload(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256) {
         return upload(content, assetId, assetName, assetFormat, rawSha256, java.util.UUID.randomUUID().toString());
     }

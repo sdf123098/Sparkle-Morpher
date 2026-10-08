@@ -7,7 +7,7 @@ import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudModelSelectionStore;
 import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.capability.StarModelsCapability;
+
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
@@ -23,7 +23,7 @@ import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.render.NativeSimdValidator;
 import com.micaftic.morpher.core.vector.VectorApiCapability;
-import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.util.LocalStarModelsStore;
 import com.micaftic.morpher.util.SmExecutors;
 import com.micaftic.morpher.util.ClientUiUtil;
@@ -512,9 +512,9 @@ public final class ModernPlayerModelScreenController {
     /** 打开本地模型目录，并按原行为回写 GRAY/RED 状态栏文案。 */
     public void openModelFolder() {
         try {
-            Files.createDirectories(ServerModelManager.CUSTOM);
-            ClientUiUtil.openFile(ServerModelManager.CUSTOM.toFile());
-            this.host.postStatus(Component.literal(ServerModelManager.CUSTOM.toString()), ChatFormatting.GRAY);
+            Files.createDirectories(ModelStoragePaths.custom());
+            ClientUiUtil.openFile(ModelStoragePaths.custom().toFile());
+            this.host.postStatus(Component.literal(ModelStoragePaths.custom().toString()), ChatFormatting.GRAY);
         } catch (IOException e) {
             this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.error.open_folder", e.getMessage()), ChatFormatting.RED);
         }
@@ -544,6 +544,7 @@ public final class ModernPlayerModelScreenController {
     public Set<String> availableModelIds() {
         return ClientModelManager.getAvailableModelIds().stream()
                 .filter(modelId -> !CloudAssetIdentity.isRuntimeModelId(modelId))
+                .filter(modelId -> com.micaftic.morpher.client.LocalDisplayPreferences.snapshot().visible(modelId))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
@@ -554,6 +555,7 @@ public final class ModernPlayerModelScreenController {
     public Map<String, ModelAssembly> modelAssemblyMap() {
         return ClientModelManager.getModelAssemblyMap().entrySet().stream()
                 .filter(entry -> !CloudAssetIdentity.isRuntimeModelId(entry.getKey()))
+                .filter(entry -> com.micaftic.morpher.client.LocalDisplayPreferences.snapshot().visible(entry.getKey()))
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
@@ -576,9 +578,7 @@ public final class ModernPlayerModelScreenController {
     public boolean isLocalOnlyModel(String modelId) {
         return !CloudAssetIdentity.isRuntimeModelId(modelId) && ClientModelManager.isLocalOnlyModel(modelId);
     }
-
-    public boolean isServerModel(String modelId) { return ClientModelManager.isServerModel(modelId); }
-    public boolean cloudAvailable() { return CloudClientRuntime.state(state.selectedCloudInstanceId) != null; }
+public boolean cloudAvailable() { return CloudClientRuntime.state(state.selectedCloudInstanceId) != null; }
     public String cloudInstanceId() { return state.selectedCloudInstanceId; }
     public CompletableFuture<CloudAssetPage> listCloudAssets(String scope, String query, String cursor, int limit) {
         if (!cloudAvailable()) return CompletableFuture.failedFuture(new IllegalStateException("Cloud is not connected"));
@@ -710,18 +710,7 @@ public final class ModernPlayerModelScreenController {
         if (modelId == null || modelId.isBlank() || Minecraft.getInstance().player == null) {
             return false;
         }
-        return StarModelsCapability.get(Minecraft.getInstance().player).map(cap -> {
-            if (cap.containsModel(modelId)) {
-                cap.removeModel(modelId);
-                LocalStarModelsStore.remove(modelId);
-
-            } else {
-                cap.addModel(modelId);
-                LocalStarModelsStore.add(modelId);
-
-            }
-            return true;
-        }).orElse(false);
+        return LocalStarModelsStore.toggle(modelId);
     }
 
     // ================================================================
