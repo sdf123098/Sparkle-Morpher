@@ -110,6 +110,18 @@ class LocalModelCatalogTest {
     }
 
     @Test
+    void fingerprint_gltfChangesWhenExternalDependencyChanges() throws IOException {
+        Path file = tempDir.resolve("model.gltf");
+        Path texture = tempDir.resolve("texture.bin");
+        write(file, "{\"asset\":{\"version\":\"2.0\"},\"images\":[{\"uri\":\"texture.bin\"}]}");
+        write(texture, "red");
+        long first = LocalModelCatalog.fingerprint(file);
+        write(texture, "blu");
+        long second = LocalModelCatalog.fingerprint(file);
+        assertNotEquals(first, second, "依赖内容变化也必须使 glTF 来源指纹变化");
+    }
+
+    @Test
     void fingerprint_aggregatesDirectoryContents() throws IOException {
         Path dir = tempDir.resolve("pack");
         write(dir.resolve("a.txt"), "a1");

@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.resource.models.Metadata;
+import com.micaftic.morpher.resource.gltf.GltfLoader;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 
@@ -271,6 +272,10 @@ public final class LocalModelCatalog {
     /** 本地来源指纹：单文件取 mtime+size；目录递归聚合相对路径/mtime/size。 */
     public static long fingerprint(Path path) throws IOException {
         if (Files.isRegularFile(path)) {
+            String lower = path.getFileName() == null ? "" : path.getFileName().toString().toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".gltf") || lower.endsWith(".glb")) {
+                return GltfLoader.sourceFingerprint(path);
+            }
             return Files.getLastModifiedTime(path).toMillis() * 31L + Files.size(path);
         }
         final long[] fingerprint = {1L};
