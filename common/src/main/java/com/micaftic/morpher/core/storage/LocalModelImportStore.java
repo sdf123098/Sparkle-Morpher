@@ -71,6 +71,62 @@ public final class LocalModelImportStore {
         }
     }
 
+    /** Stage import bytes under a recognizable extension without touching the current import. */
+    public PreparedImport prepare(String modelId, String fileName, byte[] data) throws IOException {
+        if (modelId == null || modelId.isBlank() || data == null) return null;
+        String extension = importExtension(fileName);
+        if (extension.isBlank()) extension = ".ysm";
+        Path target = customRoot.resolve(modelId + extension).normalize();
+        if (!isInside(customRoot, target)) throw new IOException("Invalid import target: " + modelId);
+        Files.createDirectories(target.getParent());
+        Path staged = Files.createTempFile(target.getParent(), target.getFileName().toString() + ".", extension);
+        try {
+            Files.write(staged, data);
+            return new PreparedImport(this, modelId, fileName, staged);
+        } catch (IOException failure) {
+            Files.deleteIfExists(staged);
+            throw failure;
+        }
+    }
+
+    public static final class PreparedImport implements AutoCloseable {
+        private final LocalModelImportStore store;
+        private final String modelId;
+        private final String fileName;
+        private final Path stagedPath;
+        private boolean finished;
+
+        private PreparedImport(LocalModelImportStore store, String modelId, String fileName, Path stagedPath) {
+            this.store = store;
+            this.modelId = modelId;
+            this.fileName = fileName;
+            this.stagedPath = stagedPath;
+        }
+
+        /** File suitable for parsing; close without commit discards it and leaves prior imports intact. */
+        public Path path() {
+            if (finished) throw new IllegalStateException("Prepared import is already finished");
+            return stagedPath;
+        }
+
+        /** Persist validated bytes and apply the existing sibling replacement policy. */
+        public Path commit() throws IOException {
+            if (finished) throw new IllegalStateException("Prepared import is already finished");
+            Path persisted = store.persist(modelId, fileName, Files.readAllBytes(stagedPath));
+            finished = true;
+            Files.deleteIfExists(stagedPath);
+            return persisted;
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (!finished) {
+                finished = true;
+                Files.deleteIfExists(stagedPath);
+            }
+        }
+    }
+
     /** 识别导入文件扩展名（.ysm/.zip/.bbmodel/.gltf/.glb，大小写不敏感）；未知返回空串。 */
     public static String importExtension(String fileName) {
         String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
