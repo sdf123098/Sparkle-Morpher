@@ -1,21 +1,13 @@
 package com.micaftic.morpher.util;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.core.storage.LocalStarModelsDocument;
 import dev.architectury.platform.Platform;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 
@@ -23,115 +15,69 @@ public final class LocalStarModelsStore {
     private static final Path FILE = Platform.getConfigFolder()
             .resolve(YesSteveModel.MOD_ID)
             .resolve("local_star_models.json");
-    private static final String GLOBAL_KEY = "global";
-    private static final String MODELS = "models";
+    private static final Path LEGACY_FILE = Platform.getConfigFolder()
+            .resolve(YesSteveModel.MOD_ID)
+            .resolve("local_starred_models.json");
 
     private LocalStarModelsStore() {}
 
     public static Set<String> load() {
-        JsonObject root = readRoot();
-        JsonObject entry = getEntry(root, currentScopeKey());
-        LinkedHashSet<String> result = new LinkedHashSet<>();
-        if (entry != null && entry.has(MODELS) && entry.get(MODELS).isJsonArray()) {
-            for (var element : entry.getAsJsonArray(MODELS)) {
-                if (element.isJsonPrimitive()) {
-                    String modelId = element.getAsString();
-                    if (isValidModelId(modelId)) {
-                        result.add(modelId);
-                    }
-                }
-            }
+        String scope = currentScopeKey();
+        if (scope == null) return Set.of();
+        try {
+            return LocalStarModelsDocument.load(FILE, LEGACY_FILE, scope);
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.warn("[SM] Failed to load local star models: {}", e.getMessage());
+            return Set.of();
         }
-        return result;
     }
 
-    public static void save(Set<String> models) {
-        JsonObject root = readRoot();
-        String key = currentScopeKey();
-        if (models == null || models.isEmpty()) {
-            root.remove(key);
-        } else {
-            JsonObject entry = new JsonObject();
-            JsonArray array = new JsonArray();
-            models.stream()
-                    .filter(LocalStarModelsStore::isValidModelId)
-                    .sorted()
-                    .forEach(array::add);
-            entry.add(MODELS, array);
-            root.add(key, entry);
+    public static boolean save(Set<String> models) {
+        String scope = currentScopeKey();
+        if (scope == null) return false;
+        try {
+            LocalStarModelsDocument.save(FILE, LEGACY_FILE, scope, models);
+            return true;
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.warn("[SM] Failed to save local star models: {}", e.getMessage());
+            return false;
         }
-        writeRoot(root);
     }
 
-    public static void add(String modelId) {
+    public static boolean add(String modelId) {
         if (!isValidModelId(modelId)) {
-            return;
+            return false;
         }
         Set<String> models = load();
-        if (models.add(modelId)) {
-            save(models);
-        }
+        if (!models.add(modelId)) return true;
+        return save(models);
     }
 
-    public static void remove(String modelId) {
+    public static boolean remove(String modelId) {
         if (!isValidModelId(modelId)) {
-            return;
+            return false;
         }
         Set<String> models = load();
-        if (models.remove(modelId)) {
-            save(models);
-        }
+        if (!models.remove(modelId)) return true;
+        return save(models);
+    }
+
+    public static boolean toggle(String modelId) {
+        if (!isValidModelId(modelId) || currentScopeKey() == null) return false;
+        Set<String> models = load();
+        if (!models.remove(modelId)) models.add(modelId);
+        return save(models);
     }
 
     private static boolean isValidModelId(@Nullable String modelId) {
         return modelId != null && !modelId.isBlank();
     }
 
-    private static JsonObject readRoot() {
-        if (!Files.exists(FILE)) {
-            return new JsonObject();
-        }
-        try {
-            String content = Files.readString(FILE, StandardCharsets.UTF_8);
-            if (content.isBlank()) {
-                return new JsonObject();
-            }
-            return JsonParser.parseString(content).getAsJsonObject();
-        } catch (Exception e) {
-            YesSteveModel.LOGGER.warn("[SM] Failed to load local star models: {}", e.getMessage());
-            return new JsonObject();
-        }
-    }
-
     @Nullable
-    private static JsonObject getEntry(JsonObject root, String key) {
-        if (!root.has(key) || !root.get(key).isJsonObject()) {
-            return null;
-        }
-        return root.getAsJsonObject(key);
-    }
-
-    private static void writeRoot(JsonObject root) {
-        try {
-            Path parent = FILE.getParent();
-            if (!Files.exists(parent)) {
-                Files.createDirectories(parent);
-            }
-            Path temp = parent.resolve("local_star_models.json.tmp");
-            Files.writeString(temp, root.toString(), StandardCharsets.UTF_8);
-            try {
-                Files.move(temp, FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, FILE, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } catch (IOException e) {
-            YesSteveModel.LOGGER.warn("[SM] Failed to save local star models: {}", e.getMessage());
-        }
-    }
-
     private static String currentScopeKey() {
         Minecraft minecraft = Minecraft.getInstance();
-        String serverKey = GLOBAL_KEY;
+        if (minecraft.level == null || minecraft.player == null) return null;
+        String serverKey;
         ServerData serverData = minecraft.getConnection() == null ? null : minecraft.getConnection().getServerData();
         if (serverData == null) {
             serverData = minecraft.getCurrentServer();
@@ -140,10 +86,11 @@ public final class LocalStarModelsStore {
             serverKey = serverData.ip.trim().toLowerCase(java.util.Locale.ROOT);
         } else if (minecraft.isLocalServer()) {
             serverKey = "singleplayer";
+        } else {
+            return null;
         }
-        UUID playerId = minecraft.player == null ? null : minecraft.player.getUUID();
-        String playerKey = playerId == null ? "unknown" : playerId.toString();
-        return sanitize(serverKey) + "|" + playerKey;
+        UUID playerId = minecraft.player.getUUID();
+        return sanitize(serverKey) + "|" + playerId;
     }
 
     private static String sanitize(String value) {

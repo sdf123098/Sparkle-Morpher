@@ -2,7 +2,6 @@ package com.micaftic.morpher;
 
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.config.ModSoundEvents;
-import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.event.YsmEventBootstrap;
 import com.micaftic.morpher.util.obfuscate.Keep;
 import com.google.gson.Gson;
@@ -83,7 +82,6 @@ public class YesSteveModel {
             }
         }
         ConfigRegistration.register(MOD_ID, ModConfig.Type.CLIENT, GeneralConfig.buildSpec());
-        ConfigRegistration.register(MOD_ID, ModConfig.Type.SERVER, ServerConfig.buildSpec());
         if (!PlatformAPI.isServer()) {
             ModSoundEvents.REGISTER.register();
         }

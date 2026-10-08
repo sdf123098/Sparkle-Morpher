@@ -27,14 +27,14 @@ public final class CloudAuthClient {
     }
 
     private static String registrationRequest(String accountId, String password) {
-        String normalizedId = Objects.requireNonNull(accountId, "accountId").trim();
+        String normalizedId = accountId == null ? "" : accountId.trim();
         if (normalizedId.length() < 1 || normalizedId.length() > 128
                 || !normalizedId.matches("[A-Za-z0-9][A-Za-z0-9._-]*")) {
-            throw new IllegalArgumentException("Cloud account ID must start with a letter or number and contain only letters, numbers, '.', '_' or '-'");
+            throw new CloudValidationException(CloudValidationException.Reason.INVALID_ACCOUNT_ID);
         }
         if (password == null || password.length() < 8 || password.length() > 1024
                 || password.indexOf('\r') >= 0 || password.indexOf('\n') >= 0) {
-            throw new IllegalArgumentException("Cloud password must be 8 to 1024 characters");
+            throw new CloudValidationException(CloudValidationException.Reason.INVALID_PASSWORD);
         }
         JsonObject body = new JsonObject();
         body.addProperty("account_id", normalizedId);

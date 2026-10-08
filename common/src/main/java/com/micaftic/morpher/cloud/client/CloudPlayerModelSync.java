@@ -15,6 +15,10 @@ import java.util.concurrent.*;
 
 /** Publishes and discovers appearances directly through Cloud on any Minecraft server. */
 public final class CloudPlayerModelSync {
+    private static final CloudPlayerDisplayLedger DISPLAY = new CloudPlayerDisplayLedger();
+    private static JsonObject lastPublishedDisplay;
+    private static long nextDisplayPublish;
+    private static String displayScope, displayEpoch;
     private static final CloudPlayerAppearanceState STATE = new CloudPlayerAppearanceState();
     private static final Map<UUID, Attempt> ATTEMPTS = new HashMap<>();
     private static final Map<String, CompletableFuture<String>> IMPORTS = new HashMap<>();
@@ -39,6 +43,14 @@ public final class CloudPlayerModelSync {
     private static boolean identityRefreshRequested;
     private record Identification(CloudIdentityClient.CloudIdentity identity, JsonObject nameProof) {}
     private static String status = "Cloud 联机：等待进入世界";
+    /** Firing adapters copy these values at input time; the backend still verifies the native owner identity. */
+    public static String verifiedOwnIdentity() {
+        var client=Minecraft.getInstance();return !PrivacyMode.isActive()&&sessionRuntime==CloudClientRuntime.state()
+                &&client.level==level&&client.getConnection()==connection?identityId:null;
+    }
+    public static CloudPlayerSelection ownCloudSelection() {
+        return sessionRuntime!=null&&sessionRuntime==CloudClientRuntime.state()&&!PrivacyMode.isActive()?localSelection(sessionRuntime):null;
+    }
     private record Attempt(CloudPlayerAppearanceState.Snapshot token, Player entity,
             CloudClientRuntime.RuntimeState runtime, long retryAt, boolean pending, boolean applied) {}
     private CloudPlayerModelSync() {}
@@ -47,6 +59,8 @@ public final class CloudPlayerModelSync {
     public static boolean ownsAppearance(UUID playerId) { return !PrivacyMode.isActive() && STATE.ownsAppearance(playerId); }
 
     private static void clearRemote(Player player) {
+        DISPLAY.remove(player.getUUID());
+        PlayerCapability.get(player).ifPresent(cap -> cap.getPositionTracker().clearDisplayState());
         CloudPlayerMotionSync.remove(player.getUUID());
         STATE.remove(player.getUUID()); ATTEMPTS.remove(player.getUUID());
         if (!CloudEntityModelSync.ownsFakeAppearance(player.getUUID()))
@@ -68,6 +82,7 @@ public final class CloudPlayerModelSync {
         }
         if (client.level != null) for (Player player : client.level.players()) if (player != client.player && STATE.ownsAppearance(player.getUUID())) clearRemote(player);
         generation++; STATE.clear(); ATTEMPTS.clear(); IMPORTS.clear(); AUTHORIZED.clear(); authorizationRuntime = null;
+        DISPLAY.clear(); lastPublishedDisplay = null; nextDisplayPublish = 0; displayScope = displayEpoch = null;
         CloudPlayerMotionSync.reset(); lastPublishedMotion = null; nextMotionPublish = 0;
         sessionRuntime = runtime; connection = client.getConnection(); level = client.level;
         polling = publishing = identifying = hasPublished = hasAttempted = false; identityId = null; ownRevision = -1;
@@ -93,10 +108,12 @@ public final class CloudPlayerModelSync {
         // Dimension/respawn changes invalidate imports but keep the session publication revision.
         if (level != client.level) {
             generation++; level = client.level; STATE.clear(); ATTEMPTS.clear(); IMPORTS.clear();
+            DISPLAY.clear(); lastPublishedDisplay = null; nextDisplayPublish = 0;
             CloudPlayerMotionSync.clearPeers();
             polling = publishing = identifying = false; nextPoll = nextPublish = 0;
         }
         if (client.player == null || client.level == null) return;
+        DISPLAY.retain(client.level.players().stream().map(Player::getUUID).toList());
         if (runtime == null) {
             for (Player player : client.level.players()) if (player != client.player) clearRemote(player);
             return;
@@ -107,17 +124,26 @@ public final class CloudPlayerModelSync {
             publish(runtime, null, now); return;
         }
         if (!identifying && (identityRefreshRequested || identityId == null && now >= nextPublish || ownNameProof != null && now >= nextIdentityRefresh)) identify(runtime, now);
+        String scope = runtime.scopeLifecycle().activeScopeId(), epoch = runtime.scopeLifecycle().activeWorldEpoch();
+        if (!Objects.equals(scope, displayScope) || !Objects.equals(epoch, displayEpoch)) {
+            DISPLAY.clear(); lastPublishedDisplay = null; nextDisplayPublish = 0; nextPublish = 0;
+            displayScope = scope; displayEpoch = epoch;
+            for (Player peer : client.level.players()) if (peer != client.player)
+                PlayerCapability.get(peer).ifPresent(cap -> cap.getPositionTracker().clearDisplayState());
+        }
         CloudPlayerSelection selection = localSelection(runtime);
+        boolean displayChanged = selection != null && now >= nextDisplayPublish
+                && !Objects.equals(lastPublishedDisplay, localDisplay(runtime));
         boolean motionChanged = selection != null && motionSupported(runtime)
                 && !Objects.equals(lastPublishedMotion, CloudPlayerMotionSync.snapshot(selection.runtimeModelId())) && now >= nextMotionPublish;
-        if (identityId != null && (!hasPublished || !Objects.equals(lastPublished, selection) || motionChanged || now >= nextPublish)) publish(runtime, selection, now);
+        if (identityId != null && (!hasPublished || !Objects.equals(lastPublished, selection) || motionChanged || displayChanged || now >= nextPublish)) publish(runtime, selection, now);
         List<Player> peers = client.level.players().stream().filter(player -> player != client.player).map(player -> (Player) player).toList();
         if (!polling && now >= nextPoll && !peers.isEmpty()) poll(runtime, peers, now);
         // Transient Cloud outages keep a verified appearance briefly; then revert to vanilla.
         if (lastPollSuccess > 0 && now - lastPollSuccess > 60000) for (Player player : peers) if (STATE.ownsAppearance(player.getUUID())) clearRemote(player);
         for (Player player : peers) {
             var token = STATE.get(player.getUUID());
-            if (token != null && token.selection() != null) { apply(player, token); CloudPlayerMotionSync.apply(player); }
+            if (token != null && token.selection() != null) { apply(player, token); CloudPlayerMotionSync.apply(player); applyDisplay(player, runtime); }
             else if (!CloudEntityModelSync.ownsFakeAppearance(player.getUUID()))
                 PlayerCapability.get(player).ifPresent(cap -> cap.setForceDisabled(true));
         }
@@ -183,23 +209,25 @@ public final class CloudPlayerModelSync {
 
     private static void publish(CloudClientRuntime.RuntimeState runtime, CloudPlayerSelection selection, long now) {
         CloudPlayerMotion motion = selection != null && motionSupported(runtime) ? CloudPlayerMotionSync.snapshot(selection.runtimeModelId()) : null;
-        boolean changed = !Objects.equals(motion, lastPublishedMotion) && now >= nextMotionPublish;
+        JsonObject display = selection == null ? null : localDisplay(runtime);
+        boolean changed = !Objects.equals(motion, lastPublishedMotion) && now >= nextMotionPublish
+                || !Objects.equals(display, lastPublishedDisplay) && now >= nextDisplayPublish;
         if (publishing || identityId == null || now < nextPublish && hasAttempted && Objects.equals(selection, lastAttempted) && !changed) return;
         lastAttempted = selection; hasAttempted = true;
-        publishing = true; nextPublish = now + 15000; nextMotionPublish = now + 250; long token = generation;
+        publishing = true; nextPublish = now + 15000; nextMotionPublish = now + 250; nextDisplayPublish = now + 1000; long token = generation;
         var api = new CloudPlayerPresenceClient(runtime.http()); UUID uuid = Minecraft.getInstance().player.getUUID();
         JsonObject nameProof = ownNameProof;
         publicationUuid = uuid;
         CompletableFuture<Long> revision = ownRevision < 0 ? api.revision(identityId) : CompletableFuture.completedFuture(ownRevision);
         CompletableFuture<Long> operation = revision.thenCompose(expected -> current(token, runtime)
                 ? api.publish(identityId, uuid, expected, PrivacyMode.isActive() ? null : selection, nameProof,
-                    PrivacyMode.isActive() ? null : motion)
+                    PrivacyMode.isActive() ? null : motion, PrivacyMode.isActive() ? null : display)
                 : CompletableFuture.failedFuture(new CancellationException()));
         pendingPublication = operation;
         operation.whenComplete((value, error) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, runtime)) return; publishing = false;
             if (pendingPublication == operation) pendingPublication = null;
-            if (error == null) { ownRevision = value; lastPublished = selection; lastPublishedMotion = motion; hasPublished = true;
+            if (error == null) { ownRevision = value; lastPublished = selection; lastPublishedMotion = motion; lastPublishedDisplay = display; hasPublished = true;
                 status = motionSupported(runtime) ? "Cloud 联机：已同步模型、贴图与动作" : "Cloud 联机：模型与贴图已同步；此实例需升级后端以同步动作"; }
             else { ownRevision = -1; nextPublish = System.currentTimeMillis() + 3000; hasPublished = false;
                 nextMotionPublish = nextPublish;
@@ -223,6 +251,7 @@ public final class CloudPlayerModelSync {
                 if (selection == null) clearRemote(player);
                 else {
                     if (!CloudPlayerMotionSync.receive(player, selection)) continue;
+                    DISPLAY.receive(player.getUUID(), selection.appearanceRevision(), selection.displayState(), System.nanoTime());
                     CloudPlayerSelection appearance = selection.withoutMotion();
                     var old = STATE.get(player.getUUID());
                     if (old == null || !appearance.equals(old.selection())) { STATE.publish(player.getUUID(), appearance); ATTEMPTS.remove(player.getUUID()); }
@@ -234,6 +263,25 @@ public final class CloudPlayerModelSync {
     private static String message(Throwable error) {
         while (error instanceof CompletionException && error.getCause() != null) error = error.getCause();
         return Objects.requireNonNullElse(error.getMessage(), error.getClass().getSimpleName());
+    }
+
+    private static JsonObject localDisplay(CloudClientRuntime.RuntimeState runtime) {
+        if (runtime.instanceInfo() == null || !runtime.instanceInfo().supports("player_display_state_v1")) return null;
+        String scope = runtime.scopeLifecycle().activeScopeId(), epoch = runtime.scopeLifecycle().activeWorldEpoch();
+        Minecraft client = Minecraft.getInstance();
+        if (scope == null || epoch == null || client.player == null || client.level == null) return null;
+        try {
+            return PlayerCapability.get(client.player).map(cap -> new CloudPlayerDisplayState(scope, epoch,
+                    client.level.dimension().location().toString(),
+                    cap.getPositionTracker().snapshot((int) Math.min(256, runtime.instanceInfo().maxVisualVariables())), 0, 0)
+                    .toJson(runtime.instanceInfo().maxVisualStateBytes(), runtime.instanceInfo().maxVisualVariables())).orElse(null);
+        } catch (IllegalArgumentException budget) { return null; }
+    }
+    private static void applyDisplay(Player player, CloudClientRuntime.RuntimeState runtime) {
+        Minecraft client = Minecraft.getInstance();
+        var state = DISPLAY.get(player.getUUID(), runtime.scopeLifecycle().activeScopeId(),
+                runtime.scopeLifecycle().activeWorldEpoch(), client.level.dimension().location().toString(), System.nanoTime());
+        PlayerCapability.get(player).ifPresent(cap -> cap.getPositionTracker().applyDisplayState(state));
     }
 
     private static boolean motionSupported(CloudClientRuntime.RuntimeState runtime) {

@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class AbstractArrowEntityMixin implements ProjectileStateAccessor {
 
     @Unique
-    private String ownerMainHandItem = StringPool.EMPTY;
+    private volatile String ownerMainHandItem = StringPool.EMPTY;
 
     @Shadow
     public boolean inGround;
@@ -45,11 +45,9 @@ public class AbstractArrowEntityMixin implements ProjectileStateAccessor {
         return this.ownerMainHandItem;
     }
 
-    @Inject(at = {@At("RETURN")}, method = {"setOwner(Lnet/minecraft/world/entity/Entity;)V"})
-    private void onSetOwner(Entity entity, CallbackInfo callbackInfo) {
-        ResourceLocation key;
-        if (YesSteveModel.isAvailable() && (entity instanceof LivingEntity) && (key = BuiltInRegistries.ITEM.getKey(((LivingEntity) entity).getMainHandItem().getItem())) != null) {
-            this.ownerMainHandItem = key.toString();
-        }
+    @Override
+    @Unique
+    public void ysm$setDisplayFiringItem(String itemId) {
+        this.ownerMainHandItem = itemId == null ? StringPool.EMPTY : itemId;
     }
 }

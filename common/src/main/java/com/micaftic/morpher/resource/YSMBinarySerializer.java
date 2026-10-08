@@ -18,7 +18,7 @@ public class YSMBinarySerializer {
             writeModern(buf, model, format);
 
             if (writeFooter) {
-                writeFooter(buf, model); // 这个是服务器模型模型下发的，不是导出.ysm的，两个很像，待分析尝试合并
+                writeFooter(buf, model); // 这是运行时模型描述尾部，不是导出 .ysm 的格式；两者外形相似但职责不同
             }
 
         } else {

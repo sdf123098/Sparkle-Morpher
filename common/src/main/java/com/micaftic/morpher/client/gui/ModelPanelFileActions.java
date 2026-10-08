@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
@@ -59,8 +59,8 @@ public final class ModelPanelFileActions {
         if (safeCategory.isBlank()) {
             return Component.translatable("gui.sparkle_morpher.model_select.error.category");
         }
-        Path targetDir = ServerModelManager.CUSTOM.resolve(safeCategory).normalize();
-        if (!isInside(ServerModelManager.CUSTOM, targetDir)) {
+        Path targetDir = ModelStoragePaths.custom().resolve(safeCategory).normalize();
+        if (!isInside(ModelStoragePaths.custom(), targetDir)) {
             return Component.translatable("gui.sparkle_morpher.model_select.error.category");
         }
         List<String> moved = new ArrayList<>();
@@ -73,7 +73,7 @@ public final class ModelPanelFileActions {
                 }
                 Path sourcePath = source.get();
                 Path target = uniqueTarget(targetDir.resolve(sourcePath.getFileName()).normalize());
-                if (isInside(ServerModelManager.CUSTOM, target)) {
+                if (isInside(ModelStoragePaths.custom(), target)) {
                     Files.move(sourcePath, target, StandardCopyOption.REPLACE_EXISTING);
                     moved.add(modelId);
                 }
@@ -96,8 +96,8 @@ public final class ModelPanelFileActions {
         if (safeCategory.isBlank()) {
             return Component.translatable("gui.sparkle_morpher.model_select.error.category");
         }
-        Path dir = ServerModelManager.CUSTOM.resolve(safeCategory).normalize();
-        if (!isInside(ServerModelManager.CUSTOM, dir)) {
+        Path dir = ModelStoragePaths.custom().resolve(safeCategory).normalize();
+        if (!isInside(ModelStoragePaths.custom(), dir)) {
             return Component.translatable("gui.sparkle_morpher.model_select.error.category");
         }
         try {
@@ -121,7 +121,7 @@ public final class ModelPanelFileActions {
         List<String> affectedModelIds = findLoadedModelsInCategory(oldSafe);
         int moved = 0;
         try {
-            for (Path root : List.of(ServerModelManager.CUSTOM, ServerModelManager.AUTH)) {
+            for (Path root : List.of(ModelStoragePaths.custom(), ModelStoragePaths.auth())) {
                 Path oldDir = root.resolve(oldSafe).normalize();
                 Path newDir = root.resolve(newSafe).normalize();
                 if (!isInside(root, oldDir) || !isInside(root, newDir) || !Files.exists(oldDir)) {
@@ -152,7 +152,7 @@ public final class ModelPanelFileActions {
         List<String> affectedModelIds = findLoadedModelsInCategory(safeCategory);
         int deleted = 0;
         try {
-            for (Path root : List.of(ServerModelManager.CUSTOM, ServerModelManager.AUTH)) {
+            for (Path root : List.of(ModelStoragePaths.custom(), ModelStoragePaths.auth())) {
                 Path dir = root.resolve(safeCategory).normalize();
                 if (!isInside(root, dir) || !Files.exists(dir)) {
                     continue;
@@ -176,8 +176,8 @@ public final class ModelPanelFileActions {
 
     public static List<String> listCategories() {
         List<String> categories = new ArrayList<>();
-        collectCategories(ServerModelManager.CUSTOM, categories);
-        collectCategories(ServerModelManager.AUTH, categories);
+        collectCategories(ModelStoragePaths.custom(), categories);
+        collectCategories(ModelStoragePaths.auth(), categories);
         return categories.stream().distinct().sorted().toList();
     }
 
@@ -197,7 +197,7 @@ public final class ModelPanelFileActions {
     }
 
     private static Optional<Path> findManageableSource(String modelId) {
-        for (Path root : List.of(ServerModelManager.CUSTOM, ServerModelManager.AUTH)) {
+        for (Path root : List.of(ModelStoragePaths.custom(), ModelStoragePaths.auth())) {
             Optional<Path> found = findSource(root, modelId);
             if (found.isPresent()) {
                 return found;

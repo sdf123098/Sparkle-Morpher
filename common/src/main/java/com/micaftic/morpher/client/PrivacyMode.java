@@ -50,7 +50,7 @@ public final class PrivacyMode {
         if (enabled) {
             PrivacyState.setSessionActive(true);
             if (player != null) {
-                ClientModelManager.enterPrivacyMode();
+                ClientModelManager.reloadLocalModelsAfterPrivacyMode();
                 player.sendSystemMessage(Component.translatable("message.sparkle_morpher.privacy_mode.enabled"));
             }
             return;

@@ -5,7 +5,7 @@ import com.micaftic.morpher.client.gui.button.IconButton;
 import com.micaftic.morpher.client.gui.button.FlatColorButton;
 import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
-import com.micaftic.morpher.model.ServerModelManager;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
 import com.micaftic.morpher.util.ModelIdUtil;
 import com.micaftic.morpher.util.PerformanceProfiler;
 import net.minecraft.ChatFormatting;
@@ -307,9 +307,9 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
 
     private void openModelFolder() {
         try {
-            Files.createDirectories(ServerModelManager.CUSTOM);
-            Util.getPlatform().openFile(ServerModelManager.CUSTOM.toFile());
-            this.lastModelFolderStamp = modelFolderStamp(ServerModelManager.CUSTOM);
+            Files.createDirectories(ModelStoragePaths.custom());
+            Util.getPlatform().openFile(ModelStoragePaths.custom().toFile());
+            this.lastModelFolderStamp = modelFolderStamp(ModelStoragePaths.custom());
             this.modelFolderPollUntilMs = Util.getMillis() + MODEL_FOLDER_POLL_WINDOW_MS;
             this.nextModelFolderPollMs = 0L;
             this.localStatus = Component.translatable("gui.sparkle_morpher.import.state.folder_polling");
@@ -372,7 +372,7 @@ public class ModelUploadScreen extends Screen implements ModelUploadSession.List
         this.nextModelFolderPollMs = now + MODEL_FOLDER_POLL_INTERVAL_MS;
         long stamp;
         try {
-            stamp = modelFolderStamp(ServerModelManager.CUSTOM);
+            stamp = modelFolderStamp(ModelStoragePaths.custom());
         } catch (IOException e) {
             this.modelFolderPollUntilMs = 0L;
             this.error = Component.translatable("gui.sparkle_morpher.import.error.local_reload_failed", e.getMessage());

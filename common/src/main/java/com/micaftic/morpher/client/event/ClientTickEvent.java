@@ -41,6 +41,9 @@ public final class ClientTickEvent {
         CloudMinecraftEntityProviders.tick();
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.tick();
         com.micaftic.morpher.cloud.client.CloudEntityModelSync.tick();
+        com.micaftic.morpher.cloud.client.CloudVehicleModelSync.tick();
+        com.micaftic.morpher.cloud.client.CloudEntityMotionSync.tick();
+        com.micaftic.morpher.cloud.client.CloudProjectileModelSync.tick();
         CloudClientRuntime.drainClientTasks();
         UploadManager.processPendingUploads();
         ClientRenderCompatibilityRegistry.tick();

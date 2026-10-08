@@ -3,7 +3,7 @@ package com.micaftic.morpher.core.storage;
 import java.nio.file.Path;
 
 /**
- * R3.1 模型存储路径集中点（从 ServerModelManager 搬出）。
+ * Local model storage paths. Legacy cache subdirectory names remain stable for on-disk compatibility.
  *
  * 磁盘布局（相对 mod 配置目录）：
  * <pre>
@@ -13,8 +13,8 @@ import java.nio.file.Path;
  *     auth/    授权（付费）模型
  *     export/  导出目录
  *     cache/
- *       server_index         服务器模型索引文件
- *       server/              服务器模型缓存
+ *       server_index         本地模型定义索引（保留旧目录名）
+ *       server/              本地模型缓存（保留旧目录名）
  *       client/              客户端模型缓存
  *       .bbmodel_import_cache_identity   bbmodel 导入缓存标识
  * </pre>
@@ -91,41 +91,18 @@ public final class ModelStoragePaths {
         return cache().resolve(".bbmodel_import_cache_identity");
     }
 
-    /** 缓存版本标记文件（mod 版本变化时据此清空缓存重建）。 */
+    /** Active cache key identity; previous identities are retained alongside it. */
     public static Path cacheVersionFile() {
         return cache().resolve("version.txt");
     }
 
-    /**
-     * 版本升级时清空并重建缓存：缓存文件按 modVersion 派生的 identity 加密/校验，
-     * 升级后旧缓存验证失败路径可能产生模糊异常（如第一人称手部回退原版）。
-     * 以缓存身份标记为唯一标准：标记变化即整体清空重建（哈希校验仍保留为内容校验）。
-     */
+    /** Retains the legacy cache and its key identities before recording the current identity. */
     public static void checkCacheVersionAndReset() {
-        Path cacheRoot = cache();
-        Path versionFile = cacheVersionFile();
         try {
             String expected = com.micaftic.morpher.core.security.YsmCrypt.getModelCacheIdentity();
-            boolean mismatch = !java.nio.file.Files.exists(versionFile)
-                    || !expected.equals(java.nio.file.Files.readString(versionFile));
-            if (!mismatch) {
-                return;
-            }
-            if (java.nio.file.Files.exists(cacheRoot)) {
-                try (java.util.stream.Stream<Path> walk = java.nio.file.Files.walk(cacheRoot)) {
-                    walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
-                        try {
-                            java.nio.file.Files.deleteIfExists(p);
-                        } catch (java.io.IOException ignored) {
-                        }
-                    });
-                }
-            }
-            java.nio.file.Files.createDirectories(cacheRoot);
-            java.nio.file.Files.writeString(versionFile, expected, java.nio.charset.StandardCharsets.UTF_8);
-            com.micaftic.morpher.YesSteveModel.LOGGER.info("[SM] Cache reset on mod version change: {}", expected);
+            CacheIdentityHistory.retain(cache(), expected);
         } catch (java.io.IOException e) {
-            com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM] Failed to reset cache on version change", e);
+            com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM] Cache migration postponed; existing files preserved", e);
         }
     }
 

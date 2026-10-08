@@ -16,9 +16,6 @@ import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.input.PlayerModelToggleKey;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.core.api.PlatformAPI;
-import com.micaftic.morpher.core.compat.api.CompatServices;
-import com.micaftic.morpher.model.ServerModelManagerService;
-import com.micaftic.morpher.network.NetworkHandlerService;
 
 public final class YsmEventBootstrap {
 
@@ -27,7 +24,7 @@ public final class YsmEventBootstrap {
 
     public static void register() {
         // R11.2：兼容层服务注册——核心只定义 hook，adapter 在此注入。
-        CompatServices.registerMaidModelService(ServerModelManagerService.INSTANCE);
+        
         
 
 
@@ -39,7 +36,6 @@ public final class YsmEventBootstrap {
 
 
         if (!PlatformAPI.isServer()) {
-            EntityJoinCallbackEvent.register();
 
             ClientSetupEvent.register();
             ClientResourceLifecycleEvent.register();

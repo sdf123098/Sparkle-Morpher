@@ -18,4 +18,14 @@ class CloudIdentityBindingClientTest {
         assertEquals("spm_claim_1", code.code());
         assertEquals(600, code.expiresInSeconds());
     }
+    @Test
+    void optionalDisplayNamesSupportNewAndOlderServers() {
+        String body = "{\"binding_id\":\"binding-1\",\"account_id\":\"alice\",\"identity_id\":\"identity-1\",\"target_id\":\"target-1\",\"scope_id\":\"scope-1\",\"world_epoch\":\"epoch-1\",\"entity_uuid\":\"12345678-1234-1234-1234-1234567890ab\",\"verification_method\":\"CLAIM_CODE\",\"status\":\"APPROVED\",\"revision\":1";
+        var named = CloudIdentityBindingClient.parseBindingForTest(body + ",\"identity_display_name\":\"Alice\",\"target_display_name\":\"Mage\"}");
+        assertEquals("Alice", named.identityDisplayName());
+        assertEquals("Mage", named.targetDisplayName());
+        var older = CloudIdentityBindingClient.parseBindingForTest(body + "}");
+        org.junit.jupiter.api.Assertions.assertNull(older.identityDisplayName());
+        org.junit.jupiter.api.Assertions.assertNull(older.targetDisplayName());
+    }
 }

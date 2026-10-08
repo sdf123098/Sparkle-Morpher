@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.config;
 
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.core.render.NativeSimdPolicy;
 import net.minecraftforge.common.ForgeConfigSpec;
 
@@ -16,7 +15,7 @@ public final class ConfigPolicies {
     }
 
     public static Snapshot snapshot() {
-        return new Snapshot(render(), memory(), diagnostics(), privacy(), network());
+        return new Snapshot(render(), memory(), diagnostics(), privacy());
     }
 
     public static RenderPolicy render() {
@@ -80,23 +79,6 @@ public final class ConfigPolicies {
         return new PrivacyPolicy(bool(GeneralConfig.PRIVACY_MODE, false));
     }
 
-    public static NetworkPolicy network() {
-        return new NetworkPolicy(
-                value(ServerConfig.DEFAULT_MODEL_ID, "default"),
-                value(ServerConfig.DEFAULT_MODEL_TEXTURE, "default"),
-                bool(ServerConfig.CAN_SWITCH_MODEL, true),
-                bool(ServerConfig.ALLOW_MODEL_UPLOAD, true),
-                integer(ServerConfig.MODEL_UPLOAD_MAX_MB, 128),
-                integer(ServerConfig.MODEL_UPLOAD_CHUNKS_PER_TICK, 4),
-                List.copyOf(value(ServerConfig.CLIENT_NOT_DISPLAY_MODELS, List.of())),
-                integer(ServerConfig.THREAD_COUNT, 0),
-                bool(ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT, false),
-                integer(ServerConfig.BANDWIDTH_LIMIT, 5),
-                integer(ServerConfig.PLAYER_SYNC_TIMEOUT, 0),
-                bool(ServerConfig.LOW_BANDWIDTH_USAGE, false),
-                integer(ServerConfig.ACCEPT_SOUND_FX, 0));
-    }
-
     public static GraphicsPolicy graphics() {
         return new GraphicsPolicy(
                 nativeSimdPolicy(value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE)),
@@ -148,7 +130,7 @@ public final class ConfigPolicies {
     }
 
     public record Snapshot(RenderPolicy render, MemoryPolicy memory, DiagnosticsPolicy diagnostics,
-                           PrivacyPolicy privacy, NetworkPolicy network) {
+                           PrivacyPolicy privacy) {
     }
 
     public record RenderPolicy(boolean disableSelfModel, boolean disableOtherModel, boolean disableSelfHands,
@@ -169,13 +151,6 @@ public final class ConfigPolicies {
     }
 
     public record PrivacyPolicy(boolean enabled) {
-    }
-
-    public record NetworkPolicy(String defaultModelId, String defaultModelTexture, boolean canSwitchModel,
-                                boolean allowModelUpload, int modelUploadMaxMiB, int modelUploadChunksPerTick,
-                                List<String> clientNotDisplayModels, int threadCount,
-                                boolean globalBandwidthLimit, int bandwidthLimitMbps, int playerSyncTimeoutSeconds,
-                                boolean lowBandwidthUsage, int acceptSoundFx) {
     }
 
     public record GraphicsPolicy(NativeSimdPolicy nativeSimdPolicy,

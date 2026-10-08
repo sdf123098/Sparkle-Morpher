@@ -3,7 +3,6 @@ package com.micaftic.morpher.client.event;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.network.NetworkHandler;
 import dev.architectury.event.events.client.ClientPlayerEvent;
 import net.minecraft.client.player.LocalPlayer;
 import com.micaftic.morpher.core.api.PlatformAPI;

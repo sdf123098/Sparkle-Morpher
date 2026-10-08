@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>审计文档 3.6/R6.3：异步 resolver 每次请求带 revision N，结果回来时
  * {@code N != current → discard}——杜绝"谁异步完成得晚，谁覆盖 Entity"。
- * Cloud-like delayed candidate、Legacy packet arrival、local selection change、
+ * Cloud-like delayed candidate、Legacy cache arrival、local selection change、
  * entity despawn、dimension switch 五类竞态都不允许错误覆盖。</p>
  *
  * <pre>

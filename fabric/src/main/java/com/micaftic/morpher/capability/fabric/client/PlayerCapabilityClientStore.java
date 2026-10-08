@@ -27,7 +27,7 @@ public final class PlayerCapabilityClientStore {
         if (!(player instanceof AbstractClientPlayer)) {
             return Optional.empty();
         }
-        if (STORE.size() > 500 && System.nanoTime() - LAST_CLEANUP_NANOS.get() > 1_000_000_000L) {
+        if (!STORE.isEmpty() && System.nanoTime() - LAST_CLEANUP_NANOS.get() > 1_000_000_000L) {
             ClientLevel level = Minecraft.getInstance().level;
             if (level != null) {
                 STORE.values().removeIf(cap -> cap.entity == null || level.getEntity(cap.entity.getId()) != cap.entity);

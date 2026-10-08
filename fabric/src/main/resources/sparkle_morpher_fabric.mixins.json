@@ -10,8 +10,5 @@
     "client.PlayerRendererHandMixin",
     "client.PlayerRendererMixin",
     "client.YSMSoundInstanceFabricMixin"
-  ],
-  "mixins": [
-    "LivingEntityEffectMixin"
   ]
 }

@@ -1,9 +1,10 @@
 package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.capability.AuthModelsCapability;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
+
 import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.capability.StarModelsCapability;
+
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.util.SmExecutors;
@@ -26,13 +27,9 @@ import com.micaftic.morpher.cloud.client.CloudInstanceRegistry;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.config.ServerConfig;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
 import com.micaftic.morpher.core.gpu.BlurStack;
-import com.micaftic.morpher.model.ServerModelManager;
-import com.micaftic.morpher.network.NetworkHandler;
-import com.micaftic.morpher.network.message.C2SRequestSwitchModelPacket;
-import com.micaftic.morpher.network.message.C2SSetStarModelPacket;
+
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.util.LocalStarModelsStore;
@@ -157,10 +154,14 @@ public class ModernPlayerModelScreen extends Screen {
     private String cloudAccountDraft = "";
     private String cloudAddressDraft = "";
     private String cloudNameDraft = "";
-    private enum CloudAccountPage { ACCOUNT, INSTANCES, SCOPES }
+    private enum CloudAccountPage { ACCOUNT, INSTANCES, SCOPES, IDENTITY, CLAIM, APPROVAL }
     private CloudAccountPage cloudAccountPage = CloudAccountPage.ACCOUNT;
     private int cloudAccountScroll;
     private int cloudDetailScroll;
+    private com.micaftic.morpher.cloud.client.CloudIdentityWorkflow cloudIdentityFlow;
+    private CloudIdentityPanelGateway cloudIdentityGateway;
+    private EditBox cloudIdentityCodeBox;
+    private int cloudIdentityChoicePage;
     private EditBox cloudInstanceNameBox;
     private EditBox cloudOriginBox;
     private EditBox cloudScopeIdBox;
@@ -334,7 +335,7 @@ public class ModernPlayerModelScreen extends Screen {
     @Override
     protected void init() {
         clearWidgets();
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT) cloudAccountPage = CloudAccountPage.ACCOUNT;
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && (cloudAccountPage == CloudAccountPage.INSTANCES || cloudAccountPage == CloudAccountPage.SCOPES)) cloudAccountPage = CloudAccountPage.ACCOUNT;
         else if (STATE.activeTab == ModelPanelState.Tab.INSTANCE && cloudAccountPage == CloudAccountPage.ACCOUNT) cloudAccountPage = CloudAccountPage.INSTANCES;
         this.layout = ModelPanelLayout.create(this.width, this.height);
         this.modelSearchBox = null;
@@ -349,6 +350,18 @@ public class ModernPlayerModelScreen extends Screen {
         this.cloudScopeIdBox = null;
         this.cloudScopeNameBox = null;
         this.cloudWorldEpochBox = null;
+        this.cloudIdentityCodeBox = null;
+        if (isCloudIdentityPage()) {
+            ensureCloudIdentityFlow();
+            if (cloudAccountPage == CloudAccountPage.CLAIM && cloudIdentityFlow != null) {
+                var identityLayout = cloudDetailLayout();
+                cloudIdentityCodeBox = cloudField(identityLayout.fieldX(), identityLayout.detailY() + 246,
+                        identityLayout.fieldWidth(), "identity_panel.code_hint", 128);
+                cloudIdentityCodeBox.setValue(cloudIdentityFlow.codeDraft());
+                cloudIdentityCodeBox.setResponder(value -> { if (cloudIdentityFlow != null) cloudIdentityFlow.codeDraft(value); });
+                cloudIdentityCodeBox.visible = false;
+            }
+        }
         boolean cloudFormOpen = STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE;
         if (!cloudFormOpen && STATE.activeTab == ModelPanelState.Tab.MODEL) {
             if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
@@ -445,6 +458,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     @Override
     public void removed() {
+        if (cloudIdentityFlow != null) cloudIdentityFlow.invalidate();
+        cloudIdentityFlow = null; cloudIdentityGateway = null;
         this.controller.invalidateGeneration();
             this.cloudRequestGeneration++;
             STATE.cloudLoading = false;
@@ -2013,15 +2028,19 @@ public class ModernPlayerModelScreen extends Screen {
             case ACCOUNT -> renderCloudAccountDetails(g, mouseX, mouseY, details, connected, selected.map(CloudInstanceRegistry::isBuiltinOfficial).orElse(false), partialTick);
             case INSTANCES -> renderCloudInstances(g, mouseX, mouseY, details, partialTick);
             case SCOPES -> renderCloudScopes(g, mouseX, mouseY, details, partialTick);
+            case IDENTITY, CLAIM, APPROVAL -> renderCloudIdentityDetails(g, mouseX, mouseY, details, partialTick);
         }
         g.disableScissor();
         this.hits.subList(firstDetailHit, this.hits.size()).removeIf(hit -> hit.y() < panels.detailY() || hit.y() + hit.h() > panels.detailY() + panels.detailHeight());
-        int detailContentHeight = cloudAccountPage == CloudAccountPage.SCOPES ? 268 : cloudAccountPage == CloudAccountPage.INSTANCES ? 232 : 180;
+        int detailContentHeight = cloudIdentityContentHeight();
         if (detailContentHeight > panels.detailHeight()) renderScrollbar(g, mouseX, mouseY, panels.detailX() + panels.detailWidth() - 6, panels.detailY() + 4, 4, panels.detailHeight() - 8, detailContentHeight, panels.detailHeight(), cloudDetailScroll);
-        drawText(g, Component.literal(trim(cloudPanelStatus.getString(), w - 16)), x + 8, y + h - 18);
+        Component panelMessage = isCloudIdentityPage() && cloudIdentityFlow != null
+                ? cloudText("identity_panel." + (cloudIdentityFlow.busy() ? "working" : cloudIdentityFlow.message())) : cloudPanelStatus;
+        drawText(g, Component.literal(trim(panelMessage.getString(), w - 16)), x + 8, y + h - 18);
     }
 
     private void renderCloudAccountList(GuiGraphics g, int mouseX, int mouseY, AccountPanelLayout panels) {
+        if (isCloudIdentityPage()) { renderCloudIdentityList(g, mouseX, mouseY, panels); return; }
         int x = panels.listX(), y = panels.listY(), w = panels.listWidth();
         int listY = y + 38;
         int rows = panels.listRows();
@@ -2056,6 +2075,207 @@ public class ModernPlayerModelScreen extends Screen {
             hit(x + 8, rowY, w - 16, 32, Component.literal(CloudManagementScreen.displayName(profile) + " · " + detail), () -> selectCloudInstance(profile));
         }
         if (profiles.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4, panels.listHeight() - 46, profiles.size(), rows, cloudAccountScroll);
+    }
+
+    private boolean isCloudIdentityPage() {
+        return cloudAccountPage == CloudAccountPage.IDENTITY || cloudAccountPage == CloudAccountPage.CLAIM || cloudAccountPage == CloudAccountPage.APPROVAL;
+    }
+
+    private int cloudIdentityContentHeight() {
+        return switch (cloudAccountPage) {
+            case IDENTITY -> 300; case CLAIM -> 390; case APPROVAL -> 440;
+            case SCOPES -> 268; case INSTANCES -> 232; default -> 180;
+        };
+    }
+
+    private void ensureCloudIdentityFlow() {
+        if (cloudIdentityFlow != null && cloudIdentityGateway.current()) return;
+        if (cloudIdentityFlow != null) cloudIdentityFlow.invalidate();
+        cloudIdentityFlow = null; cloudIdentityGateway = null;
+        if (cloudIdentityCodeBox != null) cloudIdentityCodeBox.setValue("");
+        try {
+            cloudIdentityGateway = new CloudIdentityPanelGateway();
+            cloudIdentityFlow = new com.micaftic.morpher.cloud.client.CloudIdentityWorkflow(cloudIdentityGateway, task -> Minecraft.getInstance().execute(task));
+            cloudIdentityFlow.refresh();
+        } catch (RuntimeException failure) { cloudPanelStatus = cloudText("identity_panel.login_required"); }
+    }
+
+    private void openCloudIdentityPage(CloudAccountPage page) {
+        STATE.activeTab = ModelPanelState.Tab.ACCOUNT;
+        cloudAccountPage = page; cloudAccountScroll = 0; cloudDetailScroll = 0; cloudIdentityChoicePage = 0;
+        if (CloudManagementScreen.management().snapshot().scopes().isEmpty()) refreshCloudScopes();
+        init();
+    }
+
+    private int cloudIdentityListSize() {
+        return cloudAccountPage == CloudAccountPage.IDENTITY
+                ? (cloudIdentityFlow == null ? 0 : cloudIdentityFlow.catalog().identities().size())
+                : CloudManagementScreen.management().snapshot().scopes().size();
+    }
+
+    private void renderCloudIdentityList(GuiGraphics g, int mouseX, int mouseY, AccountPanelLayout panels) {
+        ensureCloudIdentityFlow();
+        int x = panels.listX() + 8, y = panels.listY(), w = panels.listWidth() - 16;
+        boolean identities = cloudAccountPage == CloudAccountPage.IDENTITY;
+        drawTitle(g, cloudText("identity_panel." + (identities ? "identities" : "worlds")), x, y + 12);
+        int rows = panels.listRows(), count = cloudIdentityListSize();
+        cloudAccountScroll = clamp(cloudAccountScroll, 0, Math.max(0, count - rows));
+        if (count == 0) drawMuted(g, Component.literal(trim(cloudText("identity_panel." + (identities ? "no_identities" : "no_worlds")).getString(), w)), x, y + 42);
+        for (int i = 0; i < rows && cloudAccountScroll + i < count; i++) {
+            int index = cloudAccountScroll + i;
+            if (identities) {
+                var identity = cloudIdentityFlow.catalog().identities().get(index);
+                boolean selected = identity.equals(cloudIdentityFlow.selectedIdentity());
+                renderRowButton(g, mouseX, mouseY, x, y + 38 + i * 36, w, 30,
+                        Component.literal(trim(identity.displayName() + " · " + cloudText("identity_panel." + ("VERIFIED".equals(identity.verificationStatus()) ? "verified_short" : "offline_short")).getString(), w - 12)),
+                        selected, () -> cloudIdentityFlow.selectIdentity(identity.identityId()));
+            } else {
+                var scope = CloudManagementScreen.management().snapshot().scopes().get(index);
+                var selected = CloudManagementScreen.management().snapshot().selectedScope();
+                renderRowButton(g, mouseX, mouseY, x, y + 38 + i * 36, w, 30, Component.literal(trim(scope.name(), w - 12)),
+                        scope.equals(selected), () -> selectCloudScope(scope.scopeId()));
+            }
+        }
+        if (count > rows) renderScrollbar(g, mouseX, mouseY, x + w - 4, y + 38, 4, panels.listHeight() - 46, count, rows, cloudAccountScroll);
+    }
+
+    private void identityAction(GuiGraphics g, int mx, int my, int x, int y, int w, String key, boolean enabled, Runnable action) {
+        Component label = cloudText("identity_panel." + key);
+        if (enabled) renderTextButton(g, mx, my, x, y, w, 20, label, action);
+        else { fill(g, x, y, w, 20, 0x4427333D); drawCentered(g, Component.literal(trim(label.getString(), w - 8)), x + w / 2, y + 6, MUTED); }
+    }
+
+    private void identityLine(GuiGraphics g, String key, int x, int y, int w) {
+        drawMuted(g, Component.literal(trim(cloudText("identity_panel." + key).getString(), w)), x, y);
+    }
+
+    private void renderCloudIdentityDetails(GuiGraphics g, int mx, int my, AccountPanelLayout panels, float partialTick) {
+        ensureCloudIdentityFlow();
+        if (cloudIdentityCodeBox != null) cloudIdentityCodeBox.visible = false;
+        int x = panels.fieldX(), y = panels.detailY(), w = panels.fieldWidth();
+        identityAction(g, mx, my, x, y + 8, w, "back", true, () -> {
+            cloudAccountPage = CloudAccountPage.ACCOUNT; cloudDetailScroll = 0; init();
+        });
+        if (cloudIdentityFlow == null) { identityLine(g, "login_required", x, y + 44, w); return; }
+        var flow = cloudIdentityFlow;
+        drawTitle(g, cloudText("identity_panel." + switch (cloudAccountPage) { case CLAIM -> "claim_title"; case APPROVAL -> "admin_title"; default -> "title"; }), x, y + 42);
+        drawText(g, Component.literal(trim(flow.context().profileName(), w)), x, y + 62);
+        if (cloudAccountPage == CloudAccountPage.IDENTITY) {
+            identityLine(g, "identity_help", x, y + 82, w);
+            identityAction(g, mx, my, x, y + 106, w, "refresh", !flow.busy(), flow::refresh);
+            if (flow.catalog().providers().isEmpty()) identityLine(g, "no_provider", x, y + 138, w);
+            else {
+                identityAction(g, mx, my, x, y + 134, w, "verify", !flow.busy(), flow::verify);
+                var provider = flow.catalog().providers().stream().filter(p -> p.providerId().equals(flow.providerId())).findFirst().orElse(null);
+                if (provider != null) {
+                    Component name = Component.literal(trim(provider.displayName(), w - 8));
+                    if (flow.catalog().providers().size() > 1) renderTextButton(g, mx, my, x, y + 162, w, 20, name, flow::nextProvider);
+                    else drawMuted(g, name, x, y + 170);
+                }
+            }
+            var selectedIdentity = flow.selectedIdentity();
+            if (selectedIdentity != null) identityLine(g, "VERIFIED".equals(selectedIdentity.verificationStatus()) ? "verified" : "registered", x, y + 194, w);
+            identityAction(g, mx, my, x, y + 224, w, "use_world", !flow.busy(), () -> openCloudIdentityPage(CloudAccountPage.CLAIM));
+            return;
+        }
+        var scope = flow.context().scope();
+        if (scope == null) {
+            identityLine(g, "choose_world", x, y + 86, w);
+            identityAction(g, mx, my, x, y + 112, w, "refresh_worlds", !flow.busy(), this::refreshCloudScopes);
+            return;
+        }
+        drawMuted(g, Component.literal(trim(scope.name(), w)), x, y + 82);
+        if (!flow.loaded()) { identityLine(g, "loading", x, y + 106, w); identityAction(g, mx, my, x, y + 132, w, "refresh", !flow.busy(), flow::refresh); return; }
+        if (flow.catalog().permissions() == null) { identityLine(g, "server_update", x, y + 106, w); identityAction(g, mx, my, x, y + 134, w, "refresh", !flow.busy(), flow::refresh); return; }
+        if (cloudAccountPage == CloudAccountPage.APPROVAL) { renderCloudIdentityAdmin(g, mx, my, x, y, w); return; }
+        identityLine(g, "claim_help", x, y + 102, w);
+        if (flow.canManage()) identityAction(g, mx, my, x, y + (flow.claimPolicy() ? 274 : 340), w, "manage", !flow.busy(), () -> openCloudIdentityPage(CloudAccountPage.APPROVAL));
+        if ("DISABLED".equals(flow.policy())) { identityLine(g, "disabled", x, y + 136, w); return; }
+        if (!flow.canEdit()) { identityLine(g, "need_edit", x, y + 136, w); return; }
+        if (flow.localOfflineIdentity() == null) {
+            identityLine(g, "register_help", x, y + 136, w);
+            identityAction(g, mx, my, x, y + 164, w, "register", flow.canRegister(), flow::register);
+            return;
+        }
+        if (flow.hasBinding()) {
+            var binding = flow.catalog().bindings().stream().filter(b -> b.entityUuid().equals(flow.context().profileId().toString()) && b.accountId().equals(flow.context().accountId())
+                    && ("APPROVED".equals(b.status()) || "PENDING_APPROVAL".equals(b.status()))).findFirst().orElseThrow();
+            identityLine(g, "APPROVED".equals(binding.status()) ? "binding_approved" : "requested", x, y + 136, w);
+            drawText(g, Component.literal(trim(flow.targetName(binding.targetId()), w)), x, y + 156);
+            identityAction(g, mx, my, x, y + 184, w, "refresh", !flow.busy(), flow::refresh);
+            return;
+        }
+        if ("STRICT_APPROVAL".equals(flow.policy())) {
+            renderCloudIdentityTargets(g, mx, my, x, y + 126, w);
+            identityAction(g, mx, my, x, y + 246, w, "request", flow.canRequest(), flow::request);
+            identityLine(g, "approval_help", x, y + 278, w);
+            identityAction(g, mx, my, x, y + 318, w, "refresh", !flow.busy(), flow::refresh);
+        } else if (flow.claimPolicy()) {
+            identityLine(g, "code_help", x, y + 134, w);
+            if (cloudIdentityCodeBox != null) {
+                cloudIdentityCodeBox.setY(y + 158);
+                cloudIdentityCodeBox.visible = true; cloudIdentityCodeBox.setEditable(!flow.busy());
+                cloudIdentityCodeBox.render(g, mx, my, partialTick);
+            }
+            identityAction(g, mx, my, x, y + 190, w, "redeem", flow.canRedeem(), flow::redeem);
+            identityAction(g, mx, my, x, y + 242, w, "refresh", !flow.busy(), flow::refresh);
+        }
+    }
+
+    private void renderCloudIdentityTargets(GuiGraphics g, int mx, int my, int x, int y, int w) {
+        var flow = cloudIdentityFlow;
+        if (flow.catalog().targets().isEmpty()) { identityLine(g, "no_targets", x, y + 6, w); return; }
+        var range = CloudScreenPagination.range(flow.catalog().targets().size(), 3, cloudIdentityChoicePage);
+        cloudIdentityChoicePage = range.page();
+        int row = 0;
+        for (var target : flow.catalog().targets().subList(range.startInclusive(), range.endExclusive())) {
+            renderRowButton(g, mx, my, x, y + row++ * 26, w, 22, Component.literal(trim(target.displayName(), w - 12)),
+                    target.equals(flow.selectedTarget()), () -> flow.selectTarget(target.targetId()));
+        }
+        if (range.pageCount() > 1) {
+            int half = Math.max(30, (w - 6) / 2);
+            identityAction(g, mx, my, x, y + 82, half, "previous", !flow.busy() && range.page() > 0, () -> cloudIdentityChoicePage--);
+            identityAction(g, mx, my, x + half + 6, y + 82, half, "next", !flow.busy() && range.page() + 1 < range.pageCount(), () -> cloudIdentityChoicePage++);
+        }
+    }
+
+    private void renderCloudIdentityAdmin(GuiGraphics g, int mx, int my, int x, int y, int w) {
+        var flow = cloudIdentityFlow;
+        if (!flow.canManage()) { identityLine(g, "permission_denied", x, y + 110, w); return; }
+        identityAction(g, mx, my, x, y + 102, w, "refresh", !flow.busy(), flow::refresh);
+        if ("STRICT_APPROVAL".equals(flow.policy())) {
+            if (flow.pending().isEmpty()) { identityLine(g, "no_requests", x, y + 140, w); return; }
+            var range = CloudScreenPagination.range(flow.pending().size(), 3, cloudIdentityChoicePage);
+            cloudIdentityChoicePage = range.page();
+            int row = 0;
+            for (var binding : flow.pending().subList(range.startInclusive(), range.endExclusive())) {
+                String player = binding.identityDisplayName() != null ? binding.identityDisplayName() : flow.catalog().players().stream().filter(p -> p.id().toString().equals(binding.entityUuid())).findFirst()
+                        .map(com.micaftic.morpher.cloud.client.CloudIdentityWorkflow.Player::name).orElse(cloudText("identity_panel.offline_player").getString());
+                renderRowButton(g, mx, my, x, y + 134 + row++ * 28, w, 24, Component.literal(trim(player + " → " + flow.targetName(binding.targetId()), w - 12)),
+                        binding.equals(flow.selectedBinding()), () -> flow.selectBinding(binding.bindingId()));
+            }
+            int half = Math.max(30, (w - 6) / 2);
+            identityAction(g, mx, my, x, y + 222, half, "previous", !flow.busy() && range.page() > 0, () -> cloudIdentityChoicePage--);
+            identityAction(g, mx, my, x + half + 6, y + 222, half, "next", !flow.busy() && range.page() + 1 < range.pageCount(), () -> cloudIdentityChoicePage++);
+            identityAction(g, mx, my, x, y + 252, half, "approve", flow.canApprove(), () -> flow.approve(true));
+            identityAction(g, mx, my, x + half + 6, y + 252, half, "reject", flow.canApprove(), () -> flow.approve(false));
+            identityLine(g, "review_help", x, y + 284, w);
+        } else if (flow.claimPolicy()) {
+            renderCloudIdentityTargets(g, mx, my, x, y + 134, w);
+            var player = flow.selectedPlayer();
+            Component playerName = Component.literal(trim(player == null ? cloudText("identity_panel.no_players").getString() : player.name(), w - 8));
+            renderTextButton(g, mx, my, x, y + 248, w, 20, playerName, flow::nextPlayer);
+            identityAction(g, mx, my, x, y + 278, w, "issue", flow.canIssue(), flow::issue);
+            if (flow.issued() != null) {
+                identityLine(g, flow.issuedExpired() ? "code_expired" : "issued", x, y + 308, w);
+                identityAction(g, mx, my, x, y + 330, w, "copy", !flow.busy() && !flow.issuedExpired(), () -> {
+                    Minecraft.getInstance().keyboardHandler.setClipboard(flow.issued().code());
+                    flow.copied();
+                });
+                identityAction(g, mx, my, x, y + 358, w, "revoke", !flow.busy(), flow::revoke);
+            }
+            identityLine(g, "invite_help", x, y + 394, w);
+        } else identityLine(g, "disabled", x, y + 140, w);
     }
 
     private void renderCloudAccountDetails(GuiGraphics g, int mouseX, int mouseY,
@@ -2097,8 +2317,8 @@ public class ModernPlayerModelScreen extends Screen {
                                 }));
                     });
             renderTextButton(g, mouseX, mouseY, x, y + 144, w, 20,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.identities"),
-                    () -> InputUtil.setScreen(new CloudIdentityManagementScreen(this, CloudManagementScreen.management())));
+                    cloudText("identity_panel.title"),
+                    () -> openCloudIdentityPage(CloudAccountPage.IDENTITY));
         } else {
             drawMuted(g, Component.literal(trim(cloudText("account_intro").getString(), w)), x, y + 40);
             renderTextButton(g, mouseX, mouseY, x, y + 66, w, 24, cloudText("quick_connect"),
@@ -2529,6 +2749,13 @@ public class ModernPlayerModelScreen extends Screen {
             setFocused(this.modelSearchBox);
             return true;
         }
+        if (this.cloudIdentityCodeBox != null && this.cloudIdentityCodeBox.visible
+                && inside(mouseX, mouseY, accountPanelLayout().detailX(), accountPanelLayout().detailY(),
+                accountPanelLayout().detailWidth(), accountPanelLayout().detailHeight())
+                && this.cloudIdentityCodeBox.mouseClicked(mouseX, mouseY, button)) {
+            this.setFocused(this.cloudIdentityCodeBox);
+            return true;
+        }
         if (this.cloudSearchBox != null && this.cloudSearchBox.mouseClicked(mouseX, mouseY, button)) {
             setFocused(this.cloudSearchBox);
             return true;
@@ -2565,13 +2792,13 @@ public class ModernPlayerModelScreen extends Screen {
             if (inside(mouseX, mouseY, panels.detailX(), panels.detailY(), panels.detailWidth(), panels.detailHeight())) {
                 cloudDetailScroll += delta * 24;
                 cloudDetailLayout();
-                if (cloudAccountPage == CloudAccountPage.SCOPES) init();
+                if (cloudAccountPage == CloudAccountPage.SCOPES || isCloudIdentityPage()) init();
                 return true;
             }
             if (!inside(mouseX, mouseY, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight())) {
                 return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
             }
-            int count = cloudAccountPage == CloudAccountPage.SCOPES
+            int count = isCloudIdentityPage() ? cloudIdentityListSize() : cloudAccountPage == CloudAccountPage.SCOPES
                     ? CloudManagementScreen.management().snapshot().scopes().size()
                     : CloudManagementScreen.management().registry().profiles().size();
             cloudAccountScroll = clamp(cloudAccountScroll + delta, 0, Math.max(0, count - panels.listRows()));
@@ -2627,9 +2854,6 @@ public class ModernPlayerModelScreen extends Screen {
             // without ysm-pack.json entries. Otherwise those models are loaded but
             // cannot be reached through the model browser path navigation.
             for (String modelId : this.controller.availableModelIds()) {
-                if (this.controller.isServerModel(modelId)) {
-                    continue;
-                }
                 if (!modelId.startsWith(STATE.currentPath)) {
                     continue;
                 }
@@ -2650,7 +2874,6 @@ public class ModernPlayerModelScreen extends Screen {
         Map<String, ModelAssembly> assemblyMap = this.controller.modelAssemblyMap();
         for (var entry : assemblyMap.entrySet()) {
             String modelId = entry.getKey();
-            if (this.controller.isServerModel(modelId)) continue;
             ModelAssembly assembly = entry.getValue();
             if (!searching && !isDirectModel(STATE.currentPath, modelId)) {
                 continue;
@@ -2666,7 +2889,6 @@ public class ModernPlayerModelScreen extends Screen {
         }
         for (String modelId : this.controller.availableModelIds()) {
             if (assemblyMap.containsKey(modelId)) continue;
-            if (this.controller.isServerModel(modelId)) continue;
             if (!searching && !isDirectModel(STATE.currentPath, modelId)) continue;
             if (!STATE.modelFilter.matchesAvailability(this.controller.isLocalOnlyModel(modelId))) continue;
             boolean authModel = this.controller.isAuthModel(modelId);
@@ -2851,7 +3073,14 @@ public class ModernPlayerModelScreen extends Screen {
             }
             return;
         }
-        this.controller.toggleStar(STATE.selectedModelId);
+        boolean wasStarred = starModels().contains(STATE.selectedModelId);
+        if (this.controller.toggleStar(STATE.selectedModelId)) {
+            setStatus(Component.translatable(wasStarred
+                    ? "gui.sparkle_morpher.model_source.favorite_removed"
+                    : "gui.sparkle_morpher.model_source.favorite_added"), ChatFormatting.GREEN);
+        } else {
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.setting.local_save_failed"), ChatFormatting.RED);
+        }
     }
 
     /** §24.7：转发到 Service（保留本方法名，行为不变）。 */
@@ -2979,9 +3208,9 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void openModelFolder() {
         try {
-            Files.createDirectories(ServerModelManager.CUSTOM);
-            Util.getPlatform().openFile(ServerModelManager.CUSTOM.toFile());
-            setStatus(Component.literal(ServerModelManager.CUSTOM.toString()), ChatFormatting.GRAY);
+            Files.createDirectories(ModelStoragePaths.custom());
+            Util.getPlatform().openFile(ModelStoragePaths.custom().toFile());
+            setStatus(Component.literal(ModelStoragePaths.custom().toString()), ChatFormatting.GRAY);
         } catch (IOException e) {
             setStatus(Component.translatable("gui.sparkle_morpher.import.error.open_folder", e.getMessage()), ChatFormatting.RED);
         }
@@ -3049,7 +3278,8 @@ public class ModernPlayerModelScreen extends Screen {
             }
             java.util.List<String> errors = new java.util.ArrayList<>();
             if (!this.STATE.applyDevState(parsed, errors)) {
-                setStatus(Component.literal("panel state rejected: " + String.join(", ", errors)), ChatFormatting.RED);
+                com.micaftic.morpher.YesSteveModel.LOGGER.debug("Panel state rejected: {}", errors);
+                setStatus(Component.translatable("gui.sparkle_morpher.model_panel.developer.action.apply_state.invalid"), ChatFormatting.RED);
                 return;
             }
             init();
@@ -3236,8 +3466,10 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.gpu_cache_limit", GeneralConfig.MAX_CACHED_GPU_MODELS, 0, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.cpu_cache_limit", GeneralConfig.MAX_RESIDENT_CPU_MODELS, 1, 512, 1, ""));
         rows.add(intRow(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.unused_model_ttl", GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 30, 86400, 30, "s"));
-        rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.enable_global_bandwidth_limit", ServerConfig.ENABLE_GLOBAL_BANDWIDTH_LIMIT));
-        rows.add(intRow(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.bandwidth_limit", ServerConfig.BANDWIDTH_LIMIT, 1, 999, 10, "Mbps"));
+        rows.add(localSoundModeRow(ModelPanelState.SettingGroup.GENERAL));
+        rows.add(actionRow(ModelPanelState.SettingGroup.GENERAL,"gui.sparkle_morpher.model_panel.setting.local_default",this::saveSelectedLocalDefault));
+        rows.add(actionRow(ModelPanelState.SettingGroup.GENERAL,"gui.sparkle_morpher.model_panel.setting.hide_selected",this::hideSelectedLocalModel));
+        rows.add(actionRow(ModelPanelState.SettingGroup.GENERAL,"gui.sparkle_morpher.model_panel.setting.restore_hidden",()->editLocalPreferences(com.micaftic.morpher.client.LocalDisplayPreferences::restoreHidden)));
         // ---- Developer options: panel state ----
         rows.add(section(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.section.panel_state"));
         rows.add(actionRow(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.action.dump_state", this::dumpPanelState));
@@ -3283,6 +3515,30 @@ public class ModernPlayerModelScreen extends Screen {
         return new SettingRow(group, labelKey, null,
                 Component.translatable("gui.sparkle_morpher.model_panel.setting.configure").getString(),
                 action, null, null, null, null);
+    }
+
+    @FunctionalInterface private interface LocalPreferenceEdit{void run()throws java.io.IOException;}
+    private void editLocalPreferences(LocalPreferenceEdit edit){
+        try{edit.run();setStatus(Component.translatable("gui.sparkle_morpher.model_panel.setting.local_saved"),ChatFormatting.GREEN);}
+        catch(java.io.IOException|IllegalArgumentException error){setStatus(Component.translatable("gui.sparkle_morpher.model_panel.setting.local_save_failed"),ChatFormatting.RED);YesSteveModel.LOGGER.warn("[SPM] Local preference edit failed",error);}
+    }
+    private SettingRow localSoundModeRow(ModelPanelState.SettingGroup group){
+        int mode=com.micaftic.morpher.client.LocalDisplayPreferences.snapshot().soundMode();
+        String value=Component.translatable("gui.sparkle_morpher.model_panel.setting.local_sound_mode.value."+mode).getString();
+        return new SettingRow(group,"gui.sparkle_morpher.model_panel.setting.local_sound_mode",null,value,()->editLocalPreferences(()->{
+            com.micaftic.morpher.client.LocalDisplayPreferences.soundMode((mode+1)%3);this.controller.reloadLocalModels(this::setStatus);
+        }),null,null,null,null);
+    }
+    private boolean selectedLocalPreferenceModel(){
+        if(STATE.selectedModelId==null||com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(STATE.selectedModelId)||selectedAssembly()==null){
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.setting.select_local_model"),ChatFormatting.YELLOW);return false;
+        }return true;
+    }
+    private void saveSelectedLocalDefault(){
+        if(selectedLocalPreferenceModel())editLocalPreferences(()->com.micaftic.morpher.model.LocalModelService.saveDefaultModel(STATE.selectedModelId,selectedTextureOrDefault(selectedAssembly())));
+    }
+    private void hideSelectedLocalModel(){
+        if(selectedLocalPreferenceModel())editLocalPreferences(()->com.micaftic.morpher.client.LocalDisplayPreferences.hide(STATE.selectedModelId));
     }
 
     private SettingRow section(ModelPanelState.SettingGroup group, String sectionKey) {
@@ -3371,17 +3627,17 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private Set<String> authModels() {
-        if (Minecraft.getInstance().player == null) {
-            return Set.of();
-        }
-        return AuthModelsCapability.get(Minecraft.getInstance().player).map(AuthModelsCapability::getAuthModels).orElse(Set.of());
+        Set<String> auth = new HashSet<>();
+        java.util.stream.Stream.concat(
+                        this.controller.availableModelIds().stream(),
+                        this.controller.modelAssemblyMap().keySet().stream())
+                .filter(this.controller::isAuthModel)
+                .forEach(auth::add);
+        return Set.copyOf(auth);
     }
 
     private Set<String> starModels() {
-        if (Minecraft.getInstance().player == null) {
-            return Set.of();
-        }
-        return StarModelsCapability.get(Minecraft.getInstance().player).map(StarModelsCapability::getStarModels).orElse(Set.of());
+        return LocalStarModelsStore.load();
     }
 
     private void setModelFilter(ModelPanelState.ModelFilter filter) {
@@ -4190,7 +4446,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private AccountPanelLayout cloudDetailLayout() {
         var panels = accountPanelLayout();
-        int requiredHeight = cloudAccountPage == CloudAccountPage.SCOPES ? 268 : cloudAccountPage == CloudAccountPage.INSTANCES ? 232 : 180;
+        int requiredHeight = cloudIdentityContentHeight();
         cloudDetailScroll = clamp(cloudDetailScroll, 0, Math.max(0, requiredHeight - panels.detailHeight()));
         return new AccountPanelLayout(panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight(),
                 panels.detailX(), panels.detailY() - cloudDetailScroll, panels.detailWidth(), panels.detailHeight());

@@ -48,18 +48,11 @@ dependencies {
     include "dev.architectury:architectury-fabric:$rootProject.architectury_api_version"
     include "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
 
-    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
-    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
-    include "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
-    include "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
 
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     include "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 
     modCompileOnly "maven.modrinth:iris:1.8.8+1.21.1-fabric"
-    implementation "com.electronwill.night-config:core:3.9.0"
-    implementation "com.electronwill.night-config:toml:3.9.0"
-
     implementation "com.electronwill.night-config:core:3.9.0"
     implementation "com.electronwill.night-config:toml:3.9.0"
 
