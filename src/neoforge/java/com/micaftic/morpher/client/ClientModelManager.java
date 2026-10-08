@@ -730,10 +730,14 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                             throw new CancellationException("Client model runtime is stopping");
                         }
                         ModelAssembly candidate = preparedAssembly;
-                        ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> outcome = ImportCommitFlow.commitThenPublish(
-                                () -> importLease == null || localImportRequests.isCurrent(importLease),
-                                prepared::commit,
-                                committed -> publishImportedAssembly(modelKey, candidate, committed.persistedPath()));
+                        preparedAssembly = null;
+                        ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> outcome =
+                                com.micaftic.morpher.core.importing.ImportCoordinator.commitBuiltCandidate(
+                                        candidate,
+                                        () -> importLease == null || localImportRequests.isCurrent(importLease),
+                                        prepared::commit,
+                                        (assembly, committed) -> publishImportedAssembly(modelKey, assembly, committed.persistedPath()),
+                                        assembly -> releaseModelAssembly(modelKey, assembly));
                         if (outcome.state() == ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT) return;
                         if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
                             throw outcome.failure();
