@@ -1,7 +1,9 @@
 package com.micaftic.morpher.core.importing;
 
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
+import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,6 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ImportCoordinatorTest {
+    @TempDir
+    Path tempDir;
+
     @Test
     void gltfBytesBecomeTypedPayloadWithNoInventedResourceRoot() throws Exception {
         byte[] source = "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8);
@@ -117,5 +122,25 @@ class ImportCoordinatorTest {
                 publishFailed.state());
         assertEquals("committed", publishFailed.committedSource());
         assertEquals(List.of("release-superseded", "release-commit-failure", "release-publish-failure"), events);
+    }
+
+    @Test
+    void pickedGltfWithMissingExternalDependencyCannotReplaceExistingImport() throws Exception {
+        Path customRoot = tempDir.resolve("custom");
+        LocalModelImportStore store = new LocalModelImportStore(customRoot);
+        Path existing = store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
+        byte[] invalidGltf = """
+                {"asset":{"version":"2.0"},"buffers":[{"uri":"missing.bin","byteLength":1}]}
+                """.getBytes(StandardCharsets.UTF_8);
+
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", invalidGltf)) {
+            assertThrows(Exception.class, () -> ImportCoordinator.parsePickedBytes("avatar.gltf", invalidGltf,
+                    () -> { throw new AssertionError("glTF must not reach the legacy parser"); }));
+            assertEquals("old-source", Files.readString(existing));
+            assertFalse(Files.exists(customRoot.resolve("avatar.gltf")));
+        }
+
+        assertEquals("old-source", Files.readString(existing));
+        assertFalse(Files.exists(customRoot.resolve("avatar.gltf")));
     }
 }
