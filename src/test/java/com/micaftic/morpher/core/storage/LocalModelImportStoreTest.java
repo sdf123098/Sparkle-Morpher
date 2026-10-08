@@ -186,4 +186,27 @@ class LocalModelImportStoreTest {
                     "failed move and close must remove the staged import");
         }
     }
+
+    @Test
+    void preparedImportReportsSecurityDeniedSiblingCleanupAsPending() throws Exception {
+        Path custom = tempDir.resolve("custom");
+        Files.createDirectories(custom);
+        Path old = custom.resolve("cirno.ysm");
+        Files.writeString(old, "old");
+        LocalModelImportStore store = new LocalModelImportStore(custom,
+                (source, target) -> Files.move(source, target, StandardCopyOption.REPLACE_EXISTING),
+                path -> {
+                    if (path.equals(old)) throw new SecurityException("injected security manager denial");
+                    return Files.deleteIfExists(path);
+                });
+
+        LocalModelImportStore.CommitResult commit;
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare(
+                "cirno", "cirno.glb", "new-source".getBytes(StandardCharsets.UTF_8))) {
+            commit = prepared.commit();
+        }
+
+        assertEquals("new-source", Files.readString(commit.persistedPath()));
+        assertEquals(List.of(old), commit.cleanupPending());
+    }
 }
