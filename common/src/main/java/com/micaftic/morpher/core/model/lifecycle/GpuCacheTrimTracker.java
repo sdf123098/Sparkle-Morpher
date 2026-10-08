@@ -46,6 +46,10 @@ public final class GpuCacheTrimTracker<T> {
         if (modelId != null) states.remove(modelId);
     }
 
+    public void clearAll() {
+        states.clear();
+    }
+
     private enum Phase { PENDING, TRIMMED }
 
     private record State<T>(T assembly, Phase phase) { }
