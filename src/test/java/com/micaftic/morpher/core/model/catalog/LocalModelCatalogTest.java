@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -129,6 +130,30 @@ class LocalModelCatalogTest {
         write(tempDir.resolve("later.bin"), "ready");
         long restored = LocalModelCatalog.fingerprint(file);
         assertNotEquals(missing, restored, "依赖恢复后必须触发来源更新");
+    }
+
+    @Test
+    void scanPrefersNewestSiblingImportAndBreaksTimestampTiesDeterministically() throws IOException {
+        Path root = tempDir.resolve("custom");
+        Path older = root.resolve("cirno.ysm");
+        Path newer = root.resolve("cirno.glb");
+        write(older, "old");
+        write(newer, "new");
+        FileTime oldTime = FileTime.fromMillis(1_700_000_000_000L);
+        FileTime newTime = FileTime.fromMillis(1_700_000_001_000L);
+        Files.setLastModifiedTime(older, oldTime);
+        Files.setLastModifiedTime(newer, newTime);
+
+        ScanResult newest = catalog().scan(root, false, FOLDER_DETECTOR, Map.of());
+        assertEquals(newer.toAbsolutePath().normalize(), newest.entries().get("cirno").path);
+
+        Files.setLastModifiedTime(older, newTime);
+        ScanResult tied = catalog().scan(root, false, FOLDER_DETECTOR, Map.of());
+        Path expected = List.of(older, newer).stream()
+                .map(path -> path.toAbsolutePath().normalize())
+                .min((first, second) -> first.toString().compareToIgnoreCase(second.toString()))
+                .orElseThrow();
+        assertEquals(expected, tied.entries().get("cirno").path);
     }
 
     @Test
