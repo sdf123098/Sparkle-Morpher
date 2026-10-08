@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -126,11 +128,62 @@ class LocalModelImportStoreTest {
     void preparedImportCommitsOnlyAfterValidation() throws Exception {
         LocalModelImportStore store = store();
         Path old = store.persist("cirno", "cirno.ysm", "old".getBytes(StandardCharsets.UTF_8));
-        Path target;
+        LocalModelImportStore.CommitResult commit;
         try (LocalModelImportStore.PreparedImport prepared = store.prepare("cirno", "cirno.glb", "valid".getBytes(StandardCharsets.UTF_8))) {
-            target = prepared.commit();
+            commit = prepared.commit();
         }
+        Path target = commit.persistedPath();
         assertEquals("valid", Files.readString(target));
         assertFalse(Files.exists(old));
+        assertTrue(commit.cleanupPending().isEmpty());
+    }
+
+    @Test
+    void preparedImportReportsCommittedSourceWhenSiblingCleanupFails() throws Exception {
+        Path custom = tempDir.resolve("custom");
+        Files.createDirectories(custom);
+        Path old = custom.resolve("cirno.ysm");
+        Files.writeString(old, "old");
+        LocalModelImportStore store = new LocalModelImportStore(custom,
+                (source, target) -> Files.move(source, target, StandardCopyOption.REPLACE_EXISTING),
+                path -> {
+                    if (path.equals(old)) throw new IOException("injected sibling cleanup failure");
+                    return Files.deleteIfExists(path);
+                });
+
+        LocalModelImportStore.CommitResult commit;
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare(
+                "cirno", "cirno.glb", "new-source".getBytes(StandardCharsets.UTF_8))) {
+            commit = prepared.commit();
+        }
+
+        assertEquals(custom.resolve("cirno.glb"), commit.persistedPath());
+        assertEquals("new-source", Files.readString(commit.persistedPath()));
+        assertEquals(List.of(old), commit.cleanupPending());
+        assertTrue(Files.exists(old), "failed cleanup remains recoverable as a known sibling path");
+    }
+
+    @Test
+    void preparedImportMoveFailureLeavesPreviousSourceUntouched() throws Exception {
+        Path custom = tempDir.resolve("custom");
+        Files.createDirectories(custom);
+        Path old = custom.resolve("cirno.ysm");
+        Files.writeString(old, "old");
+        LocalModelImportStore store = new LocalModelImportStore(custom,
+                (source, target) -> { throw new IOException("injected source move failure"); },
+                Files::deleteIfExists);
+
+        assertThrows(IOException.class, () -> {
+            try (LocalModelImportStore.PreparedImport prepared = store.prepare(
+                    "cirno", "cirno.glb", "new-source".getBytes(StandardCharsets.UTF_8))) {
+                prepared.commit();
+            }
+        });
+        assertEquals("old", Files.readString(old));
+        assertFalse(Files.exists(custom.resolve("cirno.glb")));
+        try (var stream = Files.list(custom)) {
+            assertFalse(stream.anyMatch(path -> path.getFileName().toString().endsWith(".glb")),
+                    "failed move and close must remove the staged import");
+        }
     }
 }

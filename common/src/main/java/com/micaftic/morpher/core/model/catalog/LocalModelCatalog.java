@@ -196,7 +196,29 @@ public final class LocalModelCatalog {
         Entry duplicate = catalog.putIfAbsent(modelKey, entry);
         if (duplicate == null) {
             sources.put(modelKey, sourcePath.toAbsolutePath().normalize());
+        } else {
+            Path existingSource = sources.get(modelKey);
+            if (existingSource != null && sameDirectory(existingSource, sourcePath)
+                    && preferDuplicateSource(sourcePath, existingSource)) {
+                catalog.put(modelKey, entry);
+                sources.put(modelKey, sourcePath.toAbsolutePath().normalize());
+            }
         }
+    }
+
+    private static boolean sameDirectory(Path first, Path second) {
+        Path firstParent = first.toAbsolutePath().normalize().getParent();
+        Path secondParent = second.toAbsolutePath().normalize().getParent();
+        return firstParent != null && firstParent.equals(secondParent);
+    }
+
+    /** For duplicate import formats in one directory, prefer the newest file; ties use a stable path order. */
+    private static boolean preferDuplicateSource(Path candidate, Path existing) throws IOException {
+        long candidateModified = Files.getLastModifiedTime(candidate).toMillis();
+        long existingModified = Files.getLastModifiedTime(existing).toMillis();
+        if (candidateModified != existingModified) return candidateModified > existingModified;
+        return candidate.toAbsolutePath().normalize().toString()
+                .compareToIgnoreCase(existing.toAbsolutePath().normalize().toString()) < 0;
     }
 
     // ===================== diff =====================
