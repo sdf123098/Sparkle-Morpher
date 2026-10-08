@@ -3,28 +3,25 @@ package com.micaftic.morpher.resource.gltf;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
-import java.io.IOException;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Collections;
-import java.util.List;
 
 /**
  * Small dependency-free loader for the glTF 2.0 core used by the independent
@@ -60,6 +57,14 @@ public final class GltfLoader {
     }
 
     public static GltfModel load(Path file, GltfExtensionRegistry extensions) throws IOException {
+        return loadWithManifest(file, extensions).model();
+    }
+
+    public static GltfLoadResult loadWithManifest(Path file) throws IOException {
+        return loadWithManifest(file, GltfExtensionRegistry.coreOnly());
+    }
+
+    public static GltfLoadResult loadWithManifest(Path file, GltfExtensionRegistry extensions) throws IOException {
         Path requested = file.toAbsolutePath().normalize();
         Path root = requested.getParent().toRealPath();
         Path normalized = requested.toRealPath();
@@ -68,7 +73,7 @@ public final class GltfLoader {
         if (sourceSize > MAX_SOURCE_BYTES) throw error("glTF source exceeds the size limit: " + sourceSize);
         byte[] source = readLimited(normalized, MAX_SOURCE_BYTES, "glTF source");
         ParsedContainer container = parseContainer(source, normalized.getFileName().toString());
-        return new Parser(container.json(), root, container.bin(), extensions).parse();
+        return new Parser(container.json(), root, container.bin(), extensions).parseWithManifest();
     }
 
     /** Strong source identity for catalog invalidation, including every contained external buffer/image. */
@@ -157,11 +162,21 @@ public final class GltfLoader {
 
     public static GltfModel load(byte[] source, Path baseDirectory, String name,
                                  GltfExtensionRegistry extensions) throws IOException {
+        return loadWithManifest(source, baseDirectory, name, extensions).model();
+    }
+
+    public static GltfLoadResult loadWithManifest(byte[] source, Path baseDirectory, String name) throws IOException {
+        return loadWithManifest(source, baseDirectory, name, GltfExtensionRegistry.coreOnly());
+    }
+
+    public static GltfLoadResult loadWithManifest(byte[] source, Path baseDirectory, String name,
+                                                   GltfExtensionRegistry extensions) throws IOException {
         if (source == null) throw error("glTF source is missing");
         if (source.length > MAX_SOURCE_BYTES) throw error("glTF source exceeds the size limit: " + source.length);
         ParsedContainer container = parseContainer(source, name == null ? "model.gltf" : name);
-        return new Parser(container.json(), baseDirectory == null ? null : baseDirectory.toAbsolutePath().normalize(),
-                container.bin(), extensions).parse();
+        Path resolvedRoot = baseDirectory == null ? null : baseDirectory.toRealPath();
+        return new Parser(container.json(), resolvedRoot,
+                container.bin(), extensions).parseWithManifest();
     }
 
     private static ParsedContainer parseContainer(byte[] source, String name) throws GltfParseException {
@@ -225,6 +240,7 @@ public final class GltfLoader {
         private final Path baseDirectory;
         private final byte[] glbBin;
         private final GltfExtensionRegistry extensions;
+        private final ResourceDependencyManifest.Builder dependencies;
         private long resolvedResourceBytes;
         private int resolvedResourceCount;
         private final List<byte[]> buffers = new ArrayList<>();
@@ -246,9 +262,10 @@ public final class GltfLoader {
             this.baseDirectory = baseDirectory;
             this.glbBin = glbBin;
             this.extensions = extensions == null ? GltfExtensionRegistry.coreOnly() : extensions;
+            this.dependencies = ResourceDependencyManifest.builder(baseDirectory);
         }
 
-        private GltfModel parse() throws IOException {
+        private GltfLoadResult parseWithManifest() throws IOException {
             requireAssetVersion();
             extensions.apply(root);
             parseBuffers();
@@ -265,8 +282,9 @@ public final class GltfLoader {
 
             int defaultScene = integer(root, "scene", scenes.isEmpty() ? -1 : 0);
             checkIndex(defaultScene, scenes.size(), "scene", true);
-            return new GltfModel(string(asset(), "generator", null), scenes, defaultScene, nodes, meshes,
+            GltfModel model = new GltfModel(string(asset(), "generator", null), scenes, defaultScene, nodes, meshes,
                     materials, images, textures, skins, animations);
+            return new GltfLoadResult(model, dependencies.build());
         }
 
         private JsonObject asset() throws GltfParseException {
@@ -290,7 +308,7 @@ public final class GltfLoader {
                     if (glbBin == null) throw error("Buffer " + i + " has no URI and no GLB BIN chunk");
                     bytes = glbBin;
                 } else {
-                    bytes = readUri(uri, "buffer " + i);
+                    bytes = readUri(uri, "buffer " + i, ResourceDependencyManifest.Role.BUFFER);
                 }
                 if (bytes.length < byteLength) {
                     throw error("Buffer " + i + " is shorter than byteLength (" + bytes.length + " < " + byteLength + ")");
@@ -477,7 +495,7 @@ public final class GltfLoader {
                         bytes = countResolvedResource(data.bytes(), "image " + i);
                         if (mimeType == null) mimeType = data.mimeType();
                     } else {
-                        bytes = readUri(uri, "image " + i);
+                        bytes = readUri(uri, "image " + i, ResourceDependencyManifest.Role.IMAGE);
                     }
                 } else {
                     int view = requiredInt(image, "bufferView", "image " + i);
@@ -689,12 +707,13 @@ public final class GltfLoader {
             return result;
         }
 
-        private byte[] readUri(String uri, String context) throws IOException {
+        private byte[] readUri(String uri, String context, ResourceDependencyManifest.Role role) throws IOException {
             if (uri.startsWith("data:")) return countResolvedResource(
                     decodeDataUri(uri, remainingResourceBudget()).bytes(), context);
             if (baseDirectory == null) throw error("External " + context + " cannot be resolved without a base directory: " + uri);
             Path resolved = resolveExternalPath(baseDirectory.toRealPath(), uri, context);
-            long size = Files.size(resolved);
+            BasicFileAttributes before = Files.readAttributes(resolved, BasicFileAttributes.class);
+            long size = before.size();
             if (size > MAX_RESOLVED_RESOURCE_BYTES) {
                 throw error("External " + context + " exceeds the size limit: " + uri);
             }
@@ -703,6 +722,12 @@ public final class GltfLoader {
             }
             byte[] bytes = readLimited(resolved, Math.min(size, MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes),
                     "External " + context);
+            BasicFileAttributes after = Files.readAttributes(resolved, BasicFileAttributes.class);
+            if (before.size() != after.size() || !before.lastModifiedTime().equals(after.lastModifiedTime())
+                    || before.fileKey() != null && !before.fileKey().equals(after.fileKey())) {
+                throw error("External " + context + " changed while glTF was being parsed: " + uri);
+            }
+            dependencies.add(resolved, role, bytes, after.lastModifiedTime().toMillis());
             return countResolvedResource(bytes, context);
         }
 
