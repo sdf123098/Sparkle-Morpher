@@ -78,7 +78,6 @@ public final class GltfLoader {
         Path sourcePath = requested.toRealPath();
         if (!sourcePath.startsWith(root)) throw error("glTF source escapes its source directory: " + file);
         byte[] source = readLimited(sourcePath, MAX_SOURCE_BYTES, "glTF source");
-        ParsedContainer container = parseContainer(source, sourcePath.getFileName().toString());
         java.security.MessageDigest digest;
         try {
             digest = java.security.MessageDigest.getInstance("SHA-256");
@@ -86,32 +85,58 @@ public final class GltfLoader {
             throw new IllegalStateException("SHA-256 is unavailable", impossible);
         }
         digest.update(source);
+        ParsedContainer container;
+        JsonElement parsed;
+        try {
+            container = parseContainer(source, sourcePath.getFileName().toString());
+            parsed = JsonParser.parseString(container.json());
+        } catch (IOException | RuntimeException malformedSource) {
+            return ByteBuffer.wrap(digest.digest()).getLong();
+        }
         LinkedHashSet<String> uris = new LinkedHashSet<>();
-        JsonElement parsed = JsonParser.parseString(container.json());
         if (parsed.isJsonObject()) {
             JsonObject rootObject = parsed.getAsJsonObject();
-            collectExternalUris(rootObject.getAsJsonArray("buffers"), uris);
-            collectExternalUris(rootObject.getAsJsonArray("images"), uris);
+            collectExternalUris(asArray(rootObject.get("buffers")), uris);
+            collectExternalUris(asArray(rootObject.get("images")), uris);
         }
         List<String> orderedUris = new ArrayList<>(uris);
         orderedUris.sort(Comparator.naturalOrder());
         java.util.Map<Path, String> dependencies = new java.util.HashMap<>();
         for (String uri : orderedUris) {
-            if (!uri.startsWith("data:")) dependencies.putIfAbsent(resolveExternalPath(root, uri, "dependency"), uri);
+            if (uri.startsWith("data:")) continue;
+            try {
+                dependencies.putIfAbsent(resolveExternalPath(root, uri, "dependency"), uri);
+            } catch (IOException | RuntimeException invalidDependency) {
+                digest.update(("unresolved:" + uri).getBytes(StandardCharsets.UTF_8));
+            }
         }
-        if (dependencies.size() > MAX_EXTERNAL_RESOURCE_COUNT) throw error("glTF has too many external resources");
+        if (dependencies.size() > MAX_EXTERNAL_RESOURCE_COUNT) {
+            digest.update("too-many-dependencies".getBytes(StandardCharsets.UTF_8));
+            return ByteBuffer.wrap(digest.digest()).getLong();
+        }
         List<Path> orderedDependencies = new ArrayList<>(dependencies.keySet());
         orderedDependencies.sort(Comparator.comparing(path -> root.relativize(path).toString().replace('\\', '/')));
         long total = 0;
         for (Path dependency : orderedDependencies) {
-            long size = Files.size(dependency);
-            if (size > MAX_RESOLVED_RESOURCE_BYTES - total) throw error("Resolved glTF resources exceed the aggregate size limit");
-            byte[] bytes = readLimited(dependency, Math.min(size, MAX_RESOLVED_RESOURCE_BYTES - total), "glTF dependency");
+            String relative = root.relativize(dependency).toString().replace('\\', '/');
+            byte[] bytes;
+            try {
+                long size = Files.size(dependency);
+                if (size > MAX_RESOLVED_RESOURCE_BYTES - total) throw error("Resolved glTF resources exceed the aggregate size limit");
+                bytes = readLimited(dependency, Math.min(size, MAX_RESOLVED_RESOURCE_BYTES - total), "glTF dependency");
+            } catch (IOException | RuntimeException unreadableDependency) {
+                digest.update(("unreadable:" + relative).getBytes(StandardCharsets.UTF_8));
+                continue;
+            }
             total += bytes.length;
-            digest.update(root.relativize(dependency).toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8));
+            digest.update(relative.getBytes(StandardCharsets.UTF_8));
             digest.update(bytes);
         }
         return ByteBuffer.wrap(digest.digest()).getLong();
+    }
+
+    private static JsonArray asArray(JsonElement element) {
+        return element != null && element.isJsonArray() ? element.getAsJsonArray() : null;
     }
 
     private static void collectExternalUris(JsonArray values, LinkedHashSet<String> uris) {
