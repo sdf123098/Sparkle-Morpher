@@ -1,5 +1,6 @@
 package com.micaftic.morpher.core.storage;
 
+import com.micaftic.morpher.core.model.lifecycle.KeyedRequestLeaseRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -61,5 +62,29 @@ class ImportCommitFlowTest {
         assertEquals(committed, outcome.committedSource());
         assertTrue(outcome.sourceCommitted());
         assertEquals(1, publishCalls.get());
+    }
+
+    @Test
+    void supersededRequestDoesNotCommitOrPublish() {
+        KeyedRequestLeaseRegistry<String> requests = new KeyedRequestLeaseRegistry<>();
+        KeyedRequestLeaseRegistry.Lease<String> earlier = requests.begin("cirno");
+        requests.invalidate("cirno");
+        KeyedRequestLeaseRegistry.Lease<String> latest = requests.begin("cirno");
+        AtomicInteger commitCalls = new AtomicInteger();
+        AtomicInteger publishCalls = new AtomicInteger();
+
+        ImportCommitFlow.Outcome<Path> outcome = ImportCommitFlow.commitThenPublish(
+                () -> requests.isCurrent(earlier),
+                () -> {
+                    commitCalls.incrementAndGet();
+                    return Path.of("custom", "cirno.glb");
+                },
+                ignored -> publishCalls.incrementAndGet());
+
+        assertEquals(ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT, outcome.state());
+        assertFalse(outcome.sourceCommitted());
+        assertEquals(0, commitCalls.get());
+        assertEquals(0, publishCalls.get());
+        assertTrue(requests.isCurrent(latest), "settling an older request must not remove the latest lease");
     }
 }
