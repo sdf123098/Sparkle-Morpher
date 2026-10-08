@@ -74,4 +74,29 @@ class GpuCacheTrimCoordinatorTest {
         assertEquals(1, releases.get());
         assertTrue(coordinator.isTrimmed("model", assembly));
     }
+
+    @Test
+    void queuedTrimWaitsUntilAssemblyHasNoActiveReferences() {
+        GpuCacheTrimCoordinator<Object> coordinator = new GpuCacheTrimCoordinator<>();
+        Object assembly = new Object();
+        ArrayDeque<Runnable> renderQueue = new ArrayDeque<>();
+        AtomicBoolean onRenderThread = new AtomicBoolean();
+        AtomicBoolean active = new AtomicBoolean();
+        AtomicInteger releases = new AtomicInteger();
+        var applicable = (java.util.function.Predicate<Object>) candidate -> candidate == assembly && !active.get();
+
+        coordinator.request("model", assembly, onRenderThread::get, renderQueue::add,
+                applicable, candidate -> releases.incrementAndGet());
+        active.set(true);
+        onRenderThread.set(true);
+        renderQueue.remove().run();
+        assertEquals(0, releases.get());
+        assertFalse(coordinator.isTrimmed("model", assembly));
+
+        active.set(false);
+        coordinator.request("model", assembly, onRenderThread::get, renderQueue::add,
+                applicable, candidate -> releases.incrementAndGet());
+        assertEquals(1, releases.get());
+        assertTrue(coordinator.isTrimmed("model", assembly));
+    }
 }
