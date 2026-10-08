@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
 
@@ -39,6 +40,20 @@ public class BBModelCompatibilityTest {
     @Test @Order(12) void runtimeStepKeyframe() { runRuntimeStepKeyframeTest(); }
     @Test @Order(13) void timelineAndEffectConversion() { runTimelineAndEffectConversionTest(); }
     @Test @Order(14) void bezierBake() { runBezierBakeTest(); }
+    @Test @Order(15) void explicitStructureAndPolicyMatchCompatibilityWrapper() {
+        String json = """
+                {"meta":{"format_version":"4.5","model_format":"free"},
+                 "resolution":{"width":16,"height":16},"name":"policy-test",
+                 "model_identifier":"policy:test","elements":[],"outliner":[],
+                 "textures":[],"animations":[]}
+                """;
+        BBModelFile model = BBModelParser.parse(json);
+        RawYsmModel compatibility = BBToRawConverter.convert(model);
+        RawYsmModel explicit = BBToRawConverter.convertStructure(model);
+        BBToRawConverter.applyPlayerImportPolicy(explicit);
+        assertEquals(new com.google.gson.Gson().toJson(compatibility),
+                new com.google.gson.Gson().toJson(explicit));
+    }
 
     // ============================================================
 
