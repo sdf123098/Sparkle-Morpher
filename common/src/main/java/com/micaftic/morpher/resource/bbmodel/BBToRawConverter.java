@@ -36,6 +36,17 @@ public class BBToRawConverter {
         return convert(bbmodel, null);
     }
 
+    /** Compatibility entry point retaining the historical player-facing import defaults. */
+    public static RawYsmModel convert(BBModelFile bbmodel, Map<String, byte[]> sideTextures) {
+        RawYsmModel raw = convertStructure(bbmodel, sideTextures);
+        applyPlayerImportPolicy(raw);
+        return raw;
+    }
+
+    public static RawYsmModel convertStructure(BBModelFile bbmodel) {
+        return convertStructure(bbmodel, null);
+    }
+
     public static String importCacheSha256(byte[] sourceBytes) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -56,7 +67,8 @@ public class BBToRawConverter {
      * 杞崲 bbmodel 鍒?RawYsmModel銆?     *
      * @param bbmodel       宸茶В鏋愮殑 bbmodel 鏁版嵁
      * @param sideTextures  鏉ヨ嚜澶栭儴锛堝 Figura zip 鍚岀洰褰曪級鐨?PNG 绾圭悊瑕嗙洊銆?     *                      key 鏄?PNG 鏂囦欢鍚嶏紙灏忓啓锛屼笉鍚洰褰曪級锛寁alue 鏄?PNG 瀛楄妭銆?     *                      闈?null 涓斿尮閰嶆椂浼樺厛浜?bbmodel 鍐呭祵鐨?base64 source銆?     */
-    public static RawYsmModel convert(BBModelFile bbmodel, Map<String, byte[]> sideTextures) {
+    /** Converts only BBModel structure; caller-selected player import policy is applied separately. */
+    public static RawYsmModel convertStructure(BBModelFile bbmodel, Map<String, byte[]> sideTextures) {
         Objects.requireNonNull(bbmodel, "bbmodel");
         RawYsmModel raw = new RawYsmModel();
 
@@ -86,18 +98,23 @@ public class BBToRawConverter {
         convertTextures(bbmodel, raw, sideTextures);
 
         convertGeometry(bbmodel, raw, elementsById);
-        ImportedHumanoidNormalizer.applyImportedPlayerDefaults(raw);
-        LocatorInference.ensureElytraLocator(raw.mainEntity.mainModel);
-        LocatorInference.ensureHandLocators(raw.mainEntity.mainModel);
-
         // 鍔ㄧ敾
         convertAnimations(bbmodel, raw);
-        ImportedActionPresetInstaller.ensureVanillaFallbackAnimations(raw);
-        ImportedHumanoidNormalizer.putImportedRouletteDefaults(raw);
-
         convertAnimationControllers(bbmodel, raw);
 
         return raw;
+    }
+
+    /** Applies legacy BB/Bedrock player defaults without coupling them to format decoding. */
+    public static void applyPlayerImportPolicy(RawYsmModel raw) {
+        Objects.requireNonNull(raw, "raw");
+        ImportedHumanoidNormalizer.applyImportedPlayerDefaults(raw);
+        if (raw.mainEntity != null && raw.mainEntity.mainModel != null) {
+            LocatorInference.ensureElytraLocator(raw.mainEntity.mainModel);
+            LocatorInference.ensureHandLocators(raw.mainEntity.mainModel);
+        }
+        ImportedActionPresetInstaller.ensureVanillaFallbackAnimations(raw);
+        ImportedHumanoidNormalizer.putImportedRouletteDefaults(raw);
     }
 
 
