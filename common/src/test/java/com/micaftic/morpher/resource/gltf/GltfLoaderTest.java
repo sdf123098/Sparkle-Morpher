@@ -17,6 +17,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class GltfLoaderTest {
@@ -94,8 +95,9 @@ class GltfLoaderTest {
                  "images":[{"uri":"shared.bin","mimeType":"application/octet-stream"}]}
                 """;
 
-        GltfLoadResult parsed = GltfLoader.loadWithManifest(
-                json.getBytes(StandardCharsets.UTF_8), tempDir, "shared.gltf");
+        Path source = tempDir.resolve("shared.gltf");
+        Files.writeString(source, json, StandardCharsets.UTF_8);
+        GltfLoadResult parsed = GltfLoader.loadWithManifest(source);
         GltfModel compatibilityResult = GltfLoader.load(
                 json.getBytes(StandardCharsets.UTF_8), tempDir, "shared.gltf");
 
@@ -108,6 +110,12 @@ class GltfLoaderTest {
         assertEquals(dependency.length, entry.sizeBytes());
         assertEquals(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(dependency)), entry.sha256());
         assertEquals(Files.getLastModifiedTime(tempDir.resolve("shared.bin")).toMillis(), entry.lastModifiedMillis());
+        assertEquals(GltfLoader.sourceFingerprint(source), parsed.sourceFingerprint());
+
+        byte[] changedDependency = dependency.clone();
+        changedDependency[0] ^= 1;
+        Files.write(tempDir.resolve("shared.bin"), changedDependency);
+        assertNotEquals(parsed.sourceFingerprint(), GltfLoader.loadWithManifest(source).sourceFingerprint());
     }
 
     @Test
