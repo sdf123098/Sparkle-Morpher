@@ -6,9 +6,13 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -39,6 +43,9 @@ public final class GltfLoader {
     private static final int COMPONENT_FLOAT = 5126;
 
     private static final int MODE_TRIANGLES = 4;
+    private static final long MAX_SOURCE_BYTES = 512L * 1024L * 1024L;
+    private static final long MAX_RESOLVED_RESOURCE_BYTES = 256L * 1024L * 1024L;
+    private static final int MAX_EXTERNAL_RESOURCE_COUNT = 1024;
 
     private GltfLoader() {}
 
@@ -47,10 +54,15 @@ public final class GltfLoader {
     }
 
     public static GltfModel load(Path file, GltfExtensionRegistry extensions) throws IOException {
-        Path normalized = file.toAbsolutePath().normalize();
-        byte[] source = Files.readAllBytes(normalized);
+        Path requested = file.toAbsolutePath().normalize();
+        Path root = requested.getParent().toRealPath();
+        Path normalized = requested.toRealPath();
+        if (!normalized.startsWith(root)) throw error("glTF source escapes its source directory: " + file);
+        long sourceSize = Files.size(normalized);
+        if (sourceSize > MAX_SOURCE_BYTES) throw error("glTF source exceeds the size limit: " + sourceSize);
+        byte[] source = readLimited(normalized, MAX_SOURCE_BYTES, "glTF source");
         ParsedContainer container = parseContainer(source, normalized.getFileName().toString());
-        return new Parser(container.json(), normalized.getParent(), container.bin(), extensions).parse();
+        return new Parser(container.json(), root, container.bin(), extensions).parse();
     }
 
     /** Loads JSON glTF/GLB bytes with external resources resolved relative to {@code baseDirectory}. */
@@ -60,6 +72,8 @@ public final class GltfLoader {
 
     public static GltfModel load(byte[] source, Path baseDirectory, String name,
                                  GltfExtensionRegistry extensions) throws IOException {
+        if (source == null) throw error("glTF source is missing");
+        if (source.length > MAX_SOURCE_BYTES) throw error("glTF source exceeds the size limit: " + source.length);
         ParsedContainer container = parseContainer(source, name == null ? "model.gltf" : name);
         return new Parser(container.json(), baseDirectory == null ? null : baseDirectory.toAbsolutePath().normalize(),
                 container.bin(), extensions).parse();
@@ -126,6 +140,8 @@ public final class GltfLoader {
         private final Path baseDirectory;
         private final byte[] glbBin;
         private final GltfExtensionRegistry extensions;
+        private long resolvedResourceBytes;
+        private int resolvedResourceCount;
         private final List<byte[]> buffers = new ArrayList<>();
         private final List<BufferView> bufferViews = new ArrayList<>();
         private final List<Accessor> accessors = new ArrayList<>();
@@ -372,8 +388,8 @@ public final class GltfLoader {
                 byte[] bytes;
                 if (uri != null) {
                     if (uri.startsWith("data:")) {
-                        DataUri data = decodeDataUri(uri);
-                        bytes = data.bytes();
+                        DataUri data = decodeDataUri(uri, remainingResourceBudget());
+                        bytes = countResolvedResource(data.bytes(), "image " + i);
                         if (mimeType == null) mimeType = data.mimeType();
                     } else {
                         bytes = readUri(uri, "image " + i);
@@ -589,11 +605,54 @@ public final class GltfLoader {
         }
 
         private byte[] readUri(String uri, String context) throws IOException {
-            if (uri.startsWith("data:")) return decodeDataUri(uri).bytes();
+            if (uri.startsWith("data:")) return countResolvedResource(
+                    decodeDataUri(uri, remainingResourceBudget()).bytes(), context);
             if (baseDirectory == null) throw error("External " + context + " cannot be resolved without a base directory: " + uri);
-            Path resolved = baseDirectory.resolve(percentDecode(uri)).normalize();
-            if (!Files.isRegularFile(resolved)) throw error("External " + context + " does not exist: " + resolved);
-            return Files.readAllBytes(resolved);
+            Path relative;
+            try {
+                URI reference = new URI(uri);
+                if (reference.isAbsolute() || reference.getRawAuthority() != null
+                        || reference.getRawQuery() != null || reference.getRawFragment() != null
+                        || uri.indexOf('\\') >= 0) {
+                    throw error("External " + context + " URI must be a relative file path: " + uri);
+                }
+                String decoded = percentDecode(uri);
+                relative = Path.of(decoded);
+            } catch (URISyntaxException | java.nio.file.InvalidPathException invalid) {
+                throw error("Invalid external " + context + " URI: " + uri);
+            }
+            if (relative.isAbsolute()) throw error("External " + context + " URI must be relative: " + uri);
+            Path root = baseDirectory.toRealPath();
+            Path candidate = root.resolve(relative).normalize();
+            if (!candidate.startsWith(root)) throw error("External " + context + " escapes its source directory: " + uri);
+            Path resolved = candidate.toRealPath();
+            if (!resolved.startsWith(root)) throw error("External " + context + " escapes its source directory: " + uri);
+            if (!Files.isRegularFile(resolved)) throw error("External " + context + " is not a regular file: " + uri);
+            long size = Files.size(resolved);
+            if (size > MAX_RESOLVED_RESOURCE_BYTES) {
+                throw error("External " + context + " exceeds the size limit: " + uri);
+            }
+            if (size > MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes) {
+                throw error("Resolved glTF resources exceed the aggregate size limit");
+            }
+            byte[] bytes = readLimited(resolved, Math.min(size, MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes),
+                    "External " + context);
+            return countResolvedResource(bytes, context);
+        }
+
+        private long remainingResourceBudget() {
+            return MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes;
+        }
+
+        private byte[] countResolvedResource(byte[] bytes, String context) throws GltfParseException {
+            if (++resolvedResourceCount > MAX_EXTERNAL_RESOURCE_COUNT) {
+                throw error("glTF has too many external/data resources");
+            }
+            if (bytes.length > MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes) {
+                throw error("Resolved glTF resources exceed the aggregate size limit at " + context);
+            }
+            resolvedResourceBytes += bytes.length;
+            return bytes;
         }
 
         private Accessor accessor(int index) throws GltfParseException {
@@ -626,7 +685,7 @@ public final class GltfLoader {
                             int components, int count, boolean normalized) {}
     private record DataUri(String mimeType, byte[] bytes) {}
 
-    private static DataUri decodeDataUri(String uri) throws GltfParseException {
+    private static DataUri decodeDataUri(String uri, long maxBytes) throws GltfParseException {
         int comma = uri.indexOf(',');
         if (!uri.startsWith("data:") || comma < 0) throw error("Malformed data URI");
         String header = uri.substring(5, comma);
@@ -636,7 +695,12 @@ public final class GltfLoader {
         if (semicolon < 0) mime = header.isEmpty() ? null : header;
         else mime = header.substring(0, semicolon).isEmpty() ? null : header.substring(0, semicolon);
         try {
-            byte[] bytes = header.endsWith(";base64") ? Base64.getDecoder().decode(payload) : percentDecodeBytes(payload);
+            boolean base64 = header.endsWith(";base64");
+            long estimatedBytes = base64
+                    ? (long) payload.length() * 3 / 4 - (payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0)
+                    : payload.length();
+            if (estimatedBytes > maxBytes) throw error("Data URI exceeds the remaining resource size limit");
+            byte[] bytes = base64 ? Base64.getDecoder().decode(payload) : percentDecodeBytes(payload);
             return new DataUri(mime, bytes);
         } catch (IllegalArgumentException e) {
             throw error("Malformed data URI payload: " + e.getMessage());
@@ -648,7 +712,8 @@ public final class GltfLoader {
         int count = 0;
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            if (c == '%' && i + 2 < value.length()) {
+            if (c == '%') {
+                if (i + 2 >= value.length()) throw new IllegalArgumentException("incomplete percent escape");
                 result[count++] = (byte) Integer.parseInt(value.substring(i + 1, i + 3), 16);
                 i += 2;
             } else {
@@ -660,6 +725,23 @@ public final class GltfLoader {
 
     private static String percentDecode(String value) {
         return new String(percentDecodeBytes(value), StandardCharsets.UTF_8);
+    }
+
+    private static byte[] readLimited(Path file, long maxBytes, String description) throws IOException {
+        if (maxBytes < 0 || maxBytes > Integer.MAX_VALUE) throw error(description + " size limit is invalid");
+        try (InputStream input = Files.newInputStream(file);
+             ByteArrayOutputStream output = new ByteArrayOutputStream((int) Math.min(maxBytes, 32_000))) {
+            byte[] buffer = new byte[32_000];
+            long total = 0;
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read == 0) continue;
+                total += read;
+                if (total > maxBytes) throw error(description + " exceeds the size limit");
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
+        }
     }
 
     private static int componentCount(String type) throws GltfParseException {

@@ -3,7 +3,6 @@ package com.micaftic.morpher.client;
 import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
-
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.EntityRenderCache;
 import com.micaftic.morpher.client.gui.IGuiWidget;
@@ -351,7 +350,6 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
 
 
 
-    
     public static Map<String, ModelAssembly> getModelAssemblyMap() {
         return modelAssemblyMap;
     }
@@ -700,7 +698,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 try (LocalModelImportStore.PreparedImport prepared = LOCAL_IMPORT_STORE.prepare(modelKey, fileName, importData)) {
                     if (prepared == null) throw new IOException("Failed to prepare local import");
                     if (isGltfFileName(fileName)) {
-                        GltfModel gltfModel = GltfLoader.load(prepared.path());
+                        // Picked bytes have no authorized project root; never resolve siblings from customRoot.
+                        GltfModel gltfModel = GltfLoader.load(importData, null, fileName);
                         preparedAssembly = buildGltfAssembly(gltfModel, modelKey);
                     } else {
                         RawYsmModel rawModel = parseImportModel(fileName, importData);
@@ -890,7 +889,6 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
 
-    
     public static void reloadLocalModelsAfterPrivacyMode() {
 
         ((Executor) Minecraft.getInstance()).execute(() -> {
@@ -913,7 +911,13 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         return CloudUploadRuntime.isConfigured();
     }
 
-    // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
+
+
+    /**
+     * 在加入服务器一段时间后，如果 YSM 握手仍未完成（服务器没有安装本模组），
+     * 将同步状态从 WAITING 重置为 IDLE，避免加载状态 UI 一直卡在“等待中”。
+     */
+
 
 
 
@@ -1842,7 +1846,5 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     public static int getPendingModelCount() {
         return pendingModelQueue.size();
     }
-
-    
 
 }
