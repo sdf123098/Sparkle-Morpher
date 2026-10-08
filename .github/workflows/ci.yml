@@ -80,27 +80,32 @@ jobs:
       - name: Grant gradlew executable bit
         run: chmod +x gradlew
 
-      - name: Build (${{ matrix.gradle_task }}) — common tests + compile + build
+      - name: Build and verify final artifact (${{ matrix.gradle_task }})
         run: ./gradlew ${{ matrix.gradle_task }} --no-daemon --console=plain
         env:
           CI: 'true'
 
-      - name: Artifact smoke — jar exists and contains expected entries
+      - name: Native artifact smoke — exact final JAR
         shell: bash
         run: |
           set -eu
-          JAR=$(ls ${{ matrix.jar_glob }} 2>/dev/null | head -1)
-          test -n "$JAR" || { echo "::error::no jar matched ${{ matrix.jar_glob }}"; exit 1; }
+          NATIVE_GLOB='${{ matrix.jar_glob }}'
+          mapfile -t jars < <(compgen -G "$NATIVE_GLOB" || true)
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "::error::expected one native final JAR for ${{ matrix.branch }}, found ${#jars[@]}: $NATIVE_GLOB"
+            exit 1
+          fi
+          JAR="${jars[0]}"
           echo "smoke jar: $JAR"
-          unzip -l "$JAR" | grep -q 'com/micaftic/morpher/YesSteveModel.class' \
+          unzip -Z1 "$JAR" | grep -Fxq 'com/micaftic/morpher/YesSteveModel.class' \
             || { echo "::error::missing YesSteveModel.class in $JAR"; exit 1; }
-          unzip -l "$JAR" | grep -q '${{ matrix.mod_meta }}' \
+          unzip -Z1 "$JAR" | grep -Fxq '${{ matrix.mod_meta }}' \
             || { echo "::error::missing ${{ matrix.mod_meta }} in $JAR"; exit 1; }
-          unzip -l "$JAR" | grep -q 'natives/windows-x64/ysm-core.dll' \
+          unzip -Z1 "$JAR" | grep -Fxq 'natives/windows-x64/ysm-core.dll' \
             || { echo "::error::missing natives in $JAR"; exit 1; }
-          unzip -l "$JAR" | grep -q 'native-manifest.json' \
+          unzip -Z1 "$JAR" | grep -Fxq 'native-manifest.json' \
             || { echo "::error::missing native-manifest.json in $JAR"; exit 1; }
-          echo "smoke OK"
+          echo "native smoke OK"
 
       - name: Modrinth alias contract — uses native distribution
         shell: bash
@@ -111,6 +116,26 @@ jobs:
 
       - name: CurseForge variant build
         run: ./gradlew ${{ matrix.gradle_task }} -Pdist=curseforge --no-daemon --console=plain
+
+      - name: CurseForge artifact smoke — exact final JAR and no native payload
+        shell: bash
+        run: |
+          set -eu
+          NATIVE_GLOB='${{ matrix.jar_glob }}'
+          CURSEFORGE_GLOB="${NATIVE_GLOB%.jar}-curseforge.jar"
+          mapfile -t jars < <(compgen -G "$CURSEFORGE_GLOB" || true)
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "::error::expected one CurseForge final JAR for ${{ matrix.branch }}, found ${#jars[@]}: $CURSEFORGE_GLOB"
+            exit 1
+          fi
+          JAR="${jars[0]}"
+          unzip -Z1 "$JAR" | grep -Fxq '${{ matrix.mod_meta }}' \
+            || { echo "::error::missing ${{ matrix.mod_meta }} in $JAR"; exit 1; }
+          if unzip -Z1 "$JAR" | grep -Eq '^(natives/|native-manifest\.json$|.*\.(dll|so|dylib|jnilib|exe)$)'; then
+            echo "::error::CurseForge JAR contains native payload: $JAR"
+            exit 1
+          fi
+          echo "CurseForge smoke OK: $JAR"
 
       - name: Upload build artifacts
         if: ${{ always() }}

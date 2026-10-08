@@ -133,3 +133,5 @@ tasks.named('jar', Jar) {
     }
 }
 
+apply from: rootProject.file('gradle/verify-distribution.gradle')
+
