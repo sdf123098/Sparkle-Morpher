@@ -41,6 +41,9 @@ public final class ClientTickEvent {
         CloudMinecraftEntityProviders.tick();
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.tick();
         com.micaftic.morpher.cloud.client.CloudEntityModelSync.tick();
+        com.micaftic.morpher.cloud.client.CloudVehicleModelSync.tick();
+        com.micaftic.morpher.cloud.client.CloudEntityMotionSync.tick();
+        com.micaftic.morpher.cloud.client.CloudProjectileModelSync.tick();
         CloudClientRuntime.drainClientTasks();
         UploadManager.processPendingUploads();
         ClientRenderCompatibilityRegistry.tick();
@@ -57,7 +60,11 @@ public final class ClientTickEvent {
             ObjectPool.cleanup();
         }
         if (tickCount % REFRESH_RATE_UPDATE_INTERVAL_TICKS == 0) {
-            refreshRate = Math.max(60, client.getWindow().getRefreshRate());
+            var monitor = client.getWindow().findBestMonitor();
+            int displayRefreshRate = monitor == null || monitor.currentMode() == null
+                    ? 60
+                    : Math.round(monitor.currentMode().getRefreshRate());
+            refreshRate = Math.max(60, displayRefreshRate);
         }
         LocalPlayer localPlayer = client.player;
         if (localPlayer != null) {

@@ -3,8 +3,8 @@ package com.micaftic.morpher.core.gpu;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.util.log.ChatLogger;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.opengl.GlStateManager;
-import com.mojang.blaze3d.opengl.GlTexture;
+import com.mojang.renderpearl.backend.opengl.GlStateManager;
+import com.mojang.renderpearl.backend.opengl.GlTexture;
 
 import net.minecraft.client.Minecraft;
 import org.lwjgl.opengl.*;

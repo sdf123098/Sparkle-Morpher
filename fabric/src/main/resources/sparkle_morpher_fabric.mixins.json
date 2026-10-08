@@ -13,8 +13,5 @@
     "client.YSMSoundInstanceFabricMixin",
     "client.KeyboardHandlerMixin",
     "client.MouseHandlerMixin"
-  ],
-  "mixins": [
-    "LivingEntityEffectMixin"
   ]
 }

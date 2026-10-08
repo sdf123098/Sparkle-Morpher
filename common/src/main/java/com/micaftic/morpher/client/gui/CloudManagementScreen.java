@@ -366,6 +366,12 @@ public final class CloudManagementScreen {
 
     static String errorKey(Throwable failure) {
         Throwable cause = unwrap(failure);
+        if (cause instanceof com.micaftic.morpher.cloud.client.CloudValidationException validation) {
+            return switch (validation.reason()) {
+                case INVALID_ACCOUNT_ID -> "validation.account_id";
+                case INVALID_PASSWORD -> "validation.password";
+            };
+        }
         if (cause instanceof CloudHttpException http) {
             if (http.errorCode() == CloudErrorCode.ACCOUNT_EXISTS) return "registration_account_exists";
             if (http.errorCode() == CloudErrorCode.IDENTITY_ALREADY_LINKED) return "identity.already_linked";

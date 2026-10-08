@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.animation.predicate;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
+import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.animation.condition.ConditionHold;
@@ -90,7 +91,7 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
     }
 
     private boolean checkSwingAndUse(LivingEntity entity, InteractionHand hand) {
-        if (entity.swinging && entity.swingingArm == hand) {
+        if (InputStateKey.isSwinging(entity, hand)) {
             return false;
         }
         return !entity.isUsingItem() || entity.getUsedItemHand() != hand;

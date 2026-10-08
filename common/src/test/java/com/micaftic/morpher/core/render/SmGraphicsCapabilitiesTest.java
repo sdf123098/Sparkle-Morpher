@@ -70,4 +70,12 @@ class SmGraphicsCapabilitiesTest {
         assertEquals(a, b);
         Blaze3D26_2Capability.resetForTests();
     }
+
+    @Test
+    void portablePipelineRemainsAvailableWithThe263Api() {
+        Blaze3D26_2Capability.resetForTests();
+        assertTrue(Blaze3D26_2Capability.report().compilePipelinePresent());
+        assertTrue(SmGraphicsCapabilities.current().supportsPortablePipeline());
+        assertTrue(SmGraphicsCapabilities.current().supportsGpuSkinning());
+    }
 }

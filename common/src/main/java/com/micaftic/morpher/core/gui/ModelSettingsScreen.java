@@ -429,7 +429,7 @@ public class ModelSettingsScreen extends OptionScreen {
         Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.0f);
         Quaternionf rotationX = Axis.XP.rotationDegrees(-10.0f + pitch);
         rotationZ.mul(rotationX);
-        poseStack.mulPose(rotationZ);
+        poseStack.rotate(rotationZ);
 
         float oldBodyRot = livingEntity.yBodyRot;
         float oldBodyRotO = livingEntity.yBodyRotO;

@@ -146,7 +146,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
                         if (cap.isModelReady()) {
                             Vector3f vector3f = cap.getExpressionOffset();
                             if (vector3f != null) {
-                                poseStack.mulPose(new Quaternionf().rotateZYX(vector3f.z, 0.0f, vector3f.x).invert());
+                                poseStack.rotate(new Quaternionf().rotateZYX(vector3f.z, 0.0f, vector3f.x).invert());
                             }
                         }
                     });
@@ -295,11 +295,11 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         if (tentity.getPose() == Pose.SLEEPING) {
             Direction bedOrientation = tentity.getBedOrientation();
             float sleepRotation = bedOrientation == null ? rotationYaw : sleepDirectionToRotation(bedOrientation);
-            poseStack.mulPose(Axis.YP.rotationDegrees(sleepRotation));
-            poseStack.mulPose(Axis.ZP.rotationDegrees(90.0f));
-            poseStack.mulPose(Axis.YP.rotationDegrees(270.0f));
+            poseStack.rotate(Axis.YP.rotationDegrees(sleepRotation));
+            poseStack.rotate(Axis.ZP.rotationDegrees(90.0f));
+            poseStack.rotate(Axis.YP.rotationDegrees(270.0f));
         } else {
-            poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - rotationYaw));
+            poseStack.rotate(Axis.YP.rotationDegrees(180.0f - rotationYaw));
             if (tentity.isFallFlying() && !com.micaftic.morpher.client.render.RenderContext.isGuiPreview()) {
                 applyFallFlyingRotation(tentity, poseStack, partialTicks, zIsAutoSpinAttack, this.fallFlyingPitchHandledByAnimation);
             }
@@ -316,7 +316,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         float ticks = (float) entity.getFallFlyingTicks() + partialTicks;
         float progress = Mth.clamp(ticks * ticks / 100.0f, 0.0f, 1.0f);
         if (!autoSpinAttack && !animationHandlesPitch) {
-            poseStack.mulPose(Axis.XP.rotationDegrees(progress * (-90.0f - entity.getXRot())));
+            poseStack.rotate(Axis.XP.rotationDegrees(progress * (-90.0f - entity.getXRot())));
         }
         Vec3 view = entity.getViewVector(partialTicks);
         Vec3 movement = entity.getDeltaMovement();
@@ -325,7 +325,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
         if (movementHorizontal > 0.0d && viewHorizontal > 0.0d) {
             double dot = (movement.x * view.x + movement.z * view.z) / Math.sqrt(movementHorizontal * viewHorizontal);
             double cross = movement.x * view.z - movement.z * view.x;
-            poseStack.mulPose(Axis.YP.rotation((float) (Math.signum(cross) * Math.acos(Mth.clamp(dot, -1.0d, 1.0d)))));
+            poseStack.rotate(Axis.YP.rotation((float) (Math.signum(cross) * Math.acos(Mth.clamp(dot, -1.0d, 1.0d)))));
         }
     }
 

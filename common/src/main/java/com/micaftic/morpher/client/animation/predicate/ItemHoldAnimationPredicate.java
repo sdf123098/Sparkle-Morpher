@@ -96,7 +96,7 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
             return pulseJustStarted
                     && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
         }
-        return entity.swingTime == 0
+        return InputStateKey.getSwingTicks(entity, event.getPartialTick()) < 1.0f
                 && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
     }
 
@@ -137,10 +137,10 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 capLocal,
                 InputStateKey.isLocalPlayerEntity(entity),
                 hasLocalSwingPulse,
-                entity.swinging,
-                entity.swingingArm,
-                entity.swingTime,
-                entity.getAttackAnim(0.0f),
+                entity.isSwinging(),
+                InputStateKey.getSwingingHand(entity),
+                InputStateKey.getSwingTicks(entity, 0.0f),
+                InputStateKey.getAttackProgress(entity, 0.0f),
                 InputStateKey.getLocalSwingPulseTicks(),
                 InputStateKey.getLocalSwingPulseAge());
     }
@@ -167,9 +167,9 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 entity.getId(),
                 event.getAnimatable().getModelId(),
                 entity.getItemInHand(hand).getItem(),
-                entity.swinging,
-                entity.swingTime,
-                entity.getAttackAnim(0.0f),
+                entity.isSwinging(),
+                InputStateKey.getSwingTicks(entity, 0.0f),
+                InputStateKey.getAttackProgress(entity, 0.0f),
                 InputStateKey.getLocalSwingPulseTicks(),
                 !"none".equals(animation) && event.getAnimatable().getAnimation(animation) != null);
     }

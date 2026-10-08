@@ -13,7 +13,7 @@ import java.util.function.UnaryOperator;
  * </pre>
  *
  * <p>{@link #remember} 对齐原 rememberSelectedModel 语义：选择为 localOnly 时双轨更新；
- * 选择为同名服务器模型时清除 localOnly 轨（服务器已公布同名模型，不再是"仅本地"）。
+ * 目录中已存在的同名模型不再标记为“仅本地”。
  * 判定输入（isLocalOnly、是否匹配当前 localOnly id）由调用方算好传入——state 保持纯状态，
  * 不依赖 modelAssemblyMap / lazyModelSources 等运行时目录。</p>
  */
@@ -65,7 +65,7 @@ public final class ModelSelectionState {
         selectedTextureId = textureId;
     }
 
-    /** 只更新 selected id（texture 保持不变）；用于服务器模型重命名/重映射。 */
+    /** 只更新 selected id（texture 保持不变）；用于运行时模型重命名/重映射。 */
     public void setSelectedId(String modelId) {
         selectedModelId = modelId;
     }

@@ -16,21 +16,22 @@ public final class ProjectileCapabilityClientStore {
 
     private static final ConcurrentMap<UUID, ProjectileCapability> STORE = new ConcurrentHashMap<>();
 
-    /** 全量清理的时间节流：STORE 超过阈值时最多每秒扫描一次，避免渲染热路径 O(n²)。 */
+    /** Unloaded entities are pruned once a second, including small stores. */
     private static final AtomicLong LAST_CLEANUP_NANOS = new AtomicLong();
 
     private ProjectileCapabilityClientStore() {
     }
 
     public static Optional<ProjectileCapability> get(Projectile projectile) {
-        if (STORE.size() > 500 && System.nanoTime() - LAST_CLEANUP_NANOS.get() > 1_000_000_000L) {
+        if (!STORE.isEmpty() && System.nanoTime() - LAST_CLEANUP_NANOS.get() > 1_000_000_000L) {
             ClientLevel level = Minecraft.getInstance().level;
             if (level != null) {
                 STORE.values().removeIf(cap -> cap.entity == null || level.getEntity(cap.entity.getId()) != cap.entity);
                 LAST_CLEANUP_NANOS.set(System.nanoTime());
             }
         }
-        return Optional.of(STORE.computeIfAbsent(projectile.getUUID(), uuid -> new ProjectileCapability(projectile)));
+        return Optional.of(STORE.compute(projectile.getUUID(), (uuid, existing) ->
+                existing != null && existing.entity == projectile ? existing : new ProjectileCapability(projectile)));
     }
 
     public static void clear() {

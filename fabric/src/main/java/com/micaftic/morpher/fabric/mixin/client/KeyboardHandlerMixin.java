@@ -17,7 +17,7 @@ public class KeyboardHandlerMixin {
     private void ysm$fireKeyPress(long window, int action, KeyEvent event, CallbackInfo ci) {
         Minecraft client = Minecraft.getInstance();
         EventResult result = ClientRawInputEvent.KEY_PRESSED.fireEventResult(handler ->
-            handler.keyPressed(client, event.key(), event.scancode(), action, event.modifiers()));
+            handler.keyPressed(client, event.key(), event.keycode(), action, event.modifiers()));
         if (result.isFalse()) {
             ci.cancel();
         }

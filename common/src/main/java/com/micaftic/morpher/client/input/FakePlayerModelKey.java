@@ -1,5 +1,6 @@
 package com.micaftic.morpher.client.input;
 
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.architectury.event.EventResult;
@@ -10,8 +11,8 @@ import net.minecraft.client.Minecraft;
 /** Shift+Y entry point for the independent fake-player manager GUI. */
 public final class FakePlayerModelKey {
 
-    private static final int KEY_Y = 89;
-    private static final int GLFW_MOD_SHIFT = 1;
+    private static final int KEY_Y = InputCodeAdapter.SDL_SCANCODE_Y;
+    private static final int SDL_KMOD_SHIFT = 0x0003;
 
     private FakePlayerModelKey() {
     }
@@ -25,7 +26,7 @@ public final class FakePlayerModelKey {
     }
 
     private static boolean onKeyInput(int action, int keyCode, int modifiers) {
-        if (action != 1 || keyCode != KEY_Y || (modifiers & GLFW_MOD_SHIFT) == 0 || !InputUtil.isPlayerReady()) {
+        if (action != 1 || keyCode != KEY_Y || (modifiers & SDL_KMOD_SHIFT) == 0 || !InputUtil.isPlayerReady()) {
             return false;
         }
         if (!YesSteveModel.isAvailable()) {

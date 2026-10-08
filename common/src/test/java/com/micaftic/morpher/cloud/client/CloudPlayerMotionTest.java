@@ -36,6 +36,21 @@ class CloudPlayerMotionTest {
         assertSame(first, state.snapshot());
         assertEquals(1200, first.controllers().get("player.post_main").startedAtUnixMs());
     }
+    @Test void editingAnObservedTimelinePreservesItsClockAndOwnsAnIndependentSnapshot() {
+        var publisher = new CloudPlayerMotionState();
+        publisher.play("wave", 1000);
+        publisher.controller("idle", "roaming", 1050, Map.of("choice", 2f));
+        var observed = publisher.snapshot();
+        var editor = new CloudPlayerMotionState(); editor.adopt(observed);
+        editor.roaming(Map.of("pose", 3f));
+        assertEquals(observed.eventId(), editor.snapshot().eventId());
+        assertEquals(1000, editor.snapshot().startedAtUnixMs());
+        assertEquals(1050, editor.snapshot().controllers().get("idle").startedAtUnixMs());
+        assertTrue(publisher.snapshot().roaming().isEmpty());
+        editor.play("wave", 1200);
+        assertNotEquals(observed.eventId(), editor.snapshot().eventId());
+        assertEquals(3f, editor.snapshot().roaming().get("pose"));
+    }
     @Test void separatesPlayersAndRejectsStaleOrReplayedMotion() {
         var ledger = new CloudPlayerMotionLedger();
         var a = new CloudPlayerMotionState(); var b = new CloudPlayerMotionState();

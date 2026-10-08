@@ -41,7 +41,7 @@ public record SmGraphicsCapabilities(
         boolean stable = r.stableGraphicsApiPresent();
         boolean mesh = stable && r.createBufferPresent();
         boolean portable = mesh
-                && r.precompilePipelinePresent()
+                && r.compilePipelinePresent()
                 && r.createRenderPassPresent()
                 && r.drawIndexedPresent();
         boolean customShader = stable

@@ -8,7 +8,7 @@ import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
-import net.minecraft.client.renderer.ItemInHandRenderer;
+import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.tags.ItemTags;
@@ -21,10 +21,10 @@ import java.util.List;
 
 /** Renders items held by a maid's Sparkle/Yes Steve Model replacement. */
 public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> implements HeldItemLayer {
-    private final ItemInHandRenderer itemRenderer;
+    private final ItemModelResolver itemModelResolver;
 
-    public MaidItemInHandLayer(ItemInHandRenderer itemRenderer) {
-        this.itemRenderer = itemRenderer;
+    public MaidItemInHandLayer(ItemModelResolver itemModelResolver) {
+        this.itemModelResolver = itemModelResolver;
     }
 
     @Override
@@ -93,7 +93,8 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
                             PoseStack poseStack, int packedLight) {
         SubmitNodeCollector collector = SubmitRenderContext.get();
         if (collector != null) {
-            itemRenderer.renderItem(entity, item, displayContext, poseStack, collector, packedLight);
+            com.micaftic.morpher.client.renderer.ItemRenderBridge.renderLivingItem(
+                    itemModelResolver, entity, item, displayContext, poseStack, collector, packedLight);
         }
     }
 
@@ -148,7 +149,7 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
 
     private void applyFallbackHandTransform(PoseStack poseStack) {
         poseStack.translate(0.0d, -0.0625d, -0.1d);
-        poseStack.mulPose(Axis.XP.rotationDegrees(-90.0f));
+        poseStack.rotate(Axis.XP.rotationDegrees(-90.0f));
     }
 
     @Override

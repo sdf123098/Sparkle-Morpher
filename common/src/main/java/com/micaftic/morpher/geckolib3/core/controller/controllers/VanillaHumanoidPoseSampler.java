@@ -1,6 +1,7 @@
 package com.micaftic.morpher.geckolib3.core.controller.controllers;
 
 import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
+import com.micaftic.morpher.client.input.InputStateKey;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
@@ -75,8 +76,8 @@ public final class VanillaHumanoidPoseSampler {
         setField(state, "useItemHand", player.getUsedItemHand());
         setField(state, "ticksUsingItem", (float) player.getTicksUsingItem());
         setField(state, "mainArm", player.getMainArm());
-        setField(state, "attackArm", getAttackArm(player));
-        setField(state, "attackTime", player.getAttackAnim(event.getPartialTick()));
+        setField(state, "currentSwing", player.getCurrentSwing());
+        setField(state, "swingAnimation", player.getSwingAnimation(event.getPartialTick()));
         setField(state, "rightHandItemStack", itemForArm(player, HumanoidArm.RIGHT));
         setField(state, "leftHandItemStack", itemForArm(player, HumanoidArm.LEFT));
         setField(state, "rightArmPose", armPose(player, HumanoidArm.RIGHT));
@@ -87,7 +88,6 @@ public final class VanillaHumanoidPoseSampler {
     }
 
     private static boolean setupLegacyModel(Object model, Player player, AnimationEvent<?> event) throws ReflectiveOperationException {
-        setField(model, "attackTime", player.getAttackAnim(event.getPartialTick()));
         setField(model, "riding", event.getModelData().isSitting || player.isPassenger());
         setField(model, "young", player.isBaby());
         Method setupAnim = findMethod(model.getClass(), "setupAnim", 6);
@@ -112,11 +112,6 @@ public final class VanillaHumanoidPoseSampler {
         out.xRot = getFloat(part, "xRot");
         out.yRot = getFloat(part, "yRot");
         out.zRot = getFloat(part, "zRot");
-    }
-
-    private static HumanoidArm getAttackArm(Player player) {
-        InteractionHand hand = player.swingingArm == null ? InteractionHand.MAIN_HAND : player.swingingArm;
-        return hand == InteractionHand.MAIN_HAND ? player.getMainArm() : player.getMainArm().getOpposite();
     }
 
     private static ItemStack itemForArm(Player player, HumanoidArm arm) {

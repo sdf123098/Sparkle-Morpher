@@ -15,7 +15,7 @@ import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
 import com.micaftic.morpher.util.accessors.BufferSourceAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.ItemInHandRenderer;
+import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.core.component.DataComponents;
@@ -54,10 +54,10 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
     private static final float AUTHORED_SPEAR_THIRD_PERSON_DISPLAY_PIVOT_Y = 0.125f;
     private static final float AUTHORED_SPEAR_THIRD_PERSON_DISPLAY_PIVOT_Z = 0.125f;
 
-    private final ItemInHandRenderer itemRenderer;
+    private final ItemModelResolver itemModelResolver;
 
-    public CustomPlayerItemInHandLayer(ItemInHandRenderer itemInHandRenderer) {
-        this.itemRenderer = itemInHandRenderer;
+    public CustomPlayerItemInHandLayer(ItemModelResolver itemModelResolver) {
+        this.itemModelResolver = itemModelResolver;
     }
 
     @Override
@@ -80,7 +80,9 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                     SlashBladeRenderer.renderOnEntity(entity, animatedGeoModel, poseStack, bufferSource, packedLightIn, mainHandItem, partialTick);
                 } else {
                     TacCompat.handleGunSound(entity, mainHandItem);
-                    renderItem(animatedGeoModel, entity, mainHandItem, getDisplayContext(mainArm), mainArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
+                    if (!SwordReplacementHelper.shouldSuppressVanillaItem(animatedGeoModel.getGeoModel(), mainHandItem, mainArm)) {
+                        renderItem(animatedGeoModel, entity, mainHandItem, getDisplayContext(mainArm), mainArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
+                    }
                     if (useExtraPlayer && !mainHandItem.isEmpty() && (bufferSource instanceof BufferSourceAccessor)) {
                         ((BufferSourceAccessor) bufferSource).initialize();
                     }
@@ -92,7 +94,9 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                     SlashBladeRenderer.renderRightWaist(animatedGeoModel, poseStack, bufferSource, packedLightIn, offhandItem);
                 } else {
                     if (!SWarfareCompat.isGunItem(offhandItem)) {
-                        renderItem(animatedGeoModel, entity, offhandItem, getDisplayContext(offArm), offArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
+                        if (!SwordReplacementHelper.shouldSuppressVanillaItem(animatedGeoModel.getGeoModel(), offhandItem, offArm)) {
+                            renderItem(animatedGeoModel, entity, offhandItem, getDisplayContext(offArm), offArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
+                        }
                     }
                     if (useExtraPlayer && !offhandItem.isEmpty() && (bufferSource instanceof BufferSourceAccessor)) {
                         ((BufferSourceAccessor) bufferSource).initialize();
@@ -190,13 +194,13 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         applyEquipmentDefaultHandTransform(poseStack);
         poseStack.translate(0.0d, directHandBone ? -0.01875d : -0.0125d, -0.025d);
         if (EQUIPMENT_SPEAR_HOLD_PITCH_DEGREES != 0.0f) {
-            poseStack.mulPose(Axis.XP.rotationDegrees(EQUIPMENT_SPEAR_HOLD_PITCH_DEGREES));
+            poseStack.rotate(Axis.XP.rotationDegrees(EQUIPMENT_SPEAR_HOLD_PITCH_DEGREES));
         }
         if (EQUIPMENT_SPEAR_HOLD_YAW_DEGREES != 0.0f) {
-            poseStack.mulPose(Axis.YP.rotationDegrees(EQUIPMENT_SPEAR_HOLD_YAW_DEGREES));
+            poseStack.rotate(Axis.YP.rotationDegrees(EQUIPMENT_SPEAR_HOLD_YAW_DEGREES));
         }
         if (EQUIPMENT_SPEAR_HOLD_ROLL_DEGREES != 0.0f) {
-            poseStack.mulPose(Axis.ZP.rotationDegrees(EQUIPMENT_SPEAR_HOLD_ROLL_DEGREES));
+            poseStack.rotate(Axis.ZP.rotationDegrees(EQUIPMENT_SPEAR_HOLD_ROLL_DEGREES));
         }
     }
 
@@ -207,7 +211,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
 
     private void applyEquipmentDefaultHandTransform(PoseStack poseStack) {
         poseStack.translate(0.0d, -0.0625d, -0.1d);
-        poseStack.mulPose(Axis.XP.rotationDegrees(-90.0f));
+        poseStack.rotate(Axis.XP.rotationDegrees(-90.0f));
     }
 
     // ==================== YSM 自定义骨骼挂点变换：独立一套 ====================
@@ -239,7 +243,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
 
     private void applyAuthoredDefaultHandTransform(PoseStack poseStack) {
         poseStack.translate(0.0d, -0.0625d, -0.1d);
-        poseStack.mulPose(Axis.XP.rotationDegrees(-90.0f));
+        poseStack.rotate(Axis.XP.rotationDegrees(-90.0f));
     }
 
     private void renderVanillaItemWithUseOrientation(LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, int packedLight, float partialTick, boolean vanillaEquipment) {
@@ -420,7 +424,8 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
     private void renderVanillaItem(LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, int packedLight) {
         SubmitNodeCollector collector = SubmitRenderContext.get();
         if (collector != null) {
-            this.itemRenderer.renderItem(livingEntity, itemStack, itemDisplayContext, poseStack, collector, packedLight);
+            com.micaftic.morpher.client.renderer.ItemRenderBridge.renderLivingItem(
+                    itemModelResolver, livingEntity, itemStack, itemDisplayContext, poseStack, collector, packedLight);
         }
     }
 

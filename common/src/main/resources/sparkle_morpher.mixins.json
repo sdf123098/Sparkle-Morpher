@@ -9,8 +9,9 @@
   },
   "client": [
     "client.ArrowEntityAccessor",
+    "client.ProjectileFiringInputMixin",
+    "client.ProjectileSpawnObservationMixin",
     "client.CameraAccessor",
-    "client.CommandEncoderAccessor",
     "client.GpuDeviceAccessor",
     "client.LevelRendererAccessor",
     "client.MinecraftAccessor",
@@ -24,11 +25,10 @@
     "client.PauseScreenMixin",
     "client.ScreenAccessor",
     "client.ThrowableItemProjectileAccessor",
-    "client.WorldRendererMixin"
+    "client.WorldRendererMixin",
+    "client.OptionsKeyMappingMixin"
   ],
   "mixins": [
-    "AbstractArrowEntityMixin",
-    "ProjectileEntityMixin",
-    "compat.TouhouMaidEntityMixin"
+    "AbstractArrowEntityMixin"
   ]
 }

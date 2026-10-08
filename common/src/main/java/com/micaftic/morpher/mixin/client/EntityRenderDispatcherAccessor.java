@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.client.resources.model.EquipmentAssetManager;
 import net.minecraft.client.resources.model.sprite.AtlasManager;
+import net.minecraft.client.resources.palette.PalettedTextureManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -39,4 +40,7 @@ public interface EntityRenderDispatcherAccessor {
 
     @Accessor("playerSkinRenderCache")
     PlayerSkinRenderCache ysm$getPlayerSkinRenderCache();
+
+    @Accessor("palettedTextures")
+    PalettedTextureManager ysm$getPalettedTextureManager();
 }

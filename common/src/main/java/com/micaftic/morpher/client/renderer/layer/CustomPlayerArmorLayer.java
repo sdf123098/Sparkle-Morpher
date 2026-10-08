@@ -8,10 +8,10 @@ import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.client.renderer.ItemInHandRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemDisplayContext;
@@ -20,10 +20,10 @@ import net.minecraft.world.item.equipment.Equippable;
 
 public class CustomPlayerArmorLayer extends GeoLayerRenderer<CustomPlayerEntity> {
 
-    private final ItemInHandRenderer itemRenderer;
+    private final ItemModelResolver itemModelResolver;
 
     public CustomPlayerArmorLayer(EntityRendererProvider.Context context) {
-        this.itemRenderer = context.getEntityRenderDispatcher().getItemInHandRenderer();
+        this.itemModelResolver = context.getItemModelResolver();
     }
 
     @Override
@@ -56,7 +56,8 @@ public class CustomPlayerArmorLayer extends GeoLayerRenderer<CustomPlayerEntity>
         RenderUtils.prepMatrixForLocator(poseStack, model.headBones());
         poseStack.scale(0.625f, 0.625f, 0.625f);
         poseStack.translate(0.0f, 0.25f, 0.0f);
-        this.itemRenderer.renderItem(player, stack, ItemDisplayContext.HEAD, poseStack, collector, i);
+        com.micaftic.morpher.client.renderer.ItemRenderBridge.renderLivingItem(
+                itemModelResolver, player, stack, ItemDisplayContext.HEAD, poseStack, collector, i);
         poseStack.popPose();
     }
 }

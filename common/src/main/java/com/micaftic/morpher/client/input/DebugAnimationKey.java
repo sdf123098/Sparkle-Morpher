@@ -9,10 +9,11 @@ import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInput
 import net.minecraft.client.KeyMapping;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
 
 public final class DebugAnimationKey {
 
-    public static final KeyMapping KEY_MAPPING = KeyMappingFactory.createInGameAlt("key.sparkle_morpher.debug_animation.desc", InputConstants.Type.KEYSYM, 66, "key.category.sparkle_morpher");
+    public static final KeyMapping KEY_MAPPING = KeyMappingFactory.createInGameAlt("key.sparkle_morpher.debug_animation.desc", InputConstants.Type.KEYBOARD, InputCodeAdapter.SDL_SCANCODE_B, "key.category.sparkle_morpher");
 
     private DebugAnimationKey() {
     }

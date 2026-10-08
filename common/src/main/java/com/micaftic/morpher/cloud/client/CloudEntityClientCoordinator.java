@@ -52,6 +52,7 @@ public final class CloudEntityClientCoordinator {
         requireText(scopeId, "scopeId");
         requireText(worldEpoch, "worldEpoch");
         activeContext = new Context(scopeId, worldEpoch, worldGeneration);
+        observationTracker.clear();
     }
 
     public synchronized void deactivate() {
@@ -84,7 +85,11 @@ public final class CloudEntityClientCoordinator {
         requireText(scopeId, "scopeId");
         requireText(worldEpoch, "worldEpoch");
         requireText(targetId, "targetId");
-        if (currentWorldGeneration.getAsLong() != worldGeneration) return false;
+        Context expectedContext = activeContext;
+        if (expectedContext == null || !expectedContext.scopeId().equals(scopeId)
+                || !expectedContext.worldEpoch().equals(worldEpoch)
+                || expectedContext.worldGeneration() != worldGeneration
+                || currentWorldGeneration.getAsLong() != worldGeneration) return false;
         CloudScopeClient.CloudAppearance appearance = appearances.get(scopeId, targetId);
         if (appearance == null) return false;
 
@@ -105,7 +110,7 @@ public final class CloudEntityClientCoordinator {
             }
             for (CloudEntityProvider provider : providers.get(kind)) {
                 scheduled.set(true);
-                scheduleApply(provider, entityUuid, scopeId, worldEpoch, worldGeneration, binding, appearance);
+                scheduleApply(provider, entityUuid, scopeId, worldEpoch, worldGeneration, binding, appearance, expectedContext);
             }
         }
         return scheduled.get();
@@ -118,13 +123,14 @@ public final class CloudEntityClientCoordinator {
             String worldEpoch,
             long worldGeneration,
             CloudScopeClient.CloudEntityBinding binding,
-            CloudScopeClient.CloudAppearance expectedAppearance
+            CloudScopeClient.CloudAppearance expectedAppearance,
+            Context expectedContext
     ) {
         clientExecutor.accept(() -> {
-            if (currentWorldGeneration.getAsLong() != worldGeneration
+            if (activeContext != expectedContext || currentWorldGeneration.getAsLong() != worldGeneration
                     || !bindings.isCurrent(scopeId, worldEpoch, binding)) return;
             CloudScopeClient.CloudAppearance current = appearances.get(scopeId, expectedAppearance.targetId());
-            if (current == null || current.revision() != expectedAppearance.revision()) return;
+            if (!Objects.equals(current, expectedAppearance)) return;
             provider.applyAppearance(entityUuid, current, binding.revision());
         });
     }
@@ -141,7 +147,7 @@ public final class CloudEntityClientCoordinator {
      */
     public List<CloudEntityObservationTracker.Observation> collectObservations() {
         Context context = activeContext;
-        if (context == null) return List.of();
+        if (context == null || currentWorldGeneration.getAsLong() != context.worldGeneration()) return List.of();
 
         List<CloudScopeClient.CloudEntityBinding> snapshot = bindings.snapshot(context.scopeId(), context.worldEpoch());
         Set<String> available = new HashSet<>();

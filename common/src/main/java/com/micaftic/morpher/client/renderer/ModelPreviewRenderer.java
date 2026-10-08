@@ -140,9 +140,9 @@ public final class ModelPreviewRenderer {
                     return;
                 }
                 float bodyRotation = CustomVehicleRenderer.getBodyRotation(vehicle, Mth.lerp(partialTick, vehicle.yRotO, vehicle.getYRot()), partialTick);
-                poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - bodyRotation));
+                poseStack.rotate(Axis.YP.rotationDegrees(180.0f - bodyRotation));
                 RenderUtils.prepMatrixForLocator(poseStack, list);
-                poseStack.mulPose(Axis.YN.rotationDegrees(180.0f - bodyRotation));
+                poseStack.rotate(Axis.YN.rotationDegrees(180.0f - bodyRotation));
                 Vec3 passengerAttachment = vehicle.getPassengerRidingPosition(entity).subtract(vehicle.position());
                 double myRidingOffset = -passengerAttachment.y();
                 poseStack.translate(0.0d, myRidingOffset, 0.0d);

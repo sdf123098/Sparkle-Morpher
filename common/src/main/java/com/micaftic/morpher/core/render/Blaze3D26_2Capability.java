@@ -1,9 +1,9 @@
 package com.micaftic.morpher.core.render;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.commands.RenderPass;
 
 public final class Blaze3D26_2Capability {
     private static volatile Report cachedReport;
@@ -19,7 +19,7 @@ public final class Blaze3D26_2Capability {
         return cachedReport = new Report(
                 true,
                 hasMethod(GpuDevice.class, "createBuffer"),
-                hasMethod(GpuDevice.class, "precompilePipeline"),
+                hasMethod(GpuDevice.class, "compilePipeline"),
                 hasMethod(CommandEncoder.class, "createRenderPass"),
                 hasMethod(RenderPass.class, "drawIndexed"),
                 hasMethod(CommandEncoder.class, "dispatch"),
@@ -66,7 +66,7 @@ public final class Blaze3D26_2Capability {
     public record Report(
             boolean stableGraphicsApiPresent,
             boolean createBufferPresent,
-            boolean precompilePipelinePresent,
+            boolean compilePipelinePresent,
             boolean createRenderPassPresent,
             boolean drawIndexedPresent,
             boolean commandDispatchPresent,
@@ -86,7 +86,7 @@ public final class Blaze3D26_2Capability {
         public String summary() {
             return "stableGraphicsApiPresent=" + stableGraphicsApiPresent
                     + ", createBufferPresent=" + createBufferPresent
-                    + ", precompilePipelinePresent=" + precompilePipelinePresent
+                    + ", compilePipelinePresent=" + compilePipelinePresent
                     + ", createRenderPassPresent=" + createRenderPassPresent
                     + ", drawIndexedPresent=" + drawIndexedPresent
                     + ", stableComputeDispatchPresent=" + stableComputeDispatchPresent()

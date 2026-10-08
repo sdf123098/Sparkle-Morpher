@@ -59,7 +59,8 @@ public class RendererManager {
                 accessor.ysm$getEquipmentAssets(),
                 accessor.ysm$getAtlasManager(),
                 accessor.ysm$getFont(),
-                accessor.ysm$getPlayerSkinRenderCache()
+                accessor.ysm$getPlayerSkinRenderCache(),
+                accessor.ysm$getPalettedTextureManager()
         );
         playerRenderer = new CustomPlayerRenderer(context);
         projectileRenderer = new ProjectileRenderer(context);

@@ -12,7 +12,7 @@
   },
   "license": "MIT",
   "icon": "assets/sparkle_morpher/texture/mod_icon.png",
-  "environment": "*",
+  "environment": "client",
   "entrypoints": {
     "main": [
       "com.micaftic.morpher.fabric.YesSteveModelFabric"
@@ -22,9 +22,6 @@
     ],
     "modmenu": [
       "com.micaftic.morpher.fabric.client.YesSteveModelModMenu"
-    ],
-    "cardinal-components-entity": [
-      "com.micaftic.morpher.fabric.YsmComponents"
     ]
   },
   "mixins": [
@@ -33,22 +30,13 @@
   ],
   "accessWidener": "sparkle_morpher.accesswidener",
   "depends": {
-    "fabricloader": ">=0.19.3",
-    "minecraft": ">=26.2 <26.3",
+    "fabricloader": ">=0.19.5",
+    "minecraft": ">=26.3 <26.4",
     "java": ">=25",
     "fabric-api": "*",
     "forgeconfigapiport": "*"
   },
   "suggests": {
     "touhou_little_maid": "*"
-  },
-  "custom": {
-    "cardinal-components": [
-      "sparkle_morpher:star_models",
-      "sparkle_morpher:auth_models",
-      "sparkle_morpher:model_info",
-      "sparkle_morpher:projectile_model",
-      "sparkle_morpher:vehicle_model"
-    ]
   }
 }

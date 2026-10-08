@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gui;
 
-import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.cloud.client.CloudMotionSources;
 import com.google.common.collect.Lists;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.animation.custom.CustomRouletteLayout;
@@ -605,7 +605,7 @@ public class UnifiedRouletteScreen extends Screen {
             if (animatableModel.getEntity() == Minecraft.getInstance().player) {
                 AnimationLockEvent.toggleLock();
             } else {
-                CloudPlayerMotionSync.stop(animatableModel);
+                CloudMotionSources.stop(animatableModel);
                 onClose();
             }
             return true;
@@ -621,7 +621,7 @@ public class UnifiedRouletteScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        if (KeyMappingFactory.isActiveAndMatches(AnimationRouletteKey.KEY_ROULETTE, event.key(), event.scancode())) {
+        if (KeyMappingFactory.isActiveAndMatches(AnimationRouletteKey.KEY_ROULETTE, event.key(), event.keycode())) {
             onClose();
             return true;
         }
@@ -667,7 +667,7 @@ public class UnifiedRouletteScreen extends Screen {
 
     private void playAnimation(String key) {
         LocalPlayer player = Minecraft.getInstance().player;
-        CloudPlayerMotionSync.play(animatableModel, key);
+        CloudMotionSources.play(animatableModel, key);
         if (player != null && GeneralConfig.PRINT_ANIMATION_ROULETTE_MSG.get()) {
             player.sendSystemMessage(Component.translatable("message.sparkle_morpher.model.animation_roulette.play", key));
         }

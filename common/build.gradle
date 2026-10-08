@@ -1,5 +1,5 @@
 dependencies {
-    modCompileOnly "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+    compileOnly "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
 
     modCompileOnly "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"
     testRuntimeOnly "maven.modrinth:forge-config-api-port:$rootProject.forge_config_api_port_version"

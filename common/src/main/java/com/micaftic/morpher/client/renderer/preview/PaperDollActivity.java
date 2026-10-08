@@ -33,7 +33,7 @@ public final class PaperDollActivity {
                 || player.onClimbable()
                 || player.isInWater()
                 || player.isPassenger()
-                || player.swinging
+                || player.isSwinging()
                 || player.hurtTime > 0) {
             return true;
         }

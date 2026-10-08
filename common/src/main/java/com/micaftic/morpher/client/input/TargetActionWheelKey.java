@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.gui.TargetActionSelectionScreen;
 import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -14,7 +15,7 @@ import net.minecraft.client.KeyMapping;
 public final class TargetActionWheelKey {
     public static final KeyMapping KEY_MAPPING = KeyMappingFactory.createInGameNone(
             "key.sparkle_morpher.target_action_wheel.desc",
-            InputConstants.Type.KEYSYM, 71, "key.category.sparkle_morpher");
+            InputConstants.Type.KEYBOARD, InputCodeAdapter.SDL_SCANCODE_G, "key.category.sparkle_morpher");
 
     private TargetActionWheelKey() {
     }

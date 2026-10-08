@@ -21,7 +21,7 @@ public class ItemUseAnimationPredicate implements IAnimationPredicate<LivingAnim
         if (livingEntity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
             return PlayState.STOP;
         }
-        if (!livingEntity.swinging && !livingEntity.isUsingItem()) {
+        if (!livingEntity.isSwinging() && !livingEntity.isUsingItem()) {
             ItemStack itemInHand = livingEntity.getItemInHand(InteractionHand.MAIN_HAND);
             PlayState playState = TacCompat.handleGunActionAnimState(itemInHand, event);
             if (playState == null) {

@@ -4,16 +4,16 @@ import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
-import com.mojang.blaze3d.IndexType;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.pipeline.IndexType;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.GpuSampler;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.AbstractTexture;
@@ -54,7 +54,7 @@ public final class Blaze3DRenderPath {
         Blaze3D26_2Capability.Report report = Blaze3D26_2Capability.report();
         return report.stableGraphicsApiPresent()
                 && report.createBufferPresent()
-                && report.precompilePipelinePresent()
+                && report.compilePipelinePresent()
                 && report.createRenderPassPresent()
                 && report.drawIndexedPresent();
     }
@@ -156,13 +156,13 @@ public final class Blaze3DRenderPath {
                     target.getDepthTextureView(),
                     OptionalDouble.empty()
             )) {
-                pass.setPipeline(pipeline);
+                pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
                 RenderSystem.bindDefaultUniforms(pass);
                 pass.setUniform("DynamicTransforms", dynamicTransforms);
                 pass.setUniform("BoneMatrices", mesh.boneMatrixSlice());
-                pass.bindTexture("Sampler0", modelTexture.getTextureView(), modelTexture.getSampler());
-                pass.bindTexture("Sampler1", overlayTextureView, clampSampler);
-                pass.bindTexture("Sampler2", lightmapTextureView, clampSampler);
+                pass.setUniform("Sampler0", modelTexture.getTextureView(), modelTexture.getSampler());
+                pass.setUniform("Sampler1", overlayTextureView, clampSampler);
+                pass.setUniform("Sampler2", lightmapTextureView, clampSampler);
                 pass.setVertexBuffer(0, mesh.vertexSlice());
                 pass.setIndexBuffer(mesh.indexBuffer, IndexType.INT);
                 drawMeshParts(pass, mesh, renderPartMask);

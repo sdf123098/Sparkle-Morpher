@@ -18,6 +18,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
 import com.micaftic.morpher.core.api.PlatformAPI;
 
 import java.util.List;
@@ -36,7 +37,7 @@ public final class ExtraAnimationKey {
             initialized = true;
             if (YesSteveModel.isAvailable()) {
                 for (int i = 0; i <= 7; i++) {
-                    KeyMapping eventMapping = KeyMappingFactory.createInGameNone(String.format("key.sparkle_morpher.extra_animation.%d.desc", Integer.valueOf(i)), InputConstants.Type.KEYSYM, -1, "key.category.sparkle_morpher");
+                    KeyMapping eventMapping = KeyMappingFactory.createInGameNone(String.format("key.sparkle_morpher.extra_animation.%d.desc", Integer.valueOf(i)), InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), "key.category.sparkle_morpher");
                     KEY_MAPPINGS.add(eventMapping);
                 }
             }

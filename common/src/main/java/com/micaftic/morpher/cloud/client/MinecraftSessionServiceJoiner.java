@@ -2,7 +2,7 @@ package com.micaftic.morpher.cloud.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.Services;
-import com.mojang.authlib.minecraft.MinecraftSessionService;
+import com.mojang.authlib.minecraft.SessionService;
 import com.google.gson.JsonObject;
 import com.micaftic.morpher.cloud.CloudInstanceConfig;
 import com.micaftic.morpher.core.api.network.state.CloudErrorCode;
@@ -74,11 +74,11 @@ public final class MinecraftSessionServiceJoiner implements CloudIdentityClient.
         });
     }
 
-    static MinecraftSessionService sessionService(Object client) throws ReflectiveOperationException {
+    static SessionService sessionService(Object client) throws ReflectiveOperationException {
         // Method names are obfuscated on older Fabric versions; return types survive remapping.
         for (Method method : client.getClass().getMethods()) {
-            if (method.getParameterCount() == 0 && method.getReturnType() == MinecraftSessionService.class) {
-                return (MinecraftSessionService) method.invoke(client);
+            if (method.getParameterCount() == 0 && method.getReturnType() == SessionService.class) {
+                return (SessionService) method.invoke(client);
             }
         }
         for (Method method : client.getClass().getMethods()) {

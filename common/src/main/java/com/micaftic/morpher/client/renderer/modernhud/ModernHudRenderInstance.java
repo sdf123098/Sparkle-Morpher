@@ -7,19 +7,19 @@ import com.micaftic.morpher.core.gpu.Blaze3DModelMesh;
 import com.micaftic.morpher.core.gpu.Blaze3DModelMeshBuilder;
 import com.micaftic.morpher.core.gpu.Blaze3DBoneSkinPipeline;
 import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
-import com.mojang.blaze3d.GpuFormat;
-import com.mojang.blaze3d.IndexType;
+import com.mojang.renderpearl.api.GpuFormat;
+import com.mojang.renderpearl.api.pipeline.IndexType;
 import com.mojang.blaze3d.ProjectionType;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.buffers.GpuBuffer;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderPass;
+import com.mojang.renderpearl.api.commands.CommandEncoder;
+import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.GpuSampler;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.GpuSampler;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
@@ -210,8 +210,8 @@ public final class ModernHudRenderInstance {
             // GUI front-view coordinates need an X handedness correction. Keep the
             // negative Z used by the GUI camera, but do not leave the model left-right mirrored.
             poseStack.scale(-scale, scale, -scale);
-            poseStack.mulPose(Axis.ZP.rotationDegrees(FRONT_FACING_YAW + 0.1f));
-            poseStack.mulPose(Axis.YP.rotationDegrees(FRONT_FACING_YAW + yawOffset));
+            poseStack.rotate(Axis.ZP.rotationDegrees(FRONT_FACING_YAW + 0.1f));
+            poseStack.rotate(Axis.YP.rotationDegrees(FRONT_FACING_YAW + yawOffset));
             PoseStack.Pose pose = poseStack.last();
 
             boneBuf.clear();
@@ -275,13 +275,13 @@ public final class ModernHudRenderInstance {
                         new RenderPass.RenderArea(0, 0, fboWidth, fboHeight)
                 )) {
                     // 26.2（fabric-loom）RenderPass 无 setViewport：viewport 由 RenderArea 决定
-                    pass.setPipeline(Blaze3DBoneSkinPipeline.PIPELINE);
+                    pass.setPipeline(RenderSystem.getCompiledPipeline(Blaze3DBoneSkinPipeline.PIPELINE));
                     RenderSystem.bindDefaultUniforms(pass);
                     pass.setUniform("DynamicTransforms", dynamicTransforms);
                     pass.setUniform("BoneMatrices", boneSlices[boneSlice]);
-                    pass.bindTexture("Sampler0", modelTexture.getTextureView(), modelTexture.getSampler());
-                    pass.bindTexture("Sampler1", overlayTextureView, clampSampler);
-                    pass.bindTexture("Sampler2", lightmapTextureView, clampSampler);
+                    pass.setUniform("Sampler0", modelTexture.getTextureView(), modelTexture.getSampler());
+                    pass.setUniform("Sampler1", overlayTextureView, clampSampler);
+                    pass.setUniform("Sampler2", lightmapTextureView, clampSampler);
                     pass.setVertexBuffer(0, mesh.vertexSlice());
                     pass.setIndexBuffer(mesh.indexBuffer, IndexType.INT);
                     int drawCount = mesh.indexDrawCount(0);
@@ -301,13 +301,13 @@ public final class ModernHudRenderInstance {
                             OptionalDouble.empty(),
                             new RenderPass.RenderArea(0, 0, fboWidth, fboHeight)
                     )) {
-                        translucentPass.setPipeline(Blaze3DBoneSkinPipeline.TRANSLUCENT_PIPELINE);
+                        translucentPass.setPipeline(RenderSystem.getCompiledPipeline(Blaze3DBoneSkinPipeline.TRANSLUCENT_PIPELINE));
                         RenderSystem.bindDefaultUniforms(translucentPass);
                         translucentPass.setUniform("DynamicTransforms", dynamicTransforms);
                         translucentPass.setUniform("BoneMatrices", boneSlices[boneSlice]);
-                        translucentPass.bindTexture("Sampler0", modelTexture.getTextureView(), modelTexture.getSampler());
-                        translucentPass.bindTexture("Sampler1", overlayTextureView, clampSampler);
-                        translucentPass.bindTexture("Sampler2", lightmapTextureView, clampSampler);
+                        translucentPass.setUniform("Sampler0", modelTexture.getTextureView(), modelTexture.getSampler());
+                        translucentPass.setUniform("Sampler1", overlayTextureView, clampSampler);
+                        translucentPass.setUniform("Sampler2", lightmapTextureView, clampSampler);
                         translucentPass.setVertexBuffer(0, mesh.vertexSlice());
                         translucentPass.setIndexBuffer(mesh.indexBuffer, IndexType.INT);
                         int translucentDrawCount = mesh.indexDrawCount(0);
@@ -440,7 +440,8 @@ public final class ModernHudRenderInstance {
             if (fbo != null) {
                 fbo.destroyBuffers();
             }
-            fbo = new TextureTarget("sparkle_morpher_modern_hud", fboWidth, fboHeight, true, GpuFormat.RGBA8_UNORM);
+            fbo = new TextureTarget("sparkle_morpher_modern_hud", fboWidth, fboHeight,
+                    GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT);
             this.fboWidth = fboWidth;
             this.fboHeight = fboHeight;
             this.fboLogicalWidth = logicalWidth;

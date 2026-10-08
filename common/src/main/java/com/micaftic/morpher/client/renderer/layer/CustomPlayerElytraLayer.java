@@ -83,7 +83,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
 
     private boolean renderLocatorElytra(PoseStack poseStack, AnimatedGeoModel model) {
         boolean hidden = RenderUtils.prepMatrixForEquipmentLocator(poseStack, model.elytraBones());
-        poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
+        poseStack.rotate(Axis.ZP.rotationDegrees(180.0f));
         return hidden;
     }
 
@@ -96,7 +96,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
      */
     private void renderFallbackElytra(PoseStack poseStack) {
         poseStack.translate(0.0f, 1.5f, 0.125f);
-        poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
+        poseStack.rotate(Axis.ZP.rotationDegrees(180.0f));
     }
 
     public static boolean shouldSuppressVanillaWings(CustomPlayerEntity customPlayer) {

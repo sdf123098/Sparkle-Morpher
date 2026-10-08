@@ -232,7 +232,7 @@ public final class GuiModelRenderer {
         Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.0f);
         Quaternionf rotationX = Axis.XP.rotationDegrees(disablePreviewRotation ? 0.0f : -10.0f + previewPitch);
         rotationZ.mul(rotationX);
-        poseStack.mulPose(rotationZ);
+        poseStack.rotate(rotationZ);
 
         float oldBodyRot = livingEntity.yBodyRot;
         float oldBodyRotO = livingEntity.yBodyRotO;
@@ -274,7 +274,7 @@ public final class GuiModelRenderer {
         // 齐（§22.2 载具项）。GUI/Screen 预览沿用 !extraPlayer 的原有条件。
         if (vehicle instanceof LivingEntity && (!extraPlayer || options.alignWithVehicle())) {
             float vehicleYaw = vehicle.getYRot();
-            poseStack.mulPose(Axis.YP.rotationDegrees(vehicleYaw - previewYaw));
+            poseStack.rotate(Axis.YP.rotationDegrees(vehicleYaw - previewYaw));
             // 载具与 head mode 同时生效时，头部在载具基准上再叠加 head mode 偏移（默认 0，等价历史）。
             livingEntity.yHeadRot = vehicleYaw + headYawOffset;
             livingEntity.yHeadRotO = vehicleYaw + headYawOffsetO;
@@ -317,7 +317,7 @@ public final class GuiModelRenderer {
         Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.0f);
         Quaternionf rotationX = Axis.XP.rotationDegrees((-10.0f) + pitch);
         rotationZ.mul(rotationX);
-        poseStack.mulPose(rotationZ);
+        poseStack.rotate(rotationZ);
 
         float oldBodyRot = livingEntity.yBodyRot;
         float oldBodyRotO = livingEntity.yBodyRotO;
@@ -341,7 +341,7 @@ public final class GuiModelRenderer {
             Minecraft.getInstance().gameRenderer.lighting().setupFor(Lighting.Entry.ENTITY_IN_UI);
             AnimationTracker animationTracker = getPreviewAnimationTracker(animatableEntity);
             if (isPreviewAnimation(animationTracker, "sleep")) {
-                poseStack.mulPose(Axis.YP.rotationDegrees(yaw - 90.0f));
+                poseStack.rotate(Axis.YP.rotationDegrees(yaw - 90.0f));
                 poseStack.translate(0.5d, 0.5625d, 0.0d);
                 livingEntity.setPose(Pose.SLEEPING);
             }
@@ -419,7 +419,7 @@ public final class GuiModelRenderer {
         Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.0f);
         Quaternionf rotationX = Axis.XP.rotationDegrees((-10.0f) + pitch);
         rotationZ.mul(rotationX);
-        poseStack.mulPose(rotationZ);
+        poseStack.rotate(rotationZ);
 
         float oldBodyRot = livingEntity.yBodyRot;
         float oldBodyRotO = livingEntity.yBodyRotO;
@@ -449,7 +449,7 @@ public final class GuiModelRenderer {
         { // MC 26.x: was RenderSystem.runAsFancy(() -> {
             AnimationTracker animationTracker = getPreviewAnimationTracker(animatableEntity);
             if (isPreviewAnimation(animationTracker, "sleep")) {
-                poseStack.mulPose(Axis.YP.rotationDegrees(yaw - 90.0f));
+                poseStack.rotate(Axis.YP.rotationDegrees(yaw - 90.0f));
                 poseStack.translate(0.5d, 0.5625d, 0.0d);
                 livingEntity.setPose(Pose.SLEEPING);
             }
@@ -540,7 +540,7 @@ public final class GuiModelRenderer {
         Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.0f);
         Quaternionf rotationX = Axis.XP.rotationDegrees(disablePreviewRotation ? 0.0f : -10.0f);
         rotationZ.mul(rotationX);
-        poseStack.mulPose(rotationZ);
+        poseStack.rotate(rotationZ);
 
         float oldBodyRot = livingEntity.yBodyRot;
         float oldBodyRotO = livingEntity.yBodyRotO;
@@ -579,7 +579,7 @@ public final class GuiModelRenderer {
         Entity vehicle = livingEntity.getVehicle();
         if (vehicle instanceof LivingEntity) {
             float vehicleYaw = vehicle.getYRot();
-            poseStack.mulPose(Axis.YP.rotationDegrees(vehicleYaw - previewYaw));
+            poseStack.rotate(Axis.YP.rotationDegrees(vehicleYaw - previewYaw));
             livingEntity.yHeadRot = vehicleYaw;
             livingEntity.yHeadRotO = vehicleYaw;
         }

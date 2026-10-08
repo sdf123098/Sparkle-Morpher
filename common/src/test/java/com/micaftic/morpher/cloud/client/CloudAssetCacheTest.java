@@ -23,6 +23,20 @@ class CloudAssetCacheTest {
     }
 
     @Test
+    void repairsCorruptExistingObjectInsteadOfReturningUncheckedCache() throws Exception {
+        byte[] bytes = new byte[]{1, 2, 3};
+        var root = Files.createTempDirectory("spm-cloud-cache-repair");
+        var ref = new CloudAssetRef("model", 7, CloudAssetCache.sha256(bytes));
+        var path = CloudAssetCache.writeVerified(root, ref, bytes);
+        Files.write(path, new byte[]{3, 2, 1});
+        assertEquals(path, CloudAssetCache.writeVerified(root, ref, bytes));
+        assertArrayEquals(bytes, Files.readAllBytes(path));
+        Files.write(path, new byte[]{4});
+        CloudAssetCache.writeVerified(root, ref, bytes);
+        assertArrayEquals(bytes, Files.readAllBytes(path));
+    }
+
+    @Test
     void rejectsUnexpectedHashBeforeWriting() throws Exception {
         CloudAssetRef ref = new CloudAssetRef("model", 1, "a".repeat(64));
         var root = Files.createTempDirectory("spm-cloud-cache");

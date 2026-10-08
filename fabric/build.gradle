@@ -15,7 +15,7 @@ configurations {
     }
 }
 
-def releaseArchiveName = "${rootProject.archives_name}-${project.version}-fa26.2"
+def releaseArchiveName = "${rootProject.archives_name}-${project.version}-fa26.3"
 
 sourceSets {
     main {
@@ -56,32 +56,28 @@ if (rootProject.ext.isCurseForgeDist) {
 }
 
 dependencies {
-    modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+    implementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
 
     testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 
     // Ship optional renderer integrations as Fabric nested JARs. The compatibility implementation
     // stays in its own subproject/API entrypoint, while the primary distribution remains one file.
-    include(project(path: ':caustica-compat', configuration: 'namedElements')) {
+    include(project(path: ':caustica-compat', configuration: 'runtimeElements')) {
         transitive = false
     }
 
-    modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
+    implementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
 
 
-    modImplementation "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"
+    implementation "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"
     include "curse.maven:forge-config-api-port-547434:$rootProject.forge_config_api_port_curse_file_id"
 
-    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
-    modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
-    include "org.ladysnake.cardinal-components-api:cardinal-components-base:$rootProject.cardinal_components_version"
-    include "org.ladysnake.cardinal-components-api:cardinal-components-entity:$rootProject.cardinal_components_version"
 
     implementation "com.electronwill.night-config:core:3.9.0"
     implementation "com.electronwill.night-config:toml:3.9.0"
 
-    modCompileOnly "com.terraformersmc:modmenu:$rootProject.modmenu_version"
+    compileOnly "com.terraformersmc:modmenu:$rootProject.modmenu_version"
 
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     include "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
@@ -123,10 +119,10 @@ shadowJar {
     }
 }
 
-remapJar {
-    input.set shadowJar.archiveFile
+tasks.named('jar', Jar) {
     archiveFileName = rootProject.ext.distributionArchiveName(releaseArchiveName)
-
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(configurations.shadowBundle.collect { it.isDirectory() ? it : zipTree(it) })
     doLast {
         def bundledCompat = zipTree(archiveFile.get().asFile).matching {
             include 'META-INF/jars/sparkle-morpher-caustica-compat-*.jar'
@@ -135,9 +131,5 @@ remapJar {
             throw new GradleException("Expected exactly one bundled Caustica compatibility JAR, found ${bundledCompat.size()}")
         }
     }
-}
-
-tasks.named('remapSourcesJar') {
-    archiveFileName = "${releaseArchiveName}-sources.jar"
 }
 

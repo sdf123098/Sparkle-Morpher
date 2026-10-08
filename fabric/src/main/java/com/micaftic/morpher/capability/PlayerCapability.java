@@ -1,6 +1,6 @@
 package com.micaftic.morpher.capability;
 
-import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.cloud.client.CloudMotionSources;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingSyncBatch;
 import com.micaftic.morpher.capability.fabric.PlayerCapabilityImpl;
@@ -21,7 +21,6 @@ import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import com.micaftic.morpher.molang.runtime.Struct;
-import com.micaftic.morpher.network.message.FeedbackData;
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
 import it.unimi.dsi.fastutil.ints.Int2FloatMaps;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
@@ -283,7 +282,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
                             && name.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH && value instanceof Number number
                             && Float.isFinite(number.floatValue())) current.put(name, number.floatValue());
                 });
-                CloudPlayerMotionSync.roaming(this, current);
+                CloudMotionSources.roaming(this, current);
                 if (roamingStruct.hasPendingChanges()) {
                     RoamingSyncBatch syncBatch = roamingStruct.consumePendingBoneData();
                     LocalModelSettingsStore.save(getModelId(), syncBatch.changedVariables());
@@ -294,7 +293,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
                         if (!name.isBlank() && name.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH
                                 && Float.isFinite(entry.getFloatValue())) changes.put(name, entry.getFloatValue());
                     }
-                    CloudPlayerMotionSync.roaming(this, changes);
+                    CloudMotionSources.roaming(this, changes);
                 }
             }
         }

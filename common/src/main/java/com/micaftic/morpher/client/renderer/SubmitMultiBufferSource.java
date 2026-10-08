@@ -87,6 +87,12 @@ public final class SubmitMultiBufferSource implements MultiBufferSource {
         }
 
         @Override
+        public VertexConsumer setUv3(float u, float v) {
+            record(buffer -> buffer.setUv3(u, v));
+            return this;
+        }
+
+        @Override
         public VertexConsumer setNormal(float x, float y, float z) {
             record(buffer -> buffer.setNormal(x, y, z));
             return this;

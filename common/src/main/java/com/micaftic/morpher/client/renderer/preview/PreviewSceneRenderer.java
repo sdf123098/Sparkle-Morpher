@@ -48,15 +48,15 @@ public final class PreviewSceneRenderer {
         poseStack.translate(0.0d, 0.8d, 0.0d);
         Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.0f);
         rotationZ.mul(Axis.XP.rotationDegrees((-10.0f) + pitch));
-        poseStack.mulPose(rotationZ);
-        poseStack.mulPose(Axis.YP.rotationDegrees(yaw + 180.0f));
+        poseStack.rotate(rotationZ);
+        poseStack.rotate(Axis.YP.rotationDegrees(yaw + 180.0f));
         poseStack.translate(-0.5d, 0.0d, 0.5d);
         renderSimpleBed(poseStack, bufferSource);
     }
 
     public static void renderBedPreview(PoseStack poseStack, float yaw, MultiBufferSource.BufferSource bufferSource) {
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(yaw + 180.0f));
+        poseStack.rotate(Axis.YP.rotationDegrees(yaw + 180.0f));
         poseStack.translate(-0.5d, 0.0d, 0.5d);
         renderSimpleBed(poseStack, bufferSource);
         poseStack.popPose();
@@ -69,15 +69,15 @@ public final class PreviewSceneRenderer {
         poseStack.translate(0.0d, 0.8d, 0.0d);
         Quaternionf rotationZ = Axis.ZP.rotationDegrees(180.0f);
         rotationZ.mul(Axis.XP.rotationDegrees((-10.0f) + pitch));
-        poseStack.mulPose(rotationZ);
-        poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
+        poseStack.rotate(rotationZ);
+        poseStack.rotate(Axis.YP.rotationDegrees(yaw));
         poseStack.translate(-1.5d, -1.0d, -2.5d);
         renderSimpleGround(poseStack, bufferSource);
     }
 
     public static void renderGroundPreview(PoseStack poseStack, float yaw, MultiBufferSource.BufferSource bufferSource) {
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
+        poseStack.rotate(Axis.YP.rotationDegrees(yaw));
         poseStack.translate(-1.5d, -1.0d, -2.5d);
         renderSimpleGround(poseStack, bufferSource);
         poseStack.popPose();
@@ -158,7 +158,7 @@ public final class PreviewSceneRenderer {
 
     private static void renderVehicleEntity(float yaw, Entity riderEntity, PoseStack poseStack, EntityRenderDispatcher entityRenderDispatcher, MultiBufferSource.BufferSource bufferSource, Entity vehicleEntity, float partialTick) {
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
+        poseStack.rotate(Axis.YP.rotationDegrees(yaw));
         Vec3 passengerAttachment = vehicleEntity.getPassengerRidingPosition(riderEntity).subtract(vehicleEntity.position());
         // MC 26.x: EntityRenderDispatcher.render() signature changed
         // entityRenderDispatcher.render(vehicleEntity, 0.0d, passengerAttachment.y(), 0.0d, 0.0f, partialTick, poseStack, bufferSource, 15728880);

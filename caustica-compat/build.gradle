@@ -2,14 +2,14 @@ base {
     archivesName = 'sparkle-morpher-caustica-compat'
 }
 
-def releaseArchiveName = "sparkle-morpher-caustica-compat-${project.version}-fa26.2"
+def releaseArchiveName = "sparkle-morpher-caustica-compat-${project.version}-fa26.3"
 
 dependencies {
-    modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
+    implementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+    implementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
     def devJar = providers.gradleProperty('sparkleMorpherDevJar').orNull
     if (devJar != null && !devJar.isBlank()) {
-        modCompileOnly files(devJar)
+        compileOnly files(devJar)
     } else {
         compileOnly(project(path: ':fabric')) { transitive = false }
     }
@@ -27,7 +27,7 @@ jar {
     archiveFileName = "${releaseArchiveName}-dev.jar"
 }
 
-remapJar {
+tasks.named('jar', Jar) {
     archiveClassifier = null
-    archiveFileName = "${releaseArchiveName}.jar"
+    archiveFileName = rootProject.ext.distributionArchiveName(releaseArchiveName)
 }
