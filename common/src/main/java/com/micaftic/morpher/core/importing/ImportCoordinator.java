@@ -46,6 +46,28 @@ public final class ImportCoordinator {
         return new ParsedImport(source, new ParsedImport.GltfPayload(result), List.of());
     }
 
+    /** Dispatches a typed parse result to exactly one runtime backend assembler. */
+    public static <A> A buildCandidate(
+            ParsedImport parsed,
+            CandidateBuilder<RawYsmModel, A> legacyBuilder,
+            CandidateBuilder<GltfLoadResult, A> gltfBuilder) throws Exception {
+        Objects.requireNonNull(parsed, "parsed");
+        Objects.requireNonNull(legacyBuilder, "legacyBuilder");
+        Objects.requireNonNull(gltfBuilder, "gltfBuilder");
+        if (parsed.payload() instanceof ParsedImport.LegacyRawPayload legacy) {
+            return legacyBuilder.build(legacy.model());
+        }
+        if (parsed.payload() instanceof ParsedImport.GltfPayload gltf) {
+            return gltfBuilder.build(gltf.result());
+        }
+        throw new IllegalArgumentException("Unsupported parsed import payload: " + parsed.payload().getClass().getName());
+    }
+
+    @FunctionalInterface
+    public interface CandidateBuilder<T, A> {
+        A build(T parsed) throws Exception;
+    }
+
     /**
      * Commits the validated source, publishes the built candidate, and settles candidate ownership.
      * The candidate transfers to the runtime only after publication succeeds; every other outcome
