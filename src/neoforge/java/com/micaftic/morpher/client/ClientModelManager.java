@@ -713,17 +713,14 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     com.micaftic.morpher.core.importing.ParsedImport parsedImport =
                             com.micaftic.morpher.core.importing.ImportCoordinator.parsePickedBytes(
                                     fileName, importData, () -> parseImportModel(fileName, importData));
-                    if (parsedImport.payload() instanceof com.micaftic.morpher.core.importing.ParsedImport.GltfPayload gltfPayload) {
-                        preparedAssembly = buildGltfAssembly(gltfPayload.result().model(), modelKey);
-                    } else if (parsedImport.payload() instanceof com.micaftic.morpher.core.importing.ParsedImport.LegacyRawPayload legacyPayload) {
-                        RawYsmModel rawModel = legacyPayload.model();
-                        ModelMemoryProfiler.log("local-import-parsed", modelKey);
-                        ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
-                        ModelMemoryProfiler.log("local-import-mapped", modelKey);
-                        preparedAssembly = ModelAssemblyFactory.buildAssembly(parsedBundle, false, false);
-                    } else {
-                        throw new IllegalStateException("Unsupported parsed import payload: " + parsedImport.payload().getClass().getName());
-                    }
+                    preparedAssembly = com.micaftic.morpher.core.importing.ImportCoordinator.buildCandidate(parsedImport,
+                            rawModel -> {
+                                ModelMemoryProfiler.log("local-import-parsed", modelKey);
+                                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
+                                ModelMemoryProfiler.log("local-import-mapped", modelKey);
+                                return ModelAssemblyFactory.buildAssembly(parsedBundle, false, false);
+                            },
+                            gltfResult -> buildGltfAssembly(gltfResult.model(), modelKey));
                     if (preparedAssembly == null) throw new IllegalStateException("Failed to build local model");
                     synchronized (MODEL_RUNTIME_STOP_LOCK) {
                         if (importGeneration != MODEL_TASK_GENERATION.get()) {
@@ -1041,7 +1038,9 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 com.micaftic.morpher.core.importing.ImportCoordinator.parseLocalGltf(source);
         com.micaftic.morpher.resource.gltf.GltfLoadResult parsed =
                 ((com.micaftic.morpher.core.importing.ParsedImport.GltfPayload) parsedImport.payload()).result();
-        ModelAssembly runtimeModel = buildGltfAssembly(parsed.model(), modelId);
+        ModelAssembly runtimeModel = com.micaftic.morpher.core.importing.ImportCoordinator.buildCandidate(parsedImport,
+                rawModel -> { throw new IllegalStateException("Local glTF source produced a legacy payload"); },
+                gltfResult -> buildGltfAssembly(gltfResult.model(), modelId));
         if (scanRevision >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)
                 || sourceEntry == null || parsed.sourceFingerprint() != sourceEntry.fingerprint)) {
             releaseModelAssembly(modelId, runtimeModel);
