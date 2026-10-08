@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.event;
 
 import com.micaftic.morpher.audio.AudioStreamCache;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.entity.EntityRenderCache;
 import com.micaftic.morpher.client.upload.CloudUploadRuntime;
 import com.micaftic.morpher.core.gpu.BlurStack;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientLifecycleEvent;
@@ -30,6 +31,8 @@ public final class ClientResourceLifecycleEvent {
     public static void register() {
         ClientPlayerEvent.CLIENT_DISCONNECT.register(client -> cleanup("client disconnect"));
         ClientLifecycleEvent.CLIENT_STOPPING.register(client -> {
+            EntityRenderCache.clear();
+            ClientModelManager.onClientStopping();
             cleanup("client stopping");
             CloudUploadRuntime.clear();
         });
