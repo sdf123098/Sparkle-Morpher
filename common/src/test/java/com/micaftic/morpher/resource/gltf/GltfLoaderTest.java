@@ -10,7 +10,10 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.Base64;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -79,6 +82,45 @@ class GltfLoaderTest {
         assertEquals(1, model.images().size());
         assertArrayEquals(new byte[]{4, 5, 6}, model.images().get(0).data());
         assertEquals(1, model.meshes().get(0).primitives().get(0).triangleCount());
+    }
+
+    @Test
+    void loadWithManifestReportsSortedExternalDependenciesAndTheirRoles() throws Exception {
+        byte[] dependency = meshBuffer();
+        Files.write(tempDir.resolve("shared.bin"), dependency);
+        String json = """
+                {"asset":{"version":"2.0"},
+                 "buffers":[{"byteLength":42,"uri":"shared.bin"}],
+                 "images":[{"uri":"shared.bin","mimeType":"application/octet-stream"}]}
+                """;
+
+        GltfLoadResult parsed = GltfLoader.loadWithManifest(
+                json.getBytes(StandardCharsets.UTF_8), tempDir, "shared.gltf");
+        GltfModel compatibilityResult = GltfLoader.load(
+                json.getBytes(StandardCharsets.UTF_8), tempDir, "shared.gltf");
+
+        assertEquals(0, parsed.model().meshes().size());
+        assertEquals(compatibilityResult.images().size(), parsed.model().images().size());
+        assertEquals(1, parsed.dependencies().entries().size());
+        ResourceDependencyManifest.Entry entry = parsed.dependencies().entries().get(0);
+        assertEquals("shared.bin", entry.relativePath());
+        assertEquals(Set.of(ResourceDependencyManifest.Role.BUFFER, ResourceDependencyManifest.Role.IMAGE), entry.roles());
+        assertEquals(dependency.length, entry.sizeBytes());
+        assertEquals(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(dependency)), entry.sha256());
+        assertEquals(Files.getLastModifiedTime(tempDir.resolve("shared.bin")).toMillis(), entry.lastModifiedMillis());
+    }
+
+    @Test
+    void bytesOnlyImportManifestDoesNotInventExternalDependenciesForDataUri() throws Exception {
+        String json = """
+                {"asset":{"version":"2.0"},"images":[{"uri":"data:image/png;base64,AQID"}]}
+                """;
+
+        GltfLoadResult parsed = GltfLoader.loadWithManifest(
+                json.getBytes(StandardCharsets.UTF_8), null, "picked.gltf");
+
+        assertEquals(1, parsed.model().images().size());
+        assertEquals(0, parsed.dependencies().entries().size());
     }
 
     @Test
