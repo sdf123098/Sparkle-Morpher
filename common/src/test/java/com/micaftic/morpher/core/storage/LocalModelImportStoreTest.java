@@ -109,4 +109,28 @@ class LocalModelImportStoreTest {
         Path custom = tempDir.resolve("custom");
         assertEquals("v2", Files.readString(custom.resolve("cirno.ysm")));
     }
+
+    @Test
+    void prepareDoesNotReplaceExistingImportUntilCommit() throws Exception {
+        LocalModelImportStore store = store();
+        Path old = store.persist("cirno", "cirno.ysm", "old".getBytes(StandardCharsets.UTF_8));
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("cirno", "cirno.gltf", "broken".getBytes(StandardCharsets.UTF_8))) {
+            assertEquals("old", Files.readString(old));
+            assertTrue(Files.exists(prepared.path()));
+        }
+        assertEquals("old", Files.readString(old));
+        assertFalse(Files.exists(tempDir.resolve("custom/cirno.gltf")));
+    }
+
+    @Test
+    void preparedImportCommitsOnlyAfterValidation() throws Exception {
+        LocalModelImportStore store = store();
+        Path old = store.persist("cirno", "cirno.ysm", "old".getBytes(StandardCharsets.UTF_8));
+        Path target;
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("cirno", "cirno.glb", "valid".getBytes(StandardCharsets.UTF_8))) {
+            target = prepared.commit();
+        }
+        assertEquals("valid", Files.readString(target));
+        assertFalse(Files.exists(old));
+    }
 }
