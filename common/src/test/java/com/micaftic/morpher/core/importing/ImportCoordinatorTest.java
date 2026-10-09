@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.importing;
 
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
+import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.model.selection.ModelSelectionState;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import org.junit.jupiter.api.Test;
@@ -350,6 +351,43 @@ class ImportCoordinatorTest {
         assertEquals(oldAssembly, runtime.get("avatar"));
         assertEquals("avatar", selection.selectedModelId());
         assertEquals("texture:old", selection.selectedTextureId());
+    }
+
+    @Test
+    void preparedImportBuildsAndPublishesRealGltfAssemblyWithoutChangingSelection() throws Exception {
+        Path customRoot = tempDir.resolve("real-assembly");
+        LocalModelImportStore store = new LocalModelImportStore(customRoot);
+        store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
+        ModelAssembly oldAssembly = ModelAssembly.forGltf(
+                ImportCoordinator.parsePickedBytes("old.gltf",
+                        "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8), RawYsmModel::new)
+                        .payload() instanceof ParsedImport.GltfPayload oldPayload ? oldPayload.result().model() : null,
+                List.of());
+        Map<String, ModelAssembly> runtime = new HashMap<>();
+        runtime.put("avatar", oldAssembly);
+        ModelSelectionState selection = new ModelSelectionState();
+        selection.remember("avatar", "texture:old", true, false);
+        byte[] bytes = "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8);
+
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", bytes)) {
+            var outcome = ImportCoordinator.importPrepared(prepared,
+                    () -> ImportCoordinator.parsePickedBytes("avatar.gltf", bytes, RawYsmModel::new),
+                    raw -> { throw new AssertionError("glTF import must not use the legacy assembler"); },
+                    result -> ModelAssembly.forGltf(result.model(), List.of()),
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            prepared::commit,
+                            (built, committed) -> runtime.put("avatar", built),
+                            ModelAssembly::unloadRuntime));
+
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.PUBLISHED, outcome.state());
+        }
+
+        ModelAssembly published = runtime.get("avatar");
+        assertTrue(published.isGltf());
+        assertTrue(published.isRuntimeResident());
+        assertEquals("avatar", selection.selectedModelId());
+        assertEquals("texture:old", selection.selectedTextureId());
+        assertTrue(Files.exists(customRoot.resolve("avatar.gltf")));
     }
 
     @Test
