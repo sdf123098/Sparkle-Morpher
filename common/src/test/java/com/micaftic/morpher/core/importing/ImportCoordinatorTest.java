@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.importing;
 
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
+import com.micaftic.morpher.core.model.selection.ModelSelectionState;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -11,6 +12,8 @@ import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -200,6 +203,153 @@ class ImportCoordinatorTest {
         assertFalse(Files.exists(oldSource));
         assertFalse(Files.exists(customRoot.resolve("avatar.bbmodel")));
         assertTrue(Files.exists(customRoot.resolve("avatar.gltf")));
+    }
+
+    @Test
+    void completePreparedTransactionPreservesExistingSourceAssemblyAndSelectionOnParseOrBuildFailure() throws Exception {
+        Path customRoot = tempDir.resolve("preserve-on-failure");
+        LocalModelImportStore store = new LocalModelImportStore(customRoot);
+        Path oldSource = store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
+        Object oldAssembly = new Object();
+        Map<String, Object> runtime = new HashMap<>();
+        runtime.put("avatar", oldAssembly);
+        ModelSelectionState selection = new ModelSelectionState();
+        selection.remember("avatar", "default", true, false);
+        AtomicBoolean publishCalled = new AtomicBoolean();
+        AtomicBoolean releaseCalled = new AtomicBoolean();
+
+        byte[] legacyBytes = {1};
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.bbmodel", legacyBytes)) {
+            var parseFailed = ImportCoordinator.importPrepared(prepared,
+                    () -> { throw new java.io.IOException("invalid legacy source"); },
+                    raw -> new Object(), result -> new Object(),
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            prepared::commit, (built, committed) -> publishCalled.set(true),
+                            released -> releaseCalled.set(true)));
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.FAILED_BEFORE_COMMIT,
+                    parseFailed.state());
+        }
+
+        byte[] gltfBytes = "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8);
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", gltfBytes)) {
+            var buildFailed = ImportCoordinator.importPrepared(prepared,
+                    () -> ImportCoordinator.parsePickedBytes("avatar.gltf", gltfBytes, RawYsmModel::new),
+                    raw -> new Object(), result -> { throw new IllegalStateException("backend assembly failed"); },
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            prepared::commit, (built, committed) -> publishCalled.set(true),
+                            released -> releaseCalled.set(true)));
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.FAILED_BEFORE_COMMIT,
+                    buildFailed.state());
+        }
+
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.zip", new byte[]{2})) {
+            var commitFailed = ImportCoordinator.importPrepared(prepared,
+                    () -> ImportCoordinator.parsePickedBytes("avatar.zip", new byte[]{2}, RawYsmModel::new),
+                    raw -> new Object(), result -> new Object(),
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            () -> { throw new java.io.IOException("disk full"); },
+                            (built, committed) -> publishCalled.set(true),
+                            released -> releaseCalled.set(true)));
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.FAILED_BEFORE_COMMIT,
+                    commitFailed.state());
+        }
+
+        assertEquals("old-source", Files.readString(oldSource));
+        assertFalse(Files.exists(customRoot.resolve("avatar.bbmodel")));
+        assertFalse(Files.exists(customRoot.resolve("avatar.gltf")));
+        assertEquals(oldAssembly, runtime.get("avatar"));
+        assertEquals("avatar", selection.selectedModelId());
+        assertEquals("default", selection.selectedTextureId());
+        assertFalse(publishCalled.get());
+        assertTrue(releaseCalled.get());
+    }
+
+    @Test
+    void completePreparedTransactionDispatchesAndPublishesLegacyThenGltfCandidates() throws Exception {
+        Path customRoot = tempDir.resolve("complete-transaction");
+        LocalModelImportStore store = new LocalModelImportStore(customRoot);
+        Path oldSource = store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
+        Object oldAssembly = new Object();
+        Map<String, Object> runtime = new HashMap<>();
+        runtime.put("avatar", oldAssembly);
+        ModelSelectionState selection = new ModelSelectionState();
+        selection.remember("avatar", "texture:legacy", true, false);
+        List<String> events = new ArrayList<>();
+        Object legacyCandidate = new Object();
+        byte[] legacyBytes = {1};
+
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.bbmodel", legacyBytes)) {
+            var outcome = ImportCoordinator.importPrepared(prepared,
+                    () -> ImportCoordinator.parsePickedBytes("avatar.bbmodel", legacyBytes, RawYsmModel::new),
+                    raw -> { events.add("legacy-build"); return legacyCandidate; },
+                    result -> { events.add("unexpected-gltf-build"); return new Object(); },
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            prepared::commit, (built, committed) -> {
+                                events.add("legacy-publish");
+                                runtime.put("avatar", built);
+                            }, released -> events.add("legacy-release")));
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.PUBLISHED, outcome.state());
+        }
+
+        assertFalse(Files.exists(oldSource));
+        assertEquals(legacyCandidate, runtime.get("avatar"));
+        assertEquals("avatar", selection.selectedModelId());
+        assertEquals("texture:legacy", selection.selectedTextureId());
+
+        Object gltfCandidate = new Object();
+        byte[] gltfBytes = "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8);
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", gltfBytes)) {
+            var outcome = ImportCoordinator.importPrepared(prepared,
+                    () -> ImportCoordinator.parsePickedBytes("avatar.gltf", gltfBytes, RawYsmModel::new),
+                    raw -> { events.add("unexpected-legacy-build"); return new Object(); },
+                    result -> { events.add("gltf-build"); return gltfCandidate; },
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            prepared::commit, (built, committed) -> {
+                                events.add("gltf-publish");
+                                runtime.put("avatar", built);
+                            }, released -> events.add("gltf-release")));
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.PUBLISHED, outcome.state());
+        }
+
+        assertEquals(List.of("legacy-build", "legacy-publish", "gltf-build", "gltf-publish"), events);
+        assertEquals(gltfCandidate, runtime.get("avatar"));
+        assertEquals("avatar", selection.selectedModelId());
+        assertEquals("texture:legacy", selection.selectedTextureId());
+        assertTrue(Files.exists(customRoot.resolve("avatar.gltf")));
+        assertFalse(Files.exists(customRoot.resolve("avatar.bbmodel")));
+    }
+
+    @Test
+    void publicationFailureKeepsOldRuntimeSelectionAndReturnsCommittedSourceForRecovery() throws Exception {
+        Path customRoot = tempDir.resolve("publication-recovery");
+        LocalModelImportStore store = new LocalModelImportStore(customRoot);
+        Path oldSource = store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
+        Object oldAssembly = new Object();
+        Map<String, Object> runtime = new HashMap<>();
+        runtime.put("avatar", oldAssembly);
+        ModelSelectionState selection = new ModelSelectionState();
+        selection.remember("avatar", "texture:old", true, false);
+        byte[] bytes = {1};
+
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.bbmodel", bytes)) {
+            var outcome = ImportCoordinator.importPrepared(prepared,
+                    () -> ImportCoordinator.parsePickedBytes("avatar.bbmodel", bytes, RawYsmModel::new),
+                    raw -> new Object(), result -> new Object(),
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            prepared::commit,
+                            (built, committed) -> { throw new IllegalStateException("runtime publication failed"); },
+                            released -> {}));
+
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.SOURCE_COMMITTED_PENDING_PUBLICATION,
+                    outcome.state());
+            assertEquals(customRoot.resolve("avatar.bbmodel"), outcome.committedSource().persistedPath());
+        }
+
+        assertFalse(Files.exists(oldSource));
+        assertTrue(Files.exists(customRoot.resolve("avatar.bbmodel")));
+        assertEquals(oldAssembly, runtime.get("avatar"));
+        assertEquals("avatar", selection.selectedModelId());
+        assertEquals("texture:old", selection.selectedTextureId());
     }
 
     @Test
