@@ -31,9 +31,11 @@ public class ModelAssembly {
     private final ModelDisplayAssets textureRegistry;
 
     private volatile List<AbstractTexture> textures;
+    private volatile List<String> textureNames;
 
     private volatile GltfModel gltfModel;
-    private boolean gltfBackend;
+    private volatile boolean gltfBackend;
+    private volatile ModelPresentationCapabilities presentationCapabilities;
 
     public ModelAssembly(PlayerModelBundle animationBundle, Map<Identifier, ProjectileModelBundle> projectileModels, Map<Identifier, VehicleModelBundle> vehicleModels, ModelResourceBundle expressionCache, ModelMetadata modelData, ModelDisplayAssets textureRegistry, List<AbstractTexture> list) {
         this.animationBundle = animationBundle;
@@ -44,6 +46,8 @@ public class ModelAssembly {
         this.textureRegistry = textureRegistry;
         this.textures = list;
         this.gltfModel = null;
+        this.textureNames = legacyTextureNames(animationBundle);
+        refreshPresentationCapabilities();
     }
 
     /** Creates a runtime assembly for the independent glTF path. */
@@ -55,7 +59,24 @@ public class ModelAssembly {
                 new ModelDisplayAssets(null, false, Map.of(), Map.of()), imageTextures);
         assembly.gltfBackend = true;
         assembly.gltfModel = model;
+        assembly.textureNames = gltfTextureNames(model);
+        assembly.refreshPresentationCapabilities();
         return assembly;
+    }
+
+    private static List<String> legacyTextureNames(PlayerModelBundle bundle) {
+        return bundle == null || bundle.getTextures() == null
+                ? List.of()
+                : List.copyOf(bundle.getTextures().keySet());
+    }
+
+    private static List<String> gltfTextureNames(GltfModel model) {
+        java.util.ArrayList<String> names = new java.util.ArrayList<>();
+        for (int i = 0; i < model.images().size(); i++) {
+            String name = model.images().get(i).name();
+            names.add(name == null || name.isBlank() ? "image" + i : name);
+        }
+        return List.copyOf(names);
     }
 
     public PlayerModelBundle getAnimationBundle() {
@@ -68,18 +89,7 @@ public class ModelAssembly {
 
     /** Returns stable texture labels for both legacy YSM and glTF assemblies. */
     public List<String> getTextureNames() {
-        if (gltfModel != null) {
-            java.util.ArrayList<String> names = new java.util.ArrayList<>();
-            for (int i = 0; i < gltfModel.images().size(); i++) {
-                String name = gltfModel.images().get(i).name();
-                names.add(name == null || name.isBlank() ? "image" + i : name);
-            }
-            return List.copyOf(names);
-        }
-        if (animationBundle == null) {
-            return List.of();
-        }
-        return List.copyOf(animationBundle.getTextures().keySet());
+        return textureNames;
     }
 
     public ModelResourceBundle getExpressionCache() {
@@ -123,12 +133,18 @@ public class ModelAssembly {
 
     /** Returns stable presentation capabilities, including after runtime payload release. */
     public ModelPresentationCapabilities getPresentationCapabilities() {
+        return presentationCapabilities;
+    }
+
+    private void refreshPresentationCapabilities() {
         boolean resident = isRuntimeResident();
         boolean hasLegacyRuntime = resident && !gltfBackend && animationBundle != null;
-        return new ModelPresentationCapabilities(
+        boolean hasTextureSelection = hasLegacyRuntime && !textureNames.isEmpty();
+        presentationCapabilities = new ModelPresentationCapabilities(
                 resident,
                 modelData != null,
-                !getTextureNames().isEmpty(),
+                !textureNames.isEmpty(),
+                hasTextureSelection,
                 hasLegacyRuntime,
                 hasLegacyRuntime,
                 hasLegacyRuntime,
@@ -144,6 +160,7 @@ public class ModelAssembly {
         textures = List.of();
         gltfModel = null;
         textureRegistry.clearTextureReferences();
+        refreshPresentationCapabilities();
     }
 
     // ==================== R10.4 资源统一 ownership ====================
