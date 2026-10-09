@@ -20,6 +20,8 @@ class CiWarningFingerprintGateContractTest {
         assertTrue(ci.contains("compile_task:"), "CI must target the effective JavaCompile task");
         assertTrue(ci.contains("java: '21.0.12'"), "1.21 branches must pin the baseline JDK patch");
         assertTrue(ci.contains("java: '25.0.4'"), "26.x branches must pin the baseline JDK patch");
+        assertTrue(ci.contains("JAVA_TOOL_OPTIONS: '-Duser.language=zh -Duser.country=CN'"),
+                "javac message language must match the diagnostic baseline locale");
         assertTrue(ci.contains("Compile and compare native javac baseline"));
         assertTrue(ci.contains("Compile and compare CurseForge javac baseline"));
         assertTrue(ci.contains("--rerun-tasks --no-build-cache"), "diagnostic sampling must force javac to run");
