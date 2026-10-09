@@ -19,7 +19,6 @@ import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
@@ -239,7 +238,6 @@ public final class ModernHudRenderInstance {
                 GL43.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, BoneSkinShader.ssbo, 0);
                 GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
                 GlStateManager._glUseProgram(0);
-                BufferUploader.invalidate();
                 GlStateManager._glBindVertexArray(0);
                 GL33.glBindSampler(0, 0);
                 GL33.glBindSampler(1, 0);
