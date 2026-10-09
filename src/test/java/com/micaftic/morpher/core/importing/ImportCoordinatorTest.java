@@ -2,6 +2,7 @@ package com.micaftic.morpher.core.importing;
 
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.core.model.selection.ModelSelectionState;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -388,6 +395,94 @@ class ImportCoordinatorTest {
         assertEquals("avatar", selection.selectedModelId());
         assertEquals("texture:old", selection.selectedTextureId());
         assertTrue(Files.exists(customRoot.resolve("avatar.gltf")));
+    }
+
+    @Test
+    void slowerImportCannotOverwriteNewerAssemblyOrClearNextLease() throws Exception {
+        Path customRoot = tempDir.resolve("superseded-import");
+        LocalModelImportStore store = new LocalModelImportStore(customRoot);
+        Path oldSource = store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
+        GltfModel oldModel = assertInstanceOf(ParsedImport.GltfPayload.class,
+                ImportCoordinator.parsePickedBytes("old.gltf",
+                        "{\"asset\":{\"version\":\"2.0\",\"generator\":\"old\"}}".getBytes(StandardCharsets.UTF_8),
+                        RawYsmModel::new).payload()).result().model();
+        ModelAssembly oldAssembly = ModelAssembly.forGltf(oldModel, List.of());
+        AtomicReference<ModelAssembly> published = new AtomicReference<>(oldAssembly);
+        AtomicReference<ModelAssembly> slowCandidate = new AtomicReference<>();
+        ModelSelectionState selection = new ModelSelectionState();
+        selection.remember("avatar", "texture:old", true, false);
+        com.micaftic.morpher.core.model.lifecycle.KeyedRequestLeaseRegistry<String> requests =
+                new com.micaftic.morpher.core.model.lifecycle.KeyedRequestLeaseRegistry<>();
+        var slowLease = requests.begin("avatar");
+        CountDownLatch slowParserStarted = new CountDownLatch(1);
+        CountDownLatch allowSlowParserToFinish = new CountDownLatch(1);
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        byte[] slowBytes = "{\"asset\":{\"version\":\"2.0\",\"generator\":\"slow-A\"}}"
+                .getBytes(StandardCharsets.UTF_8);
+
+        try {
+            Future<com.micaftic.morpher.core.storage.ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult>>
+                    slowImport = worker.submit(() -> {
+                        try (LocalModelImportStore.PreparedImport prepared =
+                                     store.prepare("avatar", "avatar.gltf", slowBytes)) {
+                            return ImportCoordinator.importPrepared(prepared,
+                                    () -> {
+                                        slowParserStarted.countDown();
+                                        assertTrue(allowSlowParserToFinish.await(5, TimeUnit.SECONDS));
+                                        return ImportCoordinator.parsePickedBytes("avatar.gltf", slowBytes, RawYsmModel::new);
+                                    },
+                                    raw -> { throw new AssertionError("glTF import must not use the legacy assembler"); },
+                                    result -> {
+                                        ModelAssembly candidate = ModelAssembly.forGltf(result.model(), List.of());
+                                        slowCandidate.set(candidate);
+                                        return candidate;
+                                    },
+                                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate,
+                                            () -> requests.isCurrent(slowLease), prepared::commit,
+                                            (assembly, committed) -> published.set(assembly),
+                                            ModelAssembly::unloadRuntime));
+                        } finally {
+                            requests.complete(slowLease);
+                        }
+                    });
+
+            assertTrue(slowParserStarted.await(5, TimeUnit.SECONDS));
+            assertTrue(requests.invalidate("avatar"));
+            var fastLease = requests.begin("avatar");
+            assertTrue(requests.isCurrent(fastLease));
+            byte[] fastBytes = "{\"asset\":{\"version\":\"2.0\",\"generator\":\"fast-B\"}}"
+                    .getBytes(StandardCharsets.UTF_8);
+            try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", fastBytes)) {
+                var fastOutcome = ImportCoordinator.importPrepared(prepared,
+                        () -> ImportCoordinator.parsePickedBytes("avatar.gltf", fastBytes, RawYsmModel::new),
+                        raw -> { throw new AssertionError("glTF import must not use the legacy assembler"); },
+                        result -> ModelAssembly.forGltf(result.model(), List.of()),
+                        candidate -> ImportCoordinator.commitBuiltCandidate(candidate,
+                                () -> requests.isCurrent(fastLease), prepared::commit,
+                                (assembly, committed) -> published.set(assembly),
+                                ModelAssembly::unloadRuntime));
+                assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.PUBLISHED, fastOutcome.state());
+            }
+            assertTrue(requests.complete(fastLease));
+
+            var nextLease = requests.begin("avatar");
+            allowSlowParserToFinish.countDown();
+            var slowOutcome = slowImport.get(5, TimeUnit.SECONDS);
+
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT,
+                    slowOutcome.state());
+            assertTrue(requests.isCurrent(nextLease), "the old task's finally block must not clear the next lease");
+            assertEquals("fast-B", published.get().getGltfModel().generator());
+            assertFalse(slowCandidate.get().isRuntimeResident(), "the superseded candidate must be released");
+            assertFalse(Files.exists(oldSource));
+            assertEquals(fastBytes.length, Files.size(customRoot.resolve("avatar.gltf")));
+            assertEquals("avatar", selection.selectedModelId());
+            assertEquals("texture:old", selection.selectedTextureId());
+            assertTrue(requests.complete(nextLease));
+        } finally {
+            allowSlowParserToFinish.countDown();
+            worker.shutdownNow();
+        }
     }
 
     @Test
