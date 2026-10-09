@@ -1,6 +1,7 @@
 package com.micaftic.morpher.resource.gltf;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
@@ -13,12 +14,14 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Base64;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GltfLoaderTest {
     @TempDir
@@ -132,12 +135,49 @@ class GltfLoaderTest {
     }
 
     @Test
-    void rejectsExternalResourcesThatEscapeTheModelDirectory() {
-        String json = """
-                {"asset":{"version":"2.0"},"images":[{"uri":"../outside.png"}]}
-                """;
-        assertThrows(GltfLoader.GltfParseException.class,
-                () -> GltfLoader.load(json.getBytes(StandardCharsets.UTF_8), tempDir, "escape.gltf"));
+    void rejectsExternalResourcesWithEscapingOrNonFileUris() {
+        List<String> unsafeUris = List.of(
+                "../outside.png",
+                "%2e%2e/outside.png",
+                "%2e%2e%2foutside.png",
+                "/outside.png",
+                "C:/outside.png",
+                "//server/share/texture.png",
+                "file:///outside.png",
+                "https://example.invalid/texture.png",
+                "texture.png?variant=1",
+                "texture.png#fragment",
+                "texture%zz.png");
+
+        for (String uri : unsafeUris) {
+            String json = "{\"asset\":{\"version\":\"2.0\"},\"images\":[{\"uri\":\"" + uri + "\"}]}";
+            assertThrows(GltfLoader.GltfParseException.class,
+                    () -> GltfLoader.load(json.getBytes(StandardCharsets.UTF_8), tempDir, "unsafe-uri.gltf"),
+                    () -> "URI must be rejected before file access: " + uri);
+        }
+    }
+
+    @Test
+    void rejectsExternalSymlinkThatEscapesTheAuthorizedModelRoot() throws Exception {
+        Path outsideDirectory = tempDir.resolveSibling(tempDir.getFileName() + "-outside");
+        Files.createDirectories(outsideDirectory);
+        Path outsideImage = Files.write(outsideDirectory.resolve("outside.png"), new byte[]{1, 2, 3});
+        Path link = tempDir.resolve("linked.png");
+        try {
+            try {
+                Files.createSymbolicLink(link, outsideImage);
+            } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+                Assumptions.assumeTrue(false, "symbolic links are unavailable in this test environment: " + unavailable);
+            }
+
+            String json = "{\"asset\":{\"version\":\"2.0\"},\"images\":[{\"uri\":\"linked.png\"}]}";
+            assertThrows(GltfLoader.GltfParseException.class,
+                    () -> GltfLoader.load(json.getBytes(StandardCharsets.UTF_8), tempDir, "symlink.gltf"));
+        } finally {
+            Files.deleteIfExists(link);
+            Files.deleteIfExists(outsideImage);
+            Files.deleteIfExists(outsideDirectory);
+        }
     }
 
     @Test
@@ -148,6 +188,45 @@ class GltfLoaderTest {
                 """;
         assertThrows(GltfLoader.GltfParseException.class,
                 () -> GltfLoader.load(json.getBytes(StandardCharsets.UTF_8), null, "picked.gltf"));
+    }
+
+    @Test
+    void rejectsOversizedDataUriBeforeDecodingItsPayload() {
+        String json = "{\"asset\":{\"version\":\"2.0\"},\"images\":[{\"uri\":\"data:application/octet-stream;base64,AQID\"}]}";
+        GltfLoader.GltfParseException failure = assertThrows(GltfLoader.GltfParseException.class,
+                () -> loadWithLimits(json, 2, 4));
+        assertTrue(failure.getMessage().contains("remaining resource size limit"));
+    }
+
+    @Test
+    void rejectsExternalAggregateBudgetBeforeReadingTheNextResource() throws Exception {
+        Files.write(tempDir.resolve("first.bin"), new byte[]{1, 2});
+        Files.write(tempDir.resolve("second.bin"), new byte[]{3, 4});
+        String json = """
+                {"asset":{"version":"2.0"},"buffers":[
+                  {"byteLength":2,"uri":"first.bin"},{"byteLength":2,"uri":"second.bin"}]}
+                """;
+
+        GltfLoader.GltfParseException failure = assertThrows(GltfLoader.GltfParseException.class,
+                () -> loadWithLimits(json, 3, 8));
+        assertTrue(failure.getMessage().contains("aggregate size limit"));
+    }
+
+    @Test
+    void enforcesResourceCountAcrossDataUris() {
+        String json = """
+                {"asset":{"version":"2.0"},"images":[
+                  {"uri":"data:application/octet-stream;base64,AQ=="},
+                  {"uri":"data:application/octet-stream;base64,Ag=="}]}
+                """;
+        GltfLoader.GltfParseException failure = assertThrows(GltfLoader.GltfParseException.class,
+                () -> loadWithLimits(json, 8, 1));
+        assertTrue(failure.getMessage().contains("too many external/data resources"));
+    }
+
+    private GltfLoadResult loadWithLimits(String json, long maxBytes, int maxResources) throws IOException {
+        return GltfLoader.loadWithManifest(json.getBytes(StandardCharsets.UTF_8), tempDir, "limits.gltf",
+                GltfExtensionRegistry.coreOnly(), new GltfLoader.ResourceLimits(1_000_000, maxBytes, maxResources));
     }
 
     @Test
