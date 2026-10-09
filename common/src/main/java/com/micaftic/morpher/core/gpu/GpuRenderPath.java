@@ -233,7 +233,6 @@ public final class GpuRenderPath {
         stateCache.bindSsbo(0);
         stateCache.useProgram(0);
 
-        com.mojang.blaze3d.vertex.BufferUploader.invalidate();
         GlStateManager._glBindVertexArray(0);
         restoreRenderState();
         GpuDebugLog.glError("restore frame=" + frameId);
