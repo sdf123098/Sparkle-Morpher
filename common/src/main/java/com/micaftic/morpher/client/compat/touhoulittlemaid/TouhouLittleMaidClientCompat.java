@@ -87,6 +87,8 @@ public final class TouhouLittleMaidClientCompat {
         }
         return MaidCapability.get(hit.getEntity()).map(cap -> cap.isModelReady()
                 && cap.getModelAssembly() != null
+                && cap.getModelAssembly().getPresentationCapabilities().playerActionControlsAvailable()
+                && cap.getModelAssembly().getModelData() != null
                 && (!cap.getModelAssembly().getModelData().getModelProperties().getExtraAnimation().isEmpty()
                 || !cap.getModelAssembly().getModelData().getModelProperties().getExtraAnimationClassify().isEmpty()))
                 .orElse(false);
@@ -96,7 +98,8 @@ public final class TouhouLittleMaidClientCompat {
         Minecraft minecraft = Minecraft.getInstance();
         if (!(minecraft.hitResult instanceof EntityHitResult hit)) return;
         MaidCapability.get(hit.getEntity()).ifPresent(cap -> {
-            if (InputUtil.getCurrentScreen() == null && cap.getModelAssembly() != null) {
+            if (InputUtil.getCurrentScreen() == null && cap.getModelAssembly() != null
+                    && cap.getModelAssembly().getPresentationCapabilities().playerActionControlsAvailable()) {
                 InputUtil.setScreen(new UnifiedRouletteScreen(cap.getModelId(), cap.getModelAssembly(), cap));
             } else if (InputUtil.getCurrentScreen() instanceof UnifiedRouletteScreen) {
                 InputUtil.setScreen(null);
