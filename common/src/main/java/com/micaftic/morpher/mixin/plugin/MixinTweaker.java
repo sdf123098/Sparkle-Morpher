@@ -98,7 +98,6 @@ public class MixinTweaker implements IMixinConfigPlugin {
                     "GuiEntityRendererMixin",
                     "InventoryScreenMixin",
                     "EntityRenderDispatcherMixin",
-                    "BufferSourceMixin",
                     "WorldRendererMixin",
                     "MinecraftAccessor" -> true;
             default -> false;

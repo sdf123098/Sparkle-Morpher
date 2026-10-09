@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.ProjectileCapability;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.world.entity.projectile.Projectile;
 
 public class CustomProjectileRenderer {

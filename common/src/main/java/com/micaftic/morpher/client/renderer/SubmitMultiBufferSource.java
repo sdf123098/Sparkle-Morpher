@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.renderer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderType;
 
@@ -18,7 +18,7 @@ import java.util.function.Consumer;
  * has populated the recording consumer, so the complete vertex stream can be
  * replayed into Minecraft's target buffer.
  */
-public final class SubmitMultiBufferSource implements MultiBufferSource {
+public final class SubmitMultiBufferSource implements MultiBufferSource.BufferSource {
     private final SubmitNodeCollector collector;
     private final PoseStack poseStack;
     private final Map<RenderType, RecordingVertexConsumer> buffers = new IdentityHashMap<>();

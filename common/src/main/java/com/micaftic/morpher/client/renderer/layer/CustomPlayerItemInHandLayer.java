@@ -13,10 +13,9 @@ import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
-import com.micaftic.morpher.util.accessors.BufferSourceAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.ItemInHandRenderer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.ItemTags;
@@ -83,9 +82,6 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                     if (!SwordReplacementHelper.shouldSuppressVanillaItem(animatedGeoModel.getGeoModel(), mainHandItem, mainArm)) {
                         renderItem(animatedGeoModel, entity, mainHandItem, getDisplayContext(mainArm), mainArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
                     }
-                    if (useExtraPlayer && !mainHandItem.isEmpty() && (bufferSource instanceof BufferSourceAccessor)) {
-                        ((BufferSourceAccessor) bufferSource).initialize();
-                    }
                     TacCompat.handleItemSound(mainHandItem);
                 }
             }
@@ -97,9 +93,6 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                         if (!SwordReplacementHelper.shouldSuppressVanillaItem(animatedGeoModel.getGeoModel(), offhandItem, offArm)) {
                             renderItem(animatedGeoModel, entity, offhandItem, getDisplayContext(offArm), offArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
                         }
-                    }
-                    if (useExtraPlayer && !offhandItem.isEmpty() && (bufferSource instanceof BufferSourceAccessor)) {
-                        ((BufferSourceAccessor) bufferSource).initialize();
                     }
                 }
             }
