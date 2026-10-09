@@ -345,6 +345,11 @@ public final class ModernPlayerModelScreenController {
         return rows;
     }
 
+    /** One queue snapshot for a complete RESOURCE right-pane render. */
+    public DownloadQueuePanel.View queuePanelView() {
+        return DownloadQueuePanel.snapshot(DownloadQueue.snapshot());
+    }
+
     public Component queueStatus() {
         return DownloadQueue.snapshot().status();
     }

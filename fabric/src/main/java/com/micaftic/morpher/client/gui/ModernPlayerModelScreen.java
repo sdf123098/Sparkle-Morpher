@@ -1967,16 +1967,15 @@ public class ModernPlayerModelScreen extends Screen {
         }
         drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.queue"), x + 8, yy);
         yy += 12;
-        List<ModernPlayerModelScreenController.TaskView> rows = this.controller.queueRows();
+        DownloadQueuePanel.View queueView = this.controller.queuePanelView();
+        List<DownloadQueuePanel.Row> rows = queueView.rows();
         if (rows.isEmpty()) {
             drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.no_downloads"), x + 8, yy);
             yy += 14;
         } else {
-            for (ModernPlayerModelScreenController.TaskView task : rows) {
-                if (yy + 22 > y + h - 30) {
-                    break;
-                }
-                renderTaskRow(g, x + 8, yy, w - 16, task);
+            int visibleRows = queueView.visibleRowCount(yy, y + h - 30, 24);
+            for (int i = 0; i < visibleRows; i++) {
+                renderTaskRow(g, x + 8, yy, w - 16, rows.get(i));
                 yy += 24;
             }
         }
@@ -1984,7 +1983,7 @@ public class ModernPlayerModelScreen extends Screen {
         renderIconButton(g, mouseX, mouseY, x + 32, y + h - 24, IconGlyph.CANCEL, Component.translatable("gui.sparkle_morpher.model_panel.cancel_current"), this.controller::cancelCurrentDownload);
     }
 
-    private void renderTaskRow(GuiGraphicsExtractor g, int x, int y, int w, ModernPlayerModelScreenController.TaskView task) {
+    private void renderTaskRow(GuiGraphicsExtractor g, int x, int y, int w, DownloadQueuePanel.Row task) {
         fill(g, x, y, w, 20, GLASS_DARK);
         drawText(g, Component.literal(trim(task.name(), w - 58)), x + 4, y + 3);
         int barX = x + 4;
