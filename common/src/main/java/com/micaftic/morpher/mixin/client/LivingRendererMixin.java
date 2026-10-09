@@ -5,7 +5,7 @@ import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.geckolib3.extended.LivingEntityRendererAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.entity.EntityRenderer;

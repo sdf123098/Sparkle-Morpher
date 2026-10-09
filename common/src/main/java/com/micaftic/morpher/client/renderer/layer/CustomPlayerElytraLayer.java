@@ -12,7 +12,7 @@ import com.mojang.math.Axis;
 import net.minecraft.client.model.object.equipment.ElytraModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.state.HumanoidRenderState;

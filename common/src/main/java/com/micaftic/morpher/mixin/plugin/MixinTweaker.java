@@ -98,7 +98,7 @@ public class MixinTweaker implements IMixinConfigPlugin {
                     "GuiEntityRendererMixin",
                     "InventoryScreenMixin",
                     "EntityRenderDispatcherMixin",
-                    "BufferSourceMixin",
+                    // BufferSourceMixin was removed because its Minecraft target does not exist on 26.2+.
                     "WorldRendererMixin",
                     "MinecraftAccessor" -> true;
             default -> false;

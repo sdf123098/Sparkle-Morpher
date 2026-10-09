@@ -107,13 +107,7 @@ shadowJar {
     archiveFileName = "${releaseArchiveName}-dev-shadow.jar"
     includeEmptyDirs = false
     eachFile { details ->
-        def path = details.path
-        if (path == 'com/micaftic/morpher/mixin/client/BufferSourceMixin.class') {
-            details.exclude()
-        }
-        if (path.startsWith('net/minecraft/') &&
-                path != 'net/minecraft/client/renderer/MultiBufferSource.class' &&
-                path != 'net/minecraft/client/renderer/MultiBufferSource$BufferSource.class') {
+        if (details.path.startsWith('net/minecraft/')) {
             details.exclude()
         }
     }

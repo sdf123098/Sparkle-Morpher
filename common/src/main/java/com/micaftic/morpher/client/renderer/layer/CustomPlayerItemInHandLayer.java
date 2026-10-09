@@ -13,10 +13,10 @@ import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
-import com.micaftic.morpher.util.accessors.BufferSourceAccessor;
+// Legacy BufferSource flush hooks do not apply to the submit collector path.
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.item.ItemModelResolver;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.ItemTags;
@@ -71,7 +71,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         ItemStack mainHandItem = entity.getMainHandItem();
         if (!offhandItem.isEmpty() || !mainHandItem.isEmpty()) {
             poseStack.pushPose();
-            boolean useExtraPlayer = entityLivingBaseIn.isRenderLayersFirst();
+            // Submit rendering replaced the legacy per-hand BufferSource flush hook.
             HandLocatorProfile handLocatorProfile = entityLivingBaseIn.getModelAssembly().getAnimationBundle().getHandLocatorProfile();
             HumanoidArm mainArm = entity.getMainArm();
             HumanoidArm offArm = mainArm.getOpposite();
@@ -83,9 +83,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                     if (!SwordReplacementHelper.shouldSuppressVanillaItem(animatedGeoModel.getGeoModel(), mainHandItem, mainArm)) {
                         renderItem(animatedGeoModel, entity, mainHandItem, getDisplayContext(mainArm), mainArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
                     }
-                    if (useExtraPlayer && !mainHandItem.isEmpty() && (bufferSource instanceof BufferSourceAccessor)) {
-                        ((BufferSourceAccessor) bufferSource).initialize();
-                    }
+                    // Submit rendering replaced the legacy per-hand BufferSource flush hook.
                     TacCompat.handleItemSound(mainHandItem);
                 }
             }
@@ -98,9 +96,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                             renderItem(animatedGeoModel, entity, offhandItem, getDisplayContext(offArm), offArm, poseStack, bufferSource, packedLightIn, partialTick, handLocatorProfile);
                         }
                     }
-                    if (useExtraPlayer && !offhandItem.isEmpty() && (bufferSource instanceof BufferSourceAccessor)) {
-                        ((BufferSourceAccessor) bufferSource).initialize();
-                    }
+                    // Submit rendering replaced the legacy per-hand BufferSource flush hook.
                 }
             }
             poseStack.popPose();

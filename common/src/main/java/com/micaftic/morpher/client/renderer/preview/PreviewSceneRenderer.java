@@ -5,7 +5,7 @@ import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.world.entity.Entity;

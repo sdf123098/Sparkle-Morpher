@@ -9,7 +9,7 @@ import com.micaftic.morpher.util.CameraUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import com.micaftic.morpher.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.world.entity.player.Player;
 import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
