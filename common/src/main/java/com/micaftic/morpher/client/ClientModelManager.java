@@ -736,7 +736,11 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     public static void importLocalModel(String modelId, String fileName, byte[] data, @Nullable Consumer<Component> callback) {
-        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        final String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        com.micaftic.morpher.core.model.lifecycle.LocalImportCompletion completion =
+                new com.micaftic.morpher.core.model.lifecycle.LocalImportCompletion(callback,
+                (Executor) Minecraft.getInstance(),
+                failure -> YesSteveModel.LOGGER.error("[SM] Local import completion callback failed for {}", modelKey, failure));
         final KeyedRequestLeaseRegistry.Lease<String> importLease;
         final int importGeneration;
         synchronized (MODEL_RUNTIME_STOP_LOCK) {
@@ -783,8 +787,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                                         prepared::commit,
                                         (assembly, committed) -> publishImportedAssembly(modelKey, assembly, committed.persistedPath()),
                                         assembly -> releaseModelAssembly(modelKey, assembly));
-                        if (outcome.state() == ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT) return;
-                        if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
+                        if (outcome.state() == ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT) {
+                            error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
+                                    "Import superseded by a newer request");
+                        } else if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
                             throw outcome.failure();
                         }
                         LocalModelImportStore.CommitResult commit = outcome.committedSource();
@@ -814,18 +820,11 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 if (importLease != null) localImportRequests.complete(importLease);
                 if (preparedAssembly != null) releaseModelAssembly(modelKey, preparedAssembly);
             }
-            if (callback != null) {
-                Component result = error;
-                ((Executor) Minecraft.getInstance()).execute(() -> {
-                    try {
-                        callback.accept(result);
-                    } catch (RuntimeException callbackFailure) {
-                        YesSteveModel.LOGGER.error("[SM] Local import completion callback failed for {}", modelKey, callbackFailure);
-                    }
-                });
-            }
+            completion.complete(error);
         }, () -> {
             if (importLease != null) localImportRequests.complete(importLease);
+            completion.complete(Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
+                    "Import task was cancelled before execution"));
         });
     }
 
