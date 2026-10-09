@@ -98,6 +98,8 @@ jobs:
 
       - name: Compile and compare native javac baseline
         shell: bash
+        env:
+          JAVA_TOOL_OPTIONS: '-Duser.language=zh -Duser.country=CN'
         run: |
           set -o pipefail
           mkdir -p build/ci-diagnostics
@@ -113,6 +115,8 @@ jobs:
 
       - name: Compile and compare CurseForge javac baseline
         shell: bash
+        env:
+          JAVA_TOOL_OPTIONS: '-Duser.language=zh -Duser.country=CN'
         run: |
           set -o pipefail
           mkdir -p build/ci-diagnostics
