@@ -90,11 +90,11 @@ subprojects {
     tasks.withType(JavaCompile).configureEach {
         it.options.release = 21
         it.options.compilerArgs.addAll([
-                '-Xlint:none',
-                '-Xlint:-deprecation',
-                '-Xlint:-removal',
-                '-Xlint:-unchecked',
-                '-nowarn',
+                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
                 '--add-modules', 'jdk.incubator.vector'
         ])
     }
