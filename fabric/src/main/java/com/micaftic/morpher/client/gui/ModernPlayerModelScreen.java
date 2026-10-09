@@ -58,6 +58,7 @@ public class ModernPlayerModelScreen extends Screen {
     private static final java.util.Map<String, ModelPanelState> STATE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
     private static final int STATE_CACHE_LIMIT = 64;
     private final ModelPanelState STATE;
+    private SettingsPanel settingsPanel;
     private final String stateKeyValue;
     private static final Identifier MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
     private static final int BG = 0x90171A1D;
@@ -2001,9 +2002,7 @@ public class ModernPlayerModelScreen extends Screen {
         glassPanel(g, x, y, w, bottom - y);
         renderSettingGroups(g, x + 8, y + 10, w - 16);
         List<SettingRow> rows = settingsRows();
-        SettingsPanelLayout.Window window = SettingsPanelLayout.window(y, bottom, 44, 22,
-                rows.size(), STATE.settingsScroll);
-        STATE.settingsScroll = window.scroll();
+        SettingsPanelLayout.Window window = settingsPanel().layout(y, bottom, 44, 22, rows.size());
         int yy = y + 38;
         for (int i = window.firstRow(); i < window.endRowExclusive(); i++) {
             SettingRow row = rows.get(i);
@@ -2017,10 +2016,8 @@ public class ModernPlayerModelScreen extends Screen {
         int xx = x;
         for (ModelPanelState.SettingGroup group : ModelPanelState.SettingGroup.values()) {
             int width = group == ModelPanelState.SettingGroup.MISC ? x + w - xx : chipW;
-            renderChip(g, xx, y, width, settingGroupLabel(group), STATE.settingGroup == group, () -> {
-                STATE.settingGroup = group;
-                STATE.settingsScroll = 0;
-            });
+            renderChip(g, xx, y, width, settingGroupLabel(group), settingsPanel().selectedGroup() == group,
+                    () -> settingsPanel().selectGroup(group));
             xx += width + 5;
         }
     }
@@ -2964,7 +2961,7 @@ public class ModernPlayerModelScreen extends Screen {
             }
             case RESOURCE -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll + delta);
             case ACCOUNT, INSTANCE -> { }
-            case SETTINGS -> STATE.settingsScroll = Math.max(0, STATE.settingsScroll + delta);
+            case SETTINGS -> settingsPanel().scrollBy(delta);
         }
         return true;
     }
@@ -3586,7 +3583,12 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.gpu_debug_log", GeneralConfig.GPU_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.gpu_debug_verbose_log", GeneralConfig.GPU_DEBUG_VERBOSE_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.show_model_id_first", GeneralConfig.SHOW_MODEL_ID_FIRST));
-        return rows.stream().filter(row -> row.group() == STATE.settingGroup).toList();
+        return rows.stream().filter(row -> row.group() == settingsPanel().selectedGroup()).toList();
+    }
+
+    private SettingsPanel settingsPanel() {
+        if (this.settingsPanel == null) this.settingsPanel = new SettingsPanel(STATE);
+        return this.settingsPanel;
     }
 
     private SettingRow bool(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.BooleanValue value) {
