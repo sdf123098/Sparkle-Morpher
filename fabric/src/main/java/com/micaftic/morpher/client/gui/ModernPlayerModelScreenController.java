@@ -5,6 +5,7 @@ import com.micaftic.morpher.cloud.client.CloudAssetSummary;
 import com.micaftic.morpher.cloud.client.CloudAssetImportName;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import com.micaftic.morpher.core.model.lifecycle.ScreenGenerationGate;
+import com.micaftic.morpher.core.model.lifecycle.ScreenRequestToken;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
 import com.micaftic.morpher.cloud.client.CloudModelSelectionStore;
 import com.micaftic.morpher.capability.PlayerCapability;
@@ -109,7 +110,6 @@ public final class ModernPlayerModelScreenController {
     private final List<ModelRepoEntry> resourceEntries = new ArrayList<>();
     private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
     private final Queue<FilePickerCoordinator.PickedFile> pendingImports = new ArrayDeque<>();
-    private boolean localImportInProgress;
     private final ScreenGenerationGate screenGeneration = new ScreenGenerationGate();
 
     public ModernPlayerModelScreenController(ModelPanelState state, Host host) {
@@ -220,7 +220,7 @@ public final class ModernPlayerModelScreenController {
             }
         }, RESOURCE_EXECUTOR).orTimeout(Math.max(15_000L, config.timeoutMs() * 3L), TimeUnit.MILLISECONDS).whenComplete((result, error) ->
                 ((Executor) Minecraft.getInstance()).execute(() -> {
-                    if (!this.screenGeneration.isCurrent(generation) || requestId != this.state.resourceRequestId) {
+                    if (!new ScreenRequestToken(requestId, generation).isCurrent(this.state.resourceRequestId, this.screenGeneration.capture())) {
                         return;
                     }
                     this.state.resourceLoading = false;
@@ -418,7 +418,7 @@ public final class ModernPlayerModelScreenController {
 
     /** 空闲时推进下一个导入（原 {@code startNextImportIfIdle}）。 */
     public void startNextImportIfIdle() {
-        if (this.localImportInProgress) {
+        if (this.screenGeneration.importInProgress()) {
             return;
         }
         FilePickerCoordinator.PickedFile file = this.pendingImports.poll();
@@ -431,12 +431,12 @@ public final class ModernPlayerModelScreenController {
             this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.error.model_id_from_filename", fileName), ChatFormatting.RED);
             return;
         }
-        this.localImportInProgress = true;
+        if (!this.screenGeneration.beginImport()) return;
         long generation = this.screenGeneration.capture();
+        if (generation < 0L) return;
         this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_importing", modelId), ChatFormatting.YELLOW);
         ClientModelManager.importLocalModel(modelId, fileName, file.data(), error -> {
-            this.localImportInProgress = false;
-            this.screenGeneration.completeIfCurrent(generation, () -> {
+            this.screenGeneration.completeImport(generation, () -> {
                 if (error != null) {
                     this.host.postStatus(error, ChatFormatting.RED);
                     return;
@@ -447,7 +447,7 @@ public final class ModernPlayerModelScreenController {
     }
 
     public boolean localImportInProgress() {
-        return this.localImportInProgress;
+        return this.screenGeneration.importInProgress();
     }
 
     // ---- 上传会话只读视图（Screen 不再直接引用 ModelUploadSession） ----
