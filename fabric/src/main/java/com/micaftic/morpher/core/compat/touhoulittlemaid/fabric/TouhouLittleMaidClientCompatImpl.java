@@ -79,6 +79,8 @@ public final class TouhouLittleMaidClientCompatImpl {
         }
         return MaidCapability.get(hit.getEntity()).map(cap -> cap.isModelReady()
                 && cap.getModelAssembly() != null
+                && cap.getModelAssembly().getPresentationCapabilities().playerActionControlsAvailable()
+                && cap.getModelAssembly().getModelData() != null
                 && (!cap.getModelAssembly().getModelData().getModelProperties().getExtraAnimation().isEmpty()
                 || !cap.getModelAssembly().getModelData().getModelProperties().getExtraAnimationClassify().isEmpty()))
                 .orElse(false);
@@ -89,7 +91,8 @@ public final class TouhouLittleMaidClientCompatImpl {
         if (!(minecraft.hitResult instanceof EntityHitResult hit)) return;
         MaidCapability.get(hit.getEntity()).ifPresent(cap -> {
             // MC 26.2: 当前屏幕状态移到 Minecraft.gui（Gui.screen()）
-            if (minecraft.gui.screen() == null && cap.getModelAssembly() != null) {
+            if (minecraft.gui.screen() == null && cap.getModelAssembly() != null
+                    && cap.getModelAssembly().getPresentationCapabilities().playerActionControlsAvailable()) {
                 InputUtil.setScreen(new UnifiedRouletteScreen(cap.getModelId(), cap.getModelAssembly(), cap));
             } else if (minecraft.gui.screen() instanceof UnifiedRouletteScreen) {
                 InputUtil.setScreen(null);
