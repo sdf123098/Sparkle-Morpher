@@ -33,6 +33,7 @@ public class ModelAssembly {
     private volatile List<AbstractTexture> textures;
 
     private volatile GltfModel gltfModel;
+    private boolean gltfBackend;
 
     public ModelAssembly(PlayerModelBundle animationBundle, Map<ResourceLocation, ProjectileModelBundle> projectileModels, Map<ResourceLocation, VehicleModelBundle> vehicleModels, ModelResourceBundle expressionCache, ModelMetadata modelData, ModelDisplayAssets textureRegistry, List<AbstractTexture> list) {
         this.animationBundle = animationBundle;
@@ -52,6 +53,7 @@ public class ModelAssembly {
                 Map.of(), new Object2ReferenceOpenHashMap<>(), new Object2ReferenceOpenHashMap<>(), Map.of());
         ModelAssembly assembly = new ModelAssembly(null, Map.of(), Map.of(), resources, null,
                 new ModelDisplayAssets(null, false, Map.of(), Map.of()), imageTextures);
+        assembly.gltfBackend = true;
         assembly.gltfModel = model;
         return assembly;
     }
@@ -117,6 +119,21 @@ public class ModelAssembly {
 
     public boolean isRuntimeResident() {
         return (animationBundle != null || gltfModel != null) && expressionCache != null;
+    }
+
+    /** Returns stable presentation capabilities, including after runtime payload release. */
+    public ModelPresentationCapabilities getPresentationCapabilities() {
+        boolean resident = isRuntimeResident();
+        boolean hasLegacyRuntime = resident && !gltfBackend && animationBundle != null;
+        return new ModelPresentationCapabilities(
+                resident,
+                modelData != null,
+                !getTextureNames().isEmpty(),
+                hasLegacyRuntime,
+                hasLegacyRuntime,
+                hasLegacyRuntime,
+                hasLegacyRuntime,
+                hasLegacyRuntime);
     }
 
     public synchronized void unloadRuntime() {
