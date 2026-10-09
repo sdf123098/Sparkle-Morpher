@@ -841,16 +841,22 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                         if (callback != null) callback.accept(supersededModelScanResult());
                         return;
                     }
-                    localModelSourcePaths.clear();
-                    localModelSourcePaths.putAll(customSources);
-                    LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
-                    for (String staleId : diff.staleIds()) cpuReloadRequests.invalidate(staleId);
-                    flushPendingModels();
-                    finalizeLocalModelCatalog(diff);
-                    ClientRenderCompatibilityRegistry.flush();
-                    forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
-                    if (restoreSelection) restorePersistedModelSelection();
-                    if (callback != null) callback.accept(result);
+                    boolean finalized = LOCAL_MODEL_SCAN_REVISION.runIfCurrent(scanRevision, () -> {
+                        localModelSourcePaths.clear();
+                        localModelSourcePaths.putAll(customSources);
+                        LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
+                        for (String staleId : diff.staleIds()) cpuReloadRequests.invalidate(staleId);
+                        flushPendingModels();
+                        finalizeLocalModelCatalog(diff);
+                        ClientRenderCompatibilityRegistry.flush();
+                        forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
+                        if (restoreSelection) restorePersistedModelSelection();
+                        if (callback != null) callback.accept(result);
+                    });
+                    if (!finalized) {
+                        flushPendingModels();
+                        if (callback != null) callback.accept(supersededModelScanResult());
+                    }
                 });
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to reload local model folders", e);
