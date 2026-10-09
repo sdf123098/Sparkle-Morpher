@@ -2,6 +2,20 @@ package com.micaftic.morpher.core.importing;
 
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.client.model.ModelResourceBundle;
+import com.micaftic.morpher.client.model.PlayerModelBundle;
+import com.micaftic.morpher.client.model.ModelActionProfile;
+import com.micaftic.morpher.client.model.ModelSourceFormat;
+import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
+import com.micaftic.morpher.client.animation.condition.ArmorConditions;
+import com.micaftic.morpher.geckolib3.core.controller.controllers.ModelActionProviderRegistry;
+import com.micaftic.morpher.geckolib3.core.controller.controllers.PlayerActionProvider;
+import com.micaftic.morpher.geckolib3.core.builder.Animation;
+import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
+import com.micaftic.morpher.util.data.OrderedStringMap;
+import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.core.model.selection.ModelSelectionState;
 import com.micaftic.morpher.core.storage.LocalModelImportStore;
@@ -26,6 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -218,8 +233,8 @@ class ImportCoordinatorTest {
         Path customRoot = tempDir.resolve("preserve-on-failure");
         LocalModelImportStore store = new LocalModelImportStore(customRoot);
         Path oldSource = store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
-        Object oldAssembly = new Object();
-        Map<String, Object> runtime = new HashMap<>();
+        ModelAssembly oldAssembly = legacyAssembly();
+        Map<String, ModelAssembly> runtime = new HashMap<>();
         runtime.put("avatar", oldAssembly);
         ModelSelectionState selection = new ModelSelectionState();
         selection.remember("avatar", "default", true, false);
@@ -265,7 +280,8 @@ class ImportCoordinatorTest {
         assertEquals("old-source", Files.readString(oldSource));
         assertFalse(Files.exists(customRoot.resolve("avatar.bbmodel")));
         assertFalse(Files.exists(customRoot.resolve("avatar.gltf")));
-        assertEquals(oldAssembly, runtime.get("avatar"));
+        assertSame(oldAssembly, runtime.get("avatar"));
+        assertTrue(oldAssembly.isRuntimeResident());
         assertEquals("avatar", selection.selectedModelId());
         assertEquals("default", selection.selectedTextureId());
         assertFalse(publishCalled.get());
@@ -395,6 +411,80 @@ class ImportCoordinatorTest {
         assertEquals("avatar", selection.selectedModelId());
         assertEquals("texture:old", selection.selectedTextureId());
         assertTrue(Files.exists(customRoot.resolve("avatar.gltf")));
+    }
+
+    @Test
+    void preparedTransactionPublishesRealLegacyAndGltfAssembliesAndPreservesSelection() throws Exception {
+        Path customRoot = tempDir.resolve("both-real-backends");
+        LocalModelImportStore store = new LocalModelImportStore(customRoot);
+        Path oldSource = store.persist("avatar", "avatar.ysm", "old-source".getBytes(StandardCharsets.UTF_8));
+        ModelAssembly original = legacyAssembly();
+        AtomicReference<ModelAssembly> runtime = new AtomicReference<>(original);
+        ModelSelectionState selection = new ModelSelectionState();
+        selection.remember("avatar", "legacy", true, false);
+        List<String> backendCalls = new ArrayList<>();
+
+        byte[] legacyBytes = {1};
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.bbmodel", legacyBytes)) {
+            ParsedImport parsed = ImportCoordinator.parsePickedBytes("avatar.bbmodel", legacyBytes, RawYsmModel::new);
+            var outcome = ImportCoordinator.importPrepared(prepared, () -> parsed,
+                    raw -> { backendCalls.add("legacy"); return legacyAssembly(); },
+                    result -> { backendCalls.add("unexpected-gltf"); throw new AssertionError("legacy payload reached glTF adapter"); },
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            prepared::commit, (built, committed) -> runtime.set(built), ModelAssembly::unloadRuntime));
+
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.PUBLISHED, outcome.state());
+        }
+        ModelAssembly legacy = runtime.get();
+        assertFalse(legacy.isGltf());
+        assertTrue(legacy.isRuntimeResident());
+        assertEquals("avatar", selection.selectedModelId());
+        assertEquals("legacy", selection.selectedTextureId());
+        assertTrue(Files.exists(customRoot.resolve("avatar.bbmodel")));
+        assertFalse(Files.exists(oldSource));
+
+        byte[] gltfBytes = "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.UTF_8);
+        try (LocalModelImportStore.PreparedImport prepared = store.prepare("avatar", "avatar.gltf", gltfBytes)) {
+            ParsedImport parsed = ImportCoordinator.parsePickedBytes("avatar.gltf", gltfBytes, RawYsmModel::new);
+            var outcome = ImportCoordinator.importPrepared(prepared, () -> parsed,
+                    raw -> { backendCalls.add("unexpected-legacy"); throw new AssertionError("glTF payload reached legacy adapter"); },
+                    result -> { backendCalls.add("gltf"); return ModelAssembly.forGltf(result.model(), List.of()); },
+                    candidate -> ImportCoordinator.commitBuiltCandidate(candidate, () -> true,
+                            prepared::commit, (built, committed) -> runtime.set(built), ModelAssembly::unloadRuntime));
+
+            assertEquals(com.micaftic.morpher.core.storage.ImportCommitFlow.State.PUBLISHED, outcome.state());
+        }
+
+        ModelAssembly gltf = runtime.get();
+        assertTrue(gltf.isGltf());
+        assertTrue(gltf.isRuntimeResident());
+        assertEquals(List.of("legacy", "gltf"), backendCalls);
+        assertEquals("avatar", selection.selectedModelId());
+        assertEquals("legacy", selection.selectedTextureId());
+        assertTrue(Files.exists(customRoot.resolve("avatar.gltf")));
+        assertFalse(Files.exists(customRoot.resolve("avatar.bbmodel")));
+    }
+
+    private static ModelAssembly legacyAssembly() {
+        ModelResourceBundle resources = new ModelResourceBundle(
+                Map.of(), new Object2ReferenceOpenHashMap<>(), new Object2ReferenceOpenHashMap<>(), Map.of());
+        PlayerActionProvider previous = ModelActionProviderRegistry.get(ModelActionProfile.VANILLA_HUMANOID);
+        ModelActionProviderRegistry.register(ModelActionProfile.VANILLA_HUMANOID,
+                (modelBundle, resourceBundle) -> entity -> {});
+        PlayerModelBundle bundle;
+        try {
+            bundle = new PlayerModelBundle((GeoModel) null, null,
+                    new Object2ReferenceOpenHashMap<String, Animation>(),
+                    new Object2ReferenceOpenHashMap<String, Animation>(), null, new ArmorConditions(),
+                    new Object2ReferenceOpenHashMap<String, AnimationController>(),
+                    new OrderedStringMap<>(new String[]{"legacy"}, new AbstractTexture[]{null}),
+                    "legacy", null, resources, ModelSourceFormat.BBMODEL, ModelActionProfile.VANILLA_HUMANOID,
+                    null, null);
+        } finally {
+            ModelActionProviderRegistry.register(ModelActionProfile.VANILLA_HUMANOID, previous);
+        }
+        return new ModelAssembly(bundle, Map.of(), Map.of(), resources, null,
+                new ModelDisplayAssets(null, false, Map.of(), Map.of()), List.of());
     }
 
     @Test
