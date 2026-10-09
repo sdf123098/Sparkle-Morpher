@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.importing;
 
 import com.micaftic.morpher.core.storage.ImportCommitFlow;
+import com.micaftic.morpher.core.storage.LocalModelImportStore;
 import com.micaftic.morpher.resource.gltf.GltfLoader;
 import com.micaftic.morpher.resource.gltf.GltfLoadResult;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
@@ -19,6 +20,11 @@ public final class ImportCoordinator {
     @FunctionalInterface
     public interface LegacyParser {
         RawYsmModel parse() throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ImportParser {
+        ParsedImport parse() throws Exception;
     }
 
     public static ParsedImport parsePickedBytes(String fileName, byte[] bytes, LegacyParser legacyParser) throws Exception {
@@ -110,6 +116,35 @@ public final class ImportCoordinator {
             }
         }
         return outcome;
+    }
+
+    /**
+     * Parses and assembles a prepared picked import off the runtime commit lock, then
+     * delegates the lease-guarded commit/publication step to the supplied adapter.
+     * Parse or assembly failure leaves the prepared source uncommitted.
+     */
+    public static <A> ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> importPrepared(
+            LocalModelImportStore.PreparedImport prepared,
+            ImportParser parser,
+            CandidateBuilder<RawYsmModel, A> legacyBuilder,
+            CandidateBuilder<GltfLoadResult, A> gltfBuilder,
+            CandidateTransaction<A, LocalModelImportStore.CommitResult> transaction) {
+        Objects.requireNonNull(prepared, "prepared");
+        Objects.requireNonNull(parser, "parser");
+        Objects.requireNonNull(transaction, "transaction");
+        final A candidate;
+        try {
+            candidate = buildCandidate(parser.parse(), legacyBuilder, gltfBuilder);
+            if (candidate == null) throw new IllegalStateException("Import backend returned no candidate");
+        } catch (Exception failure) {
+            return new ImportCommitFlow.Outcome<>(ImportCommitFlow.State.FAILED_BEFORE_COMMIT, null, failure);
+        }
+        return transaction.commit(candidate);
+    }
+
+    @FunctionalInterface
+    public interface CandidateTransaction<A, S> {
+        ImportCommitFlow.Outcome<S> commit(A candidate);
     }
 
     @FunctionalInterface

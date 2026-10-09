@@ -712,42 +712,40 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         byte[] importData = data;
         submitModelTask(() -> {
             Component error = null;
-            ModelAssembly preparedAssembly = null;
             try {
                 ModelMemoryProfiler.logBytes("local-import-read", modelKey, importData);
                 try (LocalModelImportStore.PreparedImport prepared = LOCAL_IMPORT_STORE.prepare(modelKey, fileName, importData)) {
                     if (prepared == null) throw new IOException("Failed to prepare local import");
-                    com.micaftic.morpher.core.importing.ParsedImport parsedImport =
-                            com.micaftic.morpher.core.importing.ImportCoordinator.parsePickedBytes(
-                                    fileName, importData, () -> parseImportModel(fileName, importData));
-                    preparedAssembly = com.micaftic.morpher.core.importing.ImportCoordinator.buildCandidate(parsedImport,
+                    ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> outcome;
+                    outcome = com.micaftic.morpher.core.importing.ImportCoordinator.importPrepared(
+                            prepared,
+                            () -> com.micaftic.morpher.core.importing.ImportCoordinator.parsePickedBytes(
+                                    fileName, importData, () -> parseImportModel(fileName, importData)),
                             rawModel -> {
                                 ModelMemoryProfiler.log("local-import-parsed", modelKey);
                                 ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
                                 ModelMemoryProfiler.log("local-import-mapped", modelKey);
                                 return ModelAssemblyFactory.buildAssembly(parsedBundle, false, false);
                             },
-                            gltfResult -> buildGltfAssembly(gltfResult.model(), modelKey));
-                    if (preparedAssembly == null) throw new IllegalStateException("Failed to build local model");
-                    synchronized (MODEL_RUNTIME_STOP_LOCK) {
-                        if (importGeneration != MODEL_TASK_GENERATION.get()) {
-                            throw new CancellationException("Client model runtime is stopping");
-                        }
-                        ModelAssembly candidate = preparedAssembly;
-                        preparedAssembly = null;
-                        ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> outcome =
-                                com.micaftic.morpher.core.importing.ImportCoordinator.commitBuiltCandidate(
-                                        candidate,
-                                        () -> importLease == null || localImportRequests.isCurrent(importLease),
-                                        prepared::commit,
-                                        (assembly, committed) -> publishImportedAssembly(modelKey, assembly, committed.persistedPath()),
-                                        assembly -> releaseModelAssembly(modelKey, assembly));
-                        if (outcome.state() == ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT) {
-                            error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
-                                    "Import superseded by a newer request");
-                        } else if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
-                            throw outcome.failure();
-                        }
+                            gltfResult -> buildGltfAssembly(gltfResult.model(), modelKey),
+                            candidate -> {
+                                synchronized (MODEL_RUNTIME_STOP_LOCK) {
+                                    return com.micaftic.morpher.core.importing.ImportCoordinator.commitBuiltCandidate(
+                                            candidate,
+                                            () -> importGeneration == MODEL_TASK_GENERATION.get()
+                                                    && (importLease == null || localImportRequests.isCurrent(importLease)),
+                                            prepared::commit,
+                                            (assembly, committed) -> publishImportedAssembly(
+                                                    modelKey, assembly, committed.persistedPath()),
+                                            assembly -> releaseModelAssembly(modelKey, assembly));
+                                }
+                            });
+                    if (outcome.state() == ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT) {
+                        error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
+                                "Import superseded by a newer request");
+                    } else if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
+                        throw outcome.failure();
+                    } else {
                         LocalModelImportStore.CommitResult commit = outcome.committedSource();
                         if (!commit.cleanupPending().isEmpty()) {
                             YesSteveModel.LOGGER.warn("[SM] Import committed with {} stale sibling file(s) awaiting cleanup: {}",
@@ -761,8 +759,6 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                             } catch (RuntimeException recoveryFailure) {
                                 YesSteveModel.LOGGER.error("[SM] Failed to schedule recovery for committed import {}", modelKey, recoveryFailure);
                             }
-                        } else {
-                            preparedAssembly = null;
                         }
                     }
                 }
@@ -773,7 +769,6 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             } finally {
                 if (importLease != null) localImportRequests.complete(importLease);
-                if (preparedAssembly != null) releaseModelAssembly(modelKey, preparedAssembly);
             }
             completion.complete(error);
         }, () -> {
