@@ -52,7 +52,7 @@ public final class ClientTickEvent {
         DownloadQueue.tick();
         ClientModelManager.flushPendingModels();
 
-        ClientModelManager.trimUnusedGpuCaches();
+        runScheduledModelCacheTrim(tickCount, ClientModelManager::trimUnusedGpuCaches);
         if (tickCount % OBJECT_POOL_CLEANUP_INTERVAL_TICKS == 0) {
             ObjectPool.cleanup();
         }
@@ -73,5 +73,9 @@ public final class ClientTickEvent {
 
     public static int getRefreshRate() {
         return refreshRate;
+    }
+
+    static void runScheduledModelCacheTrim(int tick, Runnable trim) {
+        if ((tick & 63) == 0) trim.run();
     }
 }
