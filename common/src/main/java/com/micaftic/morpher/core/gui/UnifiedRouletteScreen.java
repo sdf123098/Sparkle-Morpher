@@ -117,10 +117,21 @@ public class UnifiedRouletteScreen extends Screen {
             customClassify = customClassifyMap;
         }
 
+        var modelData = modelAssembly == null ? null : modelAssembly.getModelData();
+        var modelProperties = modelData == null ? null : modelData.getModelProperties();
+        if (modelProperties == null || !modelAssembly.getPresentationCapabilities().playerActionControlsAvailable()) {
+            navigationStack.clear();
+            navigationStack.add(MutablePair.of(StringPool.EMPTY, 0));
+            this.currentNavEntry = navigationStack.peekLast();
+            this.textProperties = Map.of();
+            this.renderGroups = Map.of();
+            this.currentProperties = new OrderedStringMap<>(new String[0], new String[0]);
+            return;
+        }
         this.textProperties = customClassify != null
                 ? customClassify
-                : modelAssembly.getModelData().getModelProperties().getExtraAnimationClassify();
-        this.renderGroups = modelAssembly.getModelData().getModelProperties().getExtraAnimationButtons();
+                : modelProperties.getExtraAnimationClassify();
+        this.renderGroups = modelProperties.getExtraAnimationButtons();
         if (navigationStack.isEmpty()) navigationStack.add(MutablePair.of(StringPool.EMPTY, 0));
         this.currentNavEntry = navigationStack.peekLast();
         if (this.textProperties.containsKey(this.currentNavEntry.getLeft())) {
@@ -128,7 +139,7 @@ public class UnifiedRouletteScreen extends Screen {
         } else {
             this.currentProperties = customRoot != null
                     ? customRoot
-                    : modelAssembly.getModelData().getModelProperties().getExtraAnimation();
+                    : modelProperties.getExtraAnimation();
             navigationStack.clear();
             navigationStack.add(MutablePair.of(StringPool.EMPTY, this.currentNavEntry.getRight()));
             this.currentNavEntry = navigationStack.peekLast();

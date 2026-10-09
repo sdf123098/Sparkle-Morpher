@@ -80,7 +80,9 @@ public final class AnimationRouletteKey {
         PlayerCapability.get(mc.player).ifPresent(cap -> {
             String modelId = cap.getModelId();
             ModelAssembly modelAssembly = cap.getModelAssembly();
-            if (modelAssembly == null || modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
+            if (modelAssembly == null || !modelAssembly.getPresentationCapabilities().playerActionControlsAvailable()
+                    || modelAssembly.getModelData() == null
+                    || modelAssembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
                 return;
             }
             if (mc.screen == null) {
