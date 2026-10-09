@@ -1,20 +1,36 @@
 package com.micaftic.morpher.core.model.lifecycle;
 
-import java.util.concurrent.atomic.AtomicLong;
-
 /** Monotonic revision gate for asynchronous local-model directory scans. */
 public final class ModelScanRevision {
-    private final AtomicLong current = new AtomicLong();
+    private long current;
 
     public long begin() {
-        return current.incrementAndGet();
+        synchronized (this) {
+            return ++current;
+        }
     }
 
     public long invalidate() {
-        return current.incrementAndGet();
+        synchronized (this) {
+            return ++current;
+        }
     }
 
     public boolean isCurrent(long revision) {
-        return current.get() == revision;
+        synchronized (this) {
+            return current == revision;
+        }
+    }
+
+    /**
+     * Applies a scan candidate atomically with respect to beginning or invalidating scans.
+     * A stale worker can never pass a check and then overwrite a newer scan's catalog.
+     */
+    public boolean runIfCurrent(long revision, Runnable apply) {
+        synchronized (this) {
+            if (current != revision) return false;
+            apply.run();
+            return true;
+        }
     }
 }
