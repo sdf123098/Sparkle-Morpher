@@ -174,17 +174,17 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static IResourceLocatable defaultTexture;
     private static volatile boolean defaultModelLoadAttempted;
 
-    static volatile Map<String, ModelAssembly> modelAssemblyMap = Object2ReferenceMaps.emptyMap();
+    private static final ClientModelResidency RESIDENCY = new ClientModelResidency();
     private static volatile Map<String, ModelPackData> modelPackMap = new Object2ReferenceOpenHashMap<>();
-    private static final ConcurrentHashMap<String, Long> modelLastUsedAt = new ConcurrentHashMap<>();
-    private static final GpuCacheTrimCoordinator<ModelAssembly> gpuCacheTrimCoordinator = new GpuCacheTrimCoordinator<>();
+
+
     static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
-    private static final KeyedRequestLeaseRegistry<String> cpuReloadRequests = new KeyedRequestLeaseRegistry<>();
+
     private static final KeyedRequestLeaseRegistry<String> localImportRequests = new KeyedRequestLeaseRegistry<>();
     private static final ConcurrentHashMap<String, LocalModelCatalog.Entry> lazyModelSources = new ConcurrentHashMap<>();
-    private static final Set<ModelAssembly> deferredAssemblyReleases = ConcurrentHashMap.newKeySet();
-    private static volatile Boolean lastLazyModelLoading;
-    private static volatile long lastModelTrimMillis;
+
+
+
 
     // ---- 模型处理失败日志去重 ----
     // 同一模型短时间反复失败（如损坏模型被反复重载）时只打印首条完整堆栈，
@@ -301,7 +301,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
             return;
         }
         try {
-            if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
+            if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
 //            if (true) return;
             // IR
 
@@ -329,7 +329,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
                 ModelMemoryProfiler.log("client-map-start", modelId);
                 ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
                 ModelMemoryProfiler.log("client-map-finished", modelId);
-                if (requestLease == null || cpuReloadRequests.isCurrent(requestLease)) {
+                if (requestLease == null || RESIDENCY.cpuReloads().isCurrent(requestLease)) {
                     onModelDataReceived(parsedBundle, modelId, false, isAuth, requestLease);
                 }
             }
@@ -353,7 +353,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
 
 
     public static Map<String, ModelAssembly> getModelAssemblyMap() {
-        return modelAssemblyMap;
+        return RESIDENCY.assemblies();
     }
 
     public static Map<String, ModelPackData> getModelPackMap() {
@@ -362,7 +362,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
 
     public static Optional<ModelAssembly> getModelContext(String str) {
         String modelKey = LocalModelCatalog.canonicalKey(str);
-        ModelAssembly assembly = modelAssemblyMap.get(modelKey);
+        ModelAssembly assembly = RESIDENCY.assemblies().get(modelKey);
         if (assembly instanceof LazyModelAssembly) {
             scheduleCachedModelReload(modelKey);
             return Optional.empty();
@@ -383,10 +383,10 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
         if (modelKey == null) {
             return false;
         }
-        if (cpuReloadRequests.isInFlight(modelKey)) {
+        if (RESIDENCY.cpuReloads().isInFlight(modelKey)) {
             return true;
         }
-        ModelAssembly assembly = modelAssemblyMap.get(modelKey);
+        ModelAssembly assembly = RESIDENCY.assemblies().get(modelKey);
         return lazyModelSources.containsKey(modelKey)
                 && (assembly == null || assembly instanceof LazyModelAssembly || !assembly.getPresentationCapabilities().runtimeResident());
     }
@@ -394,21 +394,21 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static void scheduleCachedModelReload(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey == null) return;
-        KeyedRequestLeaseRegistry.Lease<String> requestLease = cpuReloadRequests.begin(modelKey);
+        KeyedRequestLeaseRegistry.Lease<String> requestLease = RESIDENCY.cpuReloads().begin(modelKey);
         if (requestLease == null) return;
         LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
         if (source == null) {
-            cpuReloadRequests.complete(requestLease);
+            RESIDENCY.cpuReloads().complete(requestLease);
             return;
         }
         submitModelTask(() -> {
             try {
-                if (!cpuReloadRequests.isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
+                if (!RESIDENCY.cpuReloads().isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
                 if (source.remote) {
                     if (source.cacheKey == null) return;
                     byte[] fileBytes = Files.readAllBytes(source.path);
                     byte[] decompressed = YsmCrypt.readInPlace(fileBytes, source.cacheKey);
-                    if (!cpuReloadRequests.isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
+                    if (!RESIDENCY.cpuReloads().isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
                     parseAndLoadModel(decompressed, modelKey, source.auth, requestLease);
                 } else {
                     loadLocalModelSource(modelKey, source, -1L, requestLease);
@@ -427,7 +427,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
             try {
                 flushPendingModels();
             } finally {
-                cpuReloadRequests.complete(requestLease);
+                RESIDENCY.cpuReloads().complete(requestLease);
             }
         };
         if (RenderSystem.isOnRenderThread()) settle.run();
@@ -435,7 +435,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     }
 
     public static Set<String> getAvailableModelIds() {
-        LinkedHashSet<String> ids = new LinkedHashSet<>(modelAssemblyMap.keySet());
+        LinkedHashSet<String> ids = new LinkedHashSet<>(RESIDENCY.assemblies().keySet());
         ids.addAll(lazyModelSources.keySet());
         return Collections.unmodifiableSet(ids);
     }
@@ -465,7 +465,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     static void registerRemoteLazySource(String modelId, Path path, byte[] key, boolean isAuth) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey == null || path == null || key == null) return;
-        cpuReloadRequests.invalidate(modelKey);
+        RESIDENCY.cpuReloads().invalidate(modelKey);
         // 服务器已公布同名模型，本次会话中它不再是“仅本地”模型。
         localOnlyModelIds.remove(modelKey);
         localModelSourcePaths.remove(modelKey);
@@ -645,7 +645,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         localOnlyModelIds.remove(modelKey);
         localModelSourcePaths.remove(modelKey);
-        cpuReloadRequests.invalidate(modelKey);
+        RESIDENCY.cpuReloads().invalidate(modelKey);
     }
 
 
@@ -655,28 +655,28 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             return;
         }
         ((Executor) Minecraft.getInstance()).execute(() -> {
-            Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+            Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(RESIDENCY.assemblies());
             ArrayList<ModelAssembly> removed = new ArrayList<>();
             for (String modelId : modelIds) {
                 String modelKey = LocalModelCatalog.canonicalKey(modelId);
                 localOnlyModelIds.remove(modelKey);
                 localModelSourcePaths.remove(modelKey);
                 lazyModelSources.computeIfPresent(modelKey, (key, source) -> source.remote ? source : null);
-                cpuReloadRequests.invalidate(modelKey);
+                RESIDENCY.cpuReloads().invalidate(modelKey);
                 if (sameRuntimeModelId(modelId, MODEL_SELECTION.localOnlyModelId())) {
                     MODEL_SELECTION.clearLocalOnly();
                 }
                 if (sameRuntimeModelId(modelId, MODEL_SELECTION.selectedModelId())) {
                     MODEL_SELECTION.clear();
                 }
-                modelLastUsedAt.remove(modelKey);
-                gpuCacheTrimCoordinator.clear(modelKey);
+                RESIDENCY.lastUsedAt().remove(modelKey);
+                RESIDENCY.gpuTrim().clear(modelKey);
                 ModelAssembly assembly = map.remove(modelKey);
                 if (assembly != null) {
                     removed.add(assembly);
                 }
             }
-            modelAssemblyMap = map;
+            RESIDENCY.publishAssemblies(map);
             for (ModelAssembly assembly : removed) {
                 releaseModelAssembly(assembly);
             }
@@ -699,7 +699,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             if (modelKey == null) {
                 importLease = null;
             } else {
-                cpuReloadRequests.invalidate(modelKey);
+                RESIDENCY.cpuReloads().invalidate(modelKey);
                 localImportRequests.invalidate(modelKey);
                 importLease = localImportRequests.begin(modelKey);
             }
@@ -804,7 +804,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     for (Map.Entry<String, LocalModelCatalog.Entry> entry : catalog.entrySet()) {
                         if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) break;
                         if (!isScanSourceCurrent(scanRevision, entry.getValue())) continue;
-                        ModelAssembly current = modelAssemblyMap.get(entry.getKey());
+                        ModelAssembly current = RESIDENCY.assemblies().get(entry.getKey());
                         if (staleIds.contains(entry.getKey()) || current == null || !current.getPresentationCapabilities().runtimeResident()) {
                             try {
                                 loadLocalModelSource(entry.getKey(), entry.getValue(), scanRevision);
@@ -839,11 +839,11 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                         localModelSourcePaths.clear();
                         localModelSourcePaths.putAll(customSources);
                         LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
-                        for (String staleId : diff.staleIds()) cpuReloadRequests.invalidate(staleId);
+                        for (String staleId : diff.staleIds()) RESIDENCY.cpuReloads().invalidate(staleId);
                         flushPendingModels();
                         finalizeLocalModelCatalog(diff);
                         ClientRenderCompatibilityRegistry.flush();
-                        forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(modelAssemblyMap));
+                        forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(RESIDENCY.assemblies()));
                         if (restoreSelection) restorePersistedModelSelection();
                         if (callback != null) callback.accept(result);
                     });
@@ -892,7 +892,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             return model;
         }
 
-        Map<String, ModelAssembly> reg = modelAssemblyMap;
+        Map<String, ModelAssembly> reg = RESIDENCY.assemblies();
         if (reg != null && !reg.isEmpty()) {
             model = reg.get("default");
             if (model == null) {
@@ -939,7 +939,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         reloadLocalModels(error -> {
             restorePersistedModelSelection();
             forEachGuiWidget(guiWidget -> {
-                guiWidget.onModelsLoaded(modelAssemblyMap);
+                guiWidget.onModelsLoaded(RESIDENCY.assemblies());
                 guiWidget.onLocalModelsReloadComplete();
             });
         });
@@ -974,7 +974,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     private static void onModelDataReceived(@Nullable ClientModelInfo parsedBundle, String modelId,
                                             boolean isPrimary, boolean isAuth,
                                             @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
-        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
         if (isPrimary) {
             pendingModelCallback = () -> {
                 processModelData(parsedBundle, modelId, true, false);
@@ -1033,7 +1033,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                                            long scanRevision, @Nullable LocalModelCatalog.Entry sourceEntry,
                                            @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
         if (scanRevision >= 0L && !LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return;
-        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
         com.micaftic.morpher.core.importing.ParsedImport parsedImport =
                 com.micaftic.morpher.core.importing.ImportCoordinator.parseLocalGltf(source);
         com.micaftic.morpher.resource.gltf.GltfLoadResult parsed =
@@ -1046,7 +1046,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             releaseModelAssembly(modelId, runtimeModel);
             return;
         }
-        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) {
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) {
             releaseModelAssembly(modelId, runtimeModel);
             return;
         }
@@ -1329,7 +1329,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     private static void finalizeLocalModelCatalog(LocalModelCatalog.Diff diff) {
-        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(RESIDENCY.assemblies());
         ArrayList<Pair<String, ModelAssembly>> removedAssemblies = new ArrayList<>();
         for (String staleId : diff.staleIds()) {
             if (!diff.isRemoved(staleId)) {
@@ -1343,13 +1343,13 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     defaultModelLoadAttempted = false;
                 }
             }
-            modelLastUsedAt.remove(staleId);
-            gpuCacheTrimCoordinator.clear(staleId);
+            RESIDENCY.lastUsedAt().remove(staleId);
+            RESIDENCY.gpuTrim().clear(staleId);
         }
         if (removedAssemblies.isEmpty()) {
             return;
         }
-        modelAssemblyMap = map;
+        RESIDENCY.publishAssemblies(map);
         for (Pair<String, ModelAssembly> pair : removedAssemblies) {
             releaseModelAssembly(pair.getLeft(), pair.getRight());
         }
@@ -1367,7 +1367,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                                              @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
         if (source.remote) return;
         if (scanRevision >= 0L && !isScanSourceCurrent(scanRevision, source)) return;
-        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
         if (!Files.isDirectory(source.path) && isGltfFileName(source.path.getFileName().toString())) {
             loadLocalGltfModel(modelId, source.path, source.auth, scanRevision, source, requestLease);
             return;
@@ -1385,7 +1385,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             rawModel = parseImportModel(source.path.getFileName().toString(), data);
         }
         if (scanRevision >= 0L && !isScanSourceCurrent(scanRevision, source)) return;
-        if (requestLease != null && !cpuReloadRequests.isCurrent(requestLease)) return;
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
         loadLocalModel(modelId, rawModel, source.auth, scanRevision, source, requestLease);
     }
 
@@ -1395,7 +1395,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         modelId = LocalModelCatalog.canonicalKey(modelId);
         if (modelId == null || modelId.isBlank()
                 || (scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source)))
-                || (requestLease != null && !cpuReloadRequests.isCurrent(requestLease))) {
+                || (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease))) {
             return;
         }
         ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
@@ -1414,7 +1414,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
     private static boolean containsRuntimeModel(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
-        return modelKey != null && (modelAssemblyMap.containsKey(modelKey) || lazyModelSources.containsKey(modelKey));
+        return modelKey != null && (RESIDENCY.assemblies().containsKey(modelKey) || lazyModelSources.containsKey(modelKey));
     }
 
     private static boolean sameRuntimeModelId(String first, String second) {
@@ -1474,7 +1474,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 ModelMemoryProfiler.log("assembly-build-start", modelId);
                 ModelAssembly runtimeModel = ModelAssemblyFactory.buildAssembly(parsedBundle, isPrimary, isAuth);
                 if ((scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source)))
-                        || (requestLease != null && !cpuReloadRequests.isCurrent(requestLease))) {
+                        || (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease))) {
                     releaseModelAssembly(modelId, runtimeModel);
                     return false;
                 }
@@ -1511,14 +1511,14 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         if (pendingModelQueue.isEmpty())
             return;
 
-        Object2ReferenceOpenHashMap<String, ModelAssembly> object2ReferenceOpenHashMap = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+        Object2ReferenceOpenHashMap<String, ModelAssembly> object2ReferenceOpenHashMap = new Object2ReferenceOpenHashMap<>(RESIDENCY.assemblies());
         while (true) {
             PendingModelPublication pending = pendingModelQueue.poll();
             if (pending != null) {
                 String modelKey = LocalModelCatalog.canonicalKey(pending.modelId());
                 if ((pending.scanRevision() >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(pending.scanRevision())
                         || !isScanSourceCurrent(pending.scanRevision(), pending.source())))
-                        || (pending.requestLease() != null && !cpuReloadRequests.isCurrent(pending.requestLease()))) {
+                        || (pending.requestLease() != null && !RESIDENCY.cpuReloads().isCurrent(pending.requestLease()))) {
                     releaseModelAssembly(modelKey, pending.assembly());
                     continue;
                 }
@@ -1534,7 +1534,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     }
                 }
                 touchModel(modelKey);
-                gpuCacheTrimCoordinator.clear(modelKey);
+                RESIDENCY.gpuTrim().clear(modelKey);
                 if (previous == localModelContext) {
                     localModelContext = pending.assembly();
                 }
@@ -1542,7 +1542,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     releaseModelAssembly(modelKey, previous);
                 }
            } else {
-               modelAssemblyMap = object2ReferenceOpenHashMap;
+               RESIDENCY.publishAssemblies(object2ReferenceOpenHashMap);
                 trimUnusedCpuModels();
                forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(object2ReferenceOpenHashMap));
                return;
@@ -1555,20 +1555,20 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         synchronized (MODEL_RUNTIME_STOP_LOCK) {
             MODEL_TASK_GENERATION.incrementAndGet();
             LOCAL_MODEL_SCAN_REVISION.invalidate();
-            cpuReloadRequests.clearAll();
+            RESIDENCY.cpuReloads().clearAll();
             localImportRequests.clearAll();
-            gpuCacheTrimCoordinator.clearAll();
+            RESIDENCY.gpuTrim().clearAll();
 
             Set<ModelAssembly> assemblies = Collections.newSetFromMap(new IdentityHashMap<>());
             PendingModelPublication pending;
             while ((pending = pendingModelQueue.poll()) != null) assemblies.add(pending.assembly());
-            assemblies.addAll(modelAssemblyMap.values());
-            assemblies.addAll(deferredAssemblyReleases);
-            deferredAssemblyReleases.clear();
-            modelAssemblyMap = Object2ReferenceMaps.emptyMap();
+            assemblies.addAll(RESIDENCY.assemblies().values());
+            assemblies.addAll(RESIDENCY.deferredReleases());
+            RESIDENCY.deferredReleases().clear();
+            RESIDENCY.publishAssemblies(Object2ReferenceMaps.emptyMap());
             localModelContext = null;
             pendingModelCallback = null;
-            modelLastUsedAt.clear();
+            RESIDENCY.lastUsedAt().clear();
             localOnlyModelIds.clear();
             localModelSourcePaths.clear();
             lazyModelSources.clear();
@@ -1590,10 +1590,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         }
         synchronized (assembly) {
         if (EntityRenderCache.isModelAssemblyInUse(assembly)) {
-            deferredAssemblyReleases.add(assembly);
+            RESIDENCY.deferredReleases().add(assembly);
             return;
         }
-        deferredAssemblyReleases.remove(assembly);
+        RESIDENCY.deferredReleases().remove(assembly);
         ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
         // R10.4：资源释放收拢到装配自身（纹理 + audio + GPU/native + runtime），
         // GC Cleaner 仅作兜底，正常路径走确定性 close()。
@@ -1608,17 +1608,14 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         // R10.2：孤儿 GPU mesh 兜底回收（owner 弱引用失效/异常替换路径残留），渲染线程执行。
         GpuRenderPath.sweepOrphanedMeshes("periodic trim");
         long checkNow = System.currentTimeMillis();
-        if (checkNow - lastModelTrimMillis < 1_000L) {
-            return;
-        }
-        lastModelTrimMillis = checkNow;
+        if (!RESIDENCY.shouldTrimAt(checkNow)) return;
         trimUnusedCpuModels();
         int maxCachedGpuModels = ConfigPolicies.memory().maxCachedGpuModels();
         if (maxCachedGpuModels <= 0) {
            return;
        }
        Minecraft minecraft = Minecraft.getInstance();
-        long residentGpuModels = modelAssemblyMap.values().stream()
+        long residentGpuModels = RESIDENCY.assemblies().values().stream()
                 .filter(Objects::nonNull)
                 .filter(assembly -> assembly.getPresentationCapabilities().gpuTrimAvailable())
                 .count();
@@ -1628,10 +1625,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         long now = System.currentTimeMillis();
         long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
-       modelAssemblyMap.entrySet().stream()
+       RESIDENCY.assemblies().entrySet().stream()
                 .filter(entry -> entry.getValue() != null && entry.getValue().getPresentationCapabilities().runtimeResident())
                .filter(entry -> canTrimGpuCache(entry.getKey(), entry.getValue(), protectedModels, now, ttlMillis))
-               .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
+               .sorted(Comparator.comparingLong(entry -> RESIDENCY.lastUsedAt().getOrDefault(entry.getKey(), 0L)))
                 .limit(Math.max(1L, residentGpuModels - maxCachedGpuModels))
                .forEach(entry -> trimGpuCache(entry.getKey(), entry.getValue()));
     }
@@ -1639,17 +1636,17 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     private static void trimUnusedCpuModels() {
         if (!isLazyModelLoading()) return;
         Minecraft minecraft = Minecraft.getInstance();
-        if (modelAssemblyMap.isEmpty()) return;
+        if (RESIDENCY.assemblies().isEmpty()) return;
         long now = System.currentTimeMillis();
         long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
-        List<Map.Entry<String, ModelAssembly>> residents = modelAssemblyMap.entrySet().stream()
+        List<Map.Entry<String, ModelAssembly>> residents = RESIDENCY.assemblies().entrySet().stream()
                 .filter(entry -> entry.getValue() != null && entry.getValue().getPresentationCapabilities().runtimeResident())
                 .filter(entry -> !"default".equals(entry.getKey()) && lazyModelSources.containsKey(entry.getKey()))
                 .toList();
         long idleCount = residents.stream()
                 .filter(entry -> !protectedModels.contains(entry.getKey()))
-                .filter(entry -> now - modelLastUsedAt.getOrDefault(entry.getKey(), now) >= ttlMillis)
+                .filter(entry -> now - RESIDENCY.lastUsedAt().getOrDefault(entry.getKey(), now) >= ttlMillis)
                 .count();
         long overLimit = Math.max(0, residents.size() - ConfigPolicies.memory().maxResidentCpuModels());
         long trimCount = Math.max(idleCount, overLimit);
@@ -1657,15 +1654,15 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         List<Map.Entry<String, ModelAssembly>> victims = residents.stream()
                 .filter(entry -> !protectedModels.contains(entry.getKey()))
                 .filter(entry -> {
-                    long idleMillis = now - modelLastUsedAt.getOrDefault(entry.getKey(), now);
+                    long idleMillis = now - RESIDENCY.lastUsedAt().getOrDefault(entry.getKey(), now);
                     return idleMillis >= ttlMillis || (overLimit > 0 && idleMillis >= 1_000L);
                 })
-                .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
+                .sorted(Comparator.comparingLong(entry -> RESIDENCY.lastUsedAt().getOrDefault(entry.getKey(), 0L)))
                 .limit(trimCount)
                 .toList();
         if (victims.isEmpty()) return;
 
-        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(modelAssemblyMap);
+        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(RESIDENCY.assemblies());
         ArrayList<Pair<String, ModelAssembly>> released = new ArrayList<>();
         for (Map.Entry<String, ModelAssembly> entry : victims) {
             LocalModelCatalog.Entry source = lazyModelSources.get(entry.getKey());
@@ -1677,11 +1674,11 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 source.displayName = name;
             }
             map.put(entry.getKey(), new LazyModelAssembly(entry.getKey(), source));
-            gpuCacheTrimCoordinator.clear(entry.getKey());
+            RESIDENCY.gpuTrim().clear(entry.getKey());
             released.add(Pair.of(entry.getKey(), entry.getValue()));
         }
         if (released.isEmpty()) return;
-        modelAssemblyMap = map;
+        RESIDENCY.publishAssemblies(map);
         forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(map));
         released.forEach(pair -> releaseModelAssembly(pair.getLeft(), pair.getRight()));
     }
@@ -1696,7 +1693,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         if (EntityRenderCache.isModelAssemblyInUse(assembly)) return;
         // R10.4：完整确定性释放收拢到装配自身（保留装配外壳供懒加载重建）。
         assembly.close();
-        gpuCacheTrimCoordinator.clear(modelId);
+        RESIDENCY.gpuTrim().clear(modelId);
         ModelMemoryProfiler.log("cpu-model-unloaded", modelId);
         }
     }
@@ -1706,10 +1703,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         if (modelId == null || assembly == null || !assembly.getPresentationCapabilities().gpuTrimAvailable()
                 || "default".equals(modelId) || protectedModels.contains(modelId)
                 || EntityRenderCache.isModelAssemblyInUse(assembly)
-                || gpuCacheTrimCoordinator.isTrimmed(modelId, assembly)) {
+                || RESIDENCY.gpuTrim().isTrimmed(modelId, assembly)) {
             return false;
         }
-        long lastUsed = modelLastUsedAt.getOrDefault(modelId, 0L);
+        long lastUsed = RESIDENCY.lastUsedAt().getOrDefault(modelId, 0L);
         return lastUsed > 0L && now - lastUsed >= ttlMillis;
     }
 
@@ -1717,7 +1714,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         Set<String> protectedModels = new HashSet<>();
         protectedModels.add("default");
         if (localModelContext != null) {
-            for (Map.Entry<String, ModelAssembly> entry : modelAssemblyMap.entrySet()) {
+            for (Map.Entry<String, ModelAssembly> entry : RESIDENCY.assemblies().entrySet()) {
                 if (entry.getValue() == localModelContext) {
                     protectedModels.add(entry.getKey());
                     touchModel(entry.getKey());
@@ -1744,10 +1741,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     private static void drainDeferredAssemblyReleases() {
-        if (deferredAssemblyReleases.isEmpty()) return;
-        for (ModelAssembly assembly : new ArrayList<>(deferredAssemblyReleases)) {
+        if (RESIDENCY.deferredReleases().isEmpty()) return;
+        for (ModelAssembly assembly : new ArrayList<>(RESIDENCY.deferredReleases())) {
             if (!EntityRenderCache.isModelAssemblyInUse(assembly)
-                    && deferredAssemblyReleases.remove(assembly)) {
+                    && RESIDENCY.deferredReleases().remove(assembly)) {
                 releaseModelAssembly(assembly);
             }
         }
@@ -1756,14 +1753,14 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     private static void trimGpuCache(String modelId, ModelAssembly assembly) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey == null || assembly == null) return;
-        gpuCacheTrimCoordinator.request(modelKey, assembly, RenderSystem::isOnRenderThread,
+        RESIDENCY.gpuTrim().request(modelKey, assembly, RenderSystem::isOnRenderThread,
                 Minecraft.getInstance()::execute,
                 candidate -> {
                     Minecraft minecraft = Minecraft.getInstance();
                     long now = System.currentTimeMillis();
                     long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
                     Set<String> protectedModels = collectProtectedModelIds(minecraft);
-                    return modelAssemblyMap.get(modelKey) == candidate && candidate.getPresentationCapabilities().gpuTrimAvailable()
+                    return RESIDENCY.assemblies().get(modelKey) == candidate && candidate.getPresentationCapabilities().gpuTrimAvailable()
                             && canTrimGpuCache(modelKey, candidate, protectedModels, now, ttlMillis);
                 }, candidate -> {
             // R10.4：仅释放 GPU mesh（native 缓存保留，模型可立即重渲染），收拢到装配自身。
@@ -1776,8 +1773,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     private static void touchModel(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey != null && !modelKey.isBlank()) {
-            modelLastUsedAt.put(modelKey, System.currentTimeMillis());
-            gpuCacheTrimCoordinator.clear(modelKey);
+            RESIDENCY.lastUsedAt().put(modelKey, System.currentTimeMillis());
+            RESIDENCY.gpuTrim().clear(modelKey);
         }
     }
 
@@ -1787,14 +1784,12 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
     public static void updateModelLoadingMode() {
         boolean enabled = isLazyModelLoading();
-        Boolean previous = lastLazyModelLoading;
+        Boolean previous = RESIDENCY.updateLazyLoadingMode(enabled);
         if (previous != null && previous == enabled) return;
-        lastLazyModelLoading = enabled;
-        lastModelTrimMillis = 0L;
         if (previous == null || enabled) return;
 
         for (String modelId : new ArrayList<>(lazyModelSources.keySet())) {
-            ModelAssembly assembly = modelAssemblyMap.get(modelId);
+            ModelAssembly assembly = RESIDENCY.assemblies().get(modelId);
             if (assembly == null || !assembly.getPresentationCapabilities().runtimeResident()) {
                 scheduleCachedModelReload(modelId);
             }
@@ -1807,14 +1802,14 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
     public static boolean isGpuCacheTrimmed(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
-        return modelKey != null && gpuCacheTrimCoordinator.isTrimmed(modelKey);
+        return modelKey != null && RESIDENCY.gpuTrim().isTrimmed(modelKey);
     }
 
     private static void touchAssembly(ModelAssembly assembly) {
         if (assembly == null) {
             return;
         }
-        for (Map.Entry<String, ModelAssembly> entry : modelAssemblyMap.entrySet()) {
+        for (Map.Entry<String, ModelAssembly> entry : RESIDENCY.assemblies().entrySet()) {
             if (entry.getValue() == assembly) {
                 touchModel(entry.getKey());
                 return;
@@ -1845,7 +1840,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
         @Nullable
         private ModelAssembly loadedAssembly() {
-            ModelAssembly current = modelAssemblyMap.get(modelId);
+            ModelAssembly current = RESIDENCY.assemblies().get(modelId);
             return current != null && current != this && !(current instanceof LazyModelAssembly)
                     && current.getPresentationCapabilities().runtimeResident() ? current : null;
         }
