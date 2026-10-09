@@ -109,4 +109,26 @@ class ModelPresentationCapabilitiesTest {
         assertEquals("Model", ModelMetadataPresenter.getLocalizedModelStringForLocale(
                 assembly, "en_us", "metadata.name", "Model"));
     }
+
+    @Test
+    void replacingAssemblyReleasesOldCapabilitySnapshotAndKeepsNewViewLive() throws Exception {
+        var oldModel = GltfLoader.load(
+                "{\"asset\":{\"version\":\"2.0\"},\"nodes\":[{\"name\":\"old\"}]}"
+                        .getBytes(StandardCharsets.UTF_8), null, "old.gltf");
+        var newModel = GltfLoader.load(
+                "{\"asset\":{\"version\":\"2.0\"},\"nodes\":[{\"name\":\"new\"}]}"
+                        .getBytes(StandardCharsets.UTF_8), null, "new.gltf");
+        ModelAssembly oldAssembly = ModelAssembly.forGltf(oldModel, List.of());
+        ModelAssembly newAssembly = ModelAssembly.forGltf(newModel, List.of());
+        ModelPresentationCapabilities oldResidentView = oldAssembly.getPresentationCapabilities();
+
+        oldAssembly.unloadRuntime();
+        ModelPresentationCapabilities oldReleasedView = oldAssembly.getPresentationCapabilities();
+
+        assertNotSame(oldResidentView, oldReleasedView);
+        assertTrue(oldResidentView.runtimeResident(), "capability snapshots remain immutable for existing readers");
+        assertFalse(oldReleasedView.runtimeResident(), "the replaced assembly must publish its released view");
+        assertTrue(newAssembly.getPresentationCapabilities().runtimeResident(), "replacement capabilities remain resident");
+        assertEquals("new", newAssembly.getGltfModel().nodes().get(0).name());
+    }
 }
