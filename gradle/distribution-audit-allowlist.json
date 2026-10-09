@@ -24,7 +24,6 @@
       "versionProperty": "forge_config_api_port_curse_file_id",
       "distribution": "included in both native and CurseForge final JARs",
       "classes": [
-        "net/minecraftforge/client/extensions/IForgeGuiGraphicsExtractor.class",
         "net/minecraftforge/fml/config/ModConfig.class",
         "net/minecraftforge/fml/config/ModConfig$Type.class"
       ]
@@ -34,7 +33,6 @@
       "versionProperty": "forge_config_api_port_curse_file_id",
       "distribution": "included in both native and CurseForge final JARs",
       "classes": [
-        "net/minecraftforge/client/extensions/IForgeGuiGraphicsExtractor.class",
         "net/minecraftforge/fml/config/ModConfig.class",
         "net/minecraftforge/fml/config/ModConfig$Type.class"
       ]
