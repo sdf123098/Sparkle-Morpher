@@ -174,7 +174,9 @@ public final class TargetActionSelectionScreen extends Screen {
 
     private void openRoulette(String modelId, com.micaftic.morpher.client.model.ModelAssembly assembly,
                               com.micaftic.morpher.geckolib3.core.AnimatableEntity<?> target) {
-        if (assembly == null || assembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
+        if (assembly == null || !assembly.getPresentationCapabilities().playerActionControlsAvailable()
+                || assembly.getModelData() == null
+                || assembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
             fail("目标模型没有可用的额外动作。");
             return;
         }

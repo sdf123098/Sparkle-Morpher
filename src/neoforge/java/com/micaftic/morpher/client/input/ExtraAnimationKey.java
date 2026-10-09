@@ -86,6 +86,10 @@ public final class ExtraAnimationKey {
     private static void playExtraAnimation(LocalPlayer localPlayer, KeyMapping eventMapping) {
         PlayerCapability.get(localPlayer).ifPresent(cap -> {
             ModelAssembly modelAssembly = cap.getModelAssembly();
+            if (modelAssembly == null || !modelAssembly.getPresentationCapabilities().playerActionControlsAvailable()
+                    || modelAssembly.getModelData() == null) {
+                return;
+            }
             int index = KEY_MAPPINGS.indexOf(eventMapping);
             ModelProperties modelProperties = modelAssembly.getModelData().getModelProperties();
             OrderedStringMap<String, String> map = modelProperties.getExtraAnimation();
