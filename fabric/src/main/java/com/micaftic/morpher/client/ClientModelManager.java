@@ -762,7 +762,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     }
                 }
                 ((Executor) Minecraft.getInstance()).execute(ClientModelManager::flushPendingModels);
-                YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
+                if (error == null) YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
             } catch (Exception e) {
                 YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelKey, e);
                 error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
