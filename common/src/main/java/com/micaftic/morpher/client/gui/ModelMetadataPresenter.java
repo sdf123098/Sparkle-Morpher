@@ -52,6 +52,9 @@ public class ModelMetadataPresenter {
     }
 
     public static String getLocalizedModelStringForLocale(ModelAssembly modelAssembly, String locale, String key, String defaultValue) {
+        if (modelAssembly == null || modelAssembly.getExpressionCache() == null) {
+            return defaultValue;
+        }
         Map<String, Map<String, String>> metadataMap = modelAssembly.getExpressionCache().getMetadata();
 
         if (metadataMap.isEmpty()) {
@@ -68,6 +71,9 @@ public class ModelMetadataPresenter {
 
     public static List<Component> buildModelTooltip(ModelAssembly modelAssembly, String locale, String fileName, boolean showAdvancedInfo) {
         List<Component> tooltipLines = Lists.newArrayList();
+        if (modelAssembly == null || !modelAssembly.getPresentationCapabilities().metadataAvailable()) {
+            return tooltipLines;
+        }
         Metadata extraInfo = modelAssembly.getModelData().getExtraInfo();
 
         if (extraInfo != null) {
@@ -125,7 +131,7 @@ public class ModelMetadataPresenter {
         if (info != null) {
             tooltipLines.add(CommonComponents.space());
             tooltipLines.add(Component.translatable("gui.sparkle_morpher.model.main_model_info", info.getBones(), info.getCubes(), info.getFaces()).withStyle(ChatFormatting.GRAY));
-            tooltipLines.add(Component.translatable("gui.sparkle_morpher.model.texture_info", modelAssembly.getAnimationBundle().getTextures().size()).withStyle(ChatFormatting.GRAY));
+            tooltipLines.add(Component.translatable("gui.sparkle_morpher.model.texture_info", modelAssembly.getTextureNames().size()).withStyle(ChatFormatting.GRAY));
         }
 
         return tooltipLines;
