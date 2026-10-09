@@ -371,7 +371,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
             touchModel(modelKey);
         }
         if ((assembly == null && lazyModelSources.containsKey(modelKey))
-                || (assembly != null && !assembly.isRuntimeResident())) {
+                || (assembly != null && !assembly.getPresentationCapabilities().runtimeResident())) {
             scheduleCachedModelReload(modelKey);
             return Optional.empty();
        }
@@ -388,7 +388,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
         }
         ModelAssembly assembly = modelAssemblyMap.get(modelKey);
         return lazyModelSources.containsKey(modelKey)
-                && (assembly == null || assembly instanceof LazyModelAssembly || !assembly.isRuntimeResident());
+                && (assembly == null || assembly instanceof LazyModelAssembly || !assembly.getPresentationCapabilities().runtimeResident());
     }
 
     private static void scheduleCachedModelReload(String modelId) {
@@ -810,7 +810,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                         if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) break;
                         if (!isScanSourceCurrent(scanRevision, entry.getValue())) continue;
                         ModelAssembly current = modelAssemblyMap.get(entry.getKey());
-                        if (staleIds.contains(entry.getKey()) || current == null || !current.isRuntimeResident()) {
+                        if (staleIds.contains(entry.getKey()) || current == null || !current.getPresentationCapabilities().runtimeResident()) {
                             try {
                                 loadLocalModelSource(entry.getKey(), entry.getValue(), scanRevision);
                             } catch (Exception e) {
@@ -1624,7 +1624,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
        Minecraft minecraft = Minecraft.getInstance();
         long residentGpuModels = modelAssemblyMap.values().stream()
                 .filter(Objects::nonNull)
-                .filter(ModelAssembly::isRuntimeResident)
+                .filter(assembly -> assembly.getPresentationCapabilities().gpuTrimAvailable())
                 .count();
         if (residentGpuModels <= maxCachedGpuModels) {
            return;
@@ -1633,7 +1633,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
        modelAssemblyMap.entrySet().stream()
-                .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
+                .filter(entry -> entry.getValue() != null && entry.getValue().getPresentationCapabilities().runtimeResident())
                .filter(entry -> canTrimGpuCache(entry.getKey(), entry.getValue(), protectedModels, now, ttlMillis))
                .sorted(Comparator.comparingLong(entry -> modelLastUsedAt.getOrDefault(entry.getKey(), 0L)))
                 .limit(Math.max(1L, residentGpuModels - maxCachedGpuModels))
@@ -1648,7 +1648,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
         Set<String> protectedModels = collectProtectedModelIds(minecraft);
         List<Map.Entry<String, ModelAssembly>> residents = modelAssemblyMap.entrySet().stream()
-                .filter(entry -> entry.getValue() != null && entry.getValue().isRuntimeResident())
+                .filter(entry -> entry.getValue() != null && entry.getValue().getPresentationCapabilities().runtimeResident())
                 .filter(entry -> !"default".equals(entry.getKey()) && lazyModelSources.containsKey(entry.getKey()))
                 .toList();
         long idleCount = residents.stream()
@@ -1691,7 +1691,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     private static void unloadModelRuntime(String modelId, ModelAssembly assembly) {
-        if (assembly == null || !assembly.isRuntimeResident()) return;
+        if (assembly == null || !assembly.getPresentationCapabilities().runtimeResident()) return;
         if (!RenderSystem.isOnRenderThread()) {
             ((Executor) Minecraft.getInstance()).execute(() -> unloadModelRuntime(modelId, assembly));
             return;
@@ -1707,7 +1707,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
     private static boolean canTrimGpuCache(String modelId, ModelAssembly assembly, Set<String> protectedModels, long now, long ttlMillis) {
         modelId = LocalModelCatalog.canonicalKey(modelId);
-        if (modelId == null || assembly == null || "default".equals(modelId) || protectedModels.contains(modelId)
+        if (modelId == null || assembly == null || !assembly.getPresentationCapabilities().gpuTrimAvailable()
+                || "default".equals(modelId) || protectedModels.contains(modelId)
                 || EntityRenderCache.isModelAssemblyInUse(assembly)
                 || gpuCacheTrimCoordinator.isTrimmed(modelId, assembly)) {
             return false;
@@ -1766,7 +1767,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                     long now = System.currentTimeMillis();
                     long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
                     Set<String> protectedModels = collectProtectedModelIds(minecraft);
-                    return modelAssemblyMap.get(modelKey) == candidate && candidate.isRuntimeResident()
+                    return modelAssemblyMap.get(modelKey) == candidate && candidate.getPresentationCapabilities().gpuTrimAvailable()
                             && canTrimGpuCache(modelKey, candidate, protectedModels, now, ttlMillis);
                 }, candidate -> {
             // R10.4：仅释放 GPU mesh（native 缓存保留，模型可立即重渲染），收拢到装配自身。
@@ -1798,7 +1799,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
         for (String modelId : new ArrayList<>(lazyModelSources.keySet())) {
             ModelAssembly assembly = modelAssemblyMap.get(modelId);
-            if (assembly == null || !assembly.isRuntimeResident()) {
+            if (assembly == null || !assembly.getPresentationCapabilities().runtimeResident()) {
                 scheduleCachedModelReload(modelId);
             }
         }
@@ -1850,7 +1851,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         private ModelAssembly loadedAssembly() {
             ModelAssembly current = modelAssemblyMap.get(modelId);
             return current != null && current != this && !(current instanceof LazyModelAssembly)
-                    && current.isRuntimeResident() ? current : null;
+                    && current.getPresentationCapabilities().runtimeResident() ? current : null;
         }
 
         @Nullable
