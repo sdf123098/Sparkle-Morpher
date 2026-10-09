@@ -22,20 +22,14 @@
     "fa26.2": {
       "coordinate": "curse.maven:forge-config-api-port-547434",
       "versionProperty": "forge_config_api_port_curse_file_id",
-      "distribution": "included in both native and CurseForge final JARs",
-      "classes": [
-        "net/minecraftforge/fml/config/ModConfig.class",
-        "net/minecraftforge/fml/config/ModConfig$Type.class"
-      ]
+      "distribution": "nested dependency retained; no direct Forge namespace class copies",
+      "classes": []
     },
     "fa26.3": {
       "coordinate": "curse.maven:forge-config-api-port-547434",
       "versionProperty": "forge_config_api_port_curse_file_id",
-      "distribution": "included in both native and CurseForge final JARs",
-      "classes": [
-        "net/minecraftforge/fml/config/ModConfig.class",
-        "net/minecraftforge/fml/config/ModConfig$Type.class"
-      ]
+      "distribution": "nested dependency retained; no direct Forge namespace class copies",
+      "classes": []
     }
   },
   "registeredEmbeddedLibraries": {
