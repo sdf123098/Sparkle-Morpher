@@ -32,4 +32,31 @@ class ScreenGenerationGateTest {
         assertTrue(gate.completeIfCurrent(newRequest, notifications::incrementAndGet));
         assertEquals(1, notifications.get());
     }
+
+    @Test
+    void importFailureAfterCloseSettlesBusyStateWithoutNotifyingOldHost() {
+        ScreenGenerationGate gate = new ScreenGenerationGate();
+        assertTrue(gate.beginImport());
+        long request = gate.capture();
+        AtomicInteger notifications = new AtomicInteger();
+        assertTrue(gate.importInProgress());
+
+        gate.invalidate();
+
+        assertFalse(gate.completeImport(request, notifications::incrementAndGet));
+        assertFalse(gate.importInProgress());
+        assertEquals(0, notifications.get());
+    }
+
+    @Test
+    void onlyOneScreenImportCanBeActiveAtATime() {
+        ScreenGenerationGate gate = new ScreenGenerationGate();
+        assertTrue(gate.beginImport());
+        long request = gate.capture();
+
+        assertFalse(gate.beginImport());
+        assertTrue(gate.completeImport(request, () -> { }));
+        assertFalse(gate.importInProgress());
+        assertTrue(gate.beginImport());
+    }
 }
