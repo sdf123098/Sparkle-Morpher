@@ -3,7 +3,6 @@ package com.micaftic.morpher.core.gpu;
 import com.mojang.blaze3d.opengl.GlStateManager;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferUploader;
 import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -154,7 +153,6 @@ public final class BlurStack {
         }
 
         GlStateManager._glUseProgram(0);
-        BufferUploader.invalidate();
         GlStateManager._glBindVertexArray(0);
         GlStateManager._disableBlend(0);
 
