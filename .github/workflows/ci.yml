@@ -23,42 +23,58 @@ jobs:
       matrix:
         include:
           - branch: main
-            java: '21'
+            diagnostic_branch: fa1.21.1
+            java: '21.0.12'
+            compile_task: ':fabric:compileJava'
             gradle_task: ':fabric:build'
             jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa1.21.1.jar'
             mod_meta: 'fabric.mod.json'
           - branch: fa26.1.2
-            java: '25'
+            diagnostic_branch: fa26.1.2
+            java: '25.0.4'
+            compile_task: ':fabric:compileJava'
             gradle_task: ':fabric:build'
             jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa26.1.x.jar'
             mod_meta: 'fabric.mod.json'
           - branch: fa26.2
-            java: '25'
+            diagnostic_branch: fa26.2
+            java: '25.0.4'
+            compile_task: ':fabric:compileJava'
             gradle_task: ':fabric:build'
             jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa26.2.jar'
             mod_meta: 'fabric.mod.json'
           - branch: fa26.3
-            java: '25'
+            diagnostic_branch: fa26.3
+            java: '25.0.4'
+            compile_task: ':fabric:compileJava'
             gradle_task: ':fabric:build'
             jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa26.3.jar'
             mod_meta: 'fabric.mod.json'
           - branch: neo1.21.1
-            java: '21'
+            diagnostic_branch: neo1.21.1
+            java: '21.0.12'
+            compile_task: 'compileJava'
             gradle_task: ':build'
             jar_glob: 'build/libs/sparkle-morpher-*-neo1.21.1.jar'
             mod_meta: 'META-INF/neoforge.mods.toml'
           - branch: neo26.1.2
-            java: '25'
+            diagnostic_branch: neo26.1.2
+            java: '25.0.4'
+            compile_task: 'compileJava'
             gradle_task: ':build'
             jar_glob: 'build/libs/sparkle-morpher-*-neo26.1.x.jar'
             mod_meta: 'META-INF/neoforge.mods.toml'
           - branch: neo26.2
-            java: '25'
+            diagnostic_branch: neo26.2
+            java: '25.0.4'
+            compile_task: 'compileJava'
             gradle_task: ':build'
             jar_glob: 'build/libs/sparkle-morpher-*-neo26.2.jar'
             mod_meta: 'META-INF/neoforge.mods.toml'
           - branch: neo26.3
-            java: '25'
+            diagnostic_branch: neo26.3
+            java: '25.0.4'
+            compile_task: 'compileJava'
             gradle_task: ':build'
             jar_glob: 'build/libs/sparkle-morpher-*-neo26.3.jar'
             mod_meta: 'META-INF/neoforge.mods.toml'
@@ -79,6 +95,36 @@ jobs:
 
       - name: Grant gradlew executable bit
         run: chmod +x gradlew
+
+      - name: Compile and compare native javac baseline
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build/ci-diagnostics
+          ./gradlew ${{ matrix.compile_task }} --rerun-tasks --no-build-cache --no-daemon --console=plain 2>&1 | tee build/ci-diagnostics/native-compile.log
+          pwsh -NoProfile -File scripts/check-javac-warning-fingerprints.ps1 \
+            -LogPath build/ci-diagnostics/native-compile.log \
+            -RepoRoot "$GITHUB_WORKSPACE" \
+            -Branch '${{ matrix.diagnostic_branch }}' \
+            -Dist native \
+            -Task '${{ matrix.compile_task }}' \
+            -BaselinePath gradle/diagnostic-warning-baselines.json \
+            -SnapshotPath build/ci-diagnostics/native-snapshot.json
+
+      - name: Compile and compare CurseForge javac baseline
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build/ci-diagnostics
+          ./gradlew -Pdist=curseforge ${{ matrix.compile_task }} --rerun-tasks --no-build-cache --no-daemon --console=plain 2>&1 | tee build/ci-diagnostics/curseforge-compile.log
+          pwsh -NoProfile -File scripts/check-javac-warning-fingerprints.ps1 \
+            -LogPath build/ci-diagnostics/curseforge-compile.log \
+            -RepoRoot "$GITHUB_WORKSPACE" \
+            -Branch '${{ matrix.diagnostic_branch }}' \
+            -Dist curseforge \
+            -Task '${{ matrix.compile_task }}' \
+            -BaselinePath gradle/diagnostic-warning-baselines.json \
+            -SnapshotPath build/ci-diagnostics/curseforge-snapshot.json
 
       - name: Build and verify final artifact (${{ matrix.gradle_task }})
         run: ./gradlew ${{ matrix.gradle_task }} --no-daemon --console=plain
