@@ -9,6 +9,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ModelPresentationCapabilitiesTest {
@@ -22,17 +24,20 @@ class ModelPresentationCapabilitiesTest {
         assertTrue(capabilities.runtimeResident());
         assertFalse(capabilities.metadataAvailable());
         assertFalse(capabilities.textureLabelsAvailable());
+        assertFalse(capabilities.textureSelectionAvailable());
         assertFalse(capabilities.cardPreviewAvailable());
         assertFalse(capabilities.detailPreviewAvailable());
         assertFalse(capabilities.playerActionControlsAvailable());
         assertFalse(capabilities.gpuTrimAvailable());
         assertFalse(capabilities.nativeTrimAvailable());
+        assertSame(capabilities, assembly.getPresentationCapabilities());
         assertEquals("Model", ModelMetadataPresenter.getLocalizedModelStringForLocale(
                 assembly, "en_us", "metadata.name", "Model"));
         assertTrue(ModelMetadataPresenter.buildModelTooltip(assembly, "en_us", "model.gltf", true).isEmpty());
 
         assembly.unloadRuntime();
         ModelPresentationCapabilities released = assembly.getPresentationCapabilities();
+        assertNotSame(capabilities, released);
         assertFalse(released.runtimeResident());
         assertFalse(released.metadataAvailable());
         assertFalse(released.cardPreviewAvailable());

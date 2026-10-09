@@ -5,6 +5,7 @@ public record ModelPresentationCapabilities(
         boolean runtimeResident,
         boolean metadataAvailable,
         boolean textureLabelsAvailable,
+        boolean textureSelectionAvailable,
         boolean cardPreviewAvailable,
         boolean detailPreviewAvailable,
         boolean playerActionControlsAvailable,
