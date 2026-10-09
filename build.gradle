@@ -115,11 +115,11 @@ tasks.withType(JavaCompile).configureEach {
     options.release = 25
     options.encoding = "UTF-8"
     options.compilerArgs.addAll([
-            "-Xlint:none",
-            "-Xlint:-deprecation",
-            "-Xlint:-removal",
-            "-Xlint:-unchecked",
-            "-nowarn",
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
             "--add-modules", "jdk.incubator.vector",
             "-Xmaxerrs", "10000",
             "-Xmaxwarns", "10000"
