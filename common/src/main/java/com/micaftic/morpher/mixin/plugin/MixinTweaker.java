@@ -92,6 +92,7 @@ public class MixinTweaker implements IMixinConfigPlugin {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
+    // BufferSourceMixin was removed because its Minecraft target does not exist on 26.2+.
     private static boolean isHighRiskMixin(String simpleName) {
         return switch (simpleName) {
             case "PlayerRendererMixin",

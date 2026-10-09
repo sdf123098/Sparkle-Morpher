@@ -13,6 +13,7 @@ import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
+// Legacy BufferSource flush hooks do not apply to the submit collector path.
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.ItemInHandRenderer;
 import com.micaftic.morpher.client.renderer.MultiBufferSource;
@@ -71,6 +72,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         if (!offhandItem.isEmpty() || !mainHandItem.isEmpty()) {
             poseStack.pushPose();
             boolean useExtraPlayer = entityLivingBaseIn.isRenderLayersFirst();
+// Submit rendering replaced the legacy per-hand BufferSource flush hook.
             HandLocatorProfile handLocatorProfile = entityLivingBaseIn.getModelAssembly().getAnimationBundle().getHandLocatorProfile();
             HumanoidArm mainArm = entity.getMainArm();
             HumanoidArm offArm = mainArm.getOpposite();
