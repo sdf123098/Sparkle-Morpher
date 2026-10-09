@@ -1483,7 +1483,7 @@ public class ModernPlayerModelScreen extends Screen {
             drawCoverImage(g, foreground, cx, cy, cw, ch);
         }
         boolean drewFigure = false;
-        if (!asm.isGltf()) {
+        if (asm.getPresentationCapabilities().cardPreviewAvailable()) {
             drewFigure = renderCardFigure(g, slot, modelId, asm, cx, cy, cw, coverH);
         }
         // 前景边框叠在小人之上（其中心透明，正好露出小人）；未被当作背景用过才叠。
@@ -1793,9 +1793,8 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderSelectedModelPreview(GuiGraphicsExtractor g, ModelAssembly assembly, String modelId, int x, int y, int w, int h, int mouseX, int mouseY, float partialTick) {
         fill(g, x, y, w, h, GLASS_DARK);
         border(g, x, y, w, h, 0x33FFFFFF);
-        if (assembly.isGltf()) {
+        if (!assembly.getPresentationCapabilities().detailPreviewAvailable()) {
             drawIcon(g, IconGlyph.MODEL, x + w / 2 - 8, y + h / 2 - 8);
-            drawCentered(g, Component.literal("glTF"), x + w / 2, y + h - 12, MUTED);
             return;
         }
         String textureId = selectedTextureOrDefault(assembly);
