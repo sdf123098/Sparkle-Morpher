@@ -2001,12 +2001,12 @@ public class ModernPlayerModelScreen extends Screen {
         glassPanel(g, x, y, w, bottom - y);
         renderSettingGroups(g, x + 8, y + 10, w - 16);
         List<SettingRow> rows = settingsRows();
-        int visible = Math.max(1, (bottom - y - 44) / 22);
-        int maxScroll = Math.max(0, rows.size() - visible);
-        STATE.settingsScroll = clamp(STATE.settingsScroll, 0, maxScroll);
+        SettingsPanelLayout.Window window = SettingsPanelLayout.window(y, bottom, 44, 22,
+                rows.size(), STATE.settingsScroll);
+        STATE.settingsScroll = window.scroll();
         int yy = y + 38;
-        for (int i = 0; i < visible && STATE.settingsScroll + i < rows.size(); i++) {
-            SettingRow row = rows.get(STATE.settingsScroll + i);
+        for (int i = window.firstRow(); i < window.endRowExclusive(); i++) {
+            SettingRow row = rows.get(i);
             renderSettingRow(g, mouseX, mouseY, x + 8, yy, w - 16, row);
             yy += 22;
         }
