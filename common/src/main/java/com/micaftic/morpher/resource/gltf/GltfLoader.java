@@ -49,6 +49,16 @@ public final class GltfLoader {
     private static final long MAX_SOURCE_BYTES = 512L * 1024L * 1024L;
     private static final long MAX_RESOLVED_RESOURCE_BYTES = 256L * 1024L * 1024L;
     private static final int MAX_EXTERNAL_RESOURCE_COUNT = 1024;
+    private static final ResourceLimits DEFAULT_RESOURCE_LIMITS =
+            new ResourceLimits(MAX_SOURCE_BYTES, MAX_RESOLVED_RESOURCE_BYTES, MAX_EXTERNAL_RESOURCE_COUNT);
+
+    record ResourceLimits(long maxSourceBytes, long maxResolvedResourceBytes, int maxExternalResourceCount) {
+        ResourceLimits {
+            if (maxSourceBytes < 0 || maxResolvedResourceBytes < 0 || maxExternalResourceCount < 0) {
+                throw new IllegalArgumentException("glTF resource limits must not be negative");
+            }
+        }
+    }
 
     private GltfLoader() {}
 
@@ -71,11 +81,11 @@ public final class GltfLoader {
         if (!normalized.startsWith(root)) throw error("glTF source escapes its source directory: " + file);
         BasicFileAttributes before = Files.readAttributes(normalized, BasicFileAttributes.class);
         long sourceSize = before.size();
-        if (sourceSize > MAX_SOURCE_BYTES) throw error("glTF source exceeds the size limit: " + sourceSize);
-        byte[] source = readLimited(normalized, MAX_SOURCE_BYTES, "glTF source");
+        if (sourceSize > DEFAULT_RESOURCE_LIMITS.maxSourceBytes()) throw error("glTF source exceeds the size limit: " + sourceSize);
+        byte[] source = readLimited(normalized, DEFAULT_RESOURCE_LIMITS.maxSourceBytes(), "glTF source");
         verifyUnchanged(normalized, before, "glTF source");
         ParsedContainer container = parseContainer(source, normalized.getFileName().toString());
-        return new Parser(container.json(), root, container.bin(), extensions).parseWithManifest(source);
+        return new Parser(container.json(), root, container.bin(), extensions, DEFAULT_RESOURCE_LIMITS).parseWithManifest(source);
     }
 
     /** Strong source identity for catalog invalidation, including every contained external buffer/image. */
@@ -173,12 +183,18 @@ public final class GltfLoader {
 
     public static GltfLoadResult loadWithManifest(byte[] source, Path baseDirectory, String name,
                                                    GltfExtensionRegistry extensions) throws IOException {
+        return loadWithManifest(source, baseDirectory, name, extensions, DEFAULT_RESOURCE_LIMITS);
+    }
+
+    static GltfLoadResult loadWithManifest(byte[] source, Path baseDirectory, String name,
+                                           GltfExtensionRegistry extensions, ResourceLimits limits) throws IOException {
         if (source == null) throw error("glTF source is missing");
-        if (source.length > MAX_SOURCE_BYTES) throw error("glTF source exceeds the size limit: " + source.length);
+        if (limits == null) throw new NullPointerException("resource limits must not be null");
+        if (source.length > limits.maxSourceBytes()) throw error("glTF source exceeds the size limit: " + source.length);
         ParsedContainer container = parseContainer(source, name == null ? "model.gltf" : name);
         Path resolvedRoot = baseDirectory == null ? null : baseDirectory.toRealPath();
         return new Parser(container.json(), resolvedRoot,
-                container.bin(), extensions).parseWithManifest(source);
+                container.bin(), extensions, limits).parseWithManifest(source);
     }
 
     private static ParsedContainer parseContainer(byte[] source, String name) throws GltfParseException {
@@ -242,6 +258,7 @@ public final class GltfLoader {
         private final Path baseDirectory;
         private final byte[] glbBin;
         private final GltfExtensionRegistry extensions;
+        private final ResourceLimits limits;
         private final ResourceDependencyManifest.Builder dependencies;
         private long resolvedResourceBytes;
         private int resolvedResourceCount;
@@ -251,7 +268,8 @@ public final class GltfLoader {
         private final List<JsonObject> nodeObjects = new ArrayList<>();
         private final List<Integer> parentIndices = new ArrayList<>();
 
-        private Parser(String json, Path baseDirectory, byte[] glbBin, GltfExtensionRegistry extensions) throws GltfParseException {
+        private Parser(String json, Path baseDirectory, byte[] glbBin, GltfExtensionRegistry extensions,
+                       ResourceLimits limits) throws GltfParseException {
             try {
                 JsonElement parsed = JsonParser.parseString(json);
                 if (!parsed.isJsonObject()) throw error("glTF root must be a JSON object");
@@ -264,6 +282,7 @@ public final class GltfLoader {
             this.baseDirectory = baseDirectory;
             this.glbBin = glbBin;
             this.extensions = extensions == null ? GltfExtensionRegistry.coreOnly() : extensions;
+            this.limits = limits;
             this.dependencies = ResourceDependencyManifest.builder(baseDirectory);
         }
 
@@ -717,13 +736,13 @@ public final class GltfLoader {
             Path resolved = resolveExternalPath(baseDirectory.toRealPath(), uri, context);
             BasicFileAttributes before = Files.readAttributes(resolved, BasicFileAttributes.class);
             long size = before.size();
-            if (size > MAX_RESOLVED_RESOURCE_BYTES) {
+            if (size > limits.maxResolvedResourceBytes()) {
                 throw error("External " + context + " exceeds the size limit: " + uri);
             }
-            if (size > MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes) {
+            if (size > limits.maxResolvedResourceBytes() - resolvedResourceBytes) {
                 throw error("Resolved glTF resources exceed the aggregate size limit");
             }
-            byte[] bytes = readLimited(resolved, Math.min(size, MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes),
+            byte[] bytes = readLimited(resolved, Math.min(size, limits.maxResolvedResourceBytes() - resolvedResourceBytes),
                     "External " + context);
             BasicFileAttributes after = Files.readAttributes(resolved, BasicFileAttributes.class);
             if (before.size() != after.size() || !before.lastModifiedTime().equals(after.lastModifiedTime())
@@ -735,14 +754,14 @@ public final class GltfLoader {
         }
 
         private long remainingResourceBudget() {
-            return MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes;
+            return limits.maxResolvedResourceBytes() - resolvedResourceBytes;
         }
 
         private byte[] countResolvedResource(byte[] bytes, String context) throws GltfParseException {
-            if (++resolvedResourceCount > MAX_EXTERNAL_RESOURCE_COUNT) {
+            if (++resolvedResourceCount > limits.maxExternalResourceCount()) {
                 throw error("glTF has too many external/data resources");
             }
-            if (bytes.length > MAX_RESOLVED_RESOURCE_BYTES - resolvedResourceBytes) {
+            if (bytes.length > limits.maxResolvedResourceBytes() - resolvedResourceBytes) {
                 throw error("Resolved glTF resources exceed the aggregate size limit at " + context);
             }
             resolvedResourceBytes += bytes.length;
