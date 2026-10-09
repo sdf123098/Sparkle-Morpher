@@ -1723,7 +1723,8 @@ public class ModernPlayerModelScreen extends Screen {
         renderSelectedModelPreview(g, assembly, modelId, x + 8, previewTop, w - 16, previewH, mouseX, mouseY, partialTick);
         drawText(g, Component.literal(trim(displayName(modelId, assembly), w - 16)), x + 8, previewTop + previewH + 8);
         drawMuted(g, Component.literal(trim(modelId, w - 16)), x + 8, previewTop + previewH + 20);
-        Metadata metadata = assembly.getModelData() == null ? null : assembly.getModelData().getExtraInfo();
+        Metadata metadata = assembly.getPresentationCapabilities().metadataAvailable()
+                ? assembly.getModelData().getExtraInfo() : null;
         int yy = previewTop + previewH + 38;
         if (metadata != null && metadata.getAuthors() != null && !metadata.getAuthors().isEmpty()) {
             drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.authors"), x + 8, yy);
@@ -1745,11 +1746,15 @@ public class ModernPlayerModelScreen extends Screen {
         List<String> textures = assembly.getTextureNames();
         for (int i = 0; i < Math.min(8, textures.size()) && yy + 16 < y + h - 8; i++) {
             String texture = textures.get(i);
-            boolean selected = texture.equals(selectedTextureOrDefault(assembly));
-            renderRowButton(g, mouseX, mouseY, x + 8, yy, w - 16, 14, Component.literal(trim(texture, w - 28)), selected, () -> {
-                STATE.selectedTextureId = texture;
-                applySelectedTexture();
-            });
+            if (assembly.getPresentationCapabilities().textureSelectionAvailable()) {
+                boolean selected = texture.equals(selectedTextureOrDefault(assembly));
+                renderRowButton(g, mouseX, mouseY, x + 8, yy, w - 16, 14, Component.literal(trim(texture, w - 28)), selected, () -> {
+                    STATE.selectedTextureId = texture;
+                    applySelectedTexture();
+                });
+            } else {
+                drawMuted(g, Component.literal(trim(texture, w - 28)), x + 10, yy + 3);
+            }
             yy += 16;
         }
     }
@@ -2924,7 +2929,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     private boolean matchesModelSearch(String modelId, ModelAssembly assembly, String query) {
         if (query.startsWith("@")) {
-            Metadata metadata = assembly.getModelData() == null ? null : assembly.getModelData().getExtraInfo();
+            Metadata metadata = assembly.getPresentationCapabilities().metadataAvailable()
+                    ? assembly.getModelData().getExtraInfo() : null;
             return authors(metadata).toLowerCase(Locale.ROOT).contains(query.substring(1));
         }
         String haystack = modelId + " " + displayName(modelId, assembly) + " " + modelSubtitle(modelId, assembly);
@@ -3619,6 +3625,9 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private String selectedTextureOrDefault(ModelAssembly assembly) {
+        if (!assembly.getPresentationCapabilities().textureSelectionAvailable()) {
+            return "";
+        }
         List<String> names = assembly.getTextureNames();
         if (STATE.selectedTextureId != null && !STATE.selectedTextureId.isBlank() && names.contains(STATE.selectedTextureId)) {
             return STATE.selectedTextureId;
@@ -3688,7 +3697,7 @@ public class ModernPlayerModelScreen extends Screen {
         if (assembly.getTextureRegistry().isAuthModel()) {
             parts.add("auth");
         }
-        if (assembly.isRuntimeResident()) {
+        if (assembly.getPresentationCapabilities().runtimeResident()) {
             parts.add(assembly.getTextureNames().size() + " tex");
         }
         return String.join(" | ", parts);
@@ -3956,9 +3965,11 @@ public class ModernPlayerModelScreen extends Screen {
             return;
         }
         List<String> textures = assembly.getTextureNames();
-        String selectedTexture = selectedTextureOrDefault(assembly);
+        boolean textureSelectionAvailable = assembly.getPresentationCapabilities().textureSelectionAvailable();
+        String selectedTexture = textureSelectionAvailable ? selectedTextureOrDefault(assembly) : "";
         int quickButtonW = 52;
-        int quickCount = Math.min(textures.size(), Math.max(0, Math.min(3, (w - 150) / (quickButtonW + 2))));
+        int quickCount = textureSelectionAvailable
+                ? Math.min(textures.size(), Math.max(0, Math.min(3, (w - 150) / (quickButtonW + 2)))) : 0;
         int quickStartIndex = 0;
         int selectedTextureIndex = textures.indexOf(selectedTexture);
         if (quickCount > 0 && selectedTextureIndex >= quickCount) {
@@ -4282,7 +4293,8 @@ public class ModernPlayerModelScreen extends Screen {
         if (previewH >= 40) {
             renderSelectedModelPreview(g, assembly, modelId, x + 8, yy, w - 16, previewH, mouseX, mouseY, partialTick); yy += previewH + 6;
         }
-        Metadata metadata = assembly.getModelData().getExtraInfo();
+        Metadata metadata = assembly.getPresentationCapabilities().metadataAvailable()
+                ? assembly.getModelData().getExtraInfo() : null;
         if (metadata != null) {
             String authorText = metadata.getAuthors() != null && !metadata.getAuthors().isEmpty() ? authors(metadata) : "";
             String tips = metadata.getTips() == null ? "" : metadata.getTips();
@@ -4296,22 +4308,31 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderCloudTextures(GuiGraphics g, int mouseX, int mouseY, ModelAssembly assembly, String modelId, int x, int y, int w, int h) {
-        List<String> textures = new ArrayList<>(assembly.getAnimationBundle().getTextures().keySet());
-        renderTextButton(g, mouseX, mouseY, x, y - 2, Math.max(36, w - 70), 16,
-                Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures"), () -> openCloudTexturePicker(assembly, modelId));
+        List<String> textures = assembly.getTextureNames();
+        boolean textureSelectionAvailable = assembly.getPresentationCapabilities().textureSelectionAvailable();
+        if (textureSelectionAvailable) {
+            renderTextButton(g, mouseX, mouseY, x, y - 2, Math.max(36, w - 70), 16,
+                    Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures"), () -> openCloudTexturePicker(assembly, modelId));
+        } else {
+            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.textures"), x, y + 1);
+        }
         if (textures.isEmpty()) return;
-        int rows = Math.max(1, (h - 14) / 16);
+        int rows = Math.max(1, (h - (textureSelectionAvailable ? 14 : 0)) / 16);
         CloudModelPage page = CloudModelPage.cards(textures.size(), rows, cloudTexturePage);
         int pages = page.maxScroll() + 1;
         cloudTexturePage = page.scroll();
         int start = page.start();
         for (int i = start; i < page.end(); i++) {
             String texture = textures.get(i);
-            renderRowButton(g, mouseX, mouseY, x, y + 12 + (i - start) * 16, w, 14,
-                    Component.literal(trim(texture, w - 10)), texture.equals(selectedTextureOrDefault(assembly)), () -> {
-                        focusCloudAssetByModelId(modelId);
-                        STATE.selectedTextureId = texture; applySelectedTexture();
-                    });
+            if (textureSelectionAvailable) {
+                renderRowButton(g, mouseX, mouseY, x, y + 12 + (i - start) * 16, w, 14,
+                        Component.literal(trim(texture, w - 10)), texture.equals(selectedTextureOrDefault(assembly)), () -> {
+                            focusCloudAssetByModelId(modelId);
+                            STATE.selectedTextureId = texture; applySelectedTexture();
+                        });
+            } else {
+                drawMuted(g, Component.literal(trim(texture, w - 10)), x + 2, y + 14 + (i - start) * 16);
+            }
         }
         if (pages > 1) {
             renderTextButton(g, mouseX, mouseY, x + w - 66, y - 2, 18, 16, Component.literal("‹"), () -> cloudTexturePage = Math.max(0, cloudTexturePage - 1));
@@ -4346,11 +4367,13 @@ public class ModernPlayerModelScreen extends Screen {
         if (entry == null) { drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 22, y + 5); return; }
         String modelId = this.controller.cloudModelId(entry);
         ModelAssembly assembly = this.controller.assemblyOrNull(modelId);
-        String label = cloudEntryName(entry) + " · " + (assembly == null ? cloudEntryDetail(entry) : selectedTextureOrDefault(assembly));
+        String label = cloudEntryName(entry) + " · " + (assembly == null || !assembly.getPresentationCapabilities().textureLabelsAvailable()
+                ? cloudEntryDetail(entry) : selectedTextureOrDefault(assembly));
         drawText(g, Component.literal(trim(label, w - 48)), x + 22, y + 5);
-        renderIconButton(g, mouseX, mouseY, x + w - 19, y, assembly == null ? IconGlyph.INFO : IconGlyph.TEXTURE,
-                assembly == null ? cloudEntryTooltip(entry) : Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures"), () -> {
-                    if (assembly == null) STATE.compactPreviewExpanded = true;
+        boolean canSelectTexture = assembly != null && assembly.getPresentationCapabilities().textureSelectionAvailable();
+        renderIconButton(g, mouseX, mouseY, x + w - 19, y, canSelectTexture ? IconGlyph.TEXTURE : IconGlyph.INFO,
+                canSelectTexture ? Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures") : cloudEntryTooltip(entry), () -> {
+                    if (!canSelectTexture) STATE.compactPreviewExpanded = true;
                     else openCloudTexturePicker(assembly, modelId);
                 });
         if (!STATE.compactPreviewExpanded || h < 54) return;
@@ -4370,11 +4393,11 @@ public class ModernPlayerModelScreen extends Screen {
         return CloudModelViewport.measure(room, compactModelLayout(), STATE.compactPreviewExpanded);
     }
     private void openCloudTexturePicker(ModelAssembly assembly, String modelId) {
-        if (!this.controller.cloudAvailable()) return;
+        if (!this.controller.cloudAvailable() || !assembly.getPresentationCapabilities().textureSelectionAvailable()) return;
         var expected = CloudClientRuntime.state(this.controller.cloudInstanceId());
         CloudAssetSummary focused = focusedCloudAsset();
         String name = focused != null && this.controller.cloudModelId(focused).equals(modelId) ? cloudEntryName(focused) : displayName(modelId, assembly);
-        InputUtil.setScreen(new CloudTextureSelectionScreen(this, name, new ArrayList<>(assembly.getAnimationBundle().getTextures().keySet()),
+        InputUtil.setScreen(new CloudTextureSelectionScreen(this, name, new ArrayList<>(assembly.getTextureNames()),
                 selectedTextureOrDefault(assembly), texture -> {
                     if (CloudClientRuntime.state(this.controller.cloudInstanceId()) != expected) return;
                     STATE.selectedModelId = modelId; STATE.selectedTextureId = texture;
