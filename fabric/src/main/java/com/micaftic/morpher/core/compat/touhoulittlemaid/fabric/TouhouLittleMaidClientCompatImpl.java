@@ -78,6 +78,8 @@ public final class TouhouLittleMaidClientCompatImpl {
         }
         return MaidCapability.get(hit.getEntity()).map(cap -> cap.isModelReady()
                 && cap.getModelAssembly() != null
+                && cap.getModelAssembly().getPresentationCapabilities().playerActionControlsAvailable()
+                && cap.getModelAssembly().getModelData() != null
                 && (!cap.getModelAssembly().getModelData().getModelProperties().getExtraAnimation().isEmpty()
                 || !cap.getModelAssembly().getModelData().getModelProperties().getExtraAnimationClassify().isEmpty()))
                 .orElse(false);
