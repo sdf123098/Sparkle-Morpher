@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.input;
 
-import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.client.motion.ClientMotionSources;
 import com.google.common.collect.Lists;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
@@ -96,7 +96,7 @@ public final class ExtraAnimationKey {
             if (map.size() > index) {
                 String rouletteKey = map.getKeyAt(index);
                 if ("#return".equals(rouletteKey)) {
-                    CloudPlayerMotionSync.stop(cap);
+                    ClientMotionSources.stop(cap);
                     return;
                 }
                 if (rouletteKey.startsWith("#") && modelProperties.getExtraAnimationClassify().containsKey(rouletteKey.substring(1))) {
@@ -104,7 +104,7 @@ public final class ExtraAnimationKey {
                     Minecraft.getInstance().setScreen(new UnifiedRouletteScreen(cap.getModelId(), modelAssembly, cap));
                     return;
                 }
-                CloudPlayerMotionSync.play(cap, rouletteKey);
+                ClientMotionSources.play(cap, rouletteKey);
             }
         });
     }

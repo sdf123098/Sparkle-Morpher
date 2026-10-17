@@ -26,6 +26,27 @@ public class BoneAnimationQueue {
     private boolean animationActive = false;
 
     private float blendWeight = 1.0f;
+    private final com.micaftic.morpher.client.animation.molang.PoseValueCache[] validPose = {
+            new com.micaftic.morpher.client.animation.molang.PoseValueCache(new Vector3f()),
+            new com.micaftic.morpher.client.animation.molang.PoseValueCache(new Vector3f()),
+            new com.micaftic.morpher.client.animation.molang.PoseValueCache(new Vector3f(1))};
+    private boolean reportedInvalidPose;
+    public String sourceAnimation;
+
+    public Vector3f samplePose(AnimationPoint point, com.micaftic.morpher.molang.runtime.ExpressionEvaluator<com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext<?>> evaluator, int channel, boolean rawTransition) {
+        Vector3f value=validPose[channel].sample(()->rawTransition && point instanceof TransitionPoint transition
+                ? transition.evaluateRaw(evaluator) : point.getLerpPoint(evaluator));
+        if(validPose[channel].rejected()) {
+            if(point.cachedValue==null) point.cachedValue=new Vector3f(value); else point.cachedValue.set(value);
+            (channel==0 ? controllerSnapshot.rotation : channel==1 ? controllerSnapshot.position : controllerSnapshot.scale).set(value);
+            if(!reportedInvalidPose) {
+                reportedInvalidPose=true;
+                com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM-PHYSICS] Invalid animation source held at last valid pose: entity={} animation={} bone={} channel={}",
+                        evaluator.entity().geoInstance().entity.getId(),sourceAnimation,topLevelSnapshot.boneId,channel);
+            }
+        }
+        return value;
+    }
 
     public Vector3f positionOutput;
 
@@ -107,6 +128,7 @@ public class BoneAnimationQueue {
     }
 
     public void setBlendWeight(float blendWeight) {
+        if (!Float.isFinite(blendWeight)) { com.micaftic.morpher.client.animation.molang.EvaluationHealth.invalid(); return; }
         this.blendWeight = blendWeight > 0.0f ? blendWeight : 0.0f;
     }
 

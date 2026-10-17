@@ -21,6 +21,8 @@ public final class CloudPlayerModelSync {
     private static String displayScope, displayEpoch;
     private static final CloudPlayerAppearanceState STATE = new CloudPlayerAppearanceState();
     private static final Map<UUID, Attempt> ATTEMPTS = new HashMap<>();
+    private record Ready(CloudPlayerAppearanceState.Snapshot token, Player entity, CloudClientRuntime.RuntimeState runtime, String modelId) {}
+    private static final Map<UUID, Ready> READY = new HashMap<>();
     private static final Map<String, CompletableFuture<String>> IMPORTS = new HashMap<>();
     private static final Set<String> AUTHORIZED = new HashSet<>();
     private static CloudClientRuntime.RuntimeState authorizationRuntime;
@@ -45,25 +47,39 @@ public final class CloudPlayerModelSync {
     private static String status = "Cloud 联机：等待进入世界";
     /** Firing adapters copy these values at input time; the backend still verifies the native owner identity. */
     public static String verifiedOwnIdentity() {
-        var client=Minecraft.getInstance();return !PrivacyMode.isActive()&&sessionRuntime==CloudClientRuntime.state()
+        var client=Minecraft.getInstance();return (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive())&&sessionRuntime==CloudClientRuntime.state()
                 &&client.level==level&&client.getConnection()==connection?identityId:null;
     }
     public static CloudPlayerSelection ownCloudSelection() {
-        return sessionRuntime!=null&&sessionRuntime==CloudClientRuntime.state()&&!PrivacyMode.isActive()?localSelection(sessionRuntime):null;
+        return sessionRuntime!=null&&sessionRuntime==CloudClientRuntime.state()&&(com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive())?localSelection(sessionRuntime):null;
     }
     private record Attempt(CloudPlayerAppearanceState.Snapshot token, Player entity,
             CloudClientRuntime.RuntimeState runtime, long retryAt, boolean pending, boolean applied) {}
     private CloudPlayerModelSync() {}
+    /** Clear only the presentation attempt when source ownership changes; authorization/presence stay intact. */
+    public static void peerOwnershipChanged(UUID uuid) { ATTEMPTS.remove(uuid); }
+    public static boolean readyCandidate(UUID uuid) {
+        var ready=READY.get(uuid); var client=Minecraft.getInstance();
+        return ready!=null && com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive()
+                && ready.runtime==CloudClientRuntime.state() && client.level==level && client.getConnection()==connection
+                && client.level!=null && client.level.players().contains(ready.entity) && STATE.isCurrent(ready.token)
+                && ClientModelManager.getModelContext(ready.modelId).isPresent();
+    }
+    private static boolean peerBlocks(UUID uuid) {
+        return com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(uuid)
+                && !com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud();
+    }
 
     public static String status() { return status; }
-    public static boolean ownsAppearance(UUID playerId) { return !PrivacyMode.isActive() && STATE.ownsAppearance(playerId); }
+    public static boolean ownsAppearance(UUID playerId) { return (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive()) && !com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(playerId) && STATE.ownsAppearance(playerId); }
 
     private static void clearRemote(Player player) {
+        READY.remove(player.getUUID());
         DISPLAY.remove(player.getUUID());
         PlayerCapability.get(player).ifPresent(cap -> cap.getPositionTracker().clearDisplayState());
         CloudPlayerMotionSync.remove(player.getUUID());
         STATE.remove(player.getUUID()); ATTEMPTS.remove(player.getUUID());
-        if (!CloudEntityModelSync.ownsFakeAppearance(player.getUUID()))
+        if (!com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(player.getUUID()) && !CloudEntityModelSync.ownsFakeAppearance(player.getUUID()))
             PlayerCapability.get(player).ifPresent(cap -> { cap.clearModel(); cap.setForceDisabled(true); });
     }
 
@@ -81,7 +97,7 @@ public final class CloudPlayerModelSync {
             });
         }
         if (client.level != null) for (Player player : client.level.players()) if (player != client.player && STATE.ownsAppearance(player.getUUID())) clearRemote(player);
-        generation++; STATE.clear(); ATTEMPTS.clear(); IMPORTS.clear(); AUTHORIZED.clear(); authorizationRuntime = null;
+        generation++; STATE.clear(); ATTEMPTS.clear(); READY.clear(); IMPORTS.clear(); AUTHORIZED.clear(); authorizationRuntime = null;
         DISPLAY.clear(); lastPublishedDisplay = null; nextDisplayPublish = 0; displayScope = displayEpoch = null;
         CloudPlayerMotionSync.reset(); lastPublishedMotion = null; nextMotionPublish = 0;
         sessionRuntime = runtime; connection = client.getConnection(); level = client.level;
@@ -103,11 +119,12 @@ public final class CloudPlayerModelSync {
     }
 
     public static void tick() {
+        if(!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud()) { if(sessionRuntime != null) disconnect(); return; }
         Minecraft client = Minecraft.getInstance(); var runtime = CloudClientRuntime.state();
         if (runtime != sessionRuntime || client.getConnection() != connection) reset(client, runtime);
         // Dimension/respawn changes invalidate imports but keep the session publication revision.
         if (level != client.level) {
-            generation++; level = client.level; STATE.clear(); ATTEMPTS.clear(); IMPORTS.clear();
+            generation++; level = client.level; STATE.clear(); ATTEMPTS.clear(); READY.clear(); IMPORTS.clear();
             DISPLAY.clear(); lastPublishedDisplay = null; nextDisplayPublish = 0;
             CloudPlayerMotionSync.clearPeers();
             polling = publishing = identifying = false; nextPoll = nextPublish = 0;
@@ -119,7 +136,7 @@ public final class CloudPlayerModelSync {
             return;
         }
         long now = System.currentTimeMillis();
-        if (PrivacyMode.isActive()) {
+        if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive())) {
             for (Player player : client.level.players()) if (player != client.player && STATE.ownsAppearance(player.getUUID())) clearRemote(player);
             publish(runtime, null, now); return;
         }
@@ -142,9 +159,13 @@ public final class CloudPlayerModelSync {
         // Transient Cloud outages keep a verified appearance briefly; then revert to vanilla.
         if (lastPollSuccess > 0 && now - lastPollSuccess > 60000) for (Player player : peers) if (STATE.ownsAppearance(player.getUUID())) clearRemote(player);
         for (Player player : peers) {
+            if (peerBlocks(player.getUUID())) continue;
             var token = STATE.get(player.getUUID());
-            if (token != null && token.selection() != null) { apply(player, token); CloudPlayerMotionSync.apply(player); applyDisplay(player, runtime); }
-            else if (!CloudEntityModelSync.ownsFakeAppearance(player.getUUID()))
+            if (token != null && token.selection() != null) {
+                apply(player, token);
+                if(!com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(player.getUUID())) { CloudPlayerMotionSync.apply(player); applyDisplay(player, runtime); }
+            }
+            else if (!com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(player.getUUID()) && !CloudEntityModelSync.ownsFakeAppearance(player.getUUID()))
                 PlayerCapability.get(player).ifPresent(cap -> cap.setForceDisabled(true));
         }
     }
@@ -220,8 +241,8 @@ public final class CloudPlayerModelSync {
         publicationUuid = uuid;
         CompletableFuture<Long> revision = ownRevision < 0 ? api.revision(identityId) : CompletableFuture.completedFuture(ownRevision);
         CompletableFuture<Long> operation = revision.thenCompose(expected -> current(token, runtime)
-                ? api.publish(identityId, uuid, expected, PrivacyMode.isActive() ? null : selection, nameProof,
-                    PrivacyMode.isActive() ? null : motion, PrivacyMode.isActive() ? null : display)
+                ? api.publish(identityId, uuid, expected, (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) ? null : selection, nameProof,
+                    (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) ? null : motion, (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) ? null : display)
                 : CompletableFuture.failedFuture(new CancellationException()));
         pendingPublication = operation;
         operation.whenComplete((value, error) -> Minecraft.getInstance().execute(() -> {
@@ -243,7 +264,7 @@ public final class CloudPlayerModelSync {
         CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, runtime)) return; polling = false;
             if (error != null) { nextPoll = System.currentTimeMillis() + 3000; status = "Cloud 联机查询失败：" + message(error); return; }
-            if (PrivacyMode.isActive()) return;
+            if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive())) return;
             Map<UUID, CloudPlayerSelection> entries = new HashMap<>(); requests.forEach(request -> entries.putAll(request.join()));
             lastPollSuccess = System.currentTimeMillis();
             for (Player player : Minecraft.getInstance().level.players()) if (player != Minecraft.getInstance().player && ids.contains(player.getUUID())) {
@@ -293,14 +314,14 @@ public final class CloudPlayerModelSync {
     }
 
     private static void apply(Player player, CloudPlayerAppearanceState.Snapshot token) {
-        if (PrivacyMode.isActive()) return;
+        if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) || peerBlocks(player.getUUID())) return;
         var runtime = CloudClientRuntime.state();
         Attempt previous = ATTEMPTS.get(player.getUUID());
         if (previous != null && previous.token().equals(token) && previous.entity() == player
                 && previous.runtime() == runtime && (previous.pending() || previous.applied() || System.currentTimeMillis() < previous.retryAt())) return;
         PlayerCapability.get(player).ifPresent(cap -> {
             // A missing/denied Cloud model must not draw the observer's local fallback.
-            cap.setForceDisabled(true);
+            if(!com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(player.getUUID())) cap.setForceDisabled(true);
             CloudPlayerSelection selection = token.selection();
             if (runtime == null || !selection.instanceId().equals(runtime.instance().instanceId())
                     || !selection.originSha256().equals(originFingerprint(runtime))) {
@@ -312,13 +333,16 @@ public final class CloudPlayerModelSync {
             ATTEMPTS.put(player.getUUID(), attempt);
             importModel(runtime, selection).whenComplete((modelId, failure) -> Minecraft.getInstance().execute(() -> {
                 if (level != world || Minecraft.getInstance().level != world || CloudClientRuntime.state() != runtime
-                        || !STATE.isCurrent(token) || PrivacyMode.isActive()
+                        || !STATE.isCurrent(token) || (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive())
+                        || peerBlocks(player.getUUID())
                         || !Minecraft.getInstance().level.players().contains(player)) {
                     ATTEMPTS.remove(player.getUUID(), attempt);
                     return;
                 }
                 ATTEMPTS.put(player.getUUID(), new Attempt(token, player, runtime, System.currentTimeMillis() + 5000, false, failure == null));
                 if (failure == null) {
+                    READY.put(player.getUUID(),new Ready(token,player,runtime,modelId));
+                    com.micaftic.morpher.client.peer.ClientPeerRuntime.yieldToCloud(player.getUUID());
                     cap.initModelWithTexture(modelId, selection.textureId());
                     cap.setForceDisabled(false);
                     YesSteveModel.LOGGER.info("[SM][CloudPlayer] applied player={} asset={} revision={} texture={}", player.getUUID(), selection.ref().assetId(), selection.ref().revision(), selection.textureId());

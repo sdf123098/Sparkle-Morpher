@@ -15,6 +15,10 @@ public class YsmZstd {
     }
 
     public static byte[] decompress(byte[] rawData, int offset, int length) throws IOException {
+        if(com.micaftic.morpher.peer.PeerDecodeScope.active()) {
+            com.micaftic.morpher.peer.PeerDecodeScope.allocate(length);
+            return decompressStrict(rawData,offset,length);
+        }
         try {
             return decompressStrict(rawData, offset, length);
         } catch (Throwable strictError) {

@@ -1,53 +1,94 @@
 package com.micaftic.morpher.client.animation.molang;
 
 import com.micaftic.morpher.client.animation.molang.functions.physics.IPhysics;
-import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
-import org.jetbrains.annotations.Nullable;
+import com.micaftic.morpher.client.animation.molang.functions.physics.FirstOrder;
+import com.micaftic.morpher.client.animation.molang.functions.physics.SecondOrder;
+import java.util.ArrayDeque;
+import java.util.HashMap;
+import java.util.Map;
 
 public class PhysicsManager {
 
-    private static final ThreadLocal<Integer> CURRENT_SCOPE = new ThreadLocal<>();
-
-    private final Int2ReferenceOpenHashMap<IPhysics> physicsValues = new Int2ReferenceOpenHashMap<>(16);
-
-    private float lastRenderTicks = 0.0f;
-
-    public void update(float renderTicks) {
-        if (lastRenderTicks > 0) {
-            if (renderTicks > lastRenderTicks) {
-                float interval = (renderTicks - lastRenderTicks) / 20f;
-                lastRenderTicks = renderTicks;
-                physicsValues.int2ReferenceEntrySet().fastForEach(entry -> entry.getValue().update(interval));
-            }
-        } else {
-            lastRenderTicks = renderTicks;
+    public static final double RECOVERY_SECONDS = 8.0 / 60.0;
+    private static final ThreadLocal<ArrayDeque<Integer>> CURRENT_SCOPE = ThreadLocal.withInitial(ArrayDeque::new);
+    private enum Kind { FIRST, SECOND }
+    private record Key(Kind kind, long generation, Integer scope, int name) { }
+    private static final class Node {
+        IPhysics physics;
+        long step;
+        double time;
+        Node(IPhysics physics, long step, double time) {
+            this.physics = physics; this.step = step; this.time = time;
         }
     }
+    private final Map<Key, Node> physicsValues = new HashMap<>();
+    private boolean initialized;
+    private double time;
+    private long step;
+    private long generation;
+    private boolean recovery;
 
-    public void put(int key, IPhysics physics) {
-        this.physicsValues.put(key, physics);
+    /** Program-owned time domain; solver and node identity remain unchanged. */
+    public void updateSimulation(double seconds, boolean recovering) {
+        if (!Double.isFinite(seconds)) return;
+        if (!initialized) { initialized = true; time = seconds; recovery = true; return; }
+        if (seconds == time && !recovering) return;
+        time = seconds; recovery = recovering; step++;
     }
 
-    public static int scopedKey(int key) {
-        Integer scope = CURRENT_SCOPE.get();
-        return scope == null ? key : 31 * key + scope;
+    /** Begin an evaluation (ticks, including zero). Integrate only when current arguments arrive. */
+    public void update(double renderTicks) {
+        if (!Double.isFinite(renderTicks)) return;
+        double next = renderTicks / 20.0;
+        if (!initialized) { initialized = true; time = next; recovery = true; return; }
+        if (Double.compare(next, time) == 0) return;
+        recovery = next < time || next - time > RECOVERY_SECONDS;
+        time = next;
+        step++;
+        if ((step & 255) == 0) physicsValues.values().removeIf(n -> time - n.time > 30);
     }
 
-    public static void pushScope(int scope) {
-        CURRENT_SCOPE.set(scope);
+    public float sampleFirst(int name, float input, float response) {
+        // First-order names were always shared across bones. Preserve intentional sharing.
+        return sample(new Key(Kind.FIRST, generation, null, name), input, response, 0, 0);
     }
 
+    public float sampleSecond(int name, float input, float frequency, float damping, float response) {
+        return sample(new Key(Kind.SECOND, generation, CURRENT_SCOPE.get().peek(), name), input, frequency, damping, response);
+    }
+
+    private float sample(Key key, float input, float a, float b, float c) {
+        Node node = physicsValues.get(key);
+        if (node == null) {
+            node = new Node(create(key.kind, input, a, b, c), step, time);
+            physicsValues.put(key, node);
+        } else if (node.step != step) {
+            double dt = time - node.time;
+            if (recovery || dt < 0 || dt > RECOVERY_SECONDS) {
+                if (Float.isFinite(input)) node.physics = create(key.kind, input, a, b, c);
+            } else {
+                node.physics.setArgs(input, a, b, c);
+                node.physics.update((float) dt);
+            }
+            node.step = step;
+            node.time = time;
+        }
+        return node.physics.getValue();
+    }
+
+    private static IPhysics create(Kind kind, float input, float a, float b, float c) {
+        return kind == Kind.FIRST ? new FirstOrder(input, a) : new SecondOrder(input, a, b, c);
+    }
+
+    public static void pushScope(int scope) { CURRENT_SCOPE.get().push(scope); }
     public static void popScope() {
-        CURRENT_SCOPE.remove();
-    }
-
-    @Nullable
-    public IPhysics get(int key) {
-        return this.physicsValues.get(key);
+        ArrayDeque<Integer> scopes = CURRENT_SCOPE.get();
+        if (!scopes.isEmpty()) scopes.pop();
+        if (scopes.isEmpty()) CURRENT_SCOPE.remove();
     }
 
     public void clear() {
-        this.lastRenderTicks = 0.0f;
-        this.physicsValues.clear();
+        initialized = false; time = 0; step = 0; generation++; recovery = false;
+        physicsValues.clear();
     }
 }

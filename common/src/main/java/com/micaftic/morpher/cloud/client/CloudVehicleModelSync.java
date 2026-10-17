@@ -40,7 +40,7 @@ public final class CloudVehicleModelSync {
         APPLIED.clear();BINDINGS.clear();IMPORTS.clear();RETRIES.clear();polling=false;nextPoll=0;generation++;
     }
     private static EntityDisplayContext currentContext(Minecraft client,CloudClientRuntime.RuntimeState next){
-        if(client.level==null||next==null||next.instanceInfo()==null||!next.instanceInfo().supports("vehicle_appearance_v1")||PrivacyMode.isActive())return null;
+        if(client.level==null||next==null||next.instanceInfo()==null||!next.instanceInfo().supports("vehicle_appearance_v1")||(!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()))return null;
         String scope=next.scopeLifecycle().activeScopeId(),epoch=next.scopeLifecycle().activeWorldEpoch();
         if(scope==null||epoch==null)return null;
         return new EntityDisplayContext(next.instance().instanceId(),CloudAssetCache.sha256(next.instance().origin().toString().getBytes(StandardCharsets.UTF_8)),
@@ -49,7 +49,7 @@ public final class CloudVehicleModelSync {
     private static boolean current(EntityDisplayContext expected,CloudClientRuntime.RuntimeState session){
         Minecraft client=Minecraft.getInstance();
         return Objects.equals(context,expected)&&runtime==session&&runtime==CloudClientRuntime.state()
-            &&client.level==level&&client.getConnection()==connection&&!PrivacyMode.isActive()
+            &&client.level==level&&client.getConnection()==connection&&(com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive())
             &&session.scopeLifecycle().contextGeneration()==scopeGeneration;
     }
     public static void tick(){
@@ -99,11 +99,11 @@ public final class CloudVehicleModelSync {
         Entity passenger=entity.getControllingPassenger();
         if(independent!=null){model=independent.runtimeModelId();variables=bound.appearance.variables();
             if(!ClientModelManager.getAvailableModelIds().contains(model)){materialize(independent);clear(entity);return;}}
-        else if(passenger instanceof Player player&&(player==client.player||!PrivacyMode.isActive()
+        else if(passenger instanceof Player player&&(player==client.player||(com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive())
                 &&(CloudPlayerModelSync.ownsAppearance(player.getUUID())||CloudEntityModelSync.ownsFakeAppearance(player.getUUID())||CloudEntityMotionSync.ownsAppearance(player)))){
             var cap=PlayerCapability.get(player).orElse(null);
             if(cap!=null&&!cap.isForceDisabled()&&cap.isModelReady()){model=cap.getModelId();var motion=CloudMotionSources.motion(cap);if(motion!=null)variables=motion.roaming();}
-        }else if(passenger!=null&&!PrivacyMode.isActive()&&(!CloudEntityModelSync.selectedModelId(passenger.getUUID()).isEmpty()||CloudEntityMotionSync.ownsAppearance(passenger))){
+        }else if(passenger!=null&&(com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive())&&(!CloudEntityModelSync.selectedModelId(passenger.getUUID()).isEmpty()||CloudEntityMotionSync.ownsAppearance(passenger))){
             var cap=MaidCapability.get(passenger).orElse(null);if(cap!=null&&!cap.isForceDisabled()&&cap.isModelReady()){model=cap.getModelId();var motion=CloudMotionSources.motion(cap);if(motion!=null)variables=motion.roaming();}
         }
         if(VehicleAppearancePolicy.choose(vanilla(entity),independent!=null,model!=null)==VehicleAppearancePolicy.Source.VANILLA){clear(entity);return;}

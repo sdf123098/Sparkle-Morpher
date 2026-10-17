@@ -160,6 +160,7 @@ public final class ModernHudRenderer {
         }
         Vector3f point = ModernHudHandItemLayout.locate(model, profile, arm,
                 originX, originY, scale, yawOffset);
+        if (point == null) return;
         ItemDisplayContext displayContext = arm == HumanoidArm.LEFT
                 ? ItemDisplayContext.THIRD_PERSON_LEFT_HAND
                 : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;

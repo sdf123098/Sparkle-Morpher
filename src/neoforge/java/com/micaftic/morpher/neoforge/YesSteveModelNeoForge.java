@@ -17,6 +17,7 @@ public final class YesSteveModelNeoForge {
         modContainer.registerConfig(ModConfig.Type.CLIENT, GeneralConfig.buildSpec());
 
         YesSteveModel.registerModBusEvents(modEventBus);
+        PeerLanNetworking.register(modEventBus);
 
         modEventBus.addListener(YesSteveModelNeoForge::onCommonSetup);
     }

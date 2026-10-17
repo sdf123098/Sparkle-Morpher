@@ -103,7 +103,8 @@ public final class MolangParserImpl implements MolangParser {
                 if (lastTarget == null) {
                     throw new ParseException("Failed to get property: " + token.value(), lexer.cursor());
                 }
-                Expression expr = IdentifierExpression.get(token.value(), lastTarget);
+                String symbol = token.value();
+                Expression expr = IdentifierExpression.get(symbol, lastTarget);
                 token = lexer.next();
                 if (token.kind() == TokenKind.DOT) {
                     token = lexer.next();
@@ -121,7 +122,8 @@ public final class MolangParserImpl implements MolangParser {
                         throw new ParseException("Failed to get property: " + token.value(), lexer.cursor());
                     }
 
-                    expr = IdentifierExpression.get(token.value(), lastTarget);
+                    symbol += "." + token.value();
+                    expr = IdentifierExpression.get(symbol, lastTarget);
                     lexer.next();
                 }
 
@@ -206,7 +208,7 @@ public final class MolangParserImpl implements MolangParser {
                 if (!callExpression.function().validateArgumentSize(arguments.size())) {
                     throw new ParseException("Illegal function arguments size", lexer.cursor());
                 }
-                return new CallExpression(callExpression.function(), new Function.ArgumentCollection(arguments));
+                return new CallExpression(callExpression.function(), new Function.ArgumentCollection(arguments), callExpression.symbol());
             }
 
             if (!callExpression.function().validateArgumentSize(callExpression.arguments().size())) {

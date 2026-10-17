@@ -27,13 +27,13 @@ public final class IdentifierExpression implements Expression {
             return new StringExpression((String) obj);
         }
         if (obj instanceof Function) {
-            return new CallExpression((Function) obj);
+            return new CallExpression((Function) obj, CallExpression.EMPTY, str);
         }
         if (obj instanceof AssignableVariable) {
-            return new AssignableVariableExpression((AssignableVariable) obj);
+            return new AssignableVariableExpression((AssignableVariable) obj, str);
         }
         if (obj instanceof Variable) {
-            return new VariableExpression((Variable) obj);
+            return new VariableExpression((Variable) obj, str);
         }
         return new IdentifierExpression(str, obj);
     }

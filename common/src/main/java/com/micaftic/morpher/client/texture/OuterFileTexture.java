@@ -21,6 +21,7 @@ import java.util.Objects;
 
 public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     private final byte[] data;
+    private final boolean peerTexture;
     private boolean uploaded;
     private boolean closed;
     private final String modelId;
@@ -35,6 +36,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
         this.data = Objects.requireNonNull(data, "Texture source data must not be null");
         if (data.length == 0) throw new IllegalArgumentException("Texture source data must not be empty");
         this.modelId = modelId;
+        this.peerTexture = com.micaftic.morpher.peer.PeerDecodeScope.active() || modelId != null && modelId.startsWith("peer:");
     }
 
     @Override
@@ -47,6 +49,11 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     }
 
     public void doLoad() {
+        if (peerTexture && closed) return;
+        if (peerTexture && !com.micaftic.morpher.client.peer.PeerRenderFrames.executing(this)) {
+            com.micaftic.morpher.client.peer.PeerRenderFrames.schedule(this, this::doLoad);
+            return;
+        }
         if (uploaded) {
             return;
         }
@@ -65,6 +72,19 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             YesSteveModel.LOGGER.error("[SM] Failed to upload outer file texture", e);
         }
         UploadManager.onTextureUploaded(this);
+    }
+
+    public boolean isPeerTexture() { return peerTexture; }
+    public boolean isPeerUploaded() { return uploaded; }
+    public String peerModelId() { return modelId; }
+    public boolean isSourceReleased() { return closed; }
+    public long peerUploadBytes() {
+        if (data.length >= 24 && data[0] == (byte) 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G') {
+            int w = java.nio.ByteBuffer.wrap(data, 16, 8).getInt();
+            int h = java.nio.ByteBuffer.wrap(data, 20, 4).getInt();
+            if (w > 0 && w <= 4096 && h > 0 && h <= 4096) return Math.max(data.length, (long) w * h * 4);
+        }
+        return Math.max(data.length, 64L * 1024 * 1024);
     }
 
     /** Original PNG data exposed to optional runtime material integrations. */
@@ -90,6 +110,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             return;
         }
         closed = true;
+        com.micaftic.morpher.peer.PeerFrameWork.PEER.cancel(this);
         releaseGpuBinding();
         for (OuterFileTexture texture : suffixTextures.values()) {
             texture.closeAndReleaseSource();

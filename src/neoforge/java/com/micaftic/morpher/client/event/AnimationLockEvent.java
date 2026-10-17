@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.event;
 
-import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.client.motion.ClientMotionSources;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import net.minecraft.client.Minecraft;
@@ -15,7 +15,7 @@ public class AnimationLockEvent {
     private AnimationLockEvent() {}
     public static void register() {}
     @SubscribeEvent public static void onTick(net.neoforged.neoforge.client.event.ClientTickEvent.Pre event) {
-        LocalPlayer p; if (YesSteveModel.isAvailable() && !locked && (p = Minecraft.getInstance().player) != null && isMoving(p)) PlayerCapability.get(p).ifPresent(c -> { if (c.isModelSwitching()) { CloudPlayerMotionSync.stop(c); } });
+        LocalPlayer p; if (YesSteveModel.isAvailable() && !locked && (p = Minecraft.getInstance().player) != null && isMoving(p)) PlayerCapability.get(p).ifPresent(c -> { if (c.isModelSwitching()) { ClientMotionSources.stop(c); } });
     }
     public static boolean isMoving(LocalPlayer p) { Input i = p.input; return i != null && (Math.abs(i.leftImpulse) > 1e-5f || Math.abs(i.forwardImpulse) > 1e-5f || i.jumping || i.shiftKeyDown); }
     public static void toggleLock() { locked = !locked; } public static boolean isLocked() { return locked; }

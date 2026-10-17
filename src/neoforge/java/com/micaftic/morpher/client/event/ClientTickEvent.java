@@ -39,6 +39,9 @@ public final class ClientTickEvent {
         }
         tickCount++;
         InputStateKey.tick();
+        if (!client.isPaused()) com.micaftic.morpher.client.animation.molang.AnimationProgramRuntime.tickInputs();
+        com.micaftic.morpher.client.peer.ClientNetworkPreferences.refresh();
+        com.micaftic.morpher.client.peer.ClientPeerRuntime.tick();
         CloudMinecraftEntityProviders.tick();
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.tick();
         com.micaftic.morpher.cloud.client.CloudEntityModelSync.tick();

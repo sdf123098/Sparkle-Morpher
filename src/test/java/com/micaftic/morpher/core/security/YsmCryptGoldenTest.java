@@ -93,8 +93,11 @@ class YsmCryptGoldenTest {
     private static final String GOLDEN_PACKET_B64 = "IGQSY+7MxH+8hYIYksrxJitS4H7573PCvSJGVr2FAuxO";
     /** The retained 2.0.0 identity must continue to locate existing encrypted files. */
     private static final long[] GOLDEN_HASHES_2_0 = {2129038222764920386L, 959001548499694060L};
-    /** NeoForge 1.21.1 test metadata uses the workspace's existing mod_version=2.1.0. */
-    private static final long[] GOLDEN_HASHES = {-8944236874905801733L, 6059545122705836171L};
+    /** Retained identities keep existing encrypted caches readable. */
+    private static final long[] GOLDEN_HASHES_2_1_0 = {-8944236874905801733L, 6059545122705836171L};
+    private static final long[] GOLDEN_HASHES_2_1_1 = {-7081843962873028L, 524069205966456912L};
+    /** Current release identity; older vectors remain explicitly covered. */
+    private static final long[] GOLDEN_HASHES = {3536502446835589754L, 3378917116431209566L};
 
     @Test
     void packetEncrypt_goldenBytes() throws Exception {
@@ -107,6 +110,11 @@ class YsmCryptGoldenTest {
     void calculateModelHashes_goldenValues() {
         assertArrayEquals(GOLDEN_HASHES_2_0, ModelCacheKeyDerivation.hashes("model-abc", SERVER_KEY,
                 "sparkle_morpher:model_cache\nmodVersion=2.0.0"), "legacy identity must remain readable");
+        assertArrayEquals(GOLDEN_HASHES_2_1_0, ModelCacheKeyDerivation.hashes("model-abc", SERVER_KEY,
+                "sparkle_morpher:model_cache\nmodVersion=2.1.0"), "2.1.0 identity must remain readable");
+        assertArrayEquals(GOLDEN_HASHES_2_1_1, ModelCacheKeyDerivation.hashes("model-abc", SERVER_KEY,
+                "sparkle_morpher:model_cache\nmodVersion=2.1.1"), "2.1.1 identity must remain readable");
+        org.junit.jupiter.api.Assertions.assertEquals("sparkle_morpher:model_cache\nmodVersion=2.2.0",YsmCrypt.getModelCacheIdentity());
         long[] hashes = YsmCrypt.calculateModelHashes("model-abc", SERVER_KEY);
         assertArrayEquals(GOLDEN_HASHES, hashes, "model hashes 必须与 golden 向量一致");
     }

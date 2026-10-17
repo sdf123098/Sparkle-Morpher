@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gui.molang;
 
-import com.micaftic.morpher.cloud.client.CloudMotionSources;
+import com.micaftic.morpher.client.motion.ClientMotionSources;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
@@ -62,10 +62,10 @@ public final class MolangOption {
 
     private static void execute(AnimatableEntity<?> animatable, String expr) {
         try {
-            CloudMotionSources.beginEdit(animatable);
+            ClientMotionSources.beginEdit(animatable);
             animatable.executeExpression(GeckoLibCache.parseSimpleExpression(expr), true, false, null);
             if (!GeckoLibCache.isRoamingVariableAssignment(expr)) {
-                CloudMotionSources.expression(animatable, expr, java.util.List.of());
+                ClientMotionSources.expression(animatable, expr, java.util.List.of());
             }
         } catch (ParseException e) {
             YesSteveModel.LOGGER.error(e);

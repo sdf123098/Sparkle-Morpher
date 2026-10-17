@@ -17,8 +17,8 @@ import com.micaftic.morpher.geckolib3.core.keyframe.ConstantPoint;
 import com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext;
 import com.micaftic.morpher.geckolib3.core.util.TransitionVector3f;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import com.micaftic.morpher.cloud.client.CloudMotionSources;
-import com.micaftic.morpher.cloud.client.CloudControllerMotionCursor;
+import com.micaftic.morpher.client.motion.ClientMotionSources;
+import com.micaftic.morpher.client.motion.ClientControllerMotionCursor;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
@@ -82,15 +82,16 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
 
     private final SoundTransitionGate soundTransitionGate = new SoundTransitionGate();
 
-    private final CloudControllerMotionCursor cloudCursor = new CloudControllerMotionCursor();
+    private final ClientControllerMotionCursor cloudCursor = new ClientControllerMotionCursor();
     private long stateStartedAt;
+    private boolean suppressPeerEntryAudio;
 
     private String cloudName() { return this.parentName == null ? this.name : this.name + "." + this.parentName; }
 
     /** The observer adopts the owner's state and random choices before evaluating clip conditions. */
     private boolean synchronizeEntry(ExpressionEvaluator<AnimationContext<?>> evaluator) {
-        if (CloudMotionSources.isOwner(this.animatable)) return false;
-        var motion = CloudMotionSources.motion(this.animatable);
+        if (ClientMotionSources.isOwner(this.animatable)) return false;
+        var motion = ClientMotionSources.motion(this.animatable);
         var entry = motion == null ? null : motion.controllers().get(cloudName());
         if (entry == null || entry.state().isEmpty()) { this.cloudCursor.clear(); return false; }
         AnimationState target = this.animationEntries.getStates().get(StringPool.computeIfAbsent(entry.state()));
@@ -98,8 +99,11 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
         boolean transition = this.currentEntry != target || this.cloudCursor.needsTransition(entry);
         if (transition) {
             updateDisplayName(target.getName());
-            transitionToEntry(target, evaluator);
-            float elapsed = CloudMotionSources.elapsedTicks(entry.startedAtUnixMs());
+            boolean historical = motion.peer() && motion.elapsedTicks(entry.startedAtUnixMs()) > 20;
+            this.suppressPeerEntryAudio = historical;
+            if(historical)evaluator.entity().setPlaybackFlags(new PlaybackFlags(false));
+            try { transitionToEntry(target, evaluator); } finally { this.suppressPeerEntryAudio = false;evaluator.entity().setPlaybackFlags(this.playbackFlags); }
+            float elapsed = ClientMotionSources.elapsedTicks(motion, entry.startedAtUnixMs());
             for (int i = 0; i < this.activeSlotCount; i++) this.animationSlots.get(i).getResampler().seekFromElapsedTicks(elapsed);
         }
         if (transition || this.cloudCursor.needsVariables(entry))
@@ -322,7 +326,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
             for (IValue value : nextState.getPreExpressions()) {
                 value.evalSafe(evaluator);
             }
-            for (String str : nextState.getSoundEffects()) {
+            for (String str : suppressPeerEntryAudio ? java.util.List.<String>of() : nextState.getSoundEffects()) {
                 if (!StringUtils.isNoneBlank(str)) {
                     this.playbackFlags.getAudioPlayerManager().playSound(evaluator.entity().geoInstance(), 0, str, false, null);
                 }
@@ -360,7 +364,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
         }
         this.stateStartedAt = Math.max(System.currentTimeMillis(), this.stateStartedAt + 1);
         if (evaluator.entity().storage != null)
-            CloudMotionSources.controller(this.animatable, cloudName(), nextState == null ? "" : nextState.getName(),
+            ClientMotionSources.controller(this.animatable, cloudName(), nextState == null ? "" : nextState.getName(),
                     this.stateStartedAt, evaluator.entity().storage.numericSnapshot());
     }
 
@@ -551,7 +555,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                         if (!isTransition) {
                             Vector3f current = boneQueue.controllerSnapshot.rotation;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
-                            Vector3f lerpPoint = animationPoint.getLerpPoint(evaluator);
+                            Vector3f lerpPoint = boneQueue.samplePose(animationPoint, evaluator, 0, false);
                             float blendWeight = boneQueue.getBlendWeight();
                             if (animationPoint instanceof ConstantPoint) {
                                 float percentCompleted = animationPoint.getPercentCompleted();
@@ -565,9 +569,9 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                             Vector3f current = boneQueue.controllerSnapshot.rotation;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             if (animationPoint instanceof TransitionPoint transition) {
-                                transitionVector3f.fma(boneQueue.getBlendWeight(), transition.evaluateRaw(evaluator));
+                                transitionVector3f.fma(boneQueue.getBlendWeight(), boneQueue.samplePose(animationPoint, evaluator, 0, true));
                             } else {
-                                transitionVector3f.fma(boneQueue.getBlendWeight(), animationPoint.getLerpPoint(evaluator));
+                                transitionVector3f.fma(boneQueue.getBlendWeight(), boneQueue.samplePose(animationPoint, evaluator, 0, false));
                             }
                         } else {
                             transitionVector3f.set(offsetPoint);
@@ -617,7 +621,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                         if (!isTransition) {
                             Vector3f current = boneQueue.controllerSnapshot.position;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
-                            Vector3f lerpPoint = point.getLerpPoint(evaluator);
+                            Vector3f lerpPoint = boneQueue.samplePose(point, evaluator, 1, false);
                             float blendWeight = boneQueue.getBlendWeight();
                             if (point instanceof ConstantPoint) {
                                 float percentCompleted = point.getPercentCompleted();
@@ -631,9 +635,9 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                             Vector3f current = boneQueue.controllerSnapshot.position;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             if (point instanceof TransitionPoint transition) {
-                                result.fma(boneQueue.getBlendWeight(), transition.evaluateRaw(evaluator));
+                                result.fma(boneQueue.getBlendWeight(), boneQueue.samplePose(point, evaluator, 1, true));
                             } else {
-                                result.fma(boneQueue.getBlendWeight(), point.getLerpPoint(evaluator));
+                                result.fma(boneQueue.getBlendWeight(), boneQueue.samplePose(point, evaluator, 1, false));
                             }
                         } else {
                             result.set(offsetPoint);
@@ -684,7 +688,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                         if (!isTransition) {
                             Vector3f current = boneQueue.controllerSnapshot.scale;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
-                            Vector3f lerpPoint = point.getLerpPoint(evaluator);
+                            Vector3f lerpPoint = boneQueue.samplePose(point, evaluator, 2, false);
                             float blendWeight = boneQueue.getBlendWeight();
                             if (point instanceof ConstantPoint) {
                                 float percentCompleted = point.getPercentCompleted();
@@ -703,9 +707,9 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
                             Vector3f current = boneQueue.controllerSnapshot.scale;
                             evaluator.setCurrentChannelValues(current.x, current.y, current.z);
                             if (point instanceof TransitionPoint transition) {
-                                MathUtil.lerpAnglesInPlace(transition.evaluateRaw(evaluator), boneQueue.getBlendWeight(), tmp);
+                                MathUtil.lerpAnglesInPlace(boneQueue.samplePose(point, evaluator, 2, true), boneQueue.getBlendWeight(), tmp);
                             } else {
-                                MathUtil.lerpAnglesInPlace(point.getLerpPoint(evaluator), boneQueue.getBlendWeight(), tmp);
+                                MathUtil.lerpAnglesInPlace(boneQueue.samplePose(point, evaluator, 2, false), boneQueue.getBlendWeight(), tmp);
                             }
                             result.mul(tmp);
                         } else {

@@ -15,7 +15,7 @@ public final class YsmEventBootstrap {
   
   LivingEventBridge.register();
         if (!PlatformAPI.isServer()) {
-            registerClient("com.micaftic.morpher.event.EntityJoinCallbackEvent");
+            // ClientPlayerJoinNotification handles join/quit via NeoForge @EventBusSubscriber.
             registerClient("com.micaftic.morpher.client.event.ClientResourceLifecycleEvent");
             registerClient("com.micaftic.morpher.client.event.PlayerSkinTextureManager");
             registerClient("com.micaftic.morpher.client.renderer.RendererManager");

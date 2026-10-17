@@ -73,6 +73,34 @@ public class AnimationProcessor<TEntity extends Entity> {
     private float currentSeekTime;
     private boolean currentDeprecatedMode;
     private final EulerNlerpScratch rotScratch = new EulerNlerpScratch();
+    private final Vector3f lastRotation = new Vector3f(), lastPosition = new Vector3f(), lastScale = new Vector3f();
+    private com.micaftic.morpher.client.animation.molang.KipfelRuntime kipfelRuntime;
+    private volatile long programGeneration;
+    public long programGeneration() { return programGeneration; }
+    private Object programWorld;
+    private boolean programExternalWrites;
+    private final java.util.Map<com.micaftic.morpher.client.animation.molang.AnimationProgramPlan,
+            com.micaftic.morpher.client.animation.molang.AnimationProgramRuntime> programs = new java.util.IdentityHashMap<>();
+
+    public synchronized boolean runProgram(com.micaftic.morpher.client.animation.molang.AnimationProgramPlan plan, AnimationContext<?> context) {
+        if (context.programGeneration != programGeneration) return true;
+        var current = this.animatable.getAnimation(plan.animationName());
+        // A delayed slot from an old model must neither recreate a runtime nor execute its migrated writes.
+        if (current == null || current.programPlan != plan) return true;
+        if (programExternalWrites || context.peerInput()) return false;
+        var runtime = programs.computeIfAbsent(plan, key -> new com.micaftic.morpher.client.animation.molang.AnimationProgramRuntime(key, programGeneration));
+        runtime.update(context, programGeneration);
+        return true;
+    }
+
+    public synchronized void releaseProgram(com.micaftic.morpher.client.animation.molang.AnimationProgramPlan plan) {
+        var runtime = programs.remove(plan);
+        if (runtime != null) runtime.close();
+    }
+
+    public Vector3f sampleKipfelRotation(String animation,int bone,Vector3f initial) {
+        return kipfelRuntime == null ? null : kipfelRuntime.sample(animation,bone,initial);
+    }
 
     public boolean isRotationActive(int boneId) {
         BoneTopLevelSnapshot snapshot = this.boneById.get(boneId);
@@ -83,8 +111,18 @@ public class AnimationProcessor<TEntity extends Entity> {
         this.animatable = animatable;
     }
 
-    public void tickAnimation(AnimationEvent<AnimatableEntity<TEntity>> event, AnimationContext<?> context, boolean z, boolean z2) {
+    public synchronized void tickAnimation(AnimationEvent<AnimatableEntity<TEntity>> event, AnimationContext<?> context, boolean z, boolean z2) {
+        if (context.programGeneration != programGeneration) return;
+        Object world = this.animatable.entity.level();
+        if (programWorld != null && programWorld != world) {
+            programGeneration++;
+            programs.values().forEach(com.micaftic.morpher.client.animation.molang.AnimationProgramRuntime::close);
+            programs.clear();
+        }
+        programWorld = world;
+        context.programGeneration = programGeneration;
         context.setStorage(this.animationStorage);
+        for (var program : programs.values()) program.publish(context);
         context.setRandom(this.random);
         context.setAudioPlayerManager(this.audioPlayerManager);
         ExpressionEvaluator<AnimationContext<?>> evaluator = ExpressionEvaluator.evaluator(context);
@@ -96,6 +134,12 @@ public class AnimationProcessor<TEntity extends Entity> {
             this.lastAudioTickTime = seekTime;
         }
         preProcess(evaluator);
+        if (programExternalWrites) context.programPoseValues = java.util.Map.of();
+        var attachment = this.animatable.getAnimation(com.micaftic.morpher.resource.bundle.KipfelCompatibility.HAIR);
+        if (z && attachment != null && attachment.stableKipfelAttachments) {
+            if (kipfelRuntime == null) kipfelRuntime = new com.micaftic.morpher.client.animation.molang.KipfelRuntime(this.animatable);
+            kipfelRuntime.update(event,context,evaluator);
+        }
         AnimationData manager = this.animatable.getAnimationData();
         this.currentEvaluator = evaluator;
         this.currentSeekTime = seekTime;
@@ -204,6 +248,7 @@ public class AnimationProcessor<TEntity extends Entity> {
             PhysicsManager.popScope();
         }
         if (rot != null) {
+            lastRotation.set(snapshot.rotation);
             Vector3f vector3f = snapshot.currentValue;
             if (!snapshot.isCurrentlyRunningRotationAnimation) {
                 snapshot.isCurrentlyRunningRotationAnimation = true;
@@ -218,7 +263,8 @@ public class AnimationProcessor<TEntity extends Entity> {
                 vector3f.set(snapshot.rotation);
             }
             // molang/物理可能产生 NaN/Inf（无效数学、物理震荡等）→ 消毒，防止骨骼矩阵炸开乱飘
-            sanitizeVector(snapshot.rotation);
+            if (!finite(snapshot.rotation)) snapshot.rotation.set(lastRotation);
+            vector3f.set(snapshot.rotation);
         }
 
         TransitionVector3f pos;
@@ -229,13 +275,14 @@ public class AnimationProcessor<TEntity extends Entity> {
             PhysicsManager.popScope();
         }
         if (pos != null) {
+            lastPosition.set(snapshot.position);
             if (!snapshot.isCurrentlyRunningPositionAnimation) {
                 snapshot.isCurrentlyRunningPositionAnimation = true;
                 snapshot.position.set(0.0f, 0.0f, 0.0f);
             }
             snapshot.mostRecentResetPositionTick = seekTime;
             pos.applyLinearBlendTo(snapshot.position);
-            sanitizeVector(snapshot.position);
+            if (!finite(snapshot.position)) snapshot.position.set(lastPosition);
         }
 
         TransitionVector3f scale;
@@ -246,27 +293,18 @@ public class AnimationProcessor<TEntity extends Entity> {
             PhysicsManager.popScope();
         }
         if (scale != null) {
+            lastScale.set(snapshot.scale);
             if (!snapshot.isCurrentlyRunningScaleAnimation) {
                 snapshot.isCurrentlyRunningScaleAnimation = true;
                 snapshot.scale.set(1.0f, 1.0f, 1.0f);
             }
             snapshot.mostRecentResetScaleTick = seekTime;
             scale.applyLinearBlendTo(snapshot.scale);
-            sanitizeScaleVector(snapshot.scale);
+            if (!finite(snapshot.scale)) snapshot.scale.set(lastScale);
         }
     }
 
-    private static void sanitizeVector(Vector3f vector) {
-        if (!Float.isFinite(vector.x)) vector.x = 0.0f;
-        if (!Float.isFinite(vector.y)) vector.y = 0.0f;
-        if (!Float.isFinite(vector.z)) vector.z = 0.0f;
-    }
-
-    private static void sanitizeScaleVector(Vector3f vector) {
-        if (!Float.isFinite(vector.x)) vector.x = 1.0f;
-        if (!Float.isFinite(vector.y)) vector.y = 1.0f;
-        if (!Float.isFinite(vector.z)) vector.z = 1.0f;
-    }
+    private static boolean finite(Vector3f v) { return Float.isFinite(v.x) && Float.isFinite(v.y) && Float.isFinite(v.z); }
 
     @Nullable
     public IBone getBone(int i) {
@@ -278,7 +316,13 @@ public class AnimationProcessor<TEntity extends Entity> {
         return this.bones.size();
     }
 
-    public void reset() {
+    public synchronized void reset() {
+        this.kipfelRuntime = null;
+        programWorld = null;
+        programExternalWrites = false;
+        programGeneration++;
+        programs.values().forEach(com.micaftic.morpher.client.animation.molang.AnimationProgramRuntime::close);
+        programs.clear();
         this.boneById.clear();
         this.modelRendererList.clear();
         this.bones.clear();
@@ -364,7 +408,13 @@ public class AnimationProcessor<TEntity extends Entity> {
         }
     }
 
-    public void execute(IValue value, boolean isClientPlayer, boolean executeBeforeAnimation, @Nullable Consumer<String> resultConsumer) {
+    public synchronized void execute(IValue value, boolean isClientPlayer, boolean executeBeforeAnimation, @Nullable Consumer<String> resultConsumer) {
+        var facts = com.micaftic.morpher.client.animation.molang.AnimationProgramAnalyzer.inspect(value);
+        if (facts.unknownEffect() || !facts.writes().isEmpty() || !facts.physicsNodes().isEmpty()) {
+            programExternalWrites = true;
+            programs.values().forEach(com.micaftic.morpher.client.animation.molang.AnimationProgramRuntime::close);
+            programs.clear();
+        }
         this.pendingExpressions.add(new PendingExpression(value, isClientPlayer, executeBeforeAnimation, resultConsumer));
     }
 

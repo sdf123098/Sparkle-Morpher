@@ -44,10 +44,19 @@ public class ReplacePlayerRenderEvent {
                 firstPersonSuppressionSatisfied
         ));
         if (decision == PlayerRenderPolicy.Decision.RENDER_CUSTOM) {
+                if (com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(entity.getUUID())
+                        && (!cap.isModelReady() || !com.micaftic.morpher.peer.PeerFrameWork.PEER.admitModel(cap.getModelId()))) {
+                    com.micaftic.morpher.client.peer.ClientPeerRuntime.renderState(entity, cap.getModelId(), com.micaftic.morpher.peer.PeerObservation.State.WAITING_RENDER);
+                    return true;
+                }
             float previewYaw = ModelPreviewRenderer.isInventoryPreviewFrontFacing() ? ModelPreviewRenderer.FRONT_FACING_YAW : entityYaw;
             RendererManager.getPlayerRenderer().render(cap, previewYaw, partialTick, poseStack, bufferSource, packedLight);
+            com.micaftic.morpher.client.peer.ClientPeerRuntime.renderState(entity, cap.getModelId(), com.micaftic.morpher.peer.PeerObservation.State.RENDER_SUBMITTED);
             return true;
         }
+        if(cap != null) com.micaftic.morpher.client.peer.ClientPeerRuntime.renderState(entity, cap.getModelId(),
+                ConfigPolicies.render().disableOtherModel() || entity.isSpectator() ? com.micaftic.morpher.peer.PeerObservation.State.HIDDEN
+                        : com.micaftic.morpher.peer.PeerObservation.State.WAITING_RENDER);
         return false;
     }
 }

@@ -156,6 +156,16 @@ public final class CloudClientRuntime {
         return requireState().realtime().connect();
     }
 
+    public static void networkPolicyChanged() {
+        for(RuntimeState runtime : INSTANCES.values()) {
+            runtime.realtime().suspend();
+            if(com.micaftic.morpher.core.network.NetworkAccess.allowsCloud()) runtime.realtime().connect().thenCompose(ignored -> {
+                String scope=runtime.scopeLifecycle().activeScopeId(), epoch=runtime.scopeLifecycle().activeWorldEpoch();
+                return scope == null || epoch == null ? CompletableFuture.completedFuture(null) : runtime.realtime().joinScope(scope,epoch);
+            }).exceptionally(error -> null);
+        }
+    }
+
     public static void reconnectRealtime() {
         for (RuntimeState state : INSTANCES.values()) state.realtime().connect();
     }
