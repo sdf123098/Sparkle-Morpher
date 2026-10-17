@@ -35,14 +35,16 @@ public class MolangParser {
             } else {
                 YesSteveModel.LOGGER.debug("Failed to parse molang expression: {}\n{}", e.getMessage(), molangExpression);
             }
-            return FloatValue.ZERO;
+            return MolangValue.failed(molangExpression, e);
         }
     }
 
     public IValue parseExpressionUnsafe(String molangExpression, boolean isScript) throws ParseException {
-        MolangValue value = new MolangValue(this.engine.parse(isScript ? stripComments(molangExpression) : molangExpression), isScript);
-        this.primaryBinding.dispose();
-        return value;
+        try {
+            return new MolangValue(this.engine.parse(isScript ? stripComments(molangExpression) : molangExpression), isScript, molangExpression, null);
+        } finally {
+            this.primaryBinding.dispose();
+        }
     }
 
     private static String stripComments(String input) {

@@ -44,7 +44,7 @@ public interface Function {
         private final List<Expression> arguments;
 
         public ArgumentCollection(List<Expression> arguments) {
-            this.arguments = arguments;
+            this.arguments = List.copyOf(arguments);
         }
 
         public int size() {

@@ -16,6 +16,14 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
     // Bedrock Molang `this` 关键字支持：当前通道值 + 当前求值轴
     private final float[] channelCurrentValues = new float[3];
     private int currentAxis = 0;
+    private java.util.Map<Variable, Object> variableOverrides = java.util.Map.of();
+    @Override public void setVariableOverrides(java.util.Map<Variable, Object> values) { variableOverrides = values; }
+    private float variableFloat(Variable variable) {
+        return variableOverrides.containsKey(variable) ? ValueConversions.asFloat(variableOverrides.get(variable)) : variable.evaluateFloat(this);
+    }
+    private Object variableValue(Variable variable) {
+        return variableOverrides.containsKey(variable) ? variableOverrides.get(variable) : variable.evaluate(this);
+    }
 
     private static final Evaluator[] BINARY_EVALUATORS = {
             (evaluator, a, b) -> {
@@ -160,9 +168,11 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
     private int cnt = 0;
 
     private int working = 0;
+    private com.micaftic.morpher.peer.PeerMolangMeter peerMeter = new com.micaftic.morpher.peer.PeerMolangMeter();
 
     public ExpressionEvaluatorImpl(@Nullable TEntity tentity) {
         this.entity = tentity;
+        this.peerMeter.begin(tentity);
     }
 
     @Override
@@ -173,6 +183,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
     @Override
     @Nullable
     public Object eval(@NotNull Expression expression) {
+        this.peerMeter.begin(this.entity);
         try {
             return expression.visit(this);
         } finally {
@@ -183,6 +194,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public float evalAsFloat(@NotNull Expression expression) {
+        this.peerMeter.begin(this.entity);
         try {
             return evalFloat(expression);
         } finally {
@@ -193,6 +205,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public boolean evalAsBoolean(@NotNull Expression expression) {
+        this.peerMeter.begin(this.entity);
         try {
             return evalBool(expression);
         } finally {
@@ -203,6 +216,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     // 算术子树原生递归，跳过中间 Float 装箱；遇到不能在 primitive 域处理的节点回退到 visit
     private float evalFloat(@NotNull Expression expr) {
+        this.peerMeter.step();
         if (expr instanceof FloatExpression fe) {
             return fe.value();
         }
@@ -241,14 +255,15 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
         }
         // 函数调用走 primitive evaluateFloat，整棵子树避免落回 Object/visit 装箱路径
         if (expr instanceof CallExpression ce) {
-            return ce.function().evaluateFloat(this, ce.arguments());
+            boolean entered = this.peerMeter.enterCall();
+            try { return ce.function().evaluateFloat(this, ce.arguments()); } finally { this.peerMeter.exitCall(entered); }
         }
         // 变量读取走 primitive evaluateFloat（query/scoped 变量）
         if (expr instanceof VariableExpression ve) {
-            return ve.target().evaluateFloat(this);
+            return variableFloat(ve.target());
         }
         if (expr instanceof AssignableVariableExpression ave) {
-            return ave.target().evaluateFloat(this);
+            return variableFloat(ave.target());
         }
         if (expr instanceof StructAccessExpression se) {
             Object value = se.left().visit(this);
@@ -261,6 +276,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
     }
 
     private boolean evalBool(@NotNull Expression expr) {
+        this.peerMeter.step();
         if (expr instanceof FloatExpression fe) {
             return fe.value() != 0.0f;
         }
@@ -344,7 +360,8 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @NotNull
     public <TNewEntity> ExpressionEvaluatorImpl<TNewEntity> createChild(@Nullable TNewEntity tnewentity) {
-        return new ExpressionEvaluatorImpl<>(tnewentity);
+        var child = new ExpressionEvaluatorImpl<>(tnewentity);
+        child.peerMeter = this.peerMeter; return child;
     }
 
     @Nullable
@@ -359,16 +376,20 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
     @Override
     @Nullable
     public Object visitCall(@NotNull CallExpression expression) {
-        return expression.function().evaluate(this, expression.arguments());
+        this.peerMeter.step();
+        boolean entered = this.peerMeter.enterCall();
+        try { return expression.function().evaluate(this, expression.arguments()); } finally { this.peerMeter.exitCall(entered); }
     }
 
     @Override
     public Object visitFloat(@NotNull FloatExpression floatExpression) {
+        this.peerMeter.step();
         return floatExpression.boxed();
     }
 
     @Override
     public Object visitExecutionScope(@NotNull ExecutionScopeExpression executionScope) {
+        this.peerMeter.step();
         Object objMo2074xaffeef43 = null;
         final List<Expression> expressions = executionScope.expressions();
         final int size = expressions.size();
@@ -414,12 +435,14 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     public void loopFunciton(@NotNull ExecutionScopeExpression executionScope, int n) {
         for (int i = 0; i < n && !buildExecutionScope(executionScope); i++) {
+            this.peerMeter.step();
         }
     }
 
     public void forEachFunction(@NotNull ExecutionScopeExpression executionScope, AssignableVariable variableAccess, Iterable<?> iterable) {
         Iterator<?> it = iterable.iterator();
         while (it.hasNext()) {
+            this.peerMeter.step();
             variableAccess.assign(this, it.next());
             if (buildExecutionScope(executionScope)) {
                 return;
@@ -429,21 +452,25 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public Object visitIdentifier(@NotNull IdentifierExpression identifierExpression) {
+        this.peerMeter.step();
         throw new RuntimeException("Unknown identifier type");
     }
 
     @Override
     public Object visitVariable(@NotNull VariableExpression expression) {
-        return expression.target().evaluate(this);
+        this.peerMeter.step();
+        return variableValue(expression.target());
     }
 
     @Override
     public Object visitAssignableVariable(@NotNull AssignableVariableExpression expression) {
-        return expression.target().evaluate(this);
+        this.peerMeter.step();
+        return variableValue(expression.target());
     }
 
     @Override
     public Object visitStruct(@NotNull StructAccessExpression expression) {
+        this.peerMeter.step();
         Object value = expression.left().visit(this);
         if (value instanceof Struct) {
             return ((Struct) value).getProperty(expression.path());
@@ -454,6 +481,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public Object visitBinary(@NotNull BinaryExpression expression) {
+        this.peerMeter.step();
         return BINARY_EVALUATORS[expression.op().index()].eval(
                 this,
                 expression.left(),
@@ -463,6 +491,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public Object visitBinaryOperation(BinaryOperationExpression expression) {
+        this.peerMeter.step();
         Object objMo2074xaffeef43 = expression.getLeft().visit(this);
         Object objMo2074xaffeef432 = expression.getRight().visit(this);
         if (objMo2074xaffeef432 instanceof Number) {
@@ -483,6 +512,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public Object visitUnary(@NotNull UnaryExpression expression) {
+        this.peerMeter.step();
         Object value = expression.expression().visit(this);
         switch (expression.op()) {
             case LOGICAL_NEGATION:
@@ -500,6 +530,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public Object visitStatement(@NotNull StatementExpression expression) {
+        this.peerMeter.step();
         switch (expression.op()) {
             case BREAK: {
                 this.op = StatementExpression.Op.BREAK;
@@ -515,11 +546,13 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public Object visitString(@NotNull StringExpression expression) {
+        this.peerMeter.step();
         return expression;
     }
 
     @Override
     public Object visitTernaryConditional(@NotNull TernaryConditionalExpression expression) {
+        this.peerMeter.step();
         Object obj = expression.condition().visit(this);
         obj = ValueConversions.asBoolean(obj)
                 ? expression.trueExpression().visit(this)
@@ -546,11 +579,13 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
 
     @Override
     public Object visitThis(@NotNull ThisExpression expression) {
+        this.peerMeter.step();
         return this.currentValue();
     }
 
     @Override
     public Object visit(@NotNull Expression expression) {
+        this.peerMeter.step();
         throw new UnsupportedOperationException("Unsupported expression type: " + expression);
     }
 

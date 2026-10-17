@@ -116,7 +116,7 @@ public class AudioStreamCache {
             CachedAudioEntry audioEntry = this.cachedEntries.get(trackData);
             if (audioEntry != null) {
                 audioEntry.lastUsedAt = System.currentTimeMillis();
-                return new SeekableAudioStream(audioEntry.audioData.duplicate(), audioEntry.seekPositions, audioEntry.audioFormat);
+                return trackData.isPeer()?PeerBoundedAudioStream.open(trackData,ignored->new SeekableAudioStream(audioEntry.audioData.duplicate(),audioEntry.seekPositions,audioEntry.audioFormat)):new SeekableAudioStream(audioEntry.audioData.duplicate(), audioEntry.seekPositions, audioEntry.audioFormat);
             }
             // S0.2 修复：contains(Object) 是 value 查询（value 恒为 LOCK sentinel），去重永远失效；
             // 改用 putIfAbsent 原子占位，同一音轨的 cache builder 至多创建一次。
@@ -126,6 +126,11 @@ public class AudioStreamCache {
                 cacheBuilder = null;
             }
             try {
+                if(trackData.isPeer()){var builder=cacheBuilder;return PeerBoundedAudioStream.open(trackData,encoded->switch(trackData.getCodec()) {
+                    case VORBIS -> new OggVorbisAudioStream(encoded,builder);
+                    case OPUS -> new OggOpusAudioStream(encoded,builder);
+                    default -> throw new UnsupportedAudioFileException();
+                });}
                 return switch (trackData.getCodec()) {
                     case VORBIS -> new OggVorbisAudioStream(trackData.getData(), cacheBuilder);
                     case OPUS -> new OggOpusAudioStream(trackData.getData(), cacheBuilder);

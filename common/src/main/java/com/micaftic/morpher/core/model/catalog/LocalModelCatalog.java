@@ -73,6 +73,7 @@ public final class LocalModelCatalog {
         public final byte[] cacheKey;
         public final boolean remote;
         public final boolean auth;
+        public final com.micaftic.morpher.core.model.ModelSourceType sourceType;
         public final long fingerprint;
         public volatile ModelMetadata modelInfo;
         @Nullable
@@ -81,10 +82,17 @@ public final class LocalModelCatalog {
         public Entry(Path path, @Nullable byte[] cacheKey, boolean remote, boolean auth,
                      long fingerprint, @Nullable ModelMetadata modelInfo,
                      @Nullable String displayName) {
+            this(path, cacheKey, remote, auth, fingerprint, modelInfo, displayName,
+                    remote ? com.micaftic.morpher.core.model.ModelSourceType.LEGACY_SERVER : com.micaftic.morpher.core.model.ModelSourceType.LOCAL);
+        }
+        public Entry(Path path, @Nullable byte[] cacheKey, boolean remote, boolean auth,
+                     long fingerprint, @Nullable ModelMetadata modelInfo, @Nullable String displayName,
+                     com.micaftic.morpher.core.model.ModelSourceType sourceType) {
             this.path = path.toAbsolutePath().normalize();
             this.cacheKey = cacheKey == null ? null : cacheKey.clone();
             this.remote = remote;
             this.auth = auth;
+            this.sourceType = java.util.Objects.requireNonNull(sourceType);
             this.fingerprint = fingerprint;
             this.modelInfo = modelInfo;
             this.displayName = displayName;
@@ -92,7 +100,8 @@ public final class LocalModelCatalog {
 
         /** 本地来源是否与另一条目指向同一文件版本（auth + fingerprint + path 全等）。 */
         public boolean sameLocalSource(@Nullable Entry other) {
-            return other != null && !remote && !other.remote && auth == other.auth
+            return other != null && sourceType == com.micaftic.morpher.core.model.ModelSourceType.LOCAL
+                    && other.sourceType == sourceType && !remote && !other.remote && auth == other.auth
                     && fingerprint == other.fingerprint && path.equals(other.path);
         }
     }
@@ -234,7 +243,7 @@ public final class LocalModelCatalog {
     public static Diff diff(Map<String, Entry> previous, Map<String, Entry> incoming) {
         List<String> staleIds = new ArrayList<>();
         for (Map.Entry<String, Entry> old : new ArrayList<>(previous.entrySet())) {
-            if (old.getValue().remote) {
+            if (old.getValue().remote || old.getValue().sourceType != com.micaftic.morpher.core.model.ModelSourceType.LOCAL) {
                 continue;
             }
             Entry replacement = incoming.get(old.getKey());

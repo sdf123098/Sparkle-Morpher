@@ -182,6 +182,9 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    // Patched MC chat/enums consult FMLLoader even in plain JVM tests.
+    // Use the game's resolved runtime so loader versions follow NeoForge.
+    classpath += sourceSets.main.runtimeClasspath
 }
 
 tasks.register("printRepositories") {

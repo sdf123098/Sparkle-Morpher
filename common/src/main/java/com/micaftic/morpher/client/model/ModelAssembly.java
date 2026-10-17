@@ -36,6 +36,8 @@ public class ModelAssembly {
     private volatile GltfModel gltfModel;
     private volatile boolean gltfBackend;
     private volatile ModelPresentationCapabilities presentationCapabilities;
+    private com.micaftic.morpher.peer.PeerResidentReservation peerReservation;
+    public synchronized void ownPeerReservation(com.micaftic.morpher.peer.PeerResidentReservation reservation){if(peerReservation!=null)throw new IllegalStateException("Assembly already has a Peer reservation");peerReservation=reservation;if(expressionCache!=null)for(var track:expressionCache.getSoundEffects().values())if(track!=null)track.ownPeerReservation(reservation);}
 
     public ModelAssembly(PlayerModelBundle animationBundle, Map<Identifier, ProjectileModelBundle> projectileModels, Map<Identifier, VehicleModelBundle> vehicleModels, ModelResourceBundle expressionCache, ModelMetadata modelData, ModelDisplayAssets textureRegistry, List<AbstractTexture> list) {
         this.animationBundle = animationBundle;
@@ -161,6 +163,7 @@ public class ModelAssembly {
         gltfModel = null;
         textureRegistry.clearTextureReferences();
         refreshPresentationCapabilities();
+        if(peerReservation!=null){peerReservation.close();peerReservation=null;}
     }
 
     // ==================== R10.4 资源统一 ownership ====================

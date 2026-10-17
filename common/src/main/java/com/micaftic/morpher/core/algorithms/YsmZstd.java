@@ -23,6 +23,10 @@ public class YsmZstd {
     }
 
     public static byte[] decompress(byte[] rawData, int offset, int length) throws IOException {
+        if(com.micaftic.morpher.peer.PeerDecodeScope.active()) {
+            YsmZstd.washInPlace(rawData,offset,length);
+            try{return ZstdUtil.decompress(rawData,offset,length);}catch(RuntimeException rejected){throw new IOException("Peer decompression rejected",rejected);}
+        }
         if (AccelerationCapability.isLoaded()) {
             try {
                 return decompressWithYsmNative(rawData, offset, length);

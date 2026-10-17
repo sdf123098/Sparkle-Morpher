@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.gui;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettingsPanelLayoutTest {
 
@@ -33,5 +34,33 @@ class SettingsPanelLayoutTest {
         assertEquals(0, window.firstRow());
         assertEquals(3, window.endRowExclusive());
         assertEquals(0, window.maxScroll());
+    }
+
+    @Test
+    void nestedSettingsKeepTheSameTopAndBottomAsPrimaryNavigation() {
+        for (int width : new int[]{320, 600, 900}) {
+            var columns = SettingsPanelLayout.columns(10, 30, width, 310);
+            var sections = SettingsPanelLayout.sections(columns);
+            assertEquals(columns.top(), sections.top());
+            assertEquals(columns.height(), sections.height());
+        }
+    }
+
+    @Test
+    void cloudListsNeverOccupyCategoryNavigationOrOverlapDetails() {
+        for (int width : new int[]{320, 600, 900}) {
+            var sections = SettingsPanelLayout.sections(SettingsPanelLayout.columns(10, 30, width, 310));
+            var panels = SettingsPanelLayout.cloudContent(sections, false);
+            assertTrue(panels.listX() >= sections.detailsX());
+            assertTrue(panels.detailX() >= sections.detailsX());
+            assertTrue(panels.listX() + panels.listWidth() <= panels.detailX()
+                    || panels.listY() + panels.listHeight() <= panels.detailY());
+            assertTrue(panels.detailX() + panels.detailWidth() <= sections.detailsX() + sections.detailsWidth());
+            assertTrue(panels.detailY() + panels.detailHeight() <= sections.top() + sections.height());
+            var performance = SettingsPanelLayout.cloudContent(sections, true);
+            assertEquals(0, performance.listWidth());
+            assertEquals(sections.detailsX(), performance.detailX());
+            assertEquals(sections.detailsWidth(), performance.detailWidth());
+        }
     }
 }

@@ -25,7 +25,7 @@ public class ScopedVariableBinding implements ObjectBinding, ResetVariable {
         this.variableMap.clear();
     }
 
-    private record ScopedVariable(int name) implements AssignableVariable {
+    public record ScopedVariable(int name) implements AssignableVariable {
         @Override
         @SuppressWarnings("unchecked")
         public Object evaluate(final @NotNull ExecutionContext<?> context) {

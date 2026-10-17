@@ -150,6 +150,7 @@ public final class ModernHudRenderer {
         }
         Vector3f point = ModernHudHandItemLayout.locate(model, profile, arm,
                 originX, originY, scale, yawOffset);
+        if (point == null) return;
         Matrix3x2f inverse = new Matrix3x2f(graphics.pose());
         if (Math.abs(inverse.determinant()) <= 1.0e-6f) {
             inverse.identity();
