@@ -32,6 +32,7 @@ public final class ResourceLifecycleStats {
     }
 
     public static void onGpuMeshDisposed(String modelId, long estimatedBytes) {
+        if(modelId != null && modelId.startsWith("peer:")) com.micaftic.morpher.peer.PeerDiagnostics.forget(modelId);
         long disposed = gpuMeshDisposed.incrementAndGet();
         long liveCount = gpuMeshLiveCount.updateAndGet(value -> Math.max(0L, value - 1L));
         long liveBytes = gpuMeshLiveBytesEstimate.updateAndGet(value -> Math.max(0L, value - Math.max(0L, estimatedBytes)));
@@ -40,6 +41,7 @@ public final class ResourceLifecycleStats {
     }
 
     public static void onTextureUploaded(String modelId, int width, int height, long sourceBytes) {
+        com.micaftic.morpher.peer.PeerDiagnostics.textureUploadSubmitted(modelId);
         long uploaded = textureUploaded.incrementAndGet();
         long retained = textureSourceBytesRetained.addAndGet(Math.max(0L, sourceBytes));
         log("textureUploaded", modelId, "uploaded={} width={} height={} sourceBytes={} retainedSourceBytes={}",
@@ -47,6 +49,7 @@ public final class ResourceLifecycleStats {
     }
 
     public static void onTextureClosed(String modelId) {
+        if(modelId != null && modelId.startsWith("peer:")) com.micaftic.morpher.peer.PeerDiagnostics.forget(modelId);
         long closed = textureClosed.incrementAndGet();
         log("textureClosed", modelId, "closed={}", closed);
     }

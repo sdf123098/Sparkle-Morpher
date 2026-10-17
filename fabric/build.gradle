@@ -53,7 +53,31 @@ if (rootProject.ext.isCurseForgeDist) {
     }
 }
 
+// Public release artifacts are compile-only: TaCZ stays optional and is never bundled.
+def taczReleases = [
+        '26.1.2': ['26.1.2的mod文件_R3_HOTFIX-2', 'TACZ-Refabricated-26.1.2-1.1.8+fabric.26.1.2.R3-hotfix2'],
+        '26.2': ['26.2_R3-HOTFIX-3', 'TACZ-Refabricated-26.2-1.1.8+fabric.26.2.R3-hotfix3'],
+        '26.3': ['26.3_R1_HOTFIX', 'TACZ-Refabricated-26.3-1.1.8+fabric.26.3.R1-hotfix']
+]
+def taczRelease = taczReleases[rootProject.minecraft_version]
+repositories {
+    exclusiveContent {
+        forRepository {
+            ivy {
+                name = 'TaCZRefabricatedReleases'
+                url = 'https://github.com/q14433686-arch/TaCZ_Refabricated_Unofficial/releases/download'
+                patternLayout { artifact '[revision]/[artifact].[ext]' }
+                metadataSources { artifact() }
+            }
+        }
+        filter { includeGroup 'tacz-refabricated' }
+    }
+}
+
 dependencies {
+    // Loom 1.17 for unobfuscated 26.3 uses the standard compileOnly configuration.
+    add(configurations.findByName('modCompileOnly') == null ? 'compileOnly' : 'modCompileOnly',
+            "tacz-refabricated:${taczRelease[1]}:${taczRelease[0]}@jar") { transitive = false }
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
 
     testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"

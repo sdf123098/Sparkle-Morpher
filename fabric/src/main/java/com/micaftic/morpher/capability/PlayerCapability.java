@@ -1,6 +1,6 @@
 package com.micaftic.morpher.capability;
 
-import com.micaftic.morpher.cloud.client.CloudMotionSources;
+import com.micaftic.morpher.client.motion.ClientMotionSources;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingSyncBatch;
 import com.micaftic.morpher.capability.fabric.PlayerCapabilityImpl;
@@ -282,7 +282,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
                             && name.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH && value instanceof Number number
                             && Float.isFinite(number.floatValue())) current.put(name, number.floatValue());
                 });
-                CloudMotionSources.roaming(this, current);
+                ClientMotionSources.roaming(this, current);
                 if (roamingStruct.hasPendingChanges()) {
                     RoamingSyncBatch syncBatch = roamingStruct.consumePendingBoneData();
                     LocalModelSettingsStore.save(getModelId(), syncBatch.changedVariables());
@@ -293,7 +293,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
                         if (!name.isBlank() && name.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH
                                 && Float.isFinite(entry.getFloatValue())) changes.put(name, entry.getFloatValue());
                     }
-                    CloudMotionSources.roaming(this, changes);
+                    ClientMotionSources.roaming(this, changes);
                 }
             }
         }

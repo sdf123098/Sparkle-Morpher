@@ -4,12 +4,24 @@ import net.minecraft.client.player.AbstractClientPlayer;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Optional;
 
 public final class PlayerAnimatorCompat {
 
     private static final String LEGACY_ACCESS = "dev.kosmx.playerAnim.minecraftApi.PlayerAnimationAccess";
     private static final String CORE_ACCESS = "com.zigythebird.playeranim.api.PlayerAnimationAccess";
     private static final String BETTER_COMBAT_ATTACK_STACK = "net.bettercombat.client.animation.AttackAnimationStack";
+    private static final ClassValue<Optional<Method>> FIRST_PERSON_PASS = new ClassValue<>() {
+        @Override
+        protected Optional<Method> computeValue(Class<?> type) {
+            try {
+                Method getter = type.getMethod("playerAnimLib$isFirstPersonPass");
+                return getter.getReturnType() == boolean.class ? Optional.of(getter) : Optional.empty();
+            } catch (NoSuchMethodException | LinkageError | RuntimeException ignored) {
+                return Optional.empty();
+            }
+        }
+    };
 
     private PlayerAnimatorCompat() {
     }
@@ -23,6 +35,18 @@ public final class PlayerAnimatorCompat {
             return false;
         }
         return hasLegacyFirstPersonAnimation(player) || hasCoreFirstPersonAnimation(player);
+    }
+
+    /** PAL marks the actual render state, including attack fade-in/out frames. No camera guess is needed. */
+    public static boolean isFirstPersonPass(Object renderState) {
+        if (renderState == null) return false;
+        Optional<Method> getter = FIRST_PERSON_PASS.get(renderState.getClass());
+        if (getter.isEmpty()) return false;
+        try {
+            return Boolean.TRUE.equals(getter.get().invoke(renderState));
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
+            return false;
+        }
     }
 
     private static boolean hasLegacyFirstPersonAnimation(AbstractClientPlayer player) {
@@ -62,13 +86,25 @@ public final class PlayerAnimatorCompat {
         }
     }
 
-    private static boolean hasEnabledFirstPersonMode(Object layer) {
+    static boolean hasEnabledFirstPersonMode(Object layer) {
         if (layer == null) {
             return false;
         }
         try {
-            Object mode = layer.getClass().getMethod("getFirstPersonMode", float.class).invoke(layer, 0.0f);
-            return mode != null && (boolean) mode.getClass().getMethod("getEnabled").invoke(mode);
+            if (!Boolean.TRUE.equals(layer.getClass().getMethod("isActive").invoke(layer))) return false;
+            Object mode;
+            try {
+                // Player Animation Library / PlayerAnimCore (current high-version branches).
+                mode = layer.getClass().getMethod("getFirstPersonMode").invoke(layer);
+            } catch (NoSuchMethodException legacy) {
+                mode = layer.getClass().getMethod("getFirstPersonMode", float.class).invoke(layer, 0.0f);
+            }
+            if (mode == null) return false;
+            try {
+                return Boolean.TRUE.equals(mode.getClass().getMethod("isEnabled").invoke(mode));
+            } catch (NoSuchMethodException legacy) {
+                return Boolean.TRUE.equals(mode.getClass().getMethod("getEnabled").invoke(mode));
+            }
         } catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
             return false;
         }

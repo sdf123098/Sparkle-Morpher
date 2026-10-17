@@ -41,6 +41,8 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
         if (player == null || animatable instanceof IPreviewAnimatable) {
             return PlayState.STOP;
         }
+        // TaCZ supplies the gun and arm-bone motion; generic imported-model weapon poses would apply it twice.
+        if (com.micaftic.morpher.core.compat.gun.tacz.TacCompat.ownsFirstPersonViewmodel(player)) return PlayState.STOP;
         if (!player.isSleeping() && InputStateKey.isAnyHandSwinging(player)) {
             InteractionHand swingingHand = InputStateKey.getSwingingHand(player);
             boolean swingStart = player.swingTime == 0

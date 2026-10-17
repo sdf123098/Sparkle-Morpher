@@ -309,6 +309,12 @@ public class  AnimationControllerInstance {
             boneAnimationQueue.setBlendWeight(blendWeight);
             if (boneAnimationQueue.rotationTimeline != null) {
                 boneAnimationQueue.rotationQueue = getKeyFramePointAtTick(boneAnimationQueue.rotationTimeline, tick);
+                if (this.currentAnimation.stableKipfelAttachments) {
+                    Vector3f sampled = this.animatable.getEvaluationContext().sampleKipfelRotation(
+                            this.currentAnimation.animationName,boneAnimationQueue.topLevelSnapshot.boneId,
+                            boneAnimationQueue.topLevelSnapshot.bone.getInitialRotation());
+                    if (sampled != null) boneAnimationQueue.rotationQueue = new ConstantPoint(0,0,sampled,this.context);
+                }
             }
             if (boneAnimationQueue.positionTimeline != null) {
                 boneAnimationQueue.positionQueue = getKeyFramePointAtTick(boneAnimationQueue.positionTimeline, tick);
@@ -379,6 +385,7 @@ public class  AnimationControllerInstance {
             BoneAnimationQueue queue = this.boneAnimationQueues.get(animation.boneId);
             if (queue != null) {
                 queue.applyAnimation(animation, !animation.scaleKeyFrames.isEmpty());
+                queue.sourceAnimation = this.currentAnimation.animationName;
                 this.activeBoneAnimationQueues.add(queue);
             } else {
                 missingTargets++;
@@ -392,7 +399,7 @@ public class  AnimationControllerInstance {
                     this.currentAnimation.boneAnimations.size() - missingTargets,
                     missingTargets);
         }
-        this.instructionExecutor = new InstructionKeyFrameExecutor(this.currentAnimation.customInstructionKeyframes);
+        this.instructionExecutor = new InstructionKeyFrameExecutor(this.currentAnimation.customInstructionKeyframes, this.currentAnimation.programPlan);
         this.soundExecutor = new SoundKeyFrameExecutor(this.currentAnimation.soundKeyFrames, this.context.getAudioPlayerManager());
         return true;
     }
@@ -409,6 +416,8 @@ public class  AnimationControllerInstance {
     }
 
     private void clearAnimation() {
+        if (this.currentAnimation != null && this.currentAnimation.programPlan != null)
+            this.animatable.getEvaluationContext().releaseProgram(this.currentAnimation.programPlan);
         this.synchronizedElapsed = Float.NaN;
         if (this.animationState != AnimationState.IDLE) {
             this.animationState = AnimationState.IDLE;

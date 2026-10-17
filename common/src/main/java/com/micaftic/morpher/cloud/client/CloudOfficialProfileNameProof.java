@@ -12,7 +12,7 @@ final class CloudOfficialProfileNameProof {
 
     static CompletableFuture<JsonObject> fetch(UUID profileId) {
         Minecraft client = Minecraft.getInstance();
-        return CompletableFuture.supplyAsync(() -> {
+        return com.micaftic.morpher.core.network.NetworkAccess.cloud(() -> CompletableFuture.supplyAsync(() -> {
             try {
                 var service = MinecraftSessionServiceJoiner.sessionService(client);
                 // Secure fetch bypasses Authlib's six-hour insecure profile cache.
@@ -28,6 +28,6 @@ final class CloudOfficialProfileNameProof {
             } catch (ReflectiveOperationException error) {
                 throw new CompletionException(error);
             }
-        });
+        }));
     }
 }

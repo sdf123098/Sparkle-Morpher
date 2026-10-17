@@ -165,8 +165,15 @@ public class UploadManager {
 
     private static void registerTexture(AbstractTexture texture, TextureLocatable locatable) {
         if (!locatable.registered) {
+            if (texture instanceof OuterFileTexture peer && peer.isPeerTexture()
+                    && !com.micaftic.morpher.client.peer.PeerRenderFrames.executing(peer)) {
+                com.micaftic.morpher.client.peer.PeerRenderFrames.schedule(peer, () -> registerTexture(texture, locatable));
+                return;
+            }
             if (texture instanceof OuterFileTexture outerFileTexture) {
                 outerFileTexture.doLoad();
+                if (outerFileTexture.isPeerTexture() && !outerFileTexture.isPeerUploaded())
+                    throw new IllegalStateException("Peer texture upload did not complete");
             }
             long generation = locationGeneration.incrementAndGet();
             activeLocationGenerations.put(locatable.textureIdentifier, generation);

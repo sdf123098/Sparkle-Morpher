@@ -201,6 +201,13 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static final LocalModelImportStore LOCAL_IMPORT_STORE = new LocalModelImportStore(ModelStoragePaths.custom());
     private static final LocalModelImportStore CLOUD_IMPORT_STORE = new LocalModelImportStore(ModelStoragePaths.cloudModels());
     private static final LocalModelCatalog LOCAL_MODEL_CATALOG = new LocalModelCatalog();
+    public static final com.micaftic.morpher.core.model.catalog.LocalModelLibrary MODEL_LIBRARY =
+            new com.micaftic.morpher.core.model.catalog.LocalModelLibrary(ModelStoragePaths.cache().resolve("peer/local-origins.sha256"));
+    private static final java.util.concurrent.ThreadPoolExecutor PEER_PARSER = new java.util.concurrent.ThreadPoolExecutor(1,1,0,java.util.concurrent.TimeUnit.SECONDS,
+            new java.util.concurrent.ArrayBlockingQueue<>(8),task->{var thread=new Thread(task,"SPM-Peer-Parser");thread.setDaemon(true);return thread;});
+    private static void submitPeerModelTask(Runnable work,Runnable rejected){try{PEER_PARSER.execute(work);}catch(java.util.concurrent.RejectedExecutionException full){rejected.run();}}
+    private record PeerImportWaiter(java.util.function.BooleanSupplier current, Consumer<Component> completion,Consumer<com.micaftic.morpher.peer.PeerFailure> diagnosis) {}
+    private static final ConcurrentHashMap<String, CopyOnWriteArrayList<PeerImportWaiter>> PEER_IMPORTS = new ConcurrentHashMap<>();
     private static final long MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS = 5L * 60L * 1000L;
 
     private static final ModelScanRevision LOCAL_MODEL_SCAN_REVISION = new ModelScanRevision();
@@ -396,6 +403,14 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
             RESIDENCY.cpuReloads().complete(requestLease);
             return;
         }
+        if (source.sourceType == ModelSourceType.PEER) {
+            var peerSource = MODEL_LIBRARY.source(modelKey);
+            if (peerSource == null) { RESIDENCY.cpuReloads().complete(requestLease); return; }
+            loadPeerModel(peerSource.peerIdentity(), peerSource.verifiedAsset(),
+                    () -> RESIDENCY.cpuReloads().isCurrent(requestLease) && MODEL_LIBRARY.source(modelKey) == peerSource,
+                    ignored -> RESIDENCY.cpuReloads().complete(requestLease));
+            return;
+        }
         submitModelTask(() -> {
             try {
                 if (!RESIDENCY.cpuReloads().isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
@@ -432,6 +447,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     public static Set<String> getAvailableModelIds() {
         LinkedHashSet<String> ids = new LinkedHashSet<>(RESIDENCY.assemblies().keySet());
         ids.addAll(lazyModelSources.keySet());
+        ids.removeIf(MODEL_LIBRARY::isPeer);
         return Collections.unmodifiableSet(ids);
     }
 
@@ -471,6 +487,8 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
             prevName = LocalModelCatalog.displayNameFromInfo(modelInfo);
         }
         lazyModelSources.put(modelKey, new LocalModelCatalog.Entry(path, key, true, isAuth, 0L, modelInfo, prevName));
+        try { MODEL_LIBRARY.imported(modelKey, path, ModelSourceType.LEGACY_SERVER); }
+        catch (IOException provenanceFailure) { YesSteveModel.LOGGER.warn("[SM][Peer] Legacy source is restricted from sharing"); }
     }
 
     public static boolean isAuthModel(String modelId) {
@@ -570,6 +588,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             PlayerCapability.get(player).ifPresent(cap -> {
                 if (!finalModelId.equals(cap.getModelId())) {
                     cap.initModelWithTexture(finalModelId, finalTextureId);
+                  var selectedLocalSource = ClientModelManager.MODEL_LIBRARY.source(finalModelId);
+                  if (selectedLocalSource != null && selectedLocalSource.type() == com.micaftic.morpher.core.model.ModelSourceType.LOCAL) cap.setForceDisabled(false);
                 }
             });
         });
@@ -604,6 +624,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 return;
             }
             cap.initModelWithTexture(modelId, textureId);
+                  var selectedLocalSource = ClientModelManager.MODEL_LIBRARY.source(modelId);
+                  if (selectedLocalSource != null && selectedLocalSource.type() == com.micaftic.morpher.core.model.ModelSourceType.LOCAL) cap.setForceDisabled(false);
             MODEL_SELECTION.rememberPlain(modelId, textureId);
         });
     }
@@ -656,6 +678,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
                 String modelKey = LocalModelCatalog.canonicalKey(modelId);
                 localOnlyModelIds.remove(modelKey);
                 localModelSourcePaths.remove(modelKey);
+                if (MODEL_LIBRARY.isPeer(modelKey)) continue;
+                MODEL_LIBRARY.remove(modelKey);
                 lazyModelSources.computeIfPresent(modelKey, (key, source) -> source.remote ? source : null);
                 RESIDENCY.cpuReloads().invalidate(modelKey);
                 if (sameRuntimeModelId(modelId, MODEL_SELECTION.localOnlyModelId())) {
@@ -694,6 +718,19 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         importModel(modelId, fileName, data, callback, CLOUD_IMPORT_STORE, true);
     }
 
+    private static void submitImportTask(boolean cloud, Runnable task, Runnable onCancelled) {
+        if (!cloud) { submitModelTask(task, onCancelled); return; }
+        com.micaftic.morpher.cloud.client.CloudClientPerformance.process(() -> {
+            var done = new java.util.concurrent.CompletableFuture<Void>();
+            submitModelTask(() -> {
+                try { task.run(); } finally { done.complete(null); }
+            }, () -> {
+                try { onCancelled.run(); } finally { done.complete(null); }
+            });
+            return done;
+        }).whenComplete((ignored, failure) -> { if (failure != null) onCancelled.run(); });
+    }
+
     private static void importModel(String modelId, String fileName, byte[] data, @Nullable Consumer<Component> callback,
                                     LocalModelImportStore importStore, boolean cloudImport) {
         final String modelKey = LocalModelCatalog.canonicalKey(modelId);
@@ -715,7 +752,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             importGeneration = MODEL_TASK_GENERATION.get();
         }
         byte[] importData = data;
-        submitModelTask(() -> {
+        submitImportTask(com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId), () -> {
             Component error = null;
             try {
                 ModelMemoryProfiler.logBytes("local-import-read", modelKey, importData);
@@ -781,6 +818,125 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             completion.complete(Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
                     "Import task was cancelled before execution"));
         });
+    }
+
+    /** Publishes verified Peer resources without importing them into custom/auth/Cloud storage. */
+    public static void loadPeerModel(com.micaftic.morpher.peer.PeerModelIdentity identity,
+            com.micaftic.morpher.peer.PeerAssetStore.Verified asset,
+            java.util.function.BooleanSupplier current, Consumer<Component> completion) {
+        loadPeerModel(identity,asset,current,completion,ignored->{});
+    }
+    public static void loadPeerModel(com.micaftic.morpher.peer.PeerModelIdentity identity,
+            com.micaftic.morpher.peer.PeerAssetStore.Verified asset,java.util.function.BooleanSupplier current,
+            Consumer<Component> completion,Consumer<com.micaftic.morpher.peer.PeerFailure> diagnosis) {
+        final String id = identity.runtimeModelId();
+        final int generation = MODEL_TASK_GENERATION.get();
+        if(!current.getAsBoolean()) { completion.accept(Component.literal("Peer task superseded")); return; }
+        ModelAssembly resident = RESIDENCY.assemblies().get(id);
+        if(MODEL_LIBRARY.isPeer(id) && resident != null && resident.isRuntimeResident()) {
+            touchModel(id); completion.accept(null); return;
+        }
+        var waiter = new PeerImportWaiter(current, completion,diagnosis);
+        var existing = PEER_IMPORTS.get(id);
+        if(existing != null) {
+            if(existing.size() >= com.micaftic.morpher.peer.PeerLimits.CAPACITY_CEILING) completion.accept(Component.literal("Peer parser busy"));
+            else existing.add(waiter);
+            return;
+        }
+        var batch = new CopyOnWriteArrayList<PeerImportWaiter>(); batch.add(waiter);
+        var raced=PEER_IMPORTS.putIfAbsent(id,batch);if(raced!=null){if(raced.size()<com.micaftic.morpher.peer.PeerLimits.CAPACITY_CEILING)raced.add(waiter);else completion.accept(Component.literal("Peer parser busy"));return;}
+        java.util.function.BooleanSupplier live = () -> generation == MODEL_TASK_GENERATION.get() && PEER_IMPORTS.get(id) == batch
+                && batch.stream().anyMatch(w -> w.current.getAsBoolean());
+        submitPeerModelTask(() -> {
+            ModelAssembly candidate = null;
+            String stage = "VERIFY";
+            com.micaftic.morpher.peer.PeerResidentReservation reservation=null;
+            try (var scope = new com.micaftic.morpher.peer.PeerDecodeScope()) {
+                if (!live.getAsBoolean()) throw new IOException("Peer task superseded");
+                com.micaftic.morpher.peer.PeerAssetStore.verify(asset, live);
+                com.micaftic.morpher.peer.PeerModelPreflight.validate(identity, asset);
+                stage = "IMPORT";
+                Path path = asset.entrypoint();
+                if (isGltfFileName(path.toString())) {
+                    var parsed = GltfLoader.loadWithManifest(path).model();
+                    com.micaftic.morpher.peer.PeerModelPreflight.validateGltf(parsed);
+                    reservation=com.micaftic.morpher.peer.PeerResidentReservation.gltf(parsed,asset.manifest().totalBytes());
+                    candidate = buildGltfAssembly(parsed, id);
+                } else {
+                    RawYsmModel raw;
+                    if (identity.importerProfile().equals("ysm-directory-v1")) {
+                        try (YSMFolderDeserializer decoder = new YSMFolderDeserializer(asset.root())) { raw = decoder.deserialize(); }
+                    } else { com.micaftic.morpher.peer.PeerDecodeScope.allocate(Files.size(path));raw = parseImportModel(path.getFileName().toString(), Files.readAllBytes(path)); }
+                    com.micaftic.morpher.peer.PeerModelPreflight.validateParsed(raw);
+                    reservation=com.micaftic.morpher.peer.PeerResidentReservation.raw(raw,asset.manifest().totalBytes());
+                    candidate = ModelAssemblyFactory.buildAssembly(ClientModelBundleAssembler.buildParsedBundle(raw, id), false, false);
+                }
+                candidate.ownPeerReservation(reservation);reservation=null;
+                ModelAssembly ready = candidate; candidate = null;
+                Minecraft.getInstance().execute(() -> {
+                    try {
+                        if (!live.getAsBoolean()) throw new IOException("Peer task superseded");
+                        MODEL_LIBRARY.peer(identity, asset);
+                        lazyModelSources.put(id, new LocalModelCatalog.Entry(asset.entrypoint(), null, false, false, 0L,
+                                ready.getModelData(), null, ModelSourceType.PEER));
+                        var map = new Object2ReferenceOpenHashMap<String, ModelAssembly>(RESIDENCY.assemblies());
+                        ModelAssembly old = map.put(id, ready); RESIDENCY.publishAssemblies(map);
+                        touchModel(id); RESIDENCY.gpuTrim().clear(id); ResourceLifecycleStats.onModelAssemblyLoaded(id);
+                        if (old != null && old != ready) releaseModelAssembly(id, old);
+                        finishPeerImport(id, batch, null);
+                        forEachGuiWidget(widget -> widget.onModelsUpdated(map));
+                    } catch (Exception failure) {
+                        if(RESIDENCY.assemblies().get(id) != ready) releaseModelAssembly(id, ready);
+                        finishPeerImport(id, batch, Component.literal("Peer model publication cancelled"));
+                    }
+                });
+            } catch (Exception failure) {
+                if(reservation!=null)reservation.close();
+                if (candidate != null) releaseModelAssembly(id, candidate);
+                var classified=com.micaftic.morpher.peer.PeerFailure.classify(com.micaftic.morpher.peer.PeerFailure.Stage.valueOf(stage),failure);
+                var detailed=new com.micaftic.morpher.peer.PeerFailure(com.micaftic.morpher.peer.PeerFailure.Stage.valueOf(stage),classified.code());
+                String reason = detailed.getMessage();
+                YesSteveModel.LOGGER.warn("[SM][Peer] root={} import rejected at {}", identity.contentRoot().sha256(), reason);
+                Minecraft.getInstance().execute(() -> finishPeerImport(id, batch, Component.literal("Peer model rejected: " + reason),detailed));
+            }
+        }, () -> Minecraft.getInstance().execute(() -> finishPeerImport(id, batch, Component.literal("Peer parser busy"))));
+    }
+
+    private static void finishPeerImport(String id, CopyOnWriteArrayList<PeerImportWaiter> batch, Component error) {finishPeerImport(id,batch,error,null);}
+    private static void finishPeerImport(String id,CopyOnWriteArrayList<PeerImportWaiter> batch,Component error,com.micaftic.morpher.peer.PeerFailure reason) {
+        if(!PEER_IMPORTS.remove(id, batch)) return;
+        for(var waiter : batch) {
+            try {if(reason!=null&&waiter.current.getAsBoolean())waiter.diagnosis.accept(reason); waiter.completion.accept(waiter.current.getAsBoolean() ? error : Component.literal("Peer task superseded")); }
+            catch(RuntimeException callbackFailure) { YesSteveModel.LOGGER.warn("[SM][Peer] Import completion failed: {}", callbackFailure.getClass().getSimpleName()); }
+        }
+    }
+
+    public static long localSourceRevision(String id) {
+        var entry = lazyModelSources.get(LocalModelCatalog.canonicalKey(id)); return entry == null ? 0L : entry.fingerprint;
+    }
+    public static void releasePeerModel(String id) {
+        com.micaftic.morpher.client.peer.PeerMotionSync.forget(id);
+        var batch = PEER_IMPORTS.get(id); if(batch != null) finishPeerImport(id, batch, Component.literal("Peer task cancelled"));
+        if (!MODEL_LIBRARY.isPeer(id)) return;
+        RESIDENCY.cpuReloads().invalidate(id); lazyModelSources.remove(id); MODEL_LIBRARY.remove(id);
+        var map = new Object2ReferenceOpenHashMap<String, ModelAssembly>(RESIDENCY.assemblies());
+        ModelAssembly assembly = map.remove(id); RESIDENCY.publishAssemblies(map);
+        RESIDENCY.lastUsedAt().remove(id); RESIDENCY.gpuTrim().clear(id);
+        if (assembly != null) releaseModelAssembly(id, assembly);
+    }
+
+    /** Main-thread scoped teardown. Local and Cloud models retain their existing residency. */
+    public static void releasePeerModels() {
+        PEER_IMPORTS.forEach((id, batch) -> finishPeerImport(id, batch, Component.literal("Peer task cancelled")));
+        var map = new Object2ReferenceOpenHashMap<String, ModelAssembly>(RESIDENCY.assemblies());
+        var removed = new ArrayList<Pair<String, ModelAssembly>>();
+        for (var source : MODEL_LIBRARY.snapshot().values()) if (source.type() == ModelSourceType.PEER) {
+            String id = source.runtimeId(); com.micaftic.morpher.client.peer.PeerMotionSync.forget(id); RESIDENCY.cpuReloads().invalidate(id); lazyModelSources.remove(id);
+            ModelAssembly assembly = map.remove(id); if (assembly != null) removed.add(Pair.of(id, assembly));
+            RESIDENCY.lastUsedAt().remove(id); RESIDENCY.gpuTrim().clear(id);
+        }
+        MODEL_LIBRARY.removePeer(); RESIDENCY.publishAssemblies(map);
+        removed.forEach(pair -> releaseModelAssembly(pair.getLeft(), pair.getRight()));
     }
 
     public static void reloadLocalModels(@Nullable Consumer<Component> callback) {
@@ -1038,6 +1194,9 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
 
     private static void publishImportedAssembly(String modelId, ModelAssembly runtimeModel, Path persisted,
                                                 boolean cloudImport) throws IOException {
+        // Provenance sidecar failure blocks Peer sharing, never the existing import/publication.
+        try { MODEL_LIBRARY.imported(modelId, persisted, ModelSourceType.LOCAL); }
+        catch (IOException provenanceFailure) { YesSteveModel.LOGGER.warn("[SM][Peer] Source provenance unavailable; sharing disabled for this source"); }
         long fingerprint = LocalModelCatalog.fingerprint(persisted);
         LocalModelCatalog.Entry sourceEntry = new LocalModelCatalog.Entry(
                 persisted, null, false, false, fingerprint, null, null);
@@ -1350,7 +1509,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         LocalModelCatalog.Diff diff = LocalModelCatalog.diff(lazyModelSources, catalog);
         Set<String> validIds = new HashSet<>(catalog.keySet());
 
-        lazyModelSources.entrySet().removeIf(entry -> !entry.getValue().remote);
+        MODEL_LIBRARY.refreshLocal(catalog);
+        lazyModelSources.entrySet().removeIf(entry -> !entry.getValue().remote && entry.getValue().sourceType == ModelSourceType.LOCAL);
         lazyModelSources.putAll(diff.catalog());
         localOnlyModelIds.clear();
         for (String id : validIds) {

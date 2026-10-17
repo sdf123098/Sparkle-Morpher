@@ -7,5 +7,6 @@ public final class YesSteveModelFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         YesSteveModel.init();
+        PeerLanNetworking.register();
     }
 }

@@ -55,7 +55,7 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
 
     private boolean needsReset;
 
-    private final com.micaftic.morpher.cloud.client.CloudActionMotionCursor synchronizedAction = new com.micaftic.morpher.cloud.client.CloudActionMotionCursor();
+    private final com.micaftic.morpher.client.motion.ClientActionMotionCursor synchronizedAction = new com.micaftic.morpher.client.motion.ClientActionMotionCursor();
 
     public PredicateBasedController(T animatable, String name, float transitionLengthTicks, IAnimationPredicate<T> predicate) {
         this(animatable, name, transitionLengthTicks, predicate, false);
@@ -75,11 +75,11 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
     public void process(AnimationEvent<T> event, ExpressionEvaluator<AnimationContext<?>> evaluator, boolean isMoving) {
         event.setController(this);
         if (com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController.CAP_CONTROLLER_KEY.equals(this.name)) {
-            var motion = com.micaftic.morpher.cloud.client.CloudMotionSources.motion(event.getAnimatable());
+            var motion = com.micaftic.morpher.client.motion.ClientMotionSources.motion(event.getAnimatable());
             if (this.synchronizedAction.update(motion)) {
                 this.transitionInterpolator.cancelAnimation();
                 if (!motion.animationKey().isEmpty()) this.transitionInterpolator.seekFromElapsedTicks(
-                        com.micaftic.morpher.cloud.client.CloudMotionSources.elapsedTicks(motion.startedAtUnixMs()));
+                        com.micaftic.morpher.client.motion.ClientMotionSources.elapsedTicks(motion, motion.startedAtUnixMs()));
             }
         }
         PlayState playState;
@@ -284,19 +284,19 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
                 return null;
             }
             if (point instanceof ConstantPoint) {
-                mutableVector.set(point.getLerpPoint(evaluator));
+                mutableVector.set(this.data.samplePose(point, evaluator, 0, false));
                 mutableVector.setPercentCompleted(point.getPercentCompleted());
                 float blendWeight = this.data.getBlendWeight();
                 if (blendWeight != 1.0f) {
                     mutableVector.mul(blendWeight);
                 }
             } else if (point instanceof TransitionPoint transition) {
-                Vector3f vector3fMul = transition.evaluateRaw(evaluator).mul(this.data.getBlendWeight());
+                Vector3f vector3fMul = this.data.samplePose(point, evaluator, 0, true).mul(this.data.getBlendWeight());
                 MathUtil.nlerpEulerAngles(transition.getLerpFactor(), transition.getOffsetPoint(), vector3fMul, this.data.topLevelSnapshot.bone.getInitialRotation(), vector3fMul, this.rotScratch);
                 mutableVector.set(vector3fMul);
                 mutableVector.setPercentCompleted(0.0f);
             } else {
-                mutableVector.set(point.getLerpPoint(evaluator));
+                mutableVector.set(this.data.samplePose(point, evaluator, 0, false));
                 float blendWeight2 = this.data.getBlendWeight();
                 if (blendWeight2 != 1.0f) {
                     mutableVector.mul(blendWeight2);
@@ -312,7 +312,7 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
             if (point == null) {
                 return null;
             }
-            mutableVector.set(point.getLerpPoint(evaluator));
+            mutableVector.set(this.data.samplePose(point, evaluator, 1, false));
             float blendWeight = this.data.getBlendWeight();
             if (point instanceof ConstantPoint) {
                 mutableVector.setPercentCompleted(point.getPercentCompleted());
@@ -334,7 +334,7 @@ public class PredicateBasedController<T extends AnimatableEntity<?>> implements 
             if (point == null) {
                 return null;
             }
-            mutableVector.set(point.getLerpPoint(evaluator));
+            mutableVector.set(this.data.samplePose(point, evaluator, 2, false));
             float blendWeight = this.data.getBlendWeight();
             if (point instanceof ConstantPoint) {
                 mutableVector.setPercentCompleted(point.getPercentCompleted());

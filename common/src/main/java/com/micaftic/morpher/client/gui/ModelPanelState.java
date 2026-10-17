@@ -73,6 +73,9 @@ final class ModelPanelState {
     CloudView cloudView = CloudView.RECENT;
     ModelFilter modelFilter = ModelFilter.ALL;
     SettingGroup settingGroup = SettingGroup.GENERAL;
+    String settingsPageId;
+    int settingsNavigationScroll;
+    final Map<String, Integer> settingsPageScrolls = new HashMap<>();
     SecondaryPanel secondaryPanel = SecondaryPanel.NONE;
     String modelSearchText = "";
     String cloudSearchText = "";
@@ -250,7 +253,10 @@ final class ModelPanelState {
                 case "modelFilter" -> modelFilter = ModelFilter.valueOf(v.toUpperCase(java.util.Locale.ROOT));
                 case "modelSource" -> modelSource = ModelSource.valueOf(v.toUpperCase(java.util.Locale.ROOT));
                 case "cloudView" -> cloudView = CloudView.valueOf(v.toUpperCase(java.util.Locale.ROOT));
-                case "settingGroup" -> settingGroup = SettingGroup.valueOf(v.toUpperCase(java.util.Locale.ROOT));
+                case "settingGroup" -> {
+                    settingGroup = SettingGroup.valueOf(v.toUpperCase(java.util.Locale.ROOT));
+                    settingsPageId = null;
+                }
                 case "secondaryPanel" -> secondaryPanel = SecondaryPanel.valueOf(v.toUpperCase(java.util.Locale.ROOT));
                 case "modelSearchText" -> modelSearchText = clampDev(v);
                 case "cloudSearchText" -> cloudSearchText = clampDev(v);
