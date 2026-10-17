@@ -50,11 +50,21 @@ public class ReplacePlayerRenderEvent {
                     firstPersonSuppressionSatisfied
             ));
             if (decision == PlayerRenderPolicy.Decision.RENDER_CUSTOM) {
+                if (com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(entity.getUUID())
+                        && (!cap.isModelReady() || !com.micaftic.morpher.peer.PeerFrameWork.PEER.admitModel(cap.getModelId()))) {
+                    com.micaftic.morpher.client.peer.ClientPeerRuntime.renderState(entity, cap.getModelId(), com.micaftic.morpher.peer.PeerObservation.State.WAITING_RENDER);
+                    return true;
+                }
                 RendererManager.getPlayerRenderer().render(cap, entityYaw, partialTick, poseStack, bufferSource, collector, packedLight);
+                com.micaftic.morpher.client.peer.ClientPeerRuntime.renderState(entity, cap.getModelId(), com.micaftic.morpher.peer.PeerObservation.State.RENDER_SUBMITTED);
                 return true;
             }
+            if(cap != null) com.micaftic.morpher.client.peer.ClientPeerRuntime.renderState(entity, cap.getModelId(),
+                    ConfigPolicies.render().disableOtherModel() || entity.isSpectator() ? com.micaftic.morpher.peer.PeerObservation.State.HIDDEN
+                            : com.micaftic.morpher.peer.PeerObservation.State.WAITING_RENDER);
             return false;
         } catch (Exception e) {
+            if(cap != null) com.micaftic.morpher.client.peer.ClientPeerRuntime.renderState(entity, cap.getModelId(), com.micaftic.morpher.peer.PeerObservation.State.FAILED);
             boolean suppressVanillaFallback = cap != null && cap.isModelActive() && cap.hasRenderableModel();
             YesSteveModel.LOGGER.warn("Failed to render custom player model; suppressing vanilla fallback={}", suppressVanillaFallback, e);
             return suppressVanillaFallback;

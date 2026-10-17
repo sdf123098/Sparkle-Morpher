@@ -25,6 +25,7 @@ public final class YesSteveModelFabricClient implements ClientModInitializer {
                 .forEach(ClientRenderCompatibilityRegistry::register);
         OrihimeDirectModelCompat.init();
         CloudWorldLifecycleEvents.register();
+        PeerLanClientNetworking.register();
         KeyMappingRegistry.getCustomKeyMappings().forEach(KeyMappingHelper::registerKeyMapping);
 
         HudOverlay debugOverlay = AnimationDebugOverlay.createOverlay();

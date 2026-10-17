@@ -39,9 +39,9 @@ public final class ModernHudHandItemLayout {
             boolean hidden = profile != null && profile.usesEquipmentLocatorTransform()
                     ? RenderUtils.prepMatrixForEquipmentLocator(poseStack, locator)
                     : RenderUtils.prepMatrixForLocator(poseStack, locator);
-            if (!hidden) {
-                return poseStack.last().pose().transformPosition(0.0f, 0.0f, 0.0f, new Vector3f());
-            }
+            // Zero scale is an authored visibility decision, not a missing locator.
+            if (hidden) return null;
+            return poseStack.last().pose().transformPosition(0.0f, 0.0f, 0.0f, new Vector3f());
         }
 
         // Models without an authored hand locator still keep the item in the

@@ -16,6 +16,10 @@ public final class TacCompat {
     private TacCompat() {
     }
 
+    public static boolean ownsFirstPersonViewmodel(LivingEntity entity) {
+        return com.micaftic.morpher.core.compat.gun.tacz.fabric.TacCompatImpl.ownsFirstPersonViewmodel(entity);
+    }
+
     public static boolean isLoaded() {
         return com.micaftic.morpher.core.compat.gun.tacz.fabric.TacCompatImpl.isLoaded();
     }

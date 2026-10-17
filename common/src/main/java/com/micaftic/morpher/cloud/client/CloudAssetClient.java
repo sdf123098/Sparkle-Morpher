@@ -75,8 +75,8 @@ public final class CloudAssetClient {
     }
 
     public CompletableFuture<CloudAssetSummary> upload(byte[] content, String assetId, String assetName, String assetFormat, String rawSha256, String requestId) {
-        return http.uploadAsset(content, assetId, assetName, assetFormat, rawSha256, requestId)
-                .thenCompose(this::parseUploadResponse);
+        return CloudClientPerformance.upload(() -> http.uploadAsset(content, assetId, assetName, assetFormat, rawSha256, requestId)
+                .thenCompose(this::parseUploadResponse));
     }
 
     public CompletableFuture<CloudAssetSummary> upload(
@@ -107,8 +107,10 @@ public final class CloudAssetClient {
         } catch (java.io.IOException e) {
             return CompletableFuture.failedFuture(e);
         }
-        return http.uploadAsset(source, length, assetId, assetName, assetFormat, rawSha256, requestId, visibility, progress, cancellation)
-                .thenCompose(this::parseUploadResponse);
+        return CloudClientPerformance.upload(() -> cancellation.isCancelled()
+                ? CompletableFuture.failedFuture(new java.util.concurrent.CancellationException("Cloud upload cancelled"))
+                : http.uploadAsset(source, length, assetId, assetName, assetFormat, rawSha256, requestId, visibility, progress, cancellation)
+                    .thenCompose(this::parseUploadResponse));
     }
 
     private CompletableFuture<CloudAssetSummary> parseUploadResponse(HttpResponse<byte[]> response) {

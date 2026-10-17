@@ -43,6 +43,7 @@ public final class ClientModelBundleAssembler {
     }
 
     public static ClientModelInfo buildParsedBundle(RawYsmModel raw, String modelId) {
+        com.micaftic.morpher.client.peer.PeerMotionSync.register(modelId, com.micaftic.morpher.peer.PeerModelPolicy.from(raw));
         Map<String, OuterFileTexture> mainTextures = new LinkedHashMap<>();
         int textureCount = Math.max(1, raw.mainEntity.textures.size());
 
@@ -105,6 +106,8 @@ public final class ClientModelBundleAssembler {
             animations.put(entry.getKey(), new AnimationFile(AnimationMapper.buildAnimations(entry.getValue(), raw.properties.mergeMultilineExpr)));
         }
 
+        KipfelCompatibility.bind(raw, animations, modelId);
+
         List<AnimationControllerFile> controllersList = new ArrayList<>();
         if (raw.mainEntity.animationControllerFiles != null) {
             for (RawYsmModel.RawAnimationControllerFile file : raw.mainEntity.animationControllerFiles) {
@@ -119,6 +122,7 @@ public final class ClientModelBundleAssembler {
 
         ModelMetadata modelInfo = GuiConfigMapper.buildModelInfo(raw);
         ModelExtraResourcesFile extraResources = buildExtraResources(raw);
+        com.micaftic.morpher.client.animation.molang.AnimationProgramAnalyzer.bind(animations, controllersList, extraResources.getFunctions(), modelId, GuiConfigMapper.programExpressions(raw.properties));
         ProjectileModelFiles[] extraItemModels = buildExtraItemModels(raw, context, raw.properties.mergeMultilineExpr);
         VehicleModelFiles[] extraEntityModels = buildExtraEntityModels(raw, context, raw.properties.mergeMultilineExpr);
         Map<String, OuterFileTexture> extraTextures = buildExtraTextures(raw);
@@ -165,7 +169,8 @@ public final class ClientModelBundleAssembler {
             return ScaleZeroScanResult.NONE;
         }
         boolean found = false;
-        for (RawYsmModel.RawAnimation animation : animationFile.animations.values()) {
+        for (Map.Entry<String, RawYsmModel.RawAnimation> entry : animationFile.animations.entrySet()) {
+            RawYsmModel.RawAnimation animation = entry.getValue();
             if (animation == null || animation.boneAnimations == null) {
                 continue;
             }
@@ -179,6 +184,12 @@ public final class ClientModelBundleAssembler {
                         return ScaleZeroScanResult.UNSAFE;
                     }
                     if (result == KeyframeScaleResult.ZERO) {
+                        // A weapon/tool animation can deliberately hide vanilla equipment while
+                        // showing authored geometry. Only Carry On's own animations may enable
+                        // the compatibility bypass; a model-wide zero-scale heuristic revives it.
+                        if (entry.getKey() == null || !entry.getKey().startsWith("carryon:")) {
+                            return ScaleZeroScanResult.UNSAFE;
+                        }
                         found = true;
                     }
                 }
@@ -291,7 +302,9 @@ public final class ClientModelBundleAssembler {
             byte[] data = entry.getValue().data;
             String molangScript = new String(data, StandardCharsets.UTF_8);
             try {
-                functions.put(name, GeckoLibCache.getMolangParser().parseExpression(molangScript, true));
+                var parser = GeckoLibCache.getMolangParser();
+                try { functions.put(name, parser.parseExpression(molangScript, true)); }
+                finally { GeckoLibCache.releaseParser(parser); }
             } catch (Exception e) {
             }
         }

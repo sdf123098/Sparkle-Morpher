@@ -22,10 +22,10 @@ public class ConditionTAC {
         if (strArrSplit.length < 2) {
             return;
         }
-        String str2 = strArrSplit[1];
-        if (Identifier.isValidPath(str2)) {
+        Identifier gunId = Identifier.tryParse(strArrSplit[1]);
+        if (gunId != null) {
             this.nameTest.add(name);
-            this.idTest.add(Identifier.parse(str2));
+            this.idTest.add(gunId);
         }
     }
 
@@ -40,7 +40,11 @@ public class ConditionTAC {
                 return EMPTY;
             }
         }
-        if (this.idTest.contains(gunId)) {
+        return doTest(gunId, str);
+    }
+
+    String doTest(Identifier gunId, String str) {
+        if (gunId != null && str != null && str.endsWith(":") && this.idTest.contains(gunId)) {
             String str2 = str.substring(0, str.length() - 1) + "$" + gunId;
             if (this.nameTest.contains(str2)) {
                 return str2;

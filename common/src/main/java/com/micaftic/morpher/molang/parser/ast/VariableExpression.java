@@ -8,8 +8,15 @@ import java.util.Objects;
 public class VariableExpression implements Expression {
 
     private final Variable target;
+    private final String symbol;
+    public String symbol() { return symbol; }
 
     public VariableExpression(Variable target) {
+        this(target, "");
+    }
+
+    public VariableExpression(Variable target, String symbol) {
+        this.symbol = symbol;
         Objects.requireNonNull(target, "target");
         this.target = target;
     }

@@ -25,6 +25,11 @@ public abstract class PlayerRendererMixin {
     // Only intercept when the render state is for an avatar/player.
     @Inject(method = "submit", at = @At("HEAD"), cancellable = true)
     private void ysm$onSubmit(LivingEntityRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState cameraState, CallbackInfo ci) {
+        // PAL renders a vanilla arm/item-only avatar during first-person attacks.
+        // Replacing it with an authored full-body model bypasses PAL's part filtering and blocks the camera.
+        if (com.micaftic.morpher.core.compat.playeranimator.PlayerAnimatorCompat.isFirstPersonPass(state)) {
+            return;
+        }
         if (state instanceof AvatarRenderState avatarState && Minecraft.getInstance().level != null) {
             AbstractClientPlayer player = ysm$resolvePlayer(avatarState);
             if (player != null) {

@@ -110,16 +110,14 @@ class ModelPickerLayoutTest {
     }
 
     @Test
-    void blockIsCenteredWithAtLeastTheMargin() {
-        int w = 400;
-        int h = 300;
-        ModelPickerLayout.Cards m = ModelPickerLayout.cards(w, h);
-        assertTrue(m.originX(w) >= ModelPickerLayout.CARD_MARGIN);
-        assertTrue(m.originY(h) >= ModelPickerLayout.CARD_MARGIN);
-        // 居中后左右留白差不超过 1 像素（整数除法）。
-        int left = m.originX(w);
-        int right = w - (left + m.blockW());
-        assertTrue(Math.abs(left - right) <= 1, "block should be centred");
+    void cardBlockKeepsItsTopLeftOriginAcrossResultCounts() {
+        for(int[] size:new int[][]{{400,300},{600,380}})for(int count:new int[]{0,1,2,17,100}) {
+            ModelPickerLayout.Cards layout=ModelPickerLayout.cards(size[0],size[1],count);
+            assertEquals(ModelPickerLayout.CARD_MARGIN,layout.originX(size[0]));
+            assertEquals(ModelPickerLayout.CARD_MARGIN,layout.originY(size[1]));
+            assertTrue(layout.originX(size[0])+layout.blockW()<=size[0]-ModelPickerLayout.CARD_MARGIN);
+            assertTrue(layout.originY(size[1])+layout.blockH()<=size[1]-ModelPickerLayout.CARD_MARGIN);
+        }
     }
 
     @Test

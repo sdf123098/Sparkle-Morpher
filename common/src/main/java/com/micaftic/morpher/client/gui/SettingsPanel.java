@@ -11,12 +11,37 @@ final class SettingsPanel {
     }
 
     ModelPanelState.SettingGroup selectedGroup() {
-        return state.settingGroup;
+        return selectedPage().group();
     }
 
     void selectGroup(ModelPanelState.SettingGroup group) {
-        state.settingGroup = Objects.requireNonNull(group, "group");
-        state.settingsScroll = 0;
+        selectPage(Objects.requireNonNull(group, "group").name().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    SettingsPageRegistry.Page selectedPage() {
+        if (state.settingsPageId == null) {
+            state.settingsPageId = state.settingGroup.name().toLowerCase(java.util.Locale.ROOT);
+        }
+        return SettingsPageRegistry.page(state.settingsPageId);
+    }
+
+    void selectPage(String id) {
+        var previous = selectedPage();
+        state.settingsPageScrolls.put(previous.id(), state.settingsScroll);
+        var next = SettingsPageRegistry.page(id);
+        state.settingsPageId = next.id();
+        if (next.group() != null) state.settingGroup = next.group();
+        state.settingsScroll = state.settingsPageScrolls.getOrDefault(next.id(), 0);
+    }
+
+    int navigationScroll(int rowCount, int visibleRows) {
+        state.settingsNavigationScroll = Math.max(0, Math.min(state.settingsNavigationScroll,
+                Math.max(0, rowCount - visibleRows)));
+        return state.settingsNavigationScroll;
+    }
+
+    void scrollNavigationBy(int delta) {
+        state.settingsNavigationScroll = Math.max(0, state.settingsNavigationScroll + delta);
     }
 
     int scroll() {

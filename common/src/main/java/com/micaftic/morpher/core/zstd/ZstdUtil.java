@@ -50,15 +50,20 @@ public final class ZstdUtil {
         ZstdDecompressor decompressor = new ZstdDecompressor();
         long size = decompressor.getDecompressedSize(input, offset, length);
         if (size >= 0) {
+            com.micaftic.morpher.peer.PeerDecodeScope.expanded(size);
+            com.micaftic.morpher.peer.PeerDecodeScope.allocate(size);
             byte[] output = new byte[(int) size];
             decompressor.decompress(input, offset, length, output, 0, output.length);
             return output;
         }
         try (ZstdInputStream in = new ZstdInputStream(new ByteArrayInputStream(input, offset, length))) {
+            com.micaftic.morpher.peer.PeerDecodeScope.allocate(Math.max(64 * 1024L, (long)length * 2) + 64 * 1024L);
             TrimmableByteArrayOutputStream baos = new TrimmableByteArrayOutputStream(Math.max(64 * 1024, length * 2));
             byte[] buf = new byte[64 * 1024];
             int read;
             while ((read = in.read(buf)) != -1) {
+                com.micaftic.morpher.peer.PeerDecodeScope.expanded((long) baos.size() + read);
+                com.micaftic.morpher.peer.PeerDecodeScope.allocate(3L*read);
                 baos.write(buf, 0, read);
             }
             return baos.toTrimmedArray();

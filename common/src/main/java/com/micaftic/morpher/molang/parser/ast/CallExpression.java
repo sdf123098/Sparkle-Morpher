@@ -19,6 +19,8 @@ public final class CallExpression implements Expression {
     public static final Function.ArgumentCollection EMPTY = new Function.ArgumentCollection(ObjectLists.emptyList());
 
     private final Function function;
+    private final String symbol;
+    public String symbol() { return symbol; }
     private final Function.ArgumentCollection arguments;
 
     public CallExpression(@NotNull Function function) {
@@ -29,6 +31,11 @@ public final class CallExpression implements Expression {
             final @NotNull Function function,
             final @NotNull Function.ArgumentCollection arguments
     ) {
+        this(function, arguments, "");
+    }
+
+    public CallExpression(Function function, Function.ArgumentCollection arguments, String symbol) {
+        this.symbol = symbol;
         this.function = requireNonNull(function, "function");
         this.arguments = requireNonNull(arguments, "arguments");
     }

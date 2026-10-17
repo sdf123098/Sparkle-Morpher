@@ -26,7 +26,9 @@ public enum ModelSourceType {
     /** 历史强制来源 token，保留用于读取兼容模型标识。 */
     SERVER_FORCED("server-forced"),
     /** 云端模型（类 Figura Backend，R15 规划）。 */
-    CLOUD("cloud");
+    CLOUD("cloud"),
+    /** Explicitly shared room assets; separate from local and Cloud authorization. */
+    PEER("peer");
 
     private final String token;
 

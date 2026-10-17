@@ -721,6 +721,8 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
                 ClientModelManager.rememberSelectedModel(modelId, textureId);
             }
             cap.initModelWithTexture(modelId, textureId);
+                  var selectedLocalSource = ClientModelManager.MODEL_LIBRARY.source(modelId);
+                  if (selectedLocalSource != null && selectedLocalSource.type() == com.micaftic.morpher.core.model.ModelSourceType.LOCAL) cap.setForceDisabled(false);
         });
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.publishCurrentSelection();
         return ApplyResult.APPLIED_TO_PLAYER;

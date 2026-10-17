@@ -10,7 +10,7 @@ public final class ExecutionScopeExpression implements Expression {
     private final List<Expression> expressions;
 
     public ExecutionScopeExpression(final @NotNull List<Expression> expressions) {
-        this.expressions = Objects.requireNonNull(expressions, "expressions");
+        this.expressions = List.copyOf(expressions);
     }
 
     /**

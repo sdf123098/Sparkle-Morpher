@@ -23,6 +23,7 @@ public interface IValue {
         try {
             return evalUnsafe(evaluator);
         } catch (Throwable th) {
+            com.micaftic.morpher.client.animation.molang.EvaluationHealth.invalid();
             YesSteveModel.LOGGER.debug("Failed to evaluate molang expression.", th);
             return null;
         }

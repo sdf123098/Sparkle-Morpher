@@ -61,6 +61,17 @@ public class ModernPlayerModelScreen extends Screen {
     private final com.micaftic.morpher.cloud.client.CloudAssetPageCursorGuard cloudCursorGuard =
             new com.micaftic.morpher.cloud.client.CloudAssetPageCursorGuard();
     private SettingsPanel settingsPanel;
+    private EditBox peerListenerBox, peerEntranceBox, peerLocalRouteBox;
+    private String peerLocalRouteDraft="";
+    private String peerListenerDraft = "", peerEntranceDraft = "";
+    private EditBox peerEndpointBox;
+    private EditBox peerInvitationBox;
+    private String peerEndpointDraft = "";
+    private String peerInvitationDraft = "";
+    private enum PeerSettingsSection { ROOM, SHARING, CONNECTION, PUBLIC, TUNNEL }
+    private enum NetworkSettingsSection { PRESETS, PRIVACY, STATUS, SERVER }
+    private PeerSettingsSection peerSettingsSection = PeerSettingsSection.ROOM;
+    private NetworkSettingsSection networkSettingsSection = NetworkSettingsSection.PRESETS;
     private final String stateKeyValue;
     private static final Identifier MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
     private static final int BG = 0x90171A1D;
@@ -151,7 +162,7 @@ public class ModernPlayerModelScreen extends Screen {
     private String cloudAccountDraft = "";
     private String cloudAddressDraft = "";
     private String cloudNameDraft = "";
-    private enum CloudAccountPage { ACCOUNT, INSTANCES, SCOPES, IDENTITY, CLAIM, APPROVAL }
+    private enum CloudAccountPage { ACCOUNT, INSTANCES, SCOPES, IDENTITY, CLAIM, APPROVAL, PERFORMANCE }
     private CloudAccountPage cloudAccountPage = CloudAccountPage.ACCOUNT;
     private int cloudAccountScroll;
     private int cloudDetailScroll;
@@ -322,6 +333,16 @@ public class ModernPlayerModelScreen extends Screen {
         return new ModernPlayerModelScreen(ModelPanelState.Tab.SETTINGS, parentScreen, stateKey);
     }
 
+    /** Opens a network page in the same SPM settings shell, without starting any network service. */
+    public static ModernPlayerModelScreen networkSettings(String pageId) {
+        ModernPlayerModelScreen screen = settings();
+        screen.settingsPanel().selectPage(pageId);
+        if ("peer_public".equals(pageId)) screen.peerSettingsSection = PeerSettingsSection.PUBLIC;
+        if ("peer_tunnel".equals(pageId)) screen.peerSettingsSection = PeerSettingsSection.TUNNEL;
+        if ("server".equals(pageId)) screen.networkSettingsSection = NetworkSettingsSection.SERVER;
+        return screen;
+    }
+
     public static ModernPlayerModelScreen downloads() {
         ModernPlayerModelScreen screen = new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE, null, "resource");
         screen.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
@@ -330,6 +351,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     @Override
     protected void init() {
+        normalizeCloudSettingsEntry();
         clearWidgets();
         if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && (cloudAccountPage == CloudAccountPage.INSTANCES || cloudAccountPage == CloudAccountPage.SCOPES)) cloudAccountPage = CloudAccountPage.ACCOUNT;
         else if (STATE.activeTab == ModelPanelState.Tab.INSTANCE && cloudAccountPage == CloudAccountPage.ACCOUNT) cloudAccountPage = CloudAccountPage.INSTANCES;
@@ -347,6 +369,9 @@ public class ModernPlayerModelScreen extends Screen {
         this.cloudScopeNameBox = null;
         this.cloudWorldEpochBox = null;
         this.cloudIdentityCodeBox = null;
+        this.peerListenerBox = this.peerEntranceBox = this.peerLocalRouteBox = null;
+        this.peerEndpointBox = null;
+        this.peerInvitationBox = null;
         if (isCloudIdentityPage()) {
             ensureCloudIdentityFlow();
             if (cloudAccountPage == CloudAccountPage.CLAIM && cloudIdentityFlow != null) {
@@ -421,7 +446,7 @@ public class ModernPlayerModelScreen extends Screen {
             this.cloudInstanceNameBox.setValue(cloudNameDraft);
             this.cloudInstanceNameBox.setResponder(value -> cloudNameDraft = value);
             setInitialFocus(this.cloudOriginBox);
-        } else if (STATE.activeTab == ModelPanelState.Tab.INSTANCE && cloudAccountPage == CloudAccountPage.SCOPES) {
+        } else if (isCloudSettingsPage() && cloudAccountPage == CloudAccountPage.SCOPES) {
             AccountPanelLayout accountLayout = cloudDetailLayout();
             int fieldX = accountLayout.fieldX();
             int fieldW = accountLayout.fieldWidth();
@@ -434,6 +459,23 @@ public class ModernPlayerModelScreen extends Screen {
                 cloudScopeNameBox.setValue(selected.name());
                 cloudWorldEpochBox.setValue(selected.worldEpoch());
             }
+        }
+        if (STATE.activeTab == ModelPanelState.Tab.SETTINGS
+                && settingsPanel().selectedPage().kind() == SettingsPageRegistry.Kind.PEER_LAN) {
+            var columns = settingsColumns();
+            int fieldWidth = Math.max(24, SettingsPanelLayout.sections(columns).detailsWidth() - 116);
+            if (peerEndpointDraft.isBlank()) peerEndpointDraft = com.micaftic.morpher.client.peer.ClientPeerRuntime.suggestedEndpoint();
+            peerEndpointBox = peerField(fieldWidth, "endpoint", 300);
+            peerEndpointBox.setValue(peerEndpointDraft);
+            peerEndpointBox.setResponder(value -> peerEndpointDraft = value);
+            peerInvitationBox = peerField(fieldWidth, "invitation", 8192);
+            peerInvitationBox.setValue(peerInvitationDraft);
+            peerInvitationBox.setResponder(value -> peerInvitationDraft = value);
+            if(peerListenerDraft.isBlank())peerListenerDraft=com.micaftic.morpher.client.peer.ClientPeerRuntime.configuredListeners();
+            if(peerEntranceDraft.isBlank())peerEntranceDraft=com.micaftic.morpher.client.peer.ClientPeerRuntime.configuredEntrances();
+            peerListenerBox=peerField(fieldWidth,"listeners",600);peerListenerBox.setValue(peerListenerDraft);peerListenerBox.setResponder(value->peerListenerDraft=value);
+            peerEntranceBox=peerField(fieldWidth,"entrances",2400);peerEntranceBox.setValue(peerEntranceDraft);peerEntranceBox.setResponder(value->peerEntranceDraft=value);
+            peerLocalRouteBox=peerField(fieldWidth,"local_route",2400);peerLocalRouteBox.setValue(peerLocalRouteDraft);peerLocalRouteBox.setResponder(value->peerLocalRouteDraft=value);
         }
     }
 
@@ -511,6 +553,10 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private AccountPanelLayout accountPanelLayout() {
+        if (isCloudSettingsPage()) {
+            var sections = SettingsPanelLayout.sections(settingsColumns());
+            return SettingsPanelLayout.cloudContent(sections, cloudAccountPage == CloudAccountPage.PERFORMANCE);
+        }
         return AccountPanelLayout.of(this.layout.contentLeft, this.layout.contentTop,
                 this.layout.contentWidth, this.layout.contentHeight);
     }
@@ -525,6 +571,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     @Override
     public void removed() {
+        peerInvitationDraft = "";
+        if (peerInvitationBox != null) peerInvitationBox.setValue("");
         if (cloudIdentityFlow != null) cloudIdentityFlow.invalidate();
         cloudIdentityFlow = null; cloudIdentityGateway = null;
         this.controller.invalidateGeneration();
@@ -628,7 +676,7 @@ public class ModernPlayerModelScreen extends Screen {
             case MODEL -> renderModelTab(g, mainMouseX, mainMouseY, partialTick);
             case RESOURCE -> renderResourceTab(g, mainMouseX, mainMouseY, partialTick);
             case ACCOUNT, INSTANCE -> renderCloudAccountPanel(g, mainMouseX, mainMouseY, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, partialTick);
-            case SETTINGS -> renderSettingsTab(g, mainMouseX, mainMouseY);
+            case SETTINGS -> renderSettingsTab(g, mainMouseX, mainMouseY, partialTick);
         }
         renderFooter(g);
         renderSecondaryPanel(g, mouseX, mouseY, partialTick);
@@ -637,24 +685,18 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderTabs(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         if (this.layout.verticalTabs) {
-            int railX = this.layout.left + 3;
-            int railW = this.layout.railWidth - 5;
-            int th = this.height < 400 ? 22 : 26;
-            int tabGap = this.height < 400 ? 3 : 4;
+            int railX = this.layout.left + 3, railW = this.layout.railWidth - 5;
+            int th = this.height < 400 ? 22 : 26, gap = this.height < 400 ? 3 : 4;
             int y = this.layout.top + 6;
             renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, railX, y, railW, th, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, railX, y + th + tabGap, railW, th, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.ACCOUNT, railX, y + (th + tabGap) * 2, railW, th, IconGlyph.LOCK, Component.translatable("gui.sparkle_morpher.cloud.manage.account_management"));
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.INSTANCE, railX, y + (th + tabGap) * 3, railW, th, IconGlyph.RESOURCE, cloudText("instance_management"));
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, railX, y + (th + tabGap) * 4, railW, th, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, railX, y + th + gap, railW, th, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
+            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, railX, y + (th + gap) * 2, railW, th, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
             return;
         }
-        int tabWidth = this.layout.width / 5;
+        int tabWidth = this.layout.width / 3;
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, this.layout.left, tabWidth, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
         renderTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, this.layout.left + tabWidth, tabWidth, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
-        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.ACCOUNT, this.layout.left + tabWidth * 2, tabWidth, IconGlyph.LOCK, Component.translatable("gui.sparkle_morpher.cloud.manage.account_management"));
-        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.INSTANCE, this.layout.left + tabWidth * 3, tabWidth, IconGlyph.RESOURCE, cloudText("instance_management"));
-        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, this.layout.left + tabWidth * 4, this.layout.width - tabWidth * 4, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, this.layout.left + tabWidth * 2, this.layout.width - tabWidth * 2, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
     }
 
     private void renderTab(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelPanelState.Tab tab, int x, int w, IconGlyph icon, Component label) {
@@ -682,6 +724,10 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void switchTab(ModelPanelState.Tab tab) {
+        if (tab == ModelPanelState.Tab.ACCOUNT || tab == ModelPanelState.Tab.INSTANCE) {
+            openCloudSettings(tab == ModelPanelState.Tab.ACCOUNT ? CloudAccountPage.ACCOUNT : CloudAccountPage.INSTANCES);
+            return;
+        }
         if (STATE.activeTab != tab) {
             closeCloudForm();
             STATE.activeTab = tab;
@@ -2091,43 +2137,356 @@ public class ModernPlayerModelScreen extends Screen {
         fill(g, barX, barY, fillW, 3, task.color());
     }
 
-    private void renderSettingsTab(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        int x = this.layout.contentLeft + 8;
-        int y = this.layout.contentTop + 8;
-        int w = this.layout.contentWidth - 16;
-        int bottom = this.layout.footerTop - 6;
-        glassPanel(g, x, y, w, bottom - y);
-        renderSettingGroups(g, x + 8, y + 10, w - 16);
-        List<SettingRow> rows = settingsRows();
-        SettingsPanelLayout.Window window = settingsPanel().layout(y, bottom, 44, 22, rows.size());
-        int yy = y + 38;
-        for (int i = window.firstRow(); i < window.endRowExclusive(); i++) {
-            SettingRow row = rows.get(i);
-            renderSettingRow(g, mouseX, mouseY, x + 8, yy, w - 16, row);
-            yy += 22;
+    private boolean isCloudSettingsPage() {
+        return STATE.activeTab == ModelPanelState.Tab.SETTINGS && settingsPanel().selectedPage().kind() == SettingsPageRegistry.Kind.CLOUD;
+    }
+
+    private void normalizeCloudSettingsEntry() {
+        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT || STATE.activeTab == ModelPanelState.Tab.INSTANCE) {
+            if (STATE.activeTab == ModelPanelState.Tab.INSTANCE && cloudAccountPage == CloudAccountPage.ACCOUNT) cloudAccountPage = CloudAccountPage.INSTANCES;
+            STATE.activeTab = ModelPanelState.Tab.SETTINGS;
+            settingsPanel().selectPage("cloud");
         }
     }
 
-    private void renderSettingGroups(GuiGraphicsExtractor g, int x, int y, int w) {
-        int chipW = Math.max(54, (w - 20) / ModelPanelState.SettingGroup.values().length);
-        int xx = x;
-        for (ModelPanelState.SettingGroup group : ModelPanelState.SettingGroup.values()) {
-            int width = group == ModelPanelState.SettingGroup.MISC ? x + w - xx : chipW;
-            renderChip(g, xx, y, width, settingGroupLabel(group), settingsPanel().selectedGroup() == group,
-                    () -> settingsPanel().selectGroup(group));
-            xx += width + 5;
+    private void openCloudSettings(CloudAccountPage page) {
+        closeCloudForm();
+        STATE.activeTab = ModelPanelState.Tab.SETTINGS;
+        settingsPanel().selectPage("cloud");
+        cloudAccountPage = page;
+        cloudAccountScroll = 0; cloudDetailScroll = 0;
+        init();
+    }
+
+    private void selectPeerSection(PeerSettingsSection section) {
+        peerSettingsSection = section;
+        STATE.settingsScroll = 0;
+        setFocused(null);
+        init();
+    }
+
+    private void renderHierarchicalSettings(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick,
+                                            SettingsPageRegistry.Page page, SettingsPanelLayout.Columns columns) {
+        var sections = SettingsPanelLayout.sections(columns);
+        glassPanel(g, sections.optionsX(), sections.top(), sections.optionsWidth(), sections.height());
+        glassPanel(g, sections.detailsX(), sections.top(), sections.detailsWidth(), sections.height());
+        boolean peer = page.kind() == SettingsPageRegistry.Kind.PEER_LAN;
+        int x = sections.optionsX() + 4, width = sections.optionsWidth() - 8;
+        int firstHit = this.hits.size();
+        g.enableScissor(x, sections.top(), x + width, sections.top() + sections.height());
+        if (peer) {
+            int row = 0;
+            for (PeerSettingsSection section : PeerSettingsSection.values()) {
+                if (section == PeerSettingsSection.CONNECTION) continue;
+                renderRowButton(g, mouseX, mouseY, x, sections.top() + 6 + row++ * 24, width, 20,
+                        Component.literal(trim(settingsText("peer.section." + section.name().toLowerCase(Locale.ROOT)).getString(), width - 10)),
+                        peerSettingsSection == section || section == PeerSettingsSection.ROOM && peerSettingsSection == PeerSettingsSection.CONNECTION,
+                        () -> selectPeerSection(section));
+            }
+        } else {
+            int row = 0;
+            for (NetworkSettingsSection section : NetworkSettingsSection.values()) {
+                renderRowButton(g, mouseX, mouseY, x, sections.top() + 6 + row++ * 24, width, 20,
+                        Component.literal(trim(settingsText("network.section." + section.name().toLowerCase(Locale.ROOT)).getString(), width - 10)),
+                        networkSettingsSection == section, () -> { networkSettingsSection = section; STATE.settingsScroll = 0; setFocused(null); });
+            }
+        }
+        g.disableScissor();
+        this.hits.subList(firstHit, this.hits.size()).removeIf(hit -> hit.y() < sections.top() || hit.y() + hit.h() > sections.top() + sections.height());
+        x = sections.detailsX() + 8;
+        int w = Math.max(24, sections.detailsWidth() - 22);
+        int top = sections.top() + 6, bottom = sections.top() + sections.height() - 6;
+        firstHit = this.hits.size();
+        g.enableScissor(x, top, x + w, bottom);
+        if (peer) renderPeerSettingsDetail(g, mouseX, mouseY, partialTick, x, top, w, bottom);
+        else renderGeneralNetworkDetail(g, mouseX, mouseY, x, top, w, bottom);
+        g.disableScissor();
+        this.hits.subList(firstHit, this.hits.size()).removeIf(hit -> hit.y() < top || hit.y() + hit.h() > bottom);
+    }
+
+    private void renderGeneralNetworkDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int top, int w, int bottom) {
+        int count = networkSettingsSection == NetworkSettingsSection.PRESETS ? 10 : networkSettingsSection == NetworkSettingsSection.PRIVACY ? 6 : 7;
+        var window = settingsPanel().layout(top, bottom, 0, 24, count);
+        int y = top - window.scroll() * 24;
+        switch (networkSettingsSection) {
+            case PRESETS -> {
+                var current = com.micaftic.morpher.client.peer.ClientNetworkPreferences.preset();
+                int row = 0;
+                for (var preset : com.micaftic.morpher.core.network.NetworkPreset.values()) {
+                    String key = preset.name().toLowerCase(Locale.ROOT);
+                    renderRowButton(g, mouseX, mouseY, x, y + row++ * 24, w, 20, settingsText("network.preset." + key), current == preset,
+                            () -> com.micaftic.morpher.client.peer.ClientNetworkPreferences.select(preset));
+                }
+                networkLine(g, settingsText("network.preset_help." + current.name().toLowerCase(Locale.ROOT)), x, y + 168, w);
+                networkLine(g, settingsText("network.preset_privacy"), x, y + 192, w);
+                networkLine(g, settingsText("network.preset_credentials"), x, y + 216, w);
+            }
+            case PRIVACY -> {
+                renderSettingRow(g, mouseX, mouseY, x, y, w, privacyModeRow(ModelPanelState.SettingGroup.GENERAL));
+                networkLine(g, settingsText("network.privacy_help"), x, y + 24, w);
+                renderSettingRow(g, mouseX, mouseY, x, y + 72, w,
+                        bool(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.config.network_online_debug_log", GeneralConfig.NETWORK_ONLINE_DEBUG_LOG));
+                networkLine(g, settingsText("network.independent"), x, y + 120, w);
+            }
+            case STATUS -> {
+                var selected = CloudManagementScreen.management().registry().selected();
+                String id = selected.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("");
+                networkLine(g, !com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() ? settingsText("network.cloud_paused")
+                        : settingsText("cloud.state", CloudManagementScreen.text(CloudClientRuntime.state(id) != null ? "connected" : "disconnected")), x, y, w);
+                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(), x, y + 24, w);
+                networkAction(g, mouseX, mouseY, x, y + 72, w, settingsText("page.cloud"), true, () -> selectSettingsPage("cloud"));
+                networkAction(g, mouseX, mouseY, x, y + 96, w, settingsText("page.peer"), true, () -> selectSettingsPage("peer"));
+                networkLine(g, settingsText("network.priority"), x, y + 144, w);
+            }
+            case SERVER -> {
+                networkLine(g, settingsText(minecraft.getConnection() == null ? "server.offline" : "server.connected"), x, y, w);
+                networkLine(g, settingsText("server.automatic"), x, y + 48, w);
+                networkLine(g, settingsText("server.independent"), x, y + 96, w);
+            }
+        }
+        if (window.maxScroll() > 0) renderScrollbar(g, mouseX, mouseY, x + w - 4, top, 4,
+                Math.max(14, bottom - top), count, window.visibleRows(), window.scroll());
+    }
+
+    private void renderPeerSettingsDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick, int x, int top, int w, int bottom) {
+        boolean ready = minecraft.player != null && minecraft.level != null && !com.micaftic.morpher.client.PrivacyMode.isActive();
+        boolean running = com.micaftic.morpher.client.peer.ClientPeerRuntime.running();
+        String invite = com.micaftic.morpher.client.peer.ClientPeerRuntime.invitation();
+        int count = switch (peerSettingsSection) { case ROOM -> 10; case SHARING -> 7; case CONNECTION -> 14; default -> 25; };
+        var window = settingsPanel().layout(top, bottom, 0, 24, count);
+        int y = top - window.scroll() * 24;
+        int half = Math.max(20, (w - 6) / 2), buttonW = Math.min(76, Math.max(36, w / 3));
+        if(peerLocalRouteBox!=null){peerLocalRouteBox.visible=false;peerLocalRouteBox.active=false;}
+        if(peerListenerBox!=null){peerListenerBox.visible=false;peerListenerBox.active=false;}
+        if(peerEntranceBox!=null){peerEntranceBox.visible=false;peerEntranceBox.active=false;}
+        if (peerEndpointBox != null) { peerEndpointBox.visible = false; peerEndpointBox.active = false; }
+        if (peerInvitationBox != null) { peerInvitationBox.visible = false; peerInvitationBox.active = false; }
+        switch (peerSettingsSection) {
+            case ROOM -> {
+                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(), x, y, w);
+                networkLine(g, ready ? settingsText("peer.members", com.micaftic.morpher.client.peer.ClientPeerRuntime.members()) : settingsText("peer.world_required"), x, y + 24, w);
+                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.receiveStatusComponent(), x, y + 48, w);
+                networkLine(g, settingsText("peer.automatic_help"), x, y + 72, w);
+                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.observerStatusComponent(), x, y + 96, w);
+                boolean shared = com.micaftic.morpher.client.peer.ClientPeerRuntime.sharing();
+                if (running) renderSettingRow(g, mouseX, mouseY, x, y + 120, w,
+                        new SettingRow(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.settings.peer.sharing", shared, "",
+                                () -> com.micaftic.morpher.client.peer.ClientPeerRuntime.setSharing(!shared), null, null, null, null));
+                networkAction(g, mouseX, mouseY, x, y + 168, half, settingsText("peer.leave"), running, com.micaftic.morpher.client.peer.ClientPeerRuntime::leave);
+                networkAction(g, mouseX, mouseY, x + half + 6, y + 168, half, settingsText("peer.retry"), ready,
+                        () -> { if (running) com.micaftic.morpher.client.peer.ClientPeerRuntime.retrySharing(); else com.micaftic.morpher.client.peer.ClientPeerRuntime.enableAutomatic(); });
+                networkAction(g, mouseX, mouseY, x, y + 192, w, settingsText("peer.copy_diagnostics"), true,
+                        () -> minecraft.keyboardHandler.setClipboard(com.micaftic.morpher.client.peer.ClientPeerRuntime.diagnostics()));
+                networkAction(g, mouseX, mouseY, x, y + 216, w, settingsText("peer.section.connection"), true,
+                        () -> selectPeerSection(PeerSettingsSection.CONNECTION));
+            }
+            case SHARING -> {
+                boolean shared = com.micaftic.morpher.client.peer.ClientPeerRuntime.sharing();
+                if (running) renderSettingRow(g, mouseX, mouseY, x, y, w,
+                        new SettingRow(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.settings.peer.sharing", shared, "",
+                                () -> com.micaftic.morpher.client.peer.ClientPeerRuntime.setSharing(!shared), null, null, null, null));
+                else networkLine(g, settingsText("peer.sharing_off"), x, y, w);
+                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(), x, y + 24, w);
+                networkLine(g, settingsText("peer.sharing_help"), x, y + 48, w);
+                networkLine(g, settingsText("network.priority"), x, y + 72, w);
+                networkAction(g, mouseX, mouseY, x, y + 120, w, settingsText("peer.retry"), ready && running,
+                        com.micaftic.morpher.client.peer.ClientPeerRuntime::retrySharing);
+            }
+            case CONNECTION -> {
+                networkAction(g, mouseX, mouseY, x, y, w, settingsText("peer.section.room"), true,
+                        () -> selectPeerSection(PeerSettingsSection.ROOM));
+                y += 24;
+                networkLine(g, settingsText("peer.endpoint"), x, y, w);
+                renderPeerField(g, mouseX, mouseY, partialTick, peerEndpointBox, x, y + 24, w, top, bottom);
+                networkAction(g, mouseX, mouseY, x, y + 48, w, settingsText("peer.next_adapter"), true, () -> {
+                    peerEndpointDraft = com.micaftic.morpher.client.peer.ClientPeerRuntime.nextSuggestedEndpoint(peerEndpointDraft);
+                    if (peerEndpointBox != null) peerEndpointBox.setValue(peerEndpointDraft);
+                });
+                networkLine(g, settingsText("peer.endpoint_help"), x, y + 72, w);
+                networkAction(g, mouseX, mouseY, x, y + 120, half, settingsText("peer.host"), ready && !running,
+                        () -> com.micaftic.morpher.client.peer.ClientPeerRuntime.host(peerEndpointDraft.trim()));
+                networkAction(g, mouseX, mouseY, x + half + 6, y + 120, half, settingsText("peer.copy"), invite != null, () -> minecraft.keyboardHandler.setClipboard(invite));
+                networkLine(g, settingsText(com.micaftic.morpher.client.peer.ClientPeerRuntime.automatic() ? "peer.automatic_active" : "peer.invitation_help"), x, y + 144, w);
+                renderPeerField(g, mouseX, mouseY, partialTick, peerInvitationBox, x, y + 168, w - buttonW - 6, top, bottom);
+                networkAction(g, mouseX, mouseY, x + w - buttonW, y + 168, buttonW, settingsText("peer.join"), ready && !peerInvitationDraft.isBlank(), this::joinPeerInvitation);
+                networkAction(g, mouseX, mouseY, x, y + 192, w, settingsText("peer.clipboard_join"), ready, () -> { peerInvitationDraft = minecraft.keyboardHandler.getClipboard(); joinPeerInvitation(); });
+                networkAction(g, mouseX, mouseY, x, y + 264, w, settingsText("peer.leave"), running, com.micaftic.morpher.client.peer.ClientPeerRuntime::leave);
+            }
+            case PUBLIC, TUNNEL -> {
+                networkLine(g, settingsText(peerSettingsSection==PeerSettingsSection.TUNNEL?"peer.sakura_help":"peer.public_help"),x,y,w);
+                networkLine(g, settingsText("peer.listeners"),x,y+48,w);
+                renderPeerField(g,mouseX,mouseY,partialTick,peerListenerBox,x,y+72,w,top,bottom);
+                networkLine(g, settingsText("peer.entrances"),x,y+120,w);
+                renderPeerField(g,mouseX,mouseY,partialTick,peerEntranceBox,x,y+144,w,top,bottom);
+                networkLine(g, settingsText("peer.mapping_help"),x,y+168,w);
+                networkAction(g,mouseX,mouseY,x,y+216,half,settingsText("peer.host"),ready&&!running,
+                        ()->com.micaftic.morpher.client.peer.ClientPeerRuntime.hostEntrances(peerListenerDraft,peerEntranceDraft));
+                networkAction(g,mouseX,mouseY,x+half+6,y+216,half,settingsText("peer.copy"),invite!=null,()->minecraft.keyboardHandler.setClipboard(invite));
+                networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),x,y+240,w);
+                networkLine(g,settingsText("peer.coverage",com.micaftic.morpher.client.peer.ClientPeerRuntime.listenerCoverage()),x,y+264,w);
+                renderPeerField(g,mouseX,mouseY,partialTick,peerInvitationBox,x,y+312,w,top,bottom);
+                networkLine(g,settingsText("peer.local_route"),x,y+336,w);
+                renderPeerField(g,mouseX,mouseY,partialTick,peerLocalRouteBox,x,y+360,w,top,bottom);
+                networkAction(g,mouseX,mouseY,x,y+408,half,settingsText("peer.probe"),!peerInvitationDraft.isBlank(),
+                        ()->com.micaftic.morpher.client.peer.ClientPeerRuntime.probeInvitation(peerInvitationDraft.trim(),peerLocalRouteDraft));
+                networkAction(g,mouseX,mouseY,x+half+6,y+408,half,settingsText("peer.join"),ready&&!peerInvitationDraft.isBlank(),this::joinPeerInvitation);
+                networkAction(g,mouseX,mouseY,x,y+432,w,settingsText("peer.clipboard_probe"),true,()->{peerInvitationDraft=minecraft.keyboardHandler.getClipboard();if(peerInvitationBox!=null)peerInvitationBox.setValue(peerInvitationDraft);com.micaftic.morpher.client.peer.ClientPeerRuntime.probeInvitation(peerInvitationDraft.trim(),peerLocalRouteDraft);});
+                networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.probeStatusComponent(),x,y+480,w);
+                networkLine(g,settingsText("peer.probe_boundary"),x,y+504,w);
+                networkAction(g,mouseX,mouseY,x,y+552,w,settingsText("peer.leave"),running,com.micaftic.morpher.client.peer.ClientPeerRuntime::leave);
+            }
+        }
+        if (window.maxScroll() > 0) renderScrollbar(g, mouseX, mouseY, x + w - 4, top, 4,
+                Math.max(14, bottom - top), count, window.visibleRows(), window.scroll());
+    }
+
+    private void renderCloudSettingField(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick, EditBox field,
+                                         int x, int y, int w) {
+        if (field == null) return;
+        var panels = accountPanelLayout();
+        field.setX(x); field.setY(y); field.setWidth(w);
+        field.visible = STATE.secondaryPanel == ModelPanelState.SecondaryPanel.NONE
+                && y >= panels.detailY() && y + 18 <= panels.detailY() + panels.detailHeight();
+        field.active = field.visible;
+        if (field.visible) field.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        else if (getFocused() == field) setFocused(null);
+    }
+
+    private SettingsPanelLayout.Columns settingsColumns() {
+        int bottom = this.status.getString().isBlank() ? this.layout.top + this.layout.height - 6 : this.layout.footerTop - 6;
+        return SettingsPanelLayout.columns(this.layout.contentLeft + 6, this.layout.contentTop + 6,
+                this.layout.contentWidth - 12, bottom - this.layout.contentTop - 6);
+    }
+
+    private Component settingsText(String key, Object... args) {
+        return Component.translatable("gui.sparkle_morpher.settings." + key, args);
+    }
+
+    private void selectSettingsPage(String id) {
+        settingsPanel().selectPage(id);
+        if (!isCloudSettingsPage() && cloudIdentityFlow != null) {
+            cloudIdentityFlow.invalidate(); cloudIdentityFlow = null; cloudIdentityGateway = null;
+        }
+        setFocused(null);
+        init();
+    }
+
+    private void renderSettingsTab(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        var columns = settingsColumns();
+        glassPanel(g, columns.navigationX(), columns.top(), columns.navigationWidth(), columns.height());
+        renderSettingGroups(g, mouseX, mouseY, columns);
+        var page = settingsPanel().selectedPage();
+        if (page.kind() == SettingsPageRegistry.Kind.CLOUD) {
+            renderCloudAccountPanel(g, mouseX, mouseY, columns.detailX(), columns.top(), columns.detailWidth(), columns.height(), partialTick);
+            return;
+        }
+        if (page.kind() == SettingsPageRegistry.Kind.NETWORK || page.kind() == SettingsPageRegistry.Kind.PEER_LAN) {
+            renderHierarchicalSettings(g, mouseX, mouseY, partialTick, page, columns);
+            return;
+        }
+        glassPanel(g, columns.detailX(), columns.top(), columns.detailWidth(), columns.height());
+        int x = columns.detailX() + 8;
+        int w = Math.max(24, columns.detailWidth() - 22);
+        int bodyTop = columns.top() + 6, bottom = columns.top() + columns.height() - 6;
+        int firstHit = this.hits.size();
+        g.enableScissor(x, bodyTop, x + w, bottom);
+        if (page.kind() == SettingsPageRegistry.Kind.OPTIONS) {
+            List<SettingRow> rows = settingsRows();
+            var window = settingsPanel().layout(bodyTop, bottom, 0, 22, rows.size());
+            int rowY = bodyTop;
+            for (int i = window.firstRow(); i < window.endRowExclusive(); i++) {
+                renderSettingRow(g, mouseX, mouseY, x, rowY, w, rows.get(i));
+                rowY += 22;
+            }
+            if (window.maxScroll() > 0) renderScrollbar(g, mouseX, mouseY, x + w - 4, bodyTop, 4,
+                    Math.max(14, bottom - bodyTop), rows.size(), window.visibleRows(), window.scroll());
+        } else {
+            renderNetworkSettings(g, mouseX, mouseY, partialTick, page, x, bodyTop, w, bottom);
+        }
+        g.disableScissor();
+        this.hits.subList(firstHit, this.hits.size()).removeIf(hit -> hit.y() < bodyTop || hit.y() + hit.h() > bottom);
+    }
+
+    private void renderSettingGroups(GuiGraphicsExtractor g, int mouseX, int mouseY, SettingsPanelLayout.Columns columns) {
+        List<SettingsPageRegistry.Page> navigation = SettingsPageRegistry.pages();
+        int top = columns.top() + 6, bottom = columns.top() + columns.height() - 6;
+        int visible = Math.max(1, (bottom - top) / 22);
+        int scroll = settingsPanel().navigationScroll(navigation.size(), visible);
+        int x = columns.navigationX() + 5, w = Math.max(20, columns.navigationWidth() - 14);
+        g.enableScissor(x, top, x + w, bottom);
+        int firstHit = this.hits.size();
+        for (int i = scroll; i < Math.min(navigation.size(), scroll + visible); i++) {
+            int y = top + (i - scroll) * 22;
+            var page = navigation.get(i);
+            boolean selected = page.id().equals(settingsPanel().selectedPage().id());
+            Component label = Component.translatable(page.titleKey());
+            renderRowButton(g, mouseX, mouseY, x, y, w, 20,
+                    Component.literal(trim(label.getString(), w - 12)), selected, () -> selectSettingsPage(page.id()));
+            // Full page descriptions stay available even when the narrow navigation truncates labels.
+            Hit previous = this.hits.remove(this.hits.size() - 1);
+            hit(previous.x(), previous.y(), previous.w(), previous.h(), Component.translatable(page.descriptionKey()), previous.action());
+        }
+        g.disableScissor();
+        this.hits.subList(firstHit, this.hits.size()).removeIf(hit -> hit.y() < top || hit.y() + hit.h() > bottom);
+        if (navigation.size() > visible) renderScrollbar(g, mouseX, mouseY, columns.navigationX() + columns.navigationWidth() - 6,
+                top, 3, Math.max(14, bottom - top), navigation.size(), visible, scroll);
+    }
+
+    private EditBox peerField(int width, String key, int maxLength) {
+        EditBox field = new EditBox(this.font, 0, 0, width, 16, settingsText("peer." + key));
+        field.setMaxLength(maxLength);
+        field.setTextColor(TEXT);
+        field.setBordered(false);
+        field.setHint(settingsText("peer." + key));
+        field.visible = false;
+        addWidget(field);
+        return field;
+    }
+
+    private void renderPeerField(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick,
+                                 EditBox field, int x, int y, int w, int top, int bottom) {
+        if (field == null) return;
+        field.visible = y >= top && y + 20 <= bottom && STATE.secondaryPanel == ModelPanelState.SecondaryPanel.NONE;
+        field.active = field.visible;
+        if (!field.visible) { if (getFocused() == field) setFocused(null); return; }
+        fill(g, x, y, w, 20, GLASS_DARK);
+        border(g, x, y, w, 20, field.isFocused() ? RED : BORDER);
+        field.setX(x + 5); field.setY(y + 6); field.setWidth(Math.max(8, w - 10));
+        field.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+    }
+
+    private void networkLine(GuiGraphicsExtractor g, Component text, int x, int y, int w) {
+        fill(g, x, y, w, 20, 0x44202020);
+        drawText(g, Component.literal(trim(text.getString(), w - 12)), x + 6, y + 6);
+        hit(x, y, w, 20, text, () -> setFocused(null));
+    }
+
+    private void networkAction(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w,
+                               Component label, boolean enabled, Runnable action) {
+        if (enabled) renderTextButton(g, mouseX, mouseY, x, y, w, 20, label, action);
+        else {
+            fill(g, x, y, w, 20, GLASS_DARK);
+            border(g, x, y, w, 20, 0x33FFFFFF);
+            drawCentered(g, Component.literal(trim(label.getString(), w - 8)), x + w / 2, y + 5, MUTED);
         }
     }
 
-    private Component settingGroupLabel(ModelPanelState.SettingGroup group) {
-        return switch (group) {
-            case GENERAL -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.general");
-            case RENDERING -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.rendering");
-            case PERFORMANCE -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.performance");
-            case CACHE -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.cache");
-            case DEVELOPER -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.developer");
-            case MISC -> Component.translatable("gui.sparkle_morpher.model_panel.setting_group.misc");
-        };
+    private void joinPeerInvitation() {
+        com.micaftic.morpher.client.peer.ClientPeerRuntime.join(peerInvitationDraft.trim(),peerSettingsSection==PeerSettingsSection.PUBLIC||peerSettingsSection==PeerSettingsSection.TUNNEL?peerLocalRouteDraft:"");
+        peerInvitationDraft = "";
+        if (peerInvitationBox != null) peerInvitationBox.setValue("");
+    }
+
+    private void renderNetworkSettings(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick,
+                                       SettingsPageRegistry.Page page, int x, int top, int w, int bottom) {
+        var window = settingsPanel().layout(top, bottom, 0, 24, 5);
+        int y = top - window.scroll() * 24;
+        networkLine(g, settingsText("resources.route", modeLabel()), x, y, w);
+        networkAction(g, mouseX, mouseY, x, y + 48, w, settingsText("resources.switch_route"), true, this::toggleResourceMode);
+        networkAction(g, mouseX, mouseY, x, y + 72, w, Component.translatable("gui.sparkle_morpher.resource_station.title"), true, () -> switchTab(ModelPanelState.Tab.RESOURCE));
+        networkAction(g, mouseX, mouseY, x, y + 96, w, Component.translatable("gui.sparkle_morpher.model_panel.sites"), true, this::openSitesPanel);
+        if (window.maxScroll() > 0) renderScrollbar(g, mouseX, mouseY, x + w - 4, top, 4,
+                Math.max(14, bottom - top), 5, window.visibleRows(), window.scroll());
     }
 
     private void renderSettingRow(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, SettingRow row) {
@@ -2135,7 +2494,9 @@ public class ModernPlayerModelScreen extends Screen {
             drawSection(g, Component.translatable(row.sectionKey()), x + 6, y + 6);
             return;
         }
-        fill(g, x, y, w, 19, 0x44202020);
+        boolean enabled = Boolean.TRUE.equals(row.booleanValue());
+        fill(g, x, y, w, 19, enabled ? 0x775B3544 : inside(mouseX, mouseY, x, y, w, 19) ? PANEL_HOVER : 0x44202020);
+        if (enabled) fill(g, x, y, 3, 19, RED);
         Component label = Component.translatable(row.labelKey());
         if (row.segmented() != null) {
             SegmentedSetting segmented = row.segmented();
@@ -2155,7 +2516,8 @@ public class ModernPlayerModelScreen extends Screen {
         if (row.booleanValue() != null) {
             g.text(this.font, trim(label.getString(), w - 82), x + 6, y + 6, TEXT, false);
             int bx = x + w - 34;
-            fill(g, bx, y + 4, 26, 11, row.booleanValue() ? RED_SOFT : 0x55303030);
+            fill(g, bx, y + 4, 26, 11, row.booleanValue() ? RED : 0xAA202020);
+            border(g, bx, y + 4, 26, 11, row.booleanValue() ? RED : 0x887C878E);
             fill(g, bx + (row.booleanValue() ? 15 : 2), y + 5, 9, 9, 0xFFEDE1CC);
             hit(x, y, w, 19, label, row.action());
         } else if (row.decrement() == null && row.increment() == null) {
@@ -2224,17 +2586,49 @@ public class ModernPlayerModelScreen extends Screen {
         var selected = CloudManagementScreen.management().registry().selected();
         String instanceId = selected.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("");
         boolean connected = CloudClientRuntime.state(instanceId) != null;
+        var sections = SettingsPanelLayout.sections(settingsColumns());
         AccountPanelLayout panels = accountPanelLayout();
-        drawTitle(g, cloudText(STATE.activeTab == ModelPanelState.Tab.ACCOUNT ? "account_management" : "instance_management"), x + 8, y + 10);
-        drawMuted(g, Component.literal(trim(selected.map(CloudManagementScreen::displayName).orElse("—") + "  ·  "
-                + CloudManagementScreen.text(connected ? "connected" : "disconnected"), w - 132)), x + 126, y + 12);
-        glassPanel(g, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight());
+        glassPanel(g, sections.optionsX(), sections.top(), sections.optionsWidth(), sections.height());
+        if (panels.listWidth() > 0) glassPanel(g, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight());
         glassPanel(g, panels.detailX(), panels.detailY(), panels.detailWidth(), panels.detailHeight());
-        renderCloudAccountList(g, mouseX, mouseY, panels);
+        boolean account = cloudAccountPage != CloudAccountPage.PERFORMANCE && cloudAccountPage != CloudAccountPage.INSTANCES && cloudAccountPage != CloudAccountPage.SCOPES;
+        renderRowButton(g, mouseX, mouseY, sections.optionsX() + 4, sections.top() + 4, sections.optionsWidth() - 8, 20,
+                settingsText("cloud.accounts"), account, () -> setCloudAccountPage(CloudAccountPage.ACCOUNT));
+        renderRowButton(g, mouseX, mouseY, sections.optionsX() + 4, sections.top() + 28, sections.optionsWidth() - 8, 20,
+                settingsText("cloud.instances"), cloudAccountPage == CloudAccountPage.INSTANCES || cloudAccountPage == CloudAccountPage.SCOPES, () -> setCloudAccountPage(CloudAccountPage.INSTANCES));
+        renderRowButton(g, mouseX, mouseY, sections.optionsX() + 4, sections.top() + 52, sections.optionsWidth() - 8, 20,
+                settingsText("cloud.performance"), cloudAccountPage == CloudAccountPage.PERFORMANCE, () -> setCloudAccountPage(CloudAccountPage.PERFORMANCE));
+        if (panels.listWidth() > 0) {
+            int firstListHit = this.hits.size();
+            g.enableScissor(panels.listX(), panels.listY(), panels.listX() + panels.listWidth(), panels.listY() + panels.listHeight());
+            renderCloudAccountList(g, mouseX, mouseY, panels);
+            g.disableScissor();
+            this.hits.subList(firstListHit, this.hits.size()).removeIf(hit -> hit.y() < panels.listY() || hit.y() + hit.h() > panels.listY() + panels.listHeight());
+        }
         var details = cloudDetailLayout();
         int firstDetailHit = this.hits.size();
         g.enableScissor(panels.detailX(), panels.detailY(), panels.detailX() + panels.detailWidth(), panels.detailY() + panels.detailHeight());
         switch (cloudAccountPage) {
+            case PERFORMANCE -> {
+                int px = details.fieldX(), py = details.detailY() + 12, pw = details.fieldWidth();
+                drawSection(g, settingsText("cloud.performance.preset"), px, py);
+                var presets = com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.values();
+                int presetColumns = Math.max(1, Math.min(presets.length, pw / 72));
+                int presetWidth = Math.max(1, (pw - (presetColumns - 1) * 4) / presetColumns);
+                for (int i = 0; i < presets.length; i++) {
+                    var preset = presets[i];
+                    renderRowButton(g, mouseX, mouseY, px + i % presetColumns * (presetWidth + 4), py + 20 + i / presetColumns * 24,
+                            presetWidth, 20, Component.literal(trim(settingsText("cloud.performance.preset." + preset.name().toLowerCase(Locale.ROOT)).getString(), presetWidth - 12)),
+                            com.micaftic.morpher.cloud.client.CloudClientPerformance.preset() == preset,
+                            () -> com.micaftic.morpher.cloud.client.CloudClientPerformance.select(preset));
+                }
+                int limitsY = py + cloudPerformancePresetHeight();
+                renderSettingRow(g, mouseX, mouseY, px, limitsY, pw, cloudConcurrencyRow(true));
+                renderSettingRow(g, mouseX, mouseY, px, limitsY + 32, pw, cloudConcurrencyRow(false));
+                networkLine(g, settingsText("cloud.performance.custom_help"), px, limitsY + 64, pw);
+                networkLine(g, settingsText("cloud.performance.unlimited_help"), px, limitsY + 88, pw);
+                networkLine(g, settingsText("cloud.performance.live_help"), px, limitsY + 112, pw);
+            }
             case ACCOUNT -> renderCloudAccountDetails(g, mouseX, mouseY, details, connected, selected.map(CloudInstanceRegistry::isBuiltinOfficial).orElse(false), partialTick);
             case INSTANCES -> renderCloudInstances(g, mouseX, mouseY, details, partialTick);
             case SCOPES -> renderCloudScopes(g, mouseX, mouseY, details, partialTick);
@@ -2243,10 +2637,11 @@ public class ModernPlayerModelScreen extends Screen {
         g.disableScissor();
         this.hits.subList(firstDetailHit, this.hits.size()).removeIf(hit -> hit.y() < panels.detailY() || hit.y() + hit.h() > panels.detailY() + panels.detailHeight());
         int detailContentHeight = cloudIdentityContentHeight();
-        if (detailContentHeight > panels.detailHeight()) renderScrollbar(g, mouseX, mouseY, panels.detailX() + panels.detailWidth() - 6, panels.detailY() + 4, 4, panels.detailHeight() - 8, detailContentHeight, panels.detailHeight(), cloudDetailScroll);
-        Component panelMessage = isCloudIdentityPage() && cloudIdentityFlow != null
+        if (detailContentHeight > panels.detailHeight()) renderScrollbar(g, mouseX, mouseY, panels.detailX() + panels.detailWidth() - 6,
+                panels.detailY() + 4, 4, Math.max(14, panels.detailHeight() - 8), detailContentHeight, panels.detailHeight(), cloudDetailScroll);
+        Component message = isCloudIdentityPage() && cloudIdentityFlow != null
                 ? cloudText("identity_panel." + (cloudIdentityFlow.busy() ? "working" : cloudIdentityFlow.message())) : cloudPanelStatus;
-        drawText(g, Component.literal(trim(panelMessage.getString(), w - 16)), x + 8, y + h - 18);
+        if (!message.getString().isBlank()) setStatus(message);
     }
 
     private void renderCloudAccountList(GuiGraphicsExtractor g, int mouseX, int mouseY, AccountPanelLayout panels) {
@@ -2288,12 +2683,18 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private boolean isCloudIdentityPage() {
-        return cloudAccountPage == CloudAccountPage.IDENTITY || cloudAccountPage == CloudAccountPage.CLAIM || cloudAccountPage == CloudAccountPage.APPROVAL;
+        return isCloudSettingsPage() && (cloudAccountPage == CloudAccountPage.IDENTITY || cloudAccountPage == CloudAccountPage.CLAIM || cloudAccountPage == CloudAccountPage.APPROVAL);
+    }
+
+    private int cloudPerformancePresetHeight() {
+        int count = com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.values().length;
+        int columns = Math.max(1, Math.min(count, accountPanelLayout().fieldWidth() / 72));
+        return 32 + ((count + columns - 1) / columns) * 24;
     }
 
     private int cloudIdentityContentHeight() {
         return switch (cloudAccountPage) {
-            case IDENTITY -> 300; case CLAIM -> 390; case APPROVAL -> 440;
+            case PERFORMANCE -> cloudPerformancePresetHeight() + 152; case IDENTITY -> 300; case CLAIM -> 390; case APPROVAL -> 440;
             case SCOPES -> 268; case INSTANCES -> 232; default -> 180;
         };
     }
@@ -2563,9 +2964,9 @@ public class ModernPlayerModelScreen extends Screen {
         drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scope_id"), x, panels.fieldY(0) - 14);
         drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scope_name"), x, panels.fieldY(1) - 14);
         drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.world_epoch"), x, panels.fieldY(2) - 14);
-        if (cloudScopeIdBox != null) cloudScopeIdBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        if (cloudScopeNameBox != null) cloudScopeNameBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        if (cloudWorldEpochBox != null) cloudWorldEpochBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+        renderCloudSettingField(g, mouseX, mouseY, partialTick, cloudScopeIdBox, x, panels.fieldY(0), panels.fieldWidth());
+        renderCloudSettingField(g, mouseX, mouseY, partialTick, cloudScopeNameBox, x, panels.fieldY(1), panels.fieldWidth());
+        renderCloudSettingField(g, mouseX, mouseY, partialTick, cloudWorldEpochBox, x, panels.fieldY(2), panels.fieldWidth());
         int bw = panels.buttonWidth(3);
         int buttonY = panels.actionY(3);
         renderTextButton(g, mouseX, mouseY, x, buttonY, bw, 20,
@@ -2696,7 +3097,7 @@ public class ModernPlayerModelScreen extends Screen {
             cloudPanelStatus = failure == null
                     ? Component.literal(CloudManagementScreen.text(successKey))
                     : Component.literal(CloudManagementScreen.errorText(failure));
-            if (failure == null && (STATE.activeTab == ModelPanelState.Tab.ACCOUNT || STATE.activeTab == ModelPanelState.Tab.INSTANCE)) init();
+            if (failure == null && isCloudSettingsPage()) init();
         }));
     }
 
@@ -2851,6 +3252,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderFooter(GuiGraphicsExtractor g) {
+        if (STATE.activeTab == ModelPanelState.Tab.SETTINGS && this.status.getString().isBlank()) return;
         fill(g, this.layout.left, this.layout.footerTop, this.layout.width, 1, 0x55303030);
         Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatus() : this.status;
         if (this.modelSelectionTarget == null && STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
@@ -2912,6 +3314,13 @@ public class ModernPlayerModelScreen extends Screen {
         double mouseX = event.x();
         double mouseY = event.y();
         int button = event.button();
+        if (STATE.activeTab == ModelPanelState.Tab.SETTINGS && STATE.secondaryPanel == ModelPanelState.SecondaryPanel.NONE) {
+            if(peerLocalRouteBox!=null&&peerLocalRouteBox.visible&&peerLocalRouteBox.mouseClicked(event,flag)){setFocused(peerLocalRouteBox);return true;}
+            if(peerListenerBox!=null&&peerListenerBox.visible&&peerListenerBox.mouseClicked(event,flag)){setFocused(peerListenerBox);return true;}
+            if(peerEntranceBox!=null&&peerEntranceBox.visible&&peerEntranceBox.mouseClicked(event,flag)){setFocused(peerEntranceBox);return true;}
+            if (peerEndpointBox != null && peerEndpointBox.visible && peerEndpointBox.mouseClicked(event, flag)) { setFocused(peerEndpointBox); return true; }
+            if (peerInvitationBox != null && peerInvitationBox.visible && peerInvitationBox.mouseClicked(event, flag)) { setFocused(peerInvitationBox); return true; }
+        }
         if (button == 0 && beginResourceScrollDrag(mouseX, mouseY)) {
             return true;
         }
@@ -2935,17 +3344,20 @@ public class ModernPlayerModelScreen extends Screen {
             setFocused(this.cloudOriginBox);
             return true;
         }
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudScopeIdBox != null
+        if (isCloudSettingsPage() && this.cloudScopeIdBox != null && this.cloudScopeIdBox.visible
+                && inside(mouseX, mouseY, accountPanelLayout().detailX(), accountPanelLayout().detailY(), accountPanelLayout().detailWidth(), accountPanelLayout().detailHeight())
                 && this.cloudScopeIdBox.mouseClicked(event, flag)) {
             setFocused(this.cloudScopeIdBox);
             return true;
         }
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudScopeNameBox != null
+        if (isCloudSettingsPage() && this.cloudScopeNameBox != null && this.cloudScopeNameBox.visible
+                && inside(mouseX, mouseY, accountPanelLayout().detailX(), accountPanelLayout().detailY(), accountPanelLayout().detailWidth(), accountPanelLayout().detailHeight())
                 && this.cloudScopeNameBox.mouseClicked(event, flag)) {
             setFocused(this.cloudScopeNameBox);
             return true;
         }
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && this.cloudWorldEpochBox != null
+        if (isCloudSettingsPage() && this.cloudWorldEpochBox != null && this.cloudWorldEpochBox.visible
+                && inside(mouseX, mouseY, accountPanelLayout().detailX(), accountPanelLayout().detailY(), accountPanelLayout().detailWidth(), accountPanelLayout().detailHeight())
                 && this.cloudWorldEpochBox.mouseClicked(event, flag)) {
             setFocused(this.cloudWorldEpochBox);
             return true;
@@ -3014,18 +3426,20 @@ public class ModernPlayerModelScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         int delta = scrollY > 0 ? -1 : 1;
         if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) return true;
-        if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT || STATE.activeTab == ModelPanelState.Tab.INSTANCE) {
+        if (isCloudSettingsPage()) {
             AccountPanelLayout panels = accountPanelLayout();
             if (inside(mouseX, mouseY, panels.detailX(), panels.detailY(), panels.detailWidth(), panels.detailHeight())) {
                 cloudDetailScroll += delta * 24;
                 cloudDetailLayout();
-                if (cloudAccountPage == CloudAccountPage.SCOPES || isCloudIdentityPage()) init();
+                if (isCloudIdentityPage()) init();
                 return true;
             }
             if (!inside(mouseX, mouseY, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight())) {
+                var columns = settingsColumns();
+                if (inside(mouseX, mouseY, columns.navigationX(), columns.top(), columns.navigationWidth(), columns.height())) { settingsPanel().scrollNavigationBy(delta); return true; }
                 return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
             }
-            int count = isCloudIdentityPage() ? cloudIdentityListSize() : cloudAccountPage == CloudAccountPage.SCOPES
+            int count = cloudAccountPage == CloudAccountPage.PERFORMANCE ? com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.values().length : isCloudIdentityPage() ? cloudIdentityListSize() : cloudAccountPage == CloudAccountPage.SCOPES
                     ? CloudManagementScreen.management().snapshot().scopes().size()
                     : CloudManagementScreen.management().registry().profiles().size();
             cloudAccountScroll = clamp(cloudAccountScroll + delta, 0, Math.max(0, count - panels.listRows()));
@@ -3057,7 +3471,17 @@ public class ModernPlayerModelScreen extends Screen {
             }
             case RESOURCE -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll + delta);
             case ACCOUNT, INSTANCE -> { }
-            case SETTINGS -> settingsPanel().scrollBy(delta);
+            case SETTINGS -> {
+                var columns = settingsColumns();
+                if (inside(mouseX, mouseY, columns.navigationX(), columns.top(), columns.navigationWidth(), columns.height())) settingsPanel().scrollNavigationBy(delta);
+                else {
+                    var page = settingsPanel().selectedPage();
+                    var sections = SettingsPanelLayout.sections(columns);
+                    boolean nested = page.kind() == SettingsPageRegistry.Kind.NETWORK || page.kind() == SettingsPageRegistry.Kind.PEER_LAN;
+                    if (nested ? inside(mouseX, mouseY, sections.detailsX(), sections.top(), sections.detailsWidth(), sections.height())
+                            : inside(mouseX, mouseY, columns.detailX(), columns.top(), columns.detailWidth(), columns.height())) settingsPanel().scrollBy(delta);
+                }
+            }
         }
         return true;
     }
@@ -3442,7 +3866,7 @@ public class ModernPlayerModelScreen extends Screen {
         /** Developer-options: drop every memoised panel state, keeping the developer group selected. */
         private void resetPanelState() {
             STATE_CACHE.clear();
-            this.STATE.settingGroup = ModelPanelState.SettingGroup.DEVELOPER;
+            settingsPanel().selectGroup(ModelPanelState.SettingGroup.DEVELOPER);
             this.STATE.settingsScroll = 0;
             init();
             setStatus(Component.translatable("gui.sparkle_morpher.model_panel.developer.action.reset_state.done"), ChatFormatting.GREEN);
@@ -3653,6 +4077,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(actionRow(ModelPanelState.SettingGroup.GENERAL,"gui.sparkle_morpher.model_panel.setting.local_default",this::saveSelectedLocalDefault));
         rows.add(actionRow(ModelPanelState.SettingGroup.GENERAL,"gui.sparkle_morpher.model_panel.setting.hide_selected",this::hideSelectedLocalModel));
         rows.add(actionRow(ModelPanelState.SettingGroup.GENERAL,"gui.sparkle_morpher.model_panel.setting.restore_hidden",()->editLocalPreferences(com.micaftic.morpher.client.LocalDisplayPreferences::restoreHidden)));
+        rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.show_model_id_first", GeneralConfig.SHOW_MODEL_ID_FIRST));
         // ---- Developer options: panel state ----
         rows.add(section(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.section.panel_state"));
         rows.add(actionRow(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.developer.action.dump_state", this::dumpPanelState));
@@ -3680,7 +4105,6 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(nativeSimdValidationRow(ModelPanelState.SettingGroup.DEVELOPER));
         rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.gpu_debug_log", GeneralConfig.GPU_DEBUG_LOG));
         rows.add(bool(ModelPanelState.SettingGroup.DEVELOPER, "gui.sparkle_morpher.model_panel.setting.gpu_debug_verbose_log", GeneralConfig.GPU_DEBUG_VERBOSE_LOG));
-        rows.add(bool(ModelPanelState.SettingGroup.MISC, "gui.sparkle_morpher.model_panel.setting.show_model_id_first", GeneralConfig.SHOW_MODEL_ID_FIRST));
         return rows.stream().filter(row -> row.group() == settingsPanel().selectedGroup()).toList();
     }
 
@@ -3761,6 +4185,19 @@ public class ModernPlayerModelScreen extends Screen {
         return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.native_simd_validation", null, valueText, this.controller::cycleNativeSimdValidationMode, null, null, null, null);
     }
 
+
+    private SettingRow cloudConcurrencyRow(boolean upload) {
+        int value = upload ? com.micaftic.morpher.cloud.client.CloudClientPerformance.uploads()
+                : com.micaftic.morpher.cloud.client.CloudClientPerformance.processing();
+        boolean custom = com.micaftic.morpher.cloud.client.CloudClientPerformance.preset()
+                == com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.CUSTOM;
+        return new SettingRow(ModelPanelState.SettingGroup.PERFORMANCE,
+                "gui.sparkle_morpher.settings.cloud.performance." + (upload ? "uploads" : "processing"),
+                null, value == 0 ? settingsText("cloud.performance.unlimited").getString() : Integer.toString(value), null,
+                custom && value > 0 ? () -> com.micaftic.morpher.cloud.client.CloudClientPerformance.adjust(upload, -1) : null,
+                custom && value < 64 ? () -> com.micaftic.morpher.cloud.client.CloudClientPerformance.adjust(upload, 1) : null,
+                null, null);
+    }
 
     private SettingRow intRow(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.IntValue value, int min, int max, int step, String suffix) {
         int current = safeInt(value, min);
@@ -3983,8 +4420,12 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderRowButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, Component label, boolean selected, Runnable action) {
         boolean hover = inside(mouseX, mouseY, x, y, w, h);
-        fill(g, x, y, w, h, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x55303030);
-        g.text(this.font, label, x + 5, y + 4, selected ? 0xFFFFFFFF : TEXT, false);
+        fill(g, x, y, w, h, selected ? 0xE05B3544 : hover ? PANEL_HOVER : 0x55303030);
+        if (selected) {
+            border(g, x, y, w, h, RED);
+            fill(g, x, y, 3, h, RED);
+        }
+        g.text(this.font, selected ? label.copy().withStyle(ChatFormatting.BOLD) : label, x + 6, y + 4, selected ? 0xFFFFFFFF : TEXT, false);
         hit(x, y, w, h, label, action);
     }
 
