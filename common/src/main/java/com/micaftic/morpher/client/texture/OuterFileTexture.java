@@ -28,6 +28,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
 
     private Map<ShadersTextureType, OuterFileTexture> suffixTextures = Reference2ReferenceMaps.emptyMap();
 
+    private final boolean peerTexture;
     private boolean uploaded;
     private boolean closed;
 
@@ -39,6 +40,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
         this.data = Objects.requireNonNull(data, "Texture source data must not be null");
         if (data.length == 0) throw new IllegalArgumentException("Texture source data must not be empty");
         this.modelId = modelId;
+        this.peerTexture = com.micaftic.morpher.peer.PeerDecodeScope.active() || modelId != null && modelId.startsWith("peer:");
     }
 
     public void load(@NotNull ResourceManager resourceManager) {
@@ -46,6 +48,11 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     }
 
     public void doLoad() {
+        if (peerTexture && closed) return;
+        if (peerTexture && !com.micaftic.morpher.client.peer.PeerRenderFrames.executing(this)) {
+            com.micaftic.morpher.client.peer.PeerRenderFrames.schedule(this, this::doLoad);
+            return;
+        }
         RenderSystem.assertOnRenderThread();
         if (this.uploaded && this.textureView != null) {
             return;
@@ -56,6 +63,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             ModelMemoryProfiler.logBytes("texture-decode-start", null, textureData);
             image = NativeImage.read(new ByteArrayInputStream(textureData));
         } catch (IOException e) {
+            if (peerTexture) throw new IllegalStateException("Peer texture decode failed", e);
             YesSteveModel.LOGGER.warn("Failed to decode YSM texture, using fallback texture", e);
             image = createFallbackImage();
         }
@@ -71,6 +79,10 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
     public GpuTextureView getTextureView() {
         if (!isLoaded() && RenderSystem.isOnRenderThread()) {
             doLoad();
+        }
+        if (peerTexture && !isLoaded()) {
+            return net.minecraft.client.Minecraft.getInstance().getTextureManager()
+                    .getTexture(net.minecraft.client.renderer.texture.MissingTextureAtlasSprite.getLocation()).getTextureView();
         }
         return super.getTextureView();
     }
@@ -116,6 +128,19 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
         return this.suffixTextures;
     }
 
+    public boolean isPeerTexture() { return peerTexture; }
+    public boolean isPeerUploaded() { return uploaded; }
+    public String peerModelId() { return modelId; }
+    public boolean isSourceReleased() { return closed; }
+    public long peerUploadBytes() {
+        if (data.length >= 24 && data[0] == (byte) 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G') {
+            int w = java.nio.ByteBuffer.wrap(data, 16, 8).getInt();
+            int h = java.nio.ByteBuffer.wrap(data, 20, 4).getInt();
+            if (w > 0 && w <= 4096 && h > 0 && h <= 4096) return Math.max(data.length, (long) w * h * 4);
+        }
+        return Math.max(data.length, 64L * 1024 * 1024);
+    }
+
     /** Original PNG data exposed to optional runtime material integrations. */
     public byte[] getResourceData() {
         return this.data;
@@ -131,6 +156,7 @@ public class OuterFileTexture extends AbstractTexture implements ITextureMap {
             return;
         }
         closed = true;
+        com.micaftic.morpher.peer.PeerFrameWork.PEER.cancel(this);
         releaseGpuBinding();
         for (OuterFileTexture texture : this.suffixTextures.values()) {
             if (texture != null) {

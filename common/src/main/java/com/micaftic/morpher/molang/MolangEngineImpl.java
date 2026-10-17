@@ -18,6 +18,7 @@ public final class MolangEngineImpl implements MolangEngine {
 
     @Override
     public List<Expression> parse(Reader reader) throws IOException {
+        if(com.micaftic.morpher.peer.PeerDecodeScope.active()) reader = new java.io.StringReader(com.micaftic.morpher.peer.PeerMolangLimits.read(reader));
         return MolangParser.parser(reader, this.bindings).parseAll();
     }
 }

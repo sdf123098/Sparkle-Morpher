@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.animation.molang.functions.ysm;
 
-import com.micaftic.morpher.cloud.client.CloudMotionSources;
+import com.micaftic.morpher.client.motion.ClientMotionSources;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
@@ -23,10 +23,10 @@ public class Sync extends AbstractClientPlayerFunction {
         if (entity instanceof CustomPlayerEntity custom) {
             // Observers consume the owner's event, rather than generating their own random result.
             if (custom instanceof PlayerCapability && !custom.isLocalPlayerModel()
-                    && !CloudMotionSources.isOwner(custom) && CloudMotionSources.motion(custom) != null) return null;
+                    && !ClientMotionSources.isOwner(custom) && ClientMotionSources.motion(custom) != null) return null;
             FloatArrayList values = collectArgs(context, arguments);
             custom.executeAnimationExpression(values);
-            CloudMotionSources.expression(custom, "", values);
+            ClientMotionSources.expression(custom, "", values);
         }
         return null;
     }

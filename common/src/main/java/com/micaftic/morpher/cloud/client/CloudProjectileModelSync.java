@@ -57,7 +57,7 @@ public final class CloudProjectileModelSync {
             default->entity instanceof AbstractArrow?ProjectileFiringCandidates.Family.ARROW:null;
         };
     }
-    private static boolean shared(){return sharedContext&&!PrivacyMode.isActive();}
+    private static boolean shared(){return sharedContext&&(com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive());}
     private static boolean current(EntityDisplayContext expected,CloudClientRuntime.RuntimeState session){
         var client=Minecraft.getInstance();return shared()&&Objects.equals(context,expected)&&runtime==session&&CloudClientRuntime.state()==session
             &&client.level==level&&client.getConnection()==connection&&(session==null||session.scopeLifecycle().contextGeneration()==scopeGeneration);
@@ -75,7 +75,7 @@ public final class CloudProjectileModelSync {
         EntityDisplayContext nextContext=null;boolean nextShared=false;
         if(client.level!=null){String dimension=client.level.dimension().identifier().toString();
             String scope=next==null?null:next.scopeLifecycle().activeScopeId(),epoch=next==null?null:next.scopeLifecycle().activeWorldEpoch();
-            if(next!=null&&next.instanceInfo()!=null&&next.instanceInfo().supports("projectile_snapshot_v1")&&!PrivacyMode.isActive()&&scope!=null&&epoch!=null){
+            if(next!=null&&next.instanceInfo()!=null&&next.instanceInfo().supports("projectile_snapshot_v1")&&(com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive())&&scope!=null&&epoch!=null){
                 nextShared=true;
                 nextContext=new EntityDisplayContext(next.instance().instanceId(),CloudAssetCache.sha256(next.instance().origin().toString().getBytes(StandardCharsets.UTF_8)),scope,epoch,dimension,generation);
             }

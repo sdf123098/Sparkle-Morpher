@@ -60,15 +60,25 @@ public class YSMByteBuf implements AutoCloseable {
     }
 
     public int readVarInt() {
+        return readVarInt(false);
+    }
+
+    private int readVarInt(boolean byteArrayLength) {
         int value = 0;
         int position = 0;
         while (true) {
             byte currentByte = buf.readByte();
+            if (com.micaftic.morpher.peer.PeerDecodeScope.active() && position == 28 && (currentByte & 0x70) != 0)
+                throw new IllegalArgumentException("Peer VarInt exceeds 32 bits");
             value |= (currentByte & 0x7F) << position;
             if ((currentByte & 0x80) == 0) break;
             position += 7;
+            if (com.micaftic.morpher.peer.PeerDecodeScope.active() && position > 28)
+                throw new IllegalArgumentException("Peer VarInt exceeds 32 bits");
             if (position >= 64) throw new RuntimeException("VarInt too big");
         }
+        if (byteArrayLength) com.micaftic.morpher.peer.PeerDecodeScope.read();
+        else com.micaftic.morpher.peer.PeerDecodeScope.scalar(value);
         return value;
     }
 
@@ -102,7 +112,8 @@ public class YSMByteBuf implements AutoCloseable {
     }
 
     public byte[] readByteArray() {
-        int len = readVarInt();
+        int len = readVarInt(true);
+        com.micaftic.morpher.peer.PeerDecodeScope.array(len, buf.readableBytes());
         if (len == 0) return new byte[0];
         byte[] bytes = new byte[len];
         buf.readBytes(bytes);
@@ -111,6 +122,7 @@ public class YSMByteBuf implements AutoCloseable {
 
     public String readString() {
         int len = readVarInt();
+        com.micaftic.morpher.peer.PeerDecodeScope.array(len, buf.readableBytes());
         if (len == 0) return "";
         byte[] bytes = new byte[len];
         buf.readBytes(bytes);

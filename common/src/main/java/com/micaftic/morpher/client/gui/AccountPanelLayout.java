@@ -24,7 +24,7 @@ public record AccountPanelLayout(int listX, int listY, int listWidth, int listHe
     }
 
     public int fieldWidth() {
-        return Math.max(80, Math.min(460, detailWidth - 24));
+        return Math.max(24, Math.min(460, detailWidth - 24));
     }
 
     public int fieldY(int index) {
@@ -36,6 +36,6 @@ public record AccountPanelLayout(int listX, int listY, int listWidth, int listHe
     }
 
     public int buttonWidth(int columns) {
-        return Math.max(40, Math.min(210, (fieldWidth() - (columns - 1) * 6) / columns));
+        return Math.max(18, Math.min(210, (fieldWidth() - (columns - 1) * 6) / columns));
     }
 }

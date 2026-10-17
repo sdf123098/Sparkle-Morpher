@@ -28,6 +28,7 @@ public final class ValueConversions {
             if (Float.isFinite(f)) {
                 return f;
             }
+            com.micaftic.morpher.client.animation.molang.EvaluationHealth.invalid();
             return 0.0f;
         }
         if (obj instanceof Boolean) {
@@ -58,6 +59,7 @@ public final class ValueConversions {
             if (Double.isFinite(d)) {
                 return d;
             }
+            com.micaftic.morpher.client.animation.molang.EvaluationHealth.invalid();
             return 0.0d;
         }
         if (obj instanceof Boolean) {

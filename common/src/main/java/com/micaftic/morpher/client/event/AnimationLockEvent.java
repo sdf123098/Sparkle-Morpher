@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.event;
 
-import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
+import com.micaftic.morpher.client.motion.ClientMotionSources;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientTickEvent;
@@ -24,7 +24,7 @@ public class AnimationLockEvent {
         if (YesSteveModel.isAvailable() && !animationLocked && (localPlayer = client.player) != null && isPlayerMoving(localPlayer)) {
             PlayerCapability.get(localPlayer).ifPresent(cap -> {
                 if (cap.isModelSwitching()) {
-                    CloudPlayerMotionSync.stop(cap);
+                    ClientMotionSources.stop(cap);
                 }
             });
         }

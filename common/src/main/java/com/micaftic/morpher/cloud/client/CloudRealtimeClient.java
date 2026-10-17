@@ -44,6 +44,7 @@ public final class CloudRealtimeClient implements AutoCloseable {
     private final Supplier<CompletableFuture<WebSocket>> webSocketConnector;
     private volatile WebSocket socket;
     private volatile boolean closed;
+    private volatile long connectionGeneration;
     private CompletableFuture<CloudRealtimeClient> connectionAttempt;
 
     public CloudRealtimeClient(
@@ -94,7 +95,8 @@ public final class CloudRealtimeClient implements AutoCloseable {
         this.webSocketConnector = () -> httpClient.newWebSocketBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .header("Authorization", "Bearer " + accessToken)
-                .buildAsync(instance.websocketUri(), new Listener());
+                .buildAsync(instance.websocketUri(), new Listener(connectionGeneration,
+                        com.micaftic.morpher.core.network.NetworkAccess.state().epoch()));
     }
 
     CloudRealtimeClient(
@@ -118,15 +120,20 @@ public final class CloudRealtimeClient implements AutoCloseable {
     }
 
     public synchronized CompletableFuture<CloudRealtimeClient> connect() {
+        if (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud()) return CompletableFuture.failedFuture(new com.micaftic.morpher.core.network.NetworkAccess.Disabled());
         if (closed) return CompletableFuture.failedFuture(new IllegalStateException("Cloud realtime client is closed"));
         if (socket != null) return CompletableFuture.completedFuture(this);
         if (connectionAttempt != null) return connectionAttempt;
+        long generation = ++connectionGeneration;
+        long policyEpoch = com.micaftic.morpher.core.network.NetworkAccess.state().epoch();
         CloudState.setStatus(CloudConnectionStatus.CONNECTING, CloudErrorCode.NONE, instance.instanceId());
-        CompletableFuture<CloudRealtimeClient> attempt = webSocketConnector.get()
+        CompletableFuture<CloudRealtimeClient> attempt = com.micaftic.morpher.core.network.NetworkAccess.cloud(webSocketConnector)
                 .thenApply(webSocket -> {
-                    if (closed) {
-                        webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "client closed during connect");
-                    } else {
+                    synchronized (CloudRealtimeClient.this) {
+                        if (closed || generation != connectionGeneration || !com.micaftic.morpher.core.network.NetworkAccess.current(policyEpoch)) {
+                            webSocket.abort();
+                            throw new com.micaftic.morpher.core.network.NetworkAccess.Disabled();
+                        }
                         socket = webSocket;
                     }
                     return this;
@@ -135,7 +142,7 @@ public final class CloudRealtimeClient implements AutoCloseable {
         attempt.whenComplete((ignored, failure) -> {
             synchronized (CloudRealtimeClient.this) {
                 if (connectionAttempt == attempt) connectionAttempt = null;
-                if (failure != null && !closed) {
+                if (failure != null && !closed && generation == connectionGeneration) {
                     CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.INTERNAL, instance.instanceId());
                 }
             }
@@ -156,6 +163,7 @@ public final class CloudRealtimeClient implements AutoCloseable {
     }
 
     public CompletableFuture<Void> send(CloudRealtimeEnvelope envelope) {
+        if (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud()) return CompletableFuture.failedFuture(new com.micaftic.morpher.core.network.NetworkAccess.Disabled());
         WebSocket current = socket;
         if (closed || current == null) {
             return CompletableFuture.failedFuture(new IllegalStateException("Cloud realtime client is not connected"));
@@ -195,8 +203,17 @@ public final class CloudRealtimeClient implements AutoCloseable {
         return Proto.leaveScope(scopeId);
     }
 
+    public synchronized void suspend() {
+        ++connectionGeneration;
+        if(connectionAttempt != null) connectionAttempt.cancel(true);
+        connectionAttempt = null;
+        WebSocket current = socket; socket = null;
+        if(current != null) current.abort();
+    }
+
     @Override
     public synchronized void close() {
+        ++connectionGeneration;
         closed = true;
         connectionAttempt = null;
         WebSocket current = socket;
@@ -266,18 +283,34 @@ public final class CloudRealtimeClient implements AutoCloseable {
 
     private final class Listener implements WebSocket.Listener {
         private final ByteArrayOutputStream fragments = new ByteArrayOutputStream();
+        private final long generation;
+        private final long policyEpoch;
+
+        private Listener(long generation, long policyEpoch) {
+            this.generation = generation;
+            this.policyEpoch = policyEpoch;
+        }
+
+        private boolean current() {
+            return !closed && generation == connectionGeneration
+                    && com.micaftic.morpher.core.network.NetworkAccess.current(policyEpoch);
+        }
 
         @Override
         public void onOpen(WebSocket webSocket) {
-            socket = webSocket;
-            webSocket.request(1);
-            byte[] hello = Proto.hello(clientVersion, instance.instanceId());
-            byte[] envelope = Proto.envelope(CloudInstanceConfig.PROTOCOL_V1, "Hello", UUID.randomUUID().toString(), "", "", hello);
-            webSocket.sendBinary(ByteBuffer.wrap(envelope), true);
+            synchronized (CloudRealtimeClient.this) {
+                if(!current()) { webSocket.abort(); return; }
+                socket = webSocket;
+                webSocket.request(1);
+                byte[] hello = Proto.hello(clientVersion, instance.instanceId());
+                byte[] envelope = Proto.envelope(CloudInstanceConfig.PROTOCOL_V1, "Hello", UUID.randomUUID().toString(), "", "", hello);
+                webSocket.sendBinary(ByteBuffer.wrap(envelope), true);
+            }
         }
 
         @Override
         public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
+            if(!current() || socket != webSocket) { webSocket.abort(); return CompletableFuture.completedFuture(null); }
             if (fragments.size() + data.remaining() > MAX_MESSAGE_BYTES) {
                 CloudState.setStatus(CloudConnectionStatus.DEGRADED, CloudErrorCode.MESSAGE_TOO_LARGE, instance.instanceId());
                 webSocket.sendClose(1002, "message too large");
@@ -313,7 +346,7 @@ public final class CloudRealtimeClient implements AutoCloseable {
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             synchronized (CloudRealtimeClient.this) {
                 if (socket == webSocket) socket = null;
-                if (!closed) CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.NONE, instance.instanceId());
+                if (current()) CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.NONE, instance.instanceId());
             }
             return CompletableFuture.completedFuture(null);
         }
@@ -322,7 +355,7 @@ public final class CloudRealtimeClient implements AutoCloseable {
         public void onError(WebSocket webSocket, Throwable error) {
             synchronized (CloudRealtimeClient.this) {
                 if (socket == webSocket) socket = null;
-                if (!closed) CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.INTERNAL, instance.instanceId());
+                if (current()) CloudState.setStatus(CloudConnectionStatus.DISCONNECTED, CloudErrorCode.INTERNAL, instance.instanceId());
             }
         }
     }

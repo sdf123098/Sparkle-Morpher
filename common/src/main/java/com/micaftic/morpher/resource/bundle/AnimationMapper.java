@@ -34,6 +34,7 @@ import java.util.Map;
  * {@link AnimationController}，以及 Molang 表达式解析；不含模型装配策略。
  */
 public final class AnimationMapper {
+    private static final ThreadLocal<List<IValue>> PARSED = new ThreadLocal<>();
 
     private AnimationMapper() {
     }
@@ -41,6 +42,9 @@ public final class AnimationMapper {
     public static Map<String, Animation> buildAnimations(RawYsmModel.RawAnimationFile animFile, boolean mergeMultilineExpr) {
         Map<String, Animation> result = new LinkedHashMap<>();
         for (RawYsmModel.RawAnimation ra : animFile.animations.values()) {
+            List<IValue> parsed = new ArrayList<>();
+            PARSED.set(parsed);
+            try {
             ILoopType loopMode = ILoopType.EDefaultLoopTypes.PLAY_ONCE;
             if (ra.loopMode == 1) loopMode = ILoopType.EDefaultLoopTypes.LOOP;
             else if (ra.loopMode == 3) loopMode = ILoopType.EDefaultLoopTypes.HOLD_ON_LAST_FRAME;
@@ -76,7 +80,10 @@ public final class AnimationMapper {
             else blendWeight = null;
 
             Animation anim = new Animation(ra.name, ra.length * 20.0f, loopMode, blendWeight, null, null, null, boneAnims.toArray(new BoneAnimation[0]), soundEffects.toArray(new EventKeyFrame[0]), new ParticleEventKeyFrame[0], timelineEvents.toArray(new EventKeyFrame[0]));
+            anim.programExpressions = List.copyOf(parsed);
+            anim.declaredPeriodSeconds = ra.length;
             result.put(ra.name, anim);
+            } finally { PARSED.remove(); }
         }
         return result;
     }
@@ -227,16 +234,25 @@ public final class AnimationMapper {
 
             values.add(parse(parserText.toString()));
         } catch (Throwable ex) {
-            values.add(FloatValue.ZERO);
+            IValue failed = com.micaftic.morpher.geckolib3.core.molang.value.MolangValue.failed(String.join("\n", array), ex);
+            if (PARSED.get() != null) PARSED.get().add(failed);
+            values.add(failed);
         }
         return values;
     }
 
     public static IValue parse(String str) {
         try {
-            return GeckoLibCache.getMolangParser().parseExpression(str, false);
+            var parser = GeckoLibCache.getMolangParser();
+            IValue value;
+            try { value = parser.parseExpression(str, false); }
+            finally { GeckoLibCache.releaseParser(parser); }
+            if (PARSED.get() != null) PARSED.get().add(value);
+            return value;
         } catch (Throwable ex) {
-            return FloatValue.ZERO;
+            IValue failed = com.micaftic.morpher.geckolib3.core.molang.value.MolangValue.failed(str, ex);
+            if (PARSED.get() != null) PARSED.get().add(failed);
+            return failed;
         }
     }
 }

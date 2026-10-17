@@ -30,4 +30,14 @@ class SettingsPanelTest {
         assertEquals(0, panel.scroll());
         assertEquals(0, window.endRowExclusive());
     }
+
+    @Test
+    void legacyMiscSelectionOpensDeveloperOptions() {
+        ModelPanelState state = new ModelPanelState();
+        state.settingGroup = ModelPanelState.SettingGroup.MISC;
+        SettingsPanel panel = new SettingsPanel(state);
+        assertEquals("developer", panel.selectedPage().id());
+        assertEquals(ModelPanelState.SettingGroup.DEVELOPER, panel.selectedGroup());
+        assertEquals(false, SettingsPageRegistry.pages().stream().anyMatch(page -> page.id().equals("misc")));
+    }
 }
