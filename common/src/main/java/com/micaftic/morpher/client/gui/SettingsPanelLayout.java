@@ -22,4 +22,40 @@ final class SettingsPanelLayout {
             return firstRow;
         }
     }
+
+    static Columns columns(int x, int y, int width, int height) {
+        int safeWidth = Math.max(1, width), safeHeight = Math.max(1, height);
+        int gap = Math.min(8, safeWidth / 20);
+        int navigationWidth = Math.min(164, Math.max(safeWidth < 420 ? 64 : 88, safeWidth / 4));
+        navigationWidth = Math.min(navigationWidth, Math.max(1, safeWidth / 2 - gap));
+        int detailX = x + navigationWidth + gap;
+        return new Columns(x, y, navigationWidth, detailX,
+                Math.max(1, safeWidth - navigationWidth - gap), safeHeight);
+    }
+
+    record Columns(int navigationX, int top, int navigationWidth, int detailX, int detailWidth, int height) {}
+
+    static Sections sections(Columns columns) {
+        int gap = Math.min(8, columns.detailWidth() / 24);
+        int optionsWidth = Math.min(180, Math.max(64, (columns.detailWidth() - gap) / 3));
+        optionsWidth = Math.min(optionsWidth, Math.max(1, columns.detailWidth() / 2));
+        int detailsX = columns.detailX() + optionsWidth + gap;
+        return new Sections(columns.detailX(), optionsWidth, detailsX,
+                Math.max(1, columns.detailWidth() - optionsWidth - gap), columns.top(), columns.height());
+    }
+
+    /** Account lists live inside content, separately from the category navigation. */
+    static AccountPanelLayout cloudContent(Sections sections, boolean performance) {
+        int x = sections.detailsX(), y = sections.top(), w = sections.detailsWidth(), h = sections.height();
+        if (performance) return new AccountPanelLayout(x, y, 0, 0, x, y, w, h);
+        int gap = Math.min(8, w / 24);
+        if (w >= 420) {
+            int listWidth = Math.min(160, w / 3);
+            return new AccountPanelLayout(x, y, listWidth, h, x + listWidth + gap, y, w - listWidth - gap, h);
+        }
+        int listHeight = Math.min(112, Math.max(1, h / 3));
+        return new AccountPanelLayout(x, y, w, listHeight, x, y + listHeight + gap, w, Math.max(1, h - listHeight - gap));
+    }
+
+    record Sections(int optionsX, int optionsWidth, int detailsX, int detailsWidth, int top, int height) {}
 }

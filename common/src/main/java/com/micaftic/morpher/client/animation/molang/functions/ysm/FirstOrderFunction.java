@@ -4,8 +4,6 @@ import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
 import com.micaftic.morpher.geckolib3.core.molang.funciton.entity.EntityFunction;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.client.animation.molang.functions.physics.FirstOrder;
-import com.micaftic.morpher.client.animation.molang.functions.physics.IPhysics;
 import com.micaftic.morpher.molang.runtime.ExecutionContext;
 import net.minecraft.world.entity.Entity;
 
@@ -16,19 +14,22 @@ public class FirstOrderFunction extends EntityFunction {
         if (name == StringPool.EMPTY_ID) {
             return 0;
         }
-        float input = arguments.getAsFloat(context, 1);
+        float input = physicsArgument(context, arguments, 1);
         float response = 1.0f;
         if (arguments.size() >= 3) {
-            response = arguments.getAsFloat(context, 2);
+            response = physicsArgument(context, arguments, 2);
         }
-        PhysicsManager physicsManager = context.entity().geoInstance().getPhysicsManager();
-        IPhysics physics = physicsManager.get(name);
-        if (physics == null) {
-            physicsManager.put(name, new FirstOrder(input, response));
-            return input;
-        }
-        physics.setArgs(input, response, 0.0f, 0.0f);
-        return physics.getValue();
+        PhysicsManager physicsManager = (context.entity() instanceof com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext<?> program && program.programPhysics != null
+                ? program.programPhysics : context.entity().geoInstance().getPhysicsManager());
+        return physicsManager.sampleFirst(name, input, response);
+    }
+
+    static float physicsArgument(ExecutionContext<?> context, ArgumentCollection arguments, int index) {
+        long before = com.micaftic.morpher.client.animation.molang.EvaluationHealth.sequence();
+        Object value = arguments.getValue(context,index);
+        if(value instanceof Number number && !Float.isFinite(number.floatValue())) return Float.NaN;
+        float result = com.micaftic.morpher.molang.runtime.binding.ValueConversions.asFloat(value);
+        return before == com.micaftic.morpher.client.animation.molang.EvaluationHealth.sequence() ? result : Float.NaN;
     }
 
     @Override

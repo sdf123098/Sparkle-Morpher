@@ -40,6 +40,12 @@ public class Animation {
     public final List<EventKeyFrame<IValue[]>> customInstructionKeyframes;
 
     public boolean isFromPrimaryAssembly = false;
+    /** Set only by the verified import compatibility compiler. */
+    public boolean stableKipfelAttachments;
+    /** Actual parsed expressions, retained for conservative whole-model dependency analysis. */
+    public List<IValue> programExpressions = List.of();
+    public com.micaftic.morpher.client.animation.molang.AnimationProgramPlan programPlan;
+    public double declaredPeriodSeconds;
 
     @Nullable
     public String sourceKey;

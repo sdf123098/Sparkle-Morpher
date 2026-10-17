@@ -64,7 +64,7 @@ public final class CloudMinecraftEntityProviders {
             CloudClientRuntime.registerEntityProvider(new CapabilityProvider(CloudEntityProvider.Kind.MAID));
             registeredRuntime = runtime;
         }
-        if (com.micaftic.morpher.client.PrivacyMode.isActive()) {
+        if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || com.micaftic.morpher.client.PrivacyMode.isActive())) {
             if (!privacySuspended) runtime.entityCoordinator().deactivate();
             privacySuspended = true;
             return;
@@ -128,7 +128,7 @@ public final class CloudMinecraftEntityProviders {
                 && entry.targetId().equals(appearance.targetId()) && entry.revision() == bindingRevision).findFirst().orElse(null);
             AppearanceRequest request = new AppearanceRequest(capability, appearance, runtime, identity);
             request.current = () -> REQUESTS.get(capability) == request && CloudClientRuntime.state() == runtime
-                && !com.micaftic.morpher.client.PrivacyMode.isActive()
+                && (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !com.micaftic.morpher.client.PrivacyMode.isActive())
                 && client.level == expectedLevel && client.getConnection() == expectedConnection
                 && runtime.scopeLifecycle().contextGeneration() == scopeGeneration
                 && Objects.equals(runtime.scopeLifecycle().activeScopeId(), scope)

@@ -1,10 +1,8 @@
 package com.micaftic.morpher.client.animation.molang.functions.ysm;
 
-import com.micaftic.morpher.client.animation.molang.functions.physics.SecondOrder;
 import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.client.animation.molang.functions.physics.IPhysics;
 import com.micaftic.morpher.geckolib3.core.molang.funciton.entity.EntityFunction;
 import com.micaftic.morpher.molang.runtime.ExecutionContext;
 import net.minecraft.world.entity.Entity;
@@ -16,29 +14,23 @@ public class SecondOrderFunction extends EntityFunction {
         if (name == StringPool.EMPTY_ID) {
             return 0;
         }
-        int physicsKey = PhysicsManager.scopedKey(name);
-        float input = arguments.getAsFloat(context, 1);
+        float input = FirstOrderFunction.physicsArgument(context, arguments, 1);
         int size = arguments.size();
         float frequency = 1.0f;
         float coefficient = 1.0f;
         float response = 1.0f;
         if (size >= 3) {
-            frequency = arguments.getAsFloat(context, 2);
+            frequency = FirstOrderFunction.physicsArgument(context, arguments, 2);
         }
         if (size >= 4) {
-            coefficient = arguments.getAsFloat(context, 3);
+            coefficient = FirstOrderFunction.physicsArgument(context, arguments, 3);
         }
         if (size >= 5) {
-            response = arguments.getAsFloat(context, 4);
+            response = FirstOrderFunction.physicsArgument(context, arguments, 4);
         }
-        PhysicsManager physicsManager = context.entity().geoInstance().getPhysicsManager();
-        IPhysics physics = physicsManager.get(physicsKey);
-        if (physics == null) {
-            physicsManager.put(physicsKey, new SecondOrder(input, frequency, coefficient, response));
-            return input;
-        }
-        physics.setArgs(input, frequency, coefficient, response);
-        return physics.getValue();
+        PhysicsManager physicsManager = (context.entity() instanceof com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext<?> program && program.programPhysics != null
+                ? program.programPhysics : context.entity().geoInstance().getPhysicsManager());
+        return physicsManager.sampleSecond(name, input, frequency, coefficient, response);
     }
 
     @Override

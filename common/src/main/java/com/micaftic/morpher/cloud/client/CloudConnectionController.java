@@ -147,6 +147,7 @@ public final class CloudConnectionController {
     }
 
     public void tick(Path cacheRoot, String clientVersion) {
+        if(!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud()) return;
         long now = System.currentTimeMillis();
         for (var entry : sessions.entrySet()) {
             String instanceId = entry.getKey();

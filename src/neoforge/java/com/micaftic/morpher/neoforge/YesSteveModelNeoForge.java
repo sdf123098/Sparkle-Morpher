@@ -13,6 +13,7 @@ import com.micaftic.morpher.core.api.config.ConfigRegistration;
 public final class YesSteveModelNeoForge {
     public YesSteveModelNeoForge(IEventBus modBus, ModContainer container) {
         ConfigRegistration.setContainer(container);
+        PeerLanNetworking.register(modBus);
 
         NeoForgeEventBridge.register(modBus);
         if (FMLEnvironment.getDist() == Dist.CLIENT) {

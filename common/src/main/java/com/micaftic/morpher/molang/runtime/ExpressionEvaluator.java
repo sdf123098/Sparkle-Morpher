@@ -29,6 +29,8 @@ public interface ExpressionEvaluator<TEntity> extends ExecutionContext<TEntity> 
      * Bedrock Molang {@code this} 关键字：当前通道值（默认 0）。
      * 骨骼动画关键帧求值前由渲染端写入（见 AnimationControllerRuntime.BoneBlendState）。
      */
+    default void setVariableOverrides(java.util.Map<Variable, Object> values) { }
+
     default float currentValue() {
         return 0f;
     }

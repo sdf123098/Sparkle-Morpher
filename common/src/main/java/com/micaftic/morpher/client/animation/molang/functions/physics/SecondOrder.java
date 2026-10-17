@@ -20,22 +20,31 @@ public class SecondOrder implements IPhysics {
     private float frequency;
     private float coefficient;
     private float response;
+    private final boolean analytic;
+    private double preciseValue;
+    private double preciseVelocity;
 
     public SecondOrder(float input, float frequency, float coefficient, float response) {
+        this(input, frequency, coefficient, response, false);
+    }
+
+    public SecondOrder(float input, float frequency, float coefficient, float response, boolean analytic) {
+        this.analytic = analytic;
         this.input = input;
-        this.frequency = Mth.clamp(frequency, 0, 5);
-        this.coefficient = Mth.clamp(coefficient, 0, 1);
+        this.frequency = frequency;
+        this.coefficient = coefficient;
         this.response = response;
+        snapToInput(finiteOrZero(input));
     }
 
     @Override
     public void update(float timeStep) {
-        float input = finiteOrZero(this.input);
+        if (!Float.isFinite(this.input) || !Float.isFinite(frequency) || !Float.isFinite(coefficient) || !Float.isFinite(response)) return;
+        float input = this.input;
         if (!Float.isFinite(timeStep) || timeStep <= 0.0f) {
-            this.inputFunction = input;
-            sanitizeSimulation(input);
             return;
         }
+        if (analytic) { updateAnalytic(timeStep); return; }
 
         timeStep = Math.min(timeStep, MAX_TIME_STEP);
         float frequency = Mth.clamp(finiteOrZero(this.frequency), MIN_FREQUENCY, 5.0f);
@@ -87,6 +96,42 @@ public class SecondOrder implements IPhysics {
         this.inputFunction = input;
         this.lastSimulation = input;
         this.lastSimulationDot = 0.0f;
+        this.preciseValue = input;
+        this.preciseVelocity = 0;
+    }
+
+    /** Exact linear-ramp forcing for y'' + 2*z*w*y' + w*w*y = w*w*x + r*z*w*x'. */
+    private void updateAnalytic(double dt) {
+        if (!Float.isFinite(frequency) || !Float.isFinite(coefficient) || !Float.isFinite(response)) return;
+        if (frequency <= 0) { snapToInput(input); return; }
+        if (coefficient < 0) return;
+        double w = 2 * Math.PI * frequency, a = coefficient * w, b = w * w;
+        double velocity = ((double) input - inputFunction) / dt;
+        double offset = (response - 2.0) * coefficient / w * velocity;
+        double u = preciseValue - inputFunction - offset, v = preciseVelocity - velocity;
+        double nextU, nextV;
+        if (coefficient < 1) {
+            double wd = w * Math.sqrt(1.0 - (double) coefficient * coefficient);
+            double e = Math.exp(-a * dt), c = Math.cos(wd * dt), s = Math.sin(wd * dt) / wd;
+            nextU = e * (u * c + (v + a * u) * s);
+            nextV = e * (v * c - (a * v + b * u) * s);
+        } else if (coefficient == 1) {
+            double e = Math.exp(-a * dt), c = v + a * u;
+            nextU = e * (u + c * dt);
+            nextV = e * (v - a * c * dt);
+        } else {
+            double d = Math.sqrt(a * a - b), slow = -b / (a + d), fast = -a - d;
+            double c = (v - fast * u) / (slow - fast);
+            double slowTerm = c * Math.exp(slow * dt), fastTerm = (u - c) * Math.exp(fast * dt);
+            nextU = slowTerm + fastTerm;
+            nextV = slow * slowTerm + fast * fastTerm;
+        }
+        double y = input + offset + nextU, yd = velocity + nextV;
+        if (Float.isFinite((float)y) && Float.isFinite((float)yd)) {
+            preciseValue = y; preciseVelocity = yd;
+            lastSimulation = (float)y; lastSimulationDot = (float)yd;
+            inputFunction = input;
+        }
     }
 
     private static float finiteOrZero(float value) {

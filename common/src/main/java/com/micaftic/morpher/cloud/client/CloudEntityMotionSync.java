@@ -60,12 +60,12 @@ public final class CloudEntityMotionSync {
         return new CloudEntityMotionLedger.Observation(entity.getUUID(),kind,binding.targetId(),binding.revision(),appearance.revision(),model);
     }
     private static EntityDisplayContext location(Minecraft client,CloudClientRuntime.RuntimeState next){
-        if(client.level==null||next==null||next.instanceInfo()==null||!next.instanceInfo().supports("entity_motion_v1")||PrivacyMode.isActive())return null;
+        if(client.level==null||next==null||next.instanceInfo()==null||!next.instanceInfo().supports("entity_motion_v1")||(!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()))return null;
         String scope=next.scopeLifecycle().activeScopeId(),epoch=next.scopeLifecycle().activeWorldEpoch();if(scope==null||epoch==null)return null;
         return new EntityDisplayContext(next.instance().instanceId(),CloudAssetCache.sha256(next.instance().origin().toString().getBytes(StandardCharsets.UTF_8)),scope,epoch,client.level.dimension().identifier().toString(),generation);
     }
     private static boolean current(EntityDisplayContext expected,CloudClientRuntime.RuntimeState session){
-        var client=Minecraft.getInstance();return !PrivacyMode.isActive()&&context!=null&&context.equals(expected)&&runtime==session&&CloudClientRuntime.state()==session
+        var client=Minecraft.getInstance();return (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive())&&context!=null&&context.equals(expected)&&runtime==session&&CloudClientRuntime.state()==session
             &&client.level==level&&client.getConnection()==connection&&session.scopeLifecycle().contextGeneration()==scopeGeneration;
     }
     private static void clear(LivingAnimatable<?> cap){

@@ -70,7 +70,7 @@ public final class CloudPlayerMotionSync {
     public static void tickOwner() {
         Minecraft client = Minecraft.getInstance();
         var runtime = CloudClientRuntime.state();
-        if (PrivacyMode.isActive() || client.player == null || runtime == null || runtime.instanceInfo() == null
+        if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) || client.player == null || runtime == null || runtime.instanceInfo() == null
                 || !runtime.instanceInfo().playerMotionSupported() || !client.options.getCameraType().isFirstPerson()) return;
         PlayerCapability.get(client.player).ifPresent(cap -> {
             if (!cap.isModelReady() || cap.isForceDisabled() || !CloudAssetIdentity.isRuntimeModelId(cap.getModelId())) return;
@@ -78,7 +78,7 @@ public final class CloudPlayerMotionSync {
         });
     }
     public static CloudPlayerMotion motion(AnimatableEntity<?> entity) {
-        if (PrivacyMode.isActive() || !(entity instanceof CustomPlayerEntity custom)) return null;
+        if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) || !(entity instanceof CustomPlayerEntity custom)) return null;
         if (local(entity)) return snapshot(custom.getModelId());
         UUID uuid = entity.getEntity().getUUID();
         return custom.getModelId().equals(MODELS.get(uuid)) ? PEERS.get(uuid) : null;
@@ -93,7 +93,7 @@ public final class CloudPlayerMotionSync {
         return true;
     }
     public static void apply(Player player) {
-        if (PrivacyMode.isActive()) return;
+        if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive())) return;
         PlayerCapability.get(player).ifPresent(cap -> {
             if (cap.isForceDisabled() || !cap.isModelReady() || !cap.getModelId().equals(MODELS.get(player.getUUID()))) return;
             cap.awaitAsyncResult();

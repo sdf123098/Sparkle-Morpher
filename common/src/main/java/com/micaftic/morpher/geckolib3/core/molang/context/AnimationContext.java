@@ -26,7 +26,14 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-public class AnimationContext<TEntity> implements IContext<TEntity> {
+public class AnimationContext<TEntity> implements IContext<TEntity>, com.micaftic.morpher.peer.PeerEvaluationDomain {
+
+    @Override public boolean peerInput() {
+        return this.instance instanceof com.micaftic.morpher.client.entity.CustomPlayerEntity custom && custom.getModelId().startsWith("peer:");
+    }
+    @Override public long evaluationFrame() {
+        return this.animationEvent == null ? 0 : ((long)this.animationEvent.getTickCount() << 32) ^ Float.floatToIntBits(this.animationEvent.getFrameTime());
+    }
 
     public final TEntity entity;
 
@@ -45,6 +52,10 @@ public class AnimationContext<TEntity> implements IContext<TEntity> {
     public RandomSource random;
 
     public VariableStorage storage;
+    /** Captured before evaluation so an old frame cannot adopt a newer processor generation. */
+    public long programGeneration;
+    public java.util.Map<com.micaftic.morpher.geckolib3.core.molang.value.MolangValue, Float> programPoseValues = java.util.Map.of();
+    public com.micaftic.morpher.client.animation.molang.PhysicsManager programPhysics;
 
     public IForeignVariableStorage foreignStorage;
 
@@ -55,6 +66,7 @@ public class AnimationContext<TEntity> implements IContext<TEntity> {
     public AnimationContext(TEntity entity, AnimatableEntity<?> instance, AnimationEvent<?> animationEvent, EntityModelData data) {
         this.entity = entity;
         this.instance = instance;
+        this.programGeneration = instance == null ? -1 : instance.getEvaluationContext().programGeneration();
         this.animationEvent = animationEvent;
         this.data = data;
     }
@@ -62,6 +74,7 @@ public class AnimationContext<TEntity> implements IContext<TEntity> {
     private AnimationContext(TEntity entity, AnimationContext<?> context) {
         this.entity = entity;
         this.instance = context.instance;
+        this.programGeneration = context.programGeneration;
         this.animationEvent = context.animationEvent;
         this.data = context.data;
         this.animationControllerContext = context.animationControllerContext;
