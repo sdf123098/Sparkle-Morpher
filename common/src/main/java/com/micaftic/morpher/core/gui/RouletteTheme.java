@@ -22,10 +22,10 @@ public final class RouletteTheme {
     public static final int DESIGN_HEIGHT = 340;
 
     // ---- Layout (all values are pixel offsets from the screen center) ----
-    public static final float WHEEL_INNER_R = 30.0f;
-    public static final float WHEEL_GEAR_R = 56.0f;
-    public static final float WHEEL_OUTER_R = 128.0f;
-    public static final float WHEEL_OUTLINE_R = 130.0f;
+    public static final float WHEEL_INNER_R = 56.0f;
+    public static final float WHEEL_GEAR_R = 76.0f;
+    public static final float WHEEL_OUTER_R = 151.0f;
+    public static final float WHEEL_OUTLINE_R = 151.0f;
     public static final float GAP_ANGLE_PADDING = 0.02f;
 
     public static final float PAGE_BTN_OFFSET = 160.0f;
@@ -45,32 +45,32 @@ public final class RouletteTheme {
 
     // ---- Palette (ARGB) ----
     // Background veil
-    public static final int BG_VEIL = 0x7A05070A;
+    public static final int BG_VEIL = 0x5A171717;
 
     // Wheel slices - translucent frosted-glass plates.
-    public static final int SLICE_IDLE        = 0x785F6B7A;
-    public static final int SLICE_HOVER       = 0xB8DCEBFF;
-    public static final int SLICE_SUBMENU     = 0x806B7488;
-    public static final int SLICE_SUBMENU_HOV = 0xC8FFE3A3;
-    public static final int SLICE_EMPTY       = 0x22384552;
+    public static final int SLICE_IDLE        = 0x78363636;
+    public static final int SLICE_HOVER       = 0xB85A5A5A;
+    public static final int SLICE_SUBMENU     = 0x80404040;
+    public static final int SLICE_SUBMENU_HOV = 0xC8585858;
+    public static final int SLICE_EMPTY       = 0x22333333;
     public static final int SLICE_OUTLINE     = 0xA8FFFFFF;
     public static final int SLICE_INNER_GLOW  = 0x36FFFFFF;
     public static final int SLICE_SHADOW      = 0x3A000000;
 
     // Wheel inner ring (gear cluster)
-    public static final int GEAR_IDLE         = 0x809AA8BA;
+    public static final int GEAR_IDLE         = 0x805A5A5A;
     public static final int GEAR_HOVER        = 0xD8FFFFFF;
 
     // Central lock pip
-    public static final int CENTER_FILL       = 0xA02B3440;
+    public static final int CENTER_FILL       = 0xA02B2B2B;
     public static final int CENTER_RING       = 0xB8FFFFFF;
-    public static final int LOCK_TINT         = 0xFFE94F88;
-    public static final int UNLOCK_TINT       = 0xFF7BE0A4;
+    public static final int LOCK_TINT         = 0xFFE05252;
+    public static final int UNLOCK_TINT       = 0xFFF0F0F0;
 
     // Page buttons
-    public static final int PAGE_BTN_FILL          = 0x80616B78;
-    public static final int PAGE_BTN_FILL_HOVER    = 0xC8DCEBFF;
-    public static final int PAGE_BTN_FILL_DISABLED = 0x40555566;
+    public static final int PAGE_BTN_FILL          = 0x80444444;
+    public static final int PAGE_BTN_FILL_HOVER    = 0xC85A5A5A;
+    public static final int PAGE_BTN_FILL_DISABLED = 0x40333333;
     public static final int PAGE_BTN_RING          = 0xA8FFFFFF;
     public static final int PAGE_BTN_ICON          = 0xFFFFFFFF;
     public static final int PAGE_BTN_ICON_DISABLED = 0x88FFFFFF;
@@ -80,13 +80,13 @@ public final class RouletteTheme {
 
     // Text
     public static final int TEXT_LABEL      = 0xFFFFFFFF;
-    public static final int TEXT_LABEL_LINK = 0xFFFFE3A3;
-    public static final int TEXT_KEYBIND    = 0xFFDCEBFF;
-    public static final int TEXT_PATH_DIM   = 0xFFB7AFC9;
-    public static final int TEXT_PATH_CUR   = 0xFFFFC857;
-    public static final int TEXT_PAGE       = 0xFFFF8AB4;
-    public static final int TEXT_STOP       = 0xFFFFE6B5;
-    public static final int TEXT_SEPARATOR  = 0xFF7E6A9E;
+    public static final int TEXT_LABEL_LINK = 0xFFF0F0F0;
+    public static final int TEXT_KEYBIND    = 0xFFBBBBBB;
+    public static final int TEXT_PATH_DIM   = 0xFF9A9A9A;
+    public static final int TEXT_PATH_CUR   = 0xFFE05252;
+    public static final int TEXT_PAGE       = 0xFFE05252;
+    public static final int TEXT_STOP       = 0xFFF0F0F0;
+    public static final int TEXT_SEPARATOR  = 0xFF777777;
 
     // ---- Helpers ----
     /**

@@ -105,6 +105,7 @@ public final class PlayerPreviewEntity extends CustomPlayerEntity implements IPr
     private static class DummyPlayer extends AbstractClientPlayer {
         public DummyPlayer() {
             super(Minecraft.getInstance().level, createGameProfile());
+            setId(PreviewEntityIds.next());
         }
 
         private static GameProfile createGameProfile() {

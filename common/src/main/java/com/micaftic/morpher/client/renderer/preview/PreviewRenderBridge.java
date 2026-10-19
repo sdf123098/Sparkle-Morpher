@@ -40,10 +40,19 @@ public final class PreviewRenderBridge {
     // vanilla resolves the queued EntityRenderState.
     // 26.1.2：该分支把 DIRECT_GUI_PREVIEWS_SUPPORTED 固定为 false（其旧 MPR 的历史取值）；
     // 排队路径不读取本标志，仅既有 legacy 直取方法据此提前返回，故与分支行为一致。
-    private static final boolean DIRECT_GUI_PREVIEWS_SUPPORTED = false;
+    private static final boolean DIRECT_GUI_PREVIEWS_SUPPORTED = isGuiPreviewBridgeMixinEnabledByConfig();
 
     private static final Map<EntityRenderState, QueuedPreview> QUEUED =
             Collections.synchronizedMap(new IdentityHashMap<>());
+
+    private static final Map<EntityRenderState,Object> STATIC_KEYS=Collections.synchronizedMap(new IdentityHashMap<>());
+    private static final Map<EntityRenderState,CardPreviewRequest> CARD_PREVIEWS=Collections.synchronizedMap(new IdentityHashMap<>());
+    public record CardPreviewRequest(Object key,long revision,boolean refreshAllowed) { }
+    public static void markCardPreview(EntityRenderState state,Object key,long revision,boolean refreshAllowed){CARD_PREVIEWS.put(state,new CardPreviewRequest(key,revision,refreshAllowed));}
+    public static CardPreviewRequest cardPreview(EntityRenderState state){return CARD_PREVIEWS.get(state);}
+    public static void markStatic(EntityRenderState state,Object key){if(key!=null)STATIC_KEYS.put(state,key);}
+    public static Object staticKey(EntityRenderState state){return STATIC_KEYS.get(state);}
+    public static void finishGuiState(EntityRenderState state){STATIC_KEYS.remove(state);CARD_PREVIEWS.remove(state);QUEUED.remove(state);}
 
     /** 26.2 GUI 预览（InventoryScreen.extractEntityInInventoryFollowsMouse）当前渲染的实体。 */
     private static Entity guiPreviewEntity;

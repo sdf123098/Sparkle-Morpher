@@ -134,6 +134,10 @@ def verifySourceInputs = tasks.register('verifyProductionSourceBoundary') {
                 errors.add("production self-check source: ${relative}")
             }
             String text = sourceFile.getText('UTF-8')
+            // Protect against split-package crashes when another mod bundles Gagravarr.
+            if (text.contains('org.gagravarr')) {
+                errors.add("unrelocated Gagravarr reference in ${relative}")
+            }
             if (text =~ /\b(?:import\s+)?org\.junit(?:\.jupiter|\.platform)?\./) {
                 errors.add("test framework referenced by production source: ${relative}")
             }
@@ -171,6 +175,15 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
             String metadataPath = project.name == 'fabric' ? 'fabric.mod.json' : 'META-INF/neoforge.mods.toml'
             def coreErrors = coreArtifactEntryViolations(names, metadataPath)
             if (!coreErrors.isEmpty()) throw new GradleException("Final JAR entry audit failed for ${artifact.name}: ${coreErrors}")
+            // NeoForge resolves mod JARs as Java modules, so bundled third-party packages must be private.
+            def leakedGagravarr = names.findAll { it.startsWith('org/gagravarr/') && it.endsWith('.class') }
+            if (!leakedGagravarr.isEmpty()) {
+                throw new GradleException("Unrelocated Gagravarr classes in ${artifact.name}: ${leakedGagravarr.take(20)}")
+            }
+            ['com/micaftic/morpher/internal/vendor/gagravarr/ogg/OggFile.class',
+             'com/micaftic/morpher/internal/vendor/gagravarr/opus/OpusFile.class'].each { privateClass ->
+                if (!names.contains(privateClass)) throw new GradleException("Missing private audio library class: ${privateClass}")
+            }
             String repoTag = rootProject.projectDir.name.replaceFirst('(?i)^Sparkle-Morpher-', '').toLowerCase()
             String artifactTag = repoTag in ['fa26.1.2', 'neo26.1.2'] ? repoTag.replace('26.1.2', '26.1.x') : repoTag
             String suffix = distributionName == 'curseforge' ? '-curseforge.jar' : '.jar'

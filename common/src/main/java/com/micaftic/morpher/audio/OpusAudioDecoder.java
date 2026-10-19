@@ -2,9 +2,9 @@ package com.micaftic.morpher.audio;
 
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
-import org.gagravarr.ogg.OggFile;
-import org.gagravarr.opus.OpusAudioData;
-import org.gagravarr.opus.OpusFile;
+import com.micaftic.morpher.internal.vendor.gagravarr.ogg.OggFile;
+import com.micaftic.morpher.internal.vendor.gagravarr.opus.OpusAudioData;
+import com.micaftic.morpher.internal.vendor.gagravarr.opus.OpusFile;
 import org.concentus.OpusDecoder;
 
 import javax.sound.sampled.UnsupportedAudioFileException;

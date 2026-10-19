@@ -25,8 +25,8 @@ final class SettingsPanelLayout {
 
     static Columns columns(int x, int y, int width, int height) {
         int safeWidth = Math.max(1, width), safeHeight = Math.max(1, height);
-        int gap = Math.min(8, safeWidth / 20);
-        int navigationWidth = Math.min(164, Math.max(safeWidth < 420 ? 64 : 88, safeWidth / 4));
+        int gap = Math.min(16, safeWidth / 20);
+        int navigationWidth = safeWidth < 600 ? 94 : 120;
         navigationWidth = Math.min(navigationWidth, Math.max(1, safeWidth / 2 - gap));
         int detailX = x + navigationWidth + gap;
         return new Columns(x, y, navigationWidth, detailX,

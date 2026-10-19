@@ -35,22 +35,10 @@ public class TabButton extends AbstractWidget {
     }
 
     @Override
-    public void extractWidgetRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
-        GuiGraphicsExtractor g = extractor;
-        int bg = selected ? 0x90171717 : (isHovered() ? 0x900B0B0B : 0x90000000);
-        g.fill(getX(), getY(), getX() + width, getY() + height, bg);
-        if (selected) {
-            if (horizontal) g.fill(getX(), getY(), getX() + width, getY() + 1, -1);
-            else g.fill(getX(), getY(), getX() + 1, getY() + height, -1);
-        }
-        int textY = getY() + (height - 8) / 2;
-        if (horizontal) {
-            int tw = Minecraft.getInstance().font.width(getMessage());
-            int textX = getX() + Math.max(6, (width - tw) / 2);
-            g.text(Minecraft.getInstance().font, getMessage(), textX, textY, 0xFFFFFFFF, false);
-        } else {
-            g.text(Minecraft.getInstance().font, getMessage(), getX() + 10, textY, 0xFFFFFFFF, false);
-        }
+    public void extractWidgetRenderState(GuiGraphicsExtractor g,int mouseX,int mouseY,float partialTick){
+        var font=Minecraft.getInstance().font;var text=net.minecraft.network.chat.Component.literal(com.micaftic.morpher.core.gui.RoulettePanelStyle.trim(font,getMessage().getString(),Math.max(1,width-12)));
+        com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedSurface(g,getX(),getY(),width,height,4,selected?0x443F3F3F:isHovered()?0x88505050:0x44303030,selected?0xFFE05252:0x33FFFFFF);
+        g.text(font,text,getX()+(width-font.width(text))/2,com.micaftic.morpher.core.gui.UiElementLayout.centeredY(getY(),height,font.lineHeight),0xFFF0F0F0,false);
     }
 
     @Override
