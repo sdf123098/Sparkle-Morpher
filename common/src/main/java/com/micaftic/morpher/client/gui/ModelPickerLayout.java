@@ -43,14 +43,14 @@ final class ModelPickerLayout {
      * 的「背景图.png」与 {@code gui_foreground} 的「前景图.png」边框，内置 default 模型也是这一对）。
      * 卡比例与素材一致，卡图才能整幅铺满、不出现两侧留白。</p>
      */
-    static final float CARD_ASPECT = 90.0f / 52.0f;
+    static final float CARD_ASPECT = 280.0f / 162.0f;
     /** 名字条高度 = 卡高 × 该比例，并 clamp 到下面上下限。 */
-    static final float CARD_NAME_RATIO = 0.24f;
+    static final float CARD_NAME_RATIO = 0.14f;
     static final int CARD_NAME_MIN = 16;
-    static final int CARD_NAME_MAX = 34;
+    static final int CARD_NAME_MAX = 20;
     /** 卡间距与列表区四周留白。 */
     static final int CARD_GAP = 4;
-    static final int CARD_MARGIN = 5;
+    static final int CARD_MARGIN = 0;
     /**
      * 卡片内实时小人缩放 = 封面高 × 该系数。
      *
@@ -77,11 +77,11 @@ final class ModelPickerLayout {
     static final int FORCED_MIN_CARD_H = 48;
     /**
      * 每页最多列/行。行列上限与 {@link #cards} 的面积搜索共同决定每页容量，
-     * 也就是「每帧实时 3D 预览数」的硬顶；取 8×6 是为了让高瘦面板也能把纵向空间排满，
+     * 也就是「每帧实时 3D 预览数」的硬顶；常规宽度支持 9 列，
      * 实际典型页面远小于此值。
      */
-    static final int MAX_COLS = 8;
-    static final int MAX_ROWS = 6;
+    static final int MAX_COLS = 9;
+    static final int MAX_ROWS = 3;
 
     private ModelPickerLayout() {
     }
@@ -113,54 +113,28 @@ final class ModelPickerLayout {
      * 遍历列数（1..{@link #MAX_COLS}），**优先取每页张数最多**的排法（既不浪费空间、
      * 也不至于只摆两张巨大卡），张数相同时取卡更大者，避免把卡压得过小。</p>
      */
-    static Cards cards(int listW, int listH) {
-        return cards(listW, listH, CARD_MIN_W, CARD_MAX_W);
-    }
-
     static Cards cards(int listW, int listH, int entryCount, boolean compact) {
-        return cards(listW, listH, compact ? 48 : CARD_MIN_W, compact ? 96 : CARD_MAX_W);
+        return cards(listW, listH);
     }
 
-    private static Cards cards(int listW, int listH, int cardMinW, int cardMaxW) {
-        int usableW = Math.max(1, listW - 2 * CARD_MARGIN);
-        int usableH = Math.max(1, listH - 2 * CARD_MARGIN);
-        int bestCols = 0;
-        int bestRows = 0;
-        int bestW = 0;
-        int bestH = 0;
-        int bestCapacity = 0;
-        for (int cols = 1; cols <= MAX_COLS; cols++) {
-            int wFit = (usableW - (cols - 1) * CARD_GAP) / cols;
-            if (wFit < cardMinW) {
-                break; // 再往后的列数只会更窄
-            }
-            int cellW = Math.min(wFit, cardMaxW);
-            int cellH = cardH(cellW);
-            int rows = (usableH + CARD_GAP) / (cellH + CARD_GAP);
-            if (rows < 1) {
-                continue;
-            }
-            rows = Math.min(rows, MAX_ROWS);
-            int capacity = cols * rows;
-            boolean better = capacity > bestCapacity
-                    || (capacity == bestCapacity && cellW > bestW);
-            if (better) {
-                bestCapacity = capacity;
-                bestCols = cols;
-                bestRows = rows;
-                bestW = cellW;
-                bestH = cellH;
-            }
-        }
-        if (bestCols == 0) {
-            // 放不下任何最小可读卡：给出单张「宽高都放得下」的卡，
-            // 由调用方决定是否回退文字网格（此处不得超出可用区，否则排版会溢出）。
-            int byWidth = Math.min(usableW, cardMaxW);
-            int byHeight = (int) Math.floor(usableH / CARD_ASPECT);
-            int cellW = Math.max(1, Math.min(byWidth, byHeight));
-            return new Cards(1, 1, cellW, Math.max(1, Math.min(cardH(cellW), usableH)), 1);
-        }
-        return new Cards(bestCols, bestRows, bestW, bestH, bestCapacity);
+    /** Reserve a ninth regular-size card while keeping at least 120px for details. */
+    static int listWidth(int contentWidth,int listHeight){
+        int preferred=Math.max(24,Math.round(contentWidth*.76f)-2);
+        if(preferred<560)return preferred;
+        int cardWidth=Math.max(1,Math.min(81,(int)Math.floor((listHeight-2*CARD_GAP)/3f/CARD_ASPECT)));
+        int nineColumns=9*cardWidth+8*CARD_GAP;
+        return Math.max(preferred,Math.min(nineColumns,Math.max(24,contentWidth-124)));
+    }
+
+    static Cards cards(int listW,int listH){
+        boolean compact=listW<360,middle=listW>=360&&listW<560;
+        int preferredCols=compact?6:middle?7:9,maxW=compact?51:middle?65:81;
+        int cols=Math.max(1,Math.min(preferredCols,(listW+CARD_GAP)/(FORCED_MIN_CARD_W+CARD_GAP)));
+        int rows=listH<142?1:compact||middle?2:3;
+        int byWidth=Math.max(1,(listW-(cols-1)*CARD_GAP)/cols);
+        int byHeight=Math.max(1,(int)Math.floor((listH-(rows-1)*CARD_GAP)/(float)rows/CARD_ASPECT));
+        int cellW=Math.max(1,Math.min(maxW,Math.min(byWidth,byHeight))),cellH=Math.max(1,Math.min(Math.max(1,(listH-(rows-1)*CARD_GAP)/rows),Math.round(cellW*CARD_ASPECT)));
+        return new Cards(cols,rows,cellW,cellH,cols*rows);
     }
 
     /** Keep every result set in the same left-to-right, top-to-bottom grid. */
@@ -201,6 +175,9 @@ final class ModelPickerLayout {
      */
     record Cards(int cols, int rows, int cellW, int cellH, int capacity) {
 
+        int columnX(int listW,int column) {
+            return column*(cellW+CARD_GAP);
+        }
         int blockW() {
             return cols * cellW + (cols - 1) * CARD_GAP;
         }

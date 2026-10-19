@@ -27,7 +27,9 @@
     "client.ScreenAccessor",
     "client.ThrowableItemProjectileAccessor",
     "client.WingsLayerMixin",
-    "client.WorldRendererMixin"
+    "client.WorldRendererMixin",
+    "client.SystemFontManagerMixin",
+    "client.PictureInPictureRendererMixin"
   ],
   "mixins": [
     "AbstractArrowEntityMixin",
