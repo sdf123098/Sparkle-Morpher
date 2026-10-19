@@ -6,7 +6,7 @@ import java.util.Objects;
 
 /** Stable page IDs and grouped navigation. Adding a page never divides a fixed horizontal tab strip. */
 final class SettingsPageRegistry {
-    enum Kind { OPTIONS, NETWORK, CLOUD, SERVER, RESOURCES, PEER_LAN, PLANNED }
+    enum Kind { OPTIONS, NETWORK, CLOUD, SERVER, RESOURCES, PEER_LAN, APPEARANCE, PLANNED }
     record Page(String id, String categoryKey, String titleKey, String descriptionKey,
                 Kind kind, ModelPanelState.SettingGroup group) {
         Page {
@@ -24,6 +24,7 @@ final class SettingsPageRegistry {
                     "gui.sparkle_morpher.model_panel.setting_group." + id,
                     "gui.sparkle_morpher.settings.description." + id, Kind.OPTIONS, group));
         }
+        network("appearance", Kind.APPEARANCE);
         network("network", Kind.NETWORK);
         network("cloud", Kind.CLOUD);
         network("resources", Kind.RESOURCES);
@@ -38,7 +39,10 @@ final class SettingsPageRegistry {
     static synchronized void register(Page page) {
         if (PAGES.putIfAbsent(page.id(), page) != null) throw new IllegalArgumentException("Duplicate settings page");
     }
-    static synchronized List<Page> pages() { return List.copyOf(PAGES.values()); }
+    static synchronized List<Page> pages() {
+        var order=List.of("general","appearance","rendering","performance","cache","cloud","network","peer","resources","developer");
+        return PAGES.values().stream().sorted(java.util.Comparator.comparingInt(page->{int i=order.indexOf(page.id());return i<0?order.size():i;})).toList();
+    }
     static synchronized Page page(String id) {
         String current = id == null ? "general" : switch (id) {
             case "peer_lan", "peer_public", "peer_tunnel" -> "peer";

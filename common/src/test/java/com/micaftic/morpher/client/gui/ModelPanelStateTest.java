@@ -27,14 +27,14 @@ class ModelPanelStateTest {
         state.cloudView = ModelPanelState.CloudView.MINE;
         assertEquals("mine", state.cloudCatalogScope());
         state.cloudView = ModelPanelState.CloudView.ALL;
-        assertEquals("accessible", state.cloudCatalogScope());
+        assertEquals("public", state.cloudCatalogScope());
         assertFalse(state.cloudSearchRequired());
         state.cloudView = ModelPanelState.CloudView.PUBLIC;
         assertEquals("public", state.cloudCatalogScope());
-        assertTrue(state.cloudSearchRequired());
+        assertFalse(state.cloudSearchRequired());
         state.modelSource = ModelPanelState.ModelSource.SPM_CLOUD;
         assertTrue(state.cloudViews().contains(ModelPanelState.CloudView.ALL));
-        assertTrue(state.cloudSearchRequired());
+        assertFalse(state.cloudSearchRequired());
         state.cloudSearchText = " fox ";
         assertFalse(state.cloudSearchRequired());
     }
@@ -45,8 +45,8 @@ class ModelPanelStateTest {
         state.modelSource = ModelPanelState.ModelSource.COMMUNITY_CLOUD;
         for (var view : state.cloudViews()) {
             state.cloudView = view;
-            assertTrue(state.canChangeCloudVisibility(true));
-            assertEquals(view == ModelPanelState.CloudView.MINE, state.canChangeCloudVisibility(false));
+            assertEquals(view == ModelPanelState.CloudView.MINE, state.canChangeCloudVisibility(true));
+            assertFalse(state.canChangeCloudVisibility(false));
         }
         state.modelSource = ModelPanelState.ModelSource.LOCAL;
         assertFalse(state.canChangeCloudVisibility(true));

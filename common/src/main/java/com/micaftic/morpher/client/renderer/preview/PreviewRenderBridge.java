@@ -43,6 +43,15 @@ public final class PreviewRenderBridge {
     private static final Map<EntityRenderState, QueuedPreview> QUEUED =
             Collections.synchronizedMap(new IdentityHashMap<>());
 
+    private static final Map<EntityRenderState,Object> STATIC_KEYS=Collections.synchronizedMap(new IdentityHashMap<>());
+    private static final Map<EntityRenderState,CardPreviewRequest> CARD_PREVIEWS=Collections.synchronizedMap(new IdentityHashMap<>());
+    public record CardPreviewRequest(Object key,long revision,boolean refreshAllowed) { }
+    public static void markCardPreview(EntityRenderState state,Object key,long revision,boolean refreshAllowed){CARD_PREVIEWS.put(state,new CardPreviewRequest(key,revision,refreshAllowed));}
+    public static CardPreviewRequest cardPreview(EntityRenderState state){return CARD_PREVIEWS.get(state);}
+    public static void markStatic(EntityRenderState state,Object key){if(key!=null)STATIC_KEYS.put(state,key);}
+    public static Object staticKey(EntityRenderState state){return STATIC_KEYS.get(state);}
+    public static void finishGuiState(EntityRenderState state){STATIC_KEYS.remove(state);CARD_PREVIEWS.remove(state);QUEUED.remove(state);}
+
     /** 26.2 GUI 预览（InventoryScreen.extractEntityInInventoryFollowsMouse）当前渲染的实体。 */
     private static Entity guiPreviewEntity;
     private static float guiPreviewPartialTick;

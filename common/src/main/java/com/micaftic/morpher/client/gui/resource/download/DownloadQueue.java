@@ -39,7 +39,9 @@ public final class DownloadQueue {
         CANCELLED
     }
 
-    public record TaskSnapshot(String name, String fileName, TaskState state, float progress, Component message) {
+    public record TaskSnapshot(String name, String fileName, TaskState state, float progress, Component message, String sourceUrl, long byteLength) {
+        public TaskSnapshot(String name,String fileName,TaskState state,float progress,Component message){this(name,fileName,state,progress,message,"",0);}
+
     }
 
     public record Snapshot(TaskSnapshot currentTask, List<TaskSnapshot> unfinishedTasks, List<TaskSnapshot> finishedTasks,
@@ -108,6 +110,12 @@ public final class DownloadQueue {
         }
     }
 
+    /** Retry the exact original source/config, including tasks no longer in the current catalog. */
+    public static boolean retry(TaskSnapshot snapshot) {
+        DownloadTask found;
+        synchronized(LOCK){found=HISTORY.stream().filter(t->t.entry.url().equals(snapshot.sourceUrl())&&t.entry.fileName().equals(snapshot.fileName())).reduce((a,b)->b).orElse(null);}
+        return found!=null && enqueue(found.entry,found.config);
+    }
     public static void clearFinished() {
         synchronized (LOCK) {
             HISTORY.clear();
@@ -277,7 +285,7 @@ public final class DownloadQueue {
     }
 
     static TaskSnapshot snapshot(DownloadTask task) {
-        return new TaskSnapshot(task.entry.name(), task.entry.fileName(), task.state, task.progress, task.message);
+        return new TaskSnapshot(task.entry.name(), task.entry.fileName(), task.state, task.progress, task.message, task.entry.url(), task.entry.size());
     }
 
     static int progressTotal(int contentLength, long entrySize) {

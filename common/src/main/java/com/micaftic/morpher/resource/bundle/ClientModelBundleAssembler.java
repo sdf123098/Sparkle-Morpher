@@ -56,7 +56,10 @@ public final class ClientModelBundleAssembler {
             BufferedImage img = TextureDecoder.decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
             imagesList.add(img);
 
-            byte[] processedData = TextureDecoder.toPng(rt.data, rt.imageFormat, rt.width, rt.height);
+            // The alpha scanner needs the decoded image too: encode this same raster,
+            // rather than decoding a second full copy of non-PNG source textures.
+            byte[] processedData = TextureDecoder.isPng(rt.data)
+                    ? rt.data : TextureDecoder.encodeToPng(img, rt.data);
             OuterFileTexture tex = new OuterFileTexture(processedData, modelId);
 
             Map<ShadersTextureType, OuterFileTexture> suffixTextures = new LinkedHashMap<>();
@@ -98,6 +101,14 @@ public final class ClientModelBundleAssembler {
 
         GeoModel mainMesh = GeometryBaker.buildMesh(raw.mainEntity.mainModel, context, textureCount, mainScanner, raw.properties.allCutout, specialHandLocatorProfile);
         GeoModel armMesh = raw.mainEntity.armModel != null ? GeometryBaker.buildMesh(raw.mainEntity.armModel, context, textureCount, armScanner, raw.properties.allCutout) : mainMesh;
+
+        // Only geometry baking reads these images. Do not retain every large raster
+        // while parsing animations, scripts, projectile models and vehicles.
+        for (BufferedImage image : imagesList) if (image != null) image.flush();
+        imagesList.clear();
+        java.util.Arrays.fill(imagesArray, null);
+        mainScanner = null;
+        armScanner = null;
 
         GeoModel[] meshes = new GeoModel[]{mainMesh, armMesh};
 
@@ -346,8 +357,9 @@ public final class ClientModelBundleAssembler {
             for (RawYsmModel.RawTexture rt : sub.textures.values()) {
                 BufferedImage img = TextureDecoder.decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
                 imgList.add(img);
-                byte[] processedData = TextureDecoder.toPng(rt.data, rt.imageFormat, rt.width, rt.height);
                 if (texture == null) {
+                    byte[] processedData = TextureDecoder.isPng(rt.data)
+                            ? rt.data : TextureDecoder.encodeToPng(img, rt.data);
                     texture = new OuterFileTexture(processedData, sub.identifier);
                 }
             }
@@ -357,6 +369,7 @@ public final class ClientModelBundleAssembler {
         }
 
         GeoModel mesh = GeometryBaker.buildMesh(sub.model, context, textureCount, subScanner, true);
+        subScanner = null;
 
         Map<String, Animation> allAnimations = new LinkedHashMap<>();
         for (Map.Entry<String, RawYsmModel.RawAnimationFile> entry : sub.animationFiles.entrySet()) {
@@ -388,8 +401,9 @@ public final class ClientModelBundleAssembler {
             for (RawYsmModel.RawTexture rt : sub.textures.values()) {
                 BufferedImage img = TextureDecoder.decodeToImage(rt.data, rt.imageFormat, rt.width, rt.height);
                 imgList.add(img);
-                byte[] processedData = TextureDecoder.toPng(rt.data, rt.imageFormat, rt.width, rt.height);
                 if (texture == null) {
+                    byte[] processedData = TextureDecoder.isPng(rt.data)
+                            ? rt.data : TextureDecoder.encodeToPng(img, rt.data);
                     texture = new OuterFileTexture(processedData, sub.identifier);
                 }
             }
@@ -399,6 +413,7 @@ public final class ClientModelBundleAssembler {
         }
 
         GeoModel mesh = GeometryBaker.buildMesh(sub.model, context, textureCount, subScanner, true);
+        subScanner = null;
 
         Map<String, Animation> allAnimations = new LinkedHashMap<>();
         for (RawYsmModel.RawAnimationFile animFile : sub.animationFiles.values()) {

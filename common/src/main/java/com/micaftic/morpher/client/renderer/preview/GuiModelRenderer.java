@@ -87,7 +87,11 @@ public final class GuiModelRenderer {
      * 触碰排队细节。{@code options} 承载小人专属的 head mode / 载具对齐。</p>
      */
     public static void enqueueLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, GeoReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options) {
+        enqueueStaticLivingPreview(guiGraphics,left,top,right,bottom,originX,originY,scale,partialTick,animatable,renderer,disablePreviewRotation,hideEquipment,previewYaw,previewPitch,extraPlayer,options,null);
+    }
+    public static void enqueueStaticLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, GeoReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options,Object staticKey) {
         EntityRenderState state = new EntityRenderState();
+        PreviewRenderBridge.markStatic(state,staticKey);
         PreviewRenderBridge.enqueue(state, new LivingGuiPreviewRequest(
                 PreviewMath.toModelOffset(originX, left, right, scale),
                 PreviewMath.toModelOffset(originY, top, bottom, scale),
@@ -102,6 +106,29 @@ public final class GuiModelRenderer {
                 options == null ? DollOptions.GUI_PREVIEW : options
         ));
         guiGraphics.entity(state, scale, new Vector3f(), new Quaternionf(), null, left, top, right, bottom);
+    }
+
+    public static void beginCardPreviewFrame() { NativeCardPreviewCache.beginFrame(); }
+
+    public static void clearCardPreviews() { NativeCardPreviewCache.clear(); }
+
+    /** Queues a refresh when admitted, otherwise composites the last rendered card without an entity. */
+    public static boolean enqueueCachedLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, GeoReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options, Object stableKey, long revision, boolean refreshAllowed) {
+        if (guiGraphics == null || stableKey == null || right <= left || bottom <= top || scale <= 0.0f) return false;
+        boolean refresh = refreshAllowed && animatable != null && renderer != null;
+        Object cacheKey = NativeCardPreviewCache.reserve(stableKey, right-left, bottom-top, refresh);
+        if (cacheKey == null) return false;
+        EntityRenderState state = new EntityRenderState();
+        PreviewRenderBridge.markCardPreview(state, cacheKey, revision, refresh);
+        if (refresh) {
+            PreviewRenderBridge.enqueue(state, new LivingGuiPreviewRequest(
+                    PreviewMath.toModelOffset(originX, left, right, scale),
+                    PreviewMath.toModelOffset(originY, top, bottom, scale), partialTick, animatable, renderer,
+                    disablePreviewRotation, hideEquipment, previewYaw, previewPitch, extraPlayer,
+                    options == null ? DollOptions.GUI_PREVIEW : options));
+        }
+        guiGraphics.entity(state, scale, new Vector3f(), new Quaternionf(), null, left, top, right, bottom);
+        return true;
     }
 
     /** 经典 HUD 小人头部相对身体 yaw（当前帧），clamp 到 ±85°（head mode=FOLLOW 用）。 */

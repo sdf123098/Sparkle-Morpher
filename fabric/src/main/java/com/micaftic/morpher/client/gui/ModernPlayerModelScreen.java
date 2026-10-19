@@ -53,6 +53,8 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 import com.micaftic.morpher.core.config.ConfigPolicies;
+import com.micaftic.morpher.core.gui.UiElementLayout;
+import com.micaftic.morpher.core.gui.RoundedRectGeometry;
 
 public class ModernPlayerModelScreen extends Screen {
     private static final java.util.Map<String, ModelPanelState> STATE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
@@ -61,6 +63,21 @@ public class ModernPlayerModelScreen extends Screen {
     private final com.micaftic.morpher.cloud.client.CloudAssetPageCursorGuard cloudCursorGuard =
             new com.micaftic.morpher.cloud.client.CloudAssetPageCursorGuard();
     private SettingsPanel settingsPanel;
+    private final java.util.Map<String,SettingsViewport> settingsViewports=new java.util.HashMap<>();
+    private final java.util.List<EditBox> settingsViewportFields=new java.util.ArrayList<>();
+    private boolean settingsDrawingBody;
+    private int settingsDrawingOffset,settingsContentBottom;
+    private String settingsViewportKey(){
+        if(STATE.secondaryPanel!=ModelPanelState.SecondaryPanel.NONE)return "form:"+STATE.secondaryPanel+":"+sourceEditMode;
+        if(isCloudSettingsPage())return "cloud:"+cloudAccountPage+":"+STATE.selectedCloudInstanceId;
+        if(STATE.activeTab==ModelPanelState.Tab.RESOURCE)return "resource:"+resourceRoute;
+        return settingsPanel().selectedPage().id()+":"+peerSettingsSection+":"+networkSettingsSection;
+    }
+    private SettingsViewport settingsViewport(){return settingsViewports.computeIfAbsent(settingsViewportKey(),key->new SettingsViewport());}
+    private void settingsExtent(int bottom){if(settingsDrawingBody)settingsContentBottom=Math.max(settingsContentBottom,bottom);}
+    private final UiAppearancePreferences appearance=UiAppearancePreferences.current();
+    private boolean fontMenuOpen;
+    private int fontPage,keyboardHit=-1,textureMenuPage;
     private EditBox peerListenerBox, peerEntranceBox, peerLocalRouteBox;
     private String peerLocalRouteDraft="";
     private String peerListenerDraft = "", peerEntranceDraft = "";
@@ -68,36 +85,36 @@ public class ModernPlayerModelScreen extends Screen {
     private EditBox peerInvitationBox;
     private String peerEndpointDraft = "";
     private String peerInvitationDraft = "";
-    private enum PeerSettingsSection { ROOM, SHARING, CONNECTION, PUBLIC, TUNNEL }
+    private enum PeerSettingsSection { ROOM, SHARING, CONNECTION, PUBLIC, TUNNEL, PROBE }
     private enum NetworkSettingsSection { PRESETS, PRIVACY, STATUS, SERVER }
     private PeerSettingsSection peerSettingsSection = PeerSettingsSection.ROOM;
     private NetworkSettingsSection networkSettingsSection = NetworkSettingsSection.PRESETS;
     private final String stateKeyValue;
-    private static final Identifier MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
-    private static final int BG = 0x90171A1D;
-    private static final int PANEL = 0x4A34424A;
-    private static final int PANEL_HOVER = 0x66576B76;
-    private static final int PANEL_ACTIVE = 0x625E7784;
-    private static final int GLASS = 0x60405058;
-    private static final int GLASS_DARK = 0x3822292E;
-    private static final int BORDER = 0x6EE4F5FF;
+    private static final Identifier MODEL_PANEL_ICONS = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/ui/lucide.png");
+    private static final int BG = 0xC0202020;
+    private static final int PANEL = 0x66303030;
+    private static final int PANEL_HOVER = 0x88505050;
+    private static final int PANEL_ACTIVE = 0x77404040;
+    private static final int GLASS = 0x60303030;
+    private static final int GLASS_DARK = 0x38222222;
+    private static final int BORDER = 0x555F5F5F;
     private static final int RED = 0xFFE05252;
     private static final int RED_SOFT = 0x77E05252;
-    private static final int TEXT = 0xFFEDE1CC;
+    private static final int TEXT = 0xFFF0F0F0;
     private static final int MUTED = 0xFF9A9A9A;
     private static final int ROW = 24;
     private static final int DENSE_MODEL_ROW = 20;
-    private static final int MODEL_PAGE_BUTTON_WIDTH = 46;
+    private static final int MODEL_PAGE_BUTTON_WIDTH = 18;
     private static final int MODEL_PAGE_BUTTON_HEIGHT = 18;
     private static final int ICON = 18;
 
     // ---- 目录卡片（3D 卡片网格）视觉常量 ----
-    private static final int CARD_BASE = 0xFF434242;
-    private static final int CARD_BASE_HOVER = 0xFF505755;
-    private static final int CARD_SELECT = 0xFF58636E;
-    private static final int CARD_FOLDER = 0xFF9B51E0;
-    private static final int CARD_FOLDER_HOVER = 0xFFB17BEA;
-    private static final int CARD_NAME_TEXT = 0xFFF3EFE0;
+    private static final int CARD_BASE = 0xB0323232;
+    private static final int CARD_BASE_HOVER = 0xD0444444;
+    private static final int CARD_SELECT = 0xC03A3A3A;
+    private static final int CARD_FOLDER = 0xB0383838;
+    private static final int CARD_FOLDER_HOVER = 0xD0484848;
+    private static final int CARD_NAME_TEXT = 0xFFF0F0F0;
     private static final int CARD_DIM = 0x9F222222;
     private static final int CARD_NAME_BG = 0xC6000000;
 
@@ -106,6 +123,23 @@ public class ModernPlayerModelScreen extends Screen {
      * 仅渲染线程读写，用 synchronized 保护跨线程可见性。
      */
     private static final java.util.Map<AbstractTexture, int[]> COVER_DIMENSIONS = new WeakHashMap<>();
+    private static final java.util.Map<AbstractTexture, ModelCardArtwork> CARD_ARTWORK = new WeakHashMap<>();
+    private float cardPartialTick;
+    private final long previewViewId=VIEW_IDS.incrementAndGet();
+    private static final java.util.concurrent.atomic.AtomicLong VIEW_IDS=new java.util.concurrent.atomic.AtomicLong();
+    private record CardPreviewKey(long view,int slot,String model,String texture,int assembly,int width,int height,String animation){}
+    private final CardPreviewRefreshBudget cardRefreshBudget=new CardPreviewRefreshBudget();
+    private long cardFrameNanos;
+    private int previewHitX,previewHitY,previewHitW,previewHitH;
+    private boolean previewDragging,extractingPage;
+    private float detailYaw=176,detailPitch=0,detailZoom=1;
+    private List<ModelEntry> frameModelEntries;
+    private final NavigationHistory<CloudRoute> cloudHistory=new NavigationHistory<>();
+    private record CloudRoute(ModelPanelState.Tab tab,String settingsPage,CloudAccountPage cloudPage,ModelPanelState.SecondaryPanel form,boolean editing,String address,String name){}
+    private CloudRoute cloudRoute(){return new CloudRoute(STATE.activeTab,settingsPanel().selectedPage().id(),cloudAccountPage,STATE.secondaryPanel,editingCloudInstance,cloudAddressDraft,cloudNameDraft);}
+    private ModelPanelState.Tab cloudReturnTab=ModelPanelState.Tab.MODEL;
+    private String cloudReturnSettingsPage="general";
+    private String tooltipIdentity="";private long tooltipSince;
     private final List<Hit> hits = new ArrayList<>();
     private final Set<String> selectedModelIds = new LinkedHashSet<>();
     private final PlayerPreviewEntity previewEntity = new PlayerPreviewEntity();
@@ -137,6 +171,7 @@ public class ModernPlayerModelScreen extends Screen {
     private EditBox modelSearchBox;
     private EditBox cloudSearchBox;
     private long cloudRequestGeneration;
+    private String cloudPageError="";
     private final Set<String> pendingVisibilityChanges = new HashSet<>();
     private final Set<String> pendingCloudImports = new HashSet<>();
     private final Set<String> selectedCloudAssetIds = new LinkedHashSet<>();
@@ -145,14 +180,37 @@ public class ModernPlayerModelScreen extends Screen {
     private String focusedCloudAssetId = "";
     private String cloudVisibilityFilter = "";
     private boolean cloudMultiSelectMode;
+    private boolean sourceTabMenu;
+    private boolean textureMenuOpen,modelMenuOpen;
+    private int inlineTexturePage;
+    private String textureMenuModel="";
+    private String draggingSourceTab;
+    private final List<SourceTabHit> sourceTabHits = new ArrayList<>();
+    private record SourceTabHit(String instanceId,int x,int y,int w) {}
     private boolean cloudVisibilityBatchRunning;
     private int cloudTexturePage;
     private long cloudImportGeneration;
     private CloudAssetSummary cloudSelectionCandidate;
     private EditBox resourceSearchBox;
+    private enum ResourceRoute { CATALOG,DETAIL,QUEUE,ERROR }
+    private ResourceRoute resourceRoute=ResourceRoute.CATALOG;
+    private com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskSnapshot resourceFailure;
+    private boolean sourceEditMode;
+    private Runnable pendingConfirmation;
+    private Component confirmationTitle=Component.empty(),confirmationBody=Component.empty();
+    private String sourceNameDraft="";
+    private EditBox sourceNameBox;
+
     private EditBox siteEditBox;
     private EditBox categoryEditBox;
     private EditBox cloudAccountBox;
+    private EditBox instanceSearchBox;
+    private String instanceSearchDraft="", inspectedInstanceId="";
+    private boolean editingCloudInstance;
+    private boolean scopeCreateForm;
+    private boolean identityProvidersTab;
+    private boolean performanceAdvanced, developerStateMenu, developerAdvanced;
+    private Component confirmationAction=Component.translatable("gui.sparkle_morpher.model_panel.delete");
     private EditBox cloudPasswordBox;
     private Component cloudPanelStatus = Component.empty();
     private Screen afterCloudLogin;
@@ -220,7 +278,10 @@ public class ModernPlayerModelScreen extends Screen {
         FILE(64, 48),
         LOCK(80, 48),
         INFO(96, 48),
-        CHECK(112, 48);
+        CHECK(112, 48),
+        USER(0, 64), STAR_OFF(16, 64), CLOCK(32, 64), CLOUD(48, 64),
+        UPLOAD(64, 64), LOGOUT(80, 64), GLOBE(96, 64), PREVIOUS(112, 64),
+        NEXT(0, 80), MORE(16, 80), CIRCLE_CHECK(32,80), CHEVRON_DOWN(48,80), BACK(64,16), EDIT(0,96);
 
         final int u;
         final int v;
@@ -311,7 +372,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     public ModernPlayerModelScreen(ModelPanelState.Tab tab, Screen parentScreen, String stateKey) {
         this(parentScreen, null, stateKey);
-        STATE.activeTab = tab;
+        STATE.activeTab = tab;STATE.secondaryPanel=ModelPanelState.SecondaryPanel.NONE;
         if (tab == ModelPanelState.Tab.RESOURCE) {
             STATE.resourceLoaded = false;
         }
@@ -346,13 +407,16 @@ public class ModernPlayerModelScreen extends Screen {
     public static ModernPlayerModelScreen downloads() {
         ModernPlayerModelScreen screen = new ModernPlayerModelScreen(ModelPanelState.Tab.RESOURCE, null, "resource");
         screen.STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
+        screen.resourceRoute=ResourceRoute.QUEUE;
         return screen;
     }
 
     @Override
     protected void init() {
+        if(STATE.modelSource==ModelPanelState.ModelSource.LOCAL&&STATE.selectedModelId.isBlank()&&Minecraft.getInstance().player!=null)PlayerCapability.get(Minecraft.getInstance().player).ifPresent(cap->{STATE.selectedModelId=cap.getModelId();STATE.selectedTextureId=cap.getCurrentTextureName();});
         normalizeCloudSettingsEntry();
-        clearWidgets();
+        if(STATE.cloudView==ModelPanelState.CloudView.PUBLIC) STATE.cloudView=ModelPanelState.CloudView.ALL;
+        clearWidgets();tooltipIdentity="";previewDragging=false;
         if (STATE.activeTab == ModelPanelState.Tab.ACCOUNT && (cloudAccountPage == CloudAccountPage.INSTANCES || cloudAccountPage == CloudAccountPage.SCOPES)) cloudAccountPage = CloudAccountPage.ACCOUNT;
         else if (STATE.activeTab == ModelPanelState.Tab.INSTANCE && cloudAccountPage == CloudAccountPage.ACCOUNT) cloudAccountPage = CloudAccountPage.INSTANCES;
         this.layout = ModelPanelLayout.create(this.width, this.height);
@@ -362,6 +426,7 @@ public class ModernPlayerModelScreen extends Screen {
         this.siteEditBox = null;
         this.categoryEditBox = null;
         this.cloudAccountBox = null;
+        this.instanceSearchBox=null;
         this.cloudPasswordBox = null;
         this.cloudInstanceNameBox = null;
         this.cloudOriginBox = null;
@@ -383,24 +448,35 @@ public class ModernPlayerModelScreen extends Screen {
                 cloudIdentityCodeBox.visible = false;
             }
         }
+        if(isCloudSettingsPage()&&cloudAccountPage==CloudAccountPage.INSTANCES){
+            var rect=FinalUiLayout.scene("instances",this.width,this.height).control(0);
+            instanceSearchBox=new EditBox(this.font,rect.x()+6,rect.y()+6,rect.w()-12,12,cloudText("instances"));
+            instanceSearchBox.setBordered(false);instanceSearchBox.setValue(instanceSearchDraft);instanceSearchBox.setHint(Component.translatable("gui.sparkle_morpher.ui.search_instances"));
+            instanceSearchBox.setResponder(v->{instanceSearchDraft=v;cloudAccountScroll=0;});addWidget(instanceSearchBox);
+        }
         boolean cloudFormOpen = STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE;
         if (!cloudFormOpen && STATE.activeTab == ModelPanelState.Tab.MODEL) {
             if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-                this.modelSearchBox = new EditBox(this.font, modelListX(), this.layout.contentTop + 30, compactLocalSearchWidth(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
+                this.modelSearchBox = new EditBox(this.font, modelListX()+7, this.layout.top+38, compactLocalSearchWidth()-14, 12, Component.translatable("gui.sparkle_morpher.resource_station.search"));
                 this.modelSearchBox.setMaxLength(256);
                 this.modelSearchBox.setValue(STATE.modelSearchText);
+                this.modelSearchBox.setBordered(false);
+                this.modelSearchBox.setHint(Component.translatable("gui.sparkle_morpher.ui.search_models"));
                 this.modelSearchBox.setTextColor(TEXT);
                 addWidget(this.modelSearchBox);
             } else {
-                this.cloudSearchBox = new EditBox(this.font, modelListX(), this.layout.contentTop + 30, compactCloudSearchWidth(), 16, Component.translatable("gui.sparkle_morpher.model_source.search"));
+                this.cloudSearchBox = new EditBox(this.font, modelListX()+7, this.layout.top+38, compactCloudSearchWidth()-14, 12, Component.translatable("gui.sparkle_morpher.model_source.search"));
                 this.cloudSearchBox.setMaxLength(128);
                 this.cloudSearchBox.setValue(STATE.cloudSearchText);
+                this.cloudSearchBox.setBordered(false);
+                this.cloudSearchBox.setHint(Component.translatable("gui.sparkle_morpher.ui.search_models"));
                 this.cloudSearchBox.setTextColor(TEXT);
                 addWidget(this.cloudSearchBox);
                 ensureCloudPageLoaded();
             }
         } else if (!cloudFormOpen && STATE.activeTab == ModelPanelState.Tab.RESOURCE) {
-            this.resourceSearchBox = new EditBox(this.font, resourceListX(), this.layout.contentTop + 8, resourceSearchW(), 16, Component.translatable("gui.sparkle_morpher.resource_station.search"));
+            this.resourceSearchBox = new EditBox(this.font, this.layout.contentLeft+7, this.layout.top+76, Math.min(320,this.layout.contentWidth/2)-14, 12, Component.translatable("gui.sparkle_morpher.resource_station.search"));
+            this.resourceSearchBox.setBordered(false);
             this.resourceSearchBox.setMaxLength(256);
             this.resourceSearchBox.setValue(STATE.resourceSearchText);
             this.resourceSearchBox.setTextColor(TEXT);
@@ -413,7 +489,9 @@ public class ModernPlayerModelScreen extends Screen {
             int panelX = secondaryPanelX();
             int panelY = secondaryPanelY();
             int panelW = secondaryPanelW();
-            this.siteEditBox = new EditBox(this.font, panelX + 16, panelY + 42, panelW - 32, 16, Component.translatable("gui.sparkle_morpher.model_panel.url"));
+            this.siteEditBox = new EditBox(this.font, panelX + 22, panelY + 237, Math.min(530,panelW-32)-12, 12, Component.translatable("gui.sparkle_morpher.model_panel.url"));
+            this.siteEditBox.setBordered(false);
+            this.sourceNameBox=new EditBox(this.font,panelX+22,panelY+85,Math.min(530,panelW-32)-12,12,Component.literal("名称"));sourceNameBox.setBordered(false);sourceNameBox.setValue(sourceNameDraft);sourceNameBox.setResponder(v->sourceNameDraft=v);addWidget(sourceNameBox);
             this.siteEditBox.setMaxLength(2048);
             this.siteEditBox.setValue(STATE.siteEditText.isBlank() ? this.controller.selectedSite() : STATE.siteEditText);
             this.siteEditBox.setTextColor(TEXT);
@@ -422,14 +500,15 @@ public class ModernPlayerModelScreen extends Screen {
             int panelX = secondaryPanelX();
             int panelY = secondaryPanelY();
             int panelW = secondaryPanelW();
-            this.categoryEditBox = new EditBox(this.font, panelX + 16, panelY + 42, panelW - 32, 16, Component.translatable("gui.sparkle_morpher.model_panel.category"));
+            this.categoryEditBox = new EditBox(this.font, panelX+6, panelY+68, Math.min(260,panelW-32)-12, 12, Component.translatable("gui.sparkle_morpher.model_panel.category"));
+            this.categoryEditBox.setBordered(false);
             this.categoryEditBox.setMaxLength(160);
             this.categoryEditBox.setValue(STATE.categoryEditText);
             this.categoryEditBox.setTextColor(TEXT);
             addWidget(this.categoryEditBox);
         } else if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN) {
             int x = secondaryPanelX() + 16;
-            int w = secondaryPanelW() - 32;
+            int w = Math.min(530,secondaryPanelW()-32);
             this.cloudAccountBox = cloudField(x, cloudFormFieldY(0), w, "account", 128);
             this.cloudAccountBox.setValue(cloudAccountDraft);
             this.cloudAccountBox.setResponder(value -> cloudAccountDraft = value);
@@ -438,7 +517,7 @@ public class ModernPlayerModelScreen extends Screen {
             setInitialFocus(this.cloudAccountBox);
         } else if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) {
             int x = secondaryPanelX() + 16;
-            int w = secondaryPanelW() - 32;
+            int w = Math.min(530,secondaryPanelW()-32);
             this.cloudOriginBox = cloudField(x, cloudFormFieldY(0), w, "address", 2048);
             this.cloudOriginBox.setValue(cloudAddressDraft);
             this.cloudOriginBox.setResponder(value -> cloudAddressDraft = value);
@@ -484,9 +563,7 @@ public class ModernPlayerModelScreen extends Screen {
         return Component.translatable("gui.sparkle_morpher.cloud.manage." + key);
     }
 
-    private int cloudFormFieldY(int index) {
-        return secondaryPanelY() + 64 + index * (secondaryPanelH() < 210 ? 30 : 40);
-    }
+    private int cloudFormFieldY(int index){return secondaryPanelY()+(width<560?56:width<800?64:79)+index*(width<560?42:width<800?58:76);}
 
     private void closeCloudForm() {
         cloudFormGeneration++;
@@ -496,6 +573,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void openCloudLoginForm(boolean register) {
+        if(STATE.secondaryPanel!=ModelPanelState.SecondaryPanel.CLOUD_LOGIN)cloudHistory.push(cloudRoute());
         if (cloudAccountBox != null) cloudAccountDraft = cloudAccountBox.getValue().trim();
         else cloudAccountDraft = CloudManagementScreen.management().registry().selected()
                 .map(profile -> CloudManagementScreen.management().accountId(profile.instanceId())).orElse("");
@@ -507,7 +585,9 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void openCloudInstanceForm() {
+        cloudHistory.push(cloudRoute());
         closeCloudForm();
+        editingCloudInstance=false;
         cloudAddressDraft = "";
         cloudNameDraft = "";
         cloudPanelStatus = Component.empty();
@@ -515,31 +595,33 @@ public class ModernPlayerModelScreen extends Screen {
         init();
     }
 
-    private void renderCloudForm(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        boolean login = STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN;
-        drawTitle(g, cloudText(login ? (registerCloudAccount ? "register_short" : "login") : "add_instance"), x + 16, y + 12);
-        if (login) {
-            int tabW = (w - 32) / 2;
-            renderCloudBrowserTab(g, mouseX, mouseY, x + 16, y + 30, tabW, cloudText("login"), !registerCloudAccount, () -> { if (!cloudFormBusy) openCloudLoginForm(false); });
-            renderCloudBrowserTab(g, mouseX, mouseY, x + 16 + tabW, y + 30, w - 32 - tabW, cloudText("register_short"), registerCloudAccount, () -> { if (!cloudFormBusy) openCloudLoginForm(true); });
-            drawSection(g, cloudText("account"), x + 16, cloudFormFieldY(0) - 12);
-            drawSection(g, cloudText("password"), x + 16, cloudFormFieldY(1) - 12);
-            if (cloudAccountBox != null) cloudAccountBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-            if (cloudPasswordBox != null) cloudPasswordBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        } else {
-            drawMuted(g, cloudText("instance_intro"), x + 16, y + 32);
-            drawSection(g, cloudText("address"), x + 16, cloudFormFieldY(0) - 12);
-            drawSection(g, cloudText("optional_name"), x + 16, cloudFormFieldY(1) - 12);
-            if (cloudOriginBox != null) cloudOriginBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-            if (cloudInstanceNameBox != null) cloudInstanceNameBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+    private void renderCloudForm(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float partialTick){
+        boolean login=STATE.secondaryPanel==ModelPanelState.SecondaryPanel.CLOUD_LOGIN;
+        pageHeader(g,mx,my,editingCloudInstance&&!login?Component.literal("实例设置"):cloudText(login?(registerCloudAccount?"register_short":"login"):"add_instance"),Component.empty(),this::backFromCloud);
+        int bh=uiButtonHeight(),fx=x+8,fw=Math.min(530,w-16);
+        drawSection(g,cloudText(login?"account":editingCloudInstance?"optional_name":"address"),fx,cloudFormFieldY(0)-13);
+        drawSection(g,cloudText(login?"password":editingCloudInstance?"address":"optional_name"),fx,cloudFormFieldY(1)-13);
+        EditBox first=login?cloudAccountBox:editingCloudInstance?cloudInstanceNameBox:cloudOriginBox,second=login?cloudPasswordBox:editingCloudInstance?cloudOriginBox:cloudInstanceNameBox;
+        renderReferenceField(g,mx,my,partialTick,first,fx,cloudFormFieldY(0),fw,bh);
+        renderReferenceField(g,mx,my,partialTick,second,fx,cloudFormFieldY(1),fw,bh);
+        int afterFields=cloudFormFieldY(1)+bh+12;
+        if(login){
+            renderTextButton(g,mx,my,fx,afterFields,Math.min(160,fw),bh,cloudText(registerCloudAccount?"login":"register_short"),()->openCloudLoginForm(!registerCloudAccount));
         }
-        int buttonY = cloudFormFieldY(1) + 26;
-        renderTextButton(g, mouseX, mouseY, x + 16, buttonY, w - 32, 22,
-                cloudText(cloudFormBusy ? "working" : login ? (registerCloudAccount ? "register_and_login" : "login") : "add_instance"),
-                () -> { if (!cloudFormBusy) { if (login) submitCloudAccount(registerCloudAccount); else saveCloudInstance(); } });
-        String hint = cloudPanelStatus.getString().isBlank() ? (login ? CloudManagementScreen.text(registerCloudAccount ? "register_hint" : "login_hint") : "https://cloud.example.com") : cloudPanelStatus.getString();
-        drawText(g, Component.literal(trim(hint, w - 32)), x + 16, y + h - 14);
-        hit(x + 16, y + h - 16, w - 32, 14, Component.literal(hint), () -> { });
+        if(editingCloudInstance&&!login){
+            var profile=CloudManagementScreen.management().registry().find(inspectedInstanceId);
+            String[] labels={"发现的实例 ID","连接状态","世界与访问范围"};String[] values={profile.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse(""),profile.map(p->CloudClientRuntime.state(p.instanceId())==null?"未登录":"已登录").orElse("未登录"),"打开 ›"};
+            int stride=width<560?26:width<800?34:47,valueW=Math.min(150,fw/2);
+            for(int i=0;i<3;i++){int yy=afterFields+i*stride;
+                drawText(g,Component.literal(labels[i]),fx,UiElementLayout.centeredY(yy,bh,font.lineHeight));
+                if(i==2)renderTextButton(g,mx,my,fx+fw-valueW,yy,valueW,bh,Component.literal(values[i]),()->{setCloudAccountPage(CloudAccountPage.SCOPES);refreshCloudScopes();});
+                else drawMuted(g,Component.literal(trim(values[i],valueW-8)),fx+fw-valueW,UiElementLayout.centeredY(yy,bh,font.lineHeight));
+            }
+        }
+        int by=this.height-this.layout.top-bh-10;
+        if(!cloudPanelStatus.getString().isBlank())drawMuted(g,Component.literal(trim(cloudPanelStatus.getString(),w-16)),fx,by-16);
+        renderTextButton(g,mx,my,x+w-192,by,76,bh,Component.translatable("gui.cancel"),this::backFromCloud);
+        renderPrimaryButton(g,mx,my,x+w-108,by,100,bh,cloudText(cloudFormBusy?"working":login?(registerCloudAccount?"register_and_login":"login"):editingCloudInstance?"check_save":"add_instance"),()->{if(!cloudFormBusy){if(login)submitCloudAccount(registerCloudAccount);else saveCloudInstance();}});
     }
 
     private EditBox cloudField(int x, int y, int width, String key, int maxLength) {
@@ -552,13 +634,11 @@ public class ModernPlayerModelScreen extends Screen {
         return field;
     }
 
-    private AccountPanelLayout accountPanelLayout() {
-        if (isCloudSettingsPage()) {
-            var sections = SettingsPanelLayout.sections(settingsColumns());
-            return SettingsPanelLayout.cloudContent(sections, cloudAccountPage == CloudAccountPage.PERFORMANCE);
-        }
-        return AccountPanelLayout.of(this.layout.contentLeft, this.layout.contentTop,
-                this.layout.contentWidth, this.layout.contentHeight);
+    private AccountPanelLayout accountPanelLayout(){
+        int x=this.layout.contentLeft,y=this.layout.top+62,w=this.layout.contentWidth,h=this.layout.height-100;
+        if(cloudAccountPage==CloudAccountPage.ACCOUNT||cloudAccountPage==CloudAccountPage.PERFORMANCE)return new AccountPanelLayout(x,y,0,0,x,y,w,h);
+        if(cloudAccountPage==CloudAccountPage.INSTANCES){var a=FinalUiLayout.scene("instances",this.width,this.height);var l=a.area("listRect");var d=a.area("detailRect");return new AccountPanelLayout(l.x(),l.y(),l.w(),h,d.x(),d.y(),d.w(),h);}
+        int lw=Math.min(240,w/3);return new AccountPanelLayout(x,y,lw,h,x+lw+12,y,w-lw-12,h);
     }
 
     private AccountPanelLayout cloudDetailLayout() {
@@ -594,11 +674,18 @@ public class ModernPlayerModelScreen extends Screen {
             }
         }
         this.cardPreviews.clear();
+        GuiModelRenderer.clearCardPreviews();
         super.removed();
     }
 
     @Override
     public void onClose() {
+        if(pendingConfirmation!=null){pendingConfirmation=null;return;}
+        if(fontMenuOpen){fontMenuOpen=false;return;}
+        if(textureMenuOpen){textureMenuOpen=false;return;}
+        if(modelMenuOpen){modelMenuOpen=false;return;}
+        if(sourceTabMenu){sourceTabMenu=false;return;}
+        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE || isCloudSettingsPage()) {backFromCloud();return;}
         if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE) {
             closeCloudForm();
             init();
@@ -663,64 +750,55 @@ public class ModernPlayerModelScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        this.hits.clear();
+        GuiModelRenderer.beginCardPreviewFrame();
+        this.hits.clear();frameModelEntries=null;extractingPage=true;previewHitW=0;cardPartialTick=partialTick;
+        for(var child:children())if(child instanceof net.minecraft.client.gui.components.AbstractWidget widget){widget.visible=false;widget.active=false;}
+        try {
         boolean modal = STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE;
         int mainMouseX = modal ? -1 : mouseX;
         int mainMouseY = modal ? -1 : mouseY;
-        fill(g, this.layout.left, this.layout.top, this.layout.width, this.layout.height, BG);
-        border(g, this.layout.left, this.layout.top, this.layout.width, this.layout.height, 0x44FFFFFF);
-        renderTabs(g, mainMouseX, mainMouseY);
-        blurGlass(g, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, 0x1CFFFFFF, 6.0f);
-        fill(g, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, 0x18171A1D);
-        switch (STATE.activeTab) {
+        com.micaftic.morpher.core.gui.RoulettePanelStyle.glassPanel(g,this.layout.left,this.layout.top,this.layout.width,this.layout.height);
+        if(!modal)renderTabs(g, mainMouseX, mainMouseY);
+
+        if (!modal) switch (STATE.activeTab) {
             case MODEL -> renderModelTab(g, mainMouseX, mainMouseY, partialTick);
             case RESOURCE -> renderResourceTab(g, mainMouseX, mainMouseY, partialTick);
             case ACCOUNT, INSTANCE -> renderCloudAccountPanel(g, mainMouseX, mainMouseY, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, partialTick);
             case SETTINGS -> renderSettingsTab(g, mainMouseX, mainMouseY, partialTick);
         }
-        renderFooter(g);
+        if(!modal)renderFooter(g);
         renderSecondaryPanel(g, mouseX, mouseY, partialTick);
+        if(keyboardHit>=0&&keyboardHit<hits.size()){Hit focus=hits.get(keyboardHit);border(g,focus.x()-1,focus.y()-1,focus.w()+2,focus.h()+2,RED);}
+        renderConfirmation(g,mouseX,mouseY);
         renderTooltip(g, mouseX, mouseY);
+        } finally {extractingPage=false;}
     }
 
-    private void renderTabs(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        if (this.layout.verticalTabs) {
-            int railX = this.layout.left + 3, railW = this.layout.railWidth - 5;
-            int th = this.height < 400 ? 22 : 26, gap = this.height < 400 ? 3 : 4;
-            int y = this.layout.top + 6;
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, railX, y, railW, th, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, railX, y + th + gap, railW, th, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
-            renderVerticalTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, railX, y + (th + gap) * 2, railW, th, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
-            return;
-        }
-        int tabWidth = this.layout.width / 3;
-        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.MODEL, this.layout.left, tabWidth, IconGlyph.MODEL, Component.translatable("gui.sparkle_morpher.model_panel.model"));
-        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.RESOURCE, this.layout.left + tabWidth, tabWidth, IconGlyph.RESOURCE, Component.translatable("gui.sparkle_morpher.resource_station.title"));
-        renderTab(g, mouseX, mouseY, ModelPanelState.Tab.SETTINGS, this.layout.left + tabWidth * 2, this.layout.width - tabWidth * 2, IconGlyph.SETTINGS, Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+    private void renderTabs(GuiGraphicsExtractor g,int mx,int my){
+        int p=this.layout.left,side=this.layout.railWidth,logoSize=this.width<560?20:this.width<800?22:26;
+        roundedFill(g,p,p,side,this.layout.height,5,0x59080808);
+        fill(g,p+side,p,1,this.layout.height,0x1AFFFFFF);
+        com.micaftic.morpher.core.gui.RoulettePanelStyle.applicationLogo(g,p+(side-logoSize)/2,p+6,logoSize);
+        int y=p+logoSize+17,x=p+3,w=side-6;
+        if(!this.stateKeyValue.startsWith("fake:"))renderVerticalTab(g,mx,my,ModelPanelState.Tab.MODEL,x,y,w,24,IconGlyph.MODEL,Component.translatable("gui.sparkle_morpher.model_panel.model"));
+        if(this.stateKeyValue.startsWith("fake:")){drawIconScaled(g,IconGlyph.MODEL,p+(side-12)/2,y+6,12);hit(x,y,w,24,Component.literal("模型管理"),()->InputUtil.setScreen(new ModernPlayerModelScreen()));}
+        renderVerticalTab(g,mx,my,ModelPanelState.Tab.RESOURCE,x,y+30,w,24,IconGlyph.RESOURCE,Component.translatable("gui.sparkle_morpher.resource_station.title"));
+        if(this.stateKeyValue.startsWith("fake:")){roundedFill(g,x,y+60,w,24,3,0x18FFFFFF);fill(g,p,y+65,2,14,RED);}
+        drawIconScaled(g,IconGlyph.USER,p+(side-12)/2,y+66,12);
+        hit(x,y+60,w,24,Component.translatable("gui.sparkle_morpher.ui.fake_players"),FakePlayerManagerScreen::open);
+        renderVerticalTab(g,mx,my,ModelPanelState.Tab.SETTINGS,x,y+90,w,24,IconGlyph.SETTINGS,Component.translatable("gui.sparkle_morpher.model_panel.settings"));
+        drawIconScaled(g,IconGlyph.LOGOUT,p+(side-12)/2,this.height-p-24,12);
+        hit(x,this.height-p-28,w,23,Component.translatable("gui.back"),this::onClose);
     }
 
-    private void renderTab(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelPanelState.Tab tab, int x, int w, IconGlyph icon, Component label) {
-        boolean selected = STATE.activeTab == tab;
-        boolean hover = inside(mouseX, mouseY, x, this.layout.top, w, this.layout.tabHeight);
-        fill(g, x, this.layout.top, w, this.layout.tabHeight, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x40303030);
-        int iconSize = this.layout.tabHeight <= 22 ? 14 : 16;
-        int iconGap = iconSize == 14 ? 4 : 6;
-        int total = iconSize + iconGap + this.font.width(label);
-        int tx = x + (w - total) / 2;
-        int ty = this.layout.top + (this.layout.tabHeight - iconSize) / 2;
-        drawIconScaled(g, icon, tx, ty, iconSize);
-        g.text(this.font, label, tx + iconSize + iconGap, this.layout.top + (this.layout.tabHeight - this.font.lineHeight) / 2 + 1, selected ? 0xFFFFFFFF : MUTED, false);
-        hit(x, this.layout.top, w, this.layout.tabHeight, label, () -> switchTab(tab));
-    }
 
-    private void renderVerticalTab(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelPanelState.Tab tab, int x, int y, int w, int h, IconGlyph icon, Component label) {
-        boolean selected = STATE.activeTab == tab;
-        boolean hover = inside(mouseX, mouseY, x, y, w, h);
-        fill(g, x, y, w, h, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x40303030);
-        border(g, x, y, w, h, selected ? RED : 0x33FFFFFF);
-        int iconSize = h <= 22 ? 14 : 16;
-        drawIconScaled(g, icon, x + (w - iconSize) / 2, y + (h - iconSize) / 2, iconSize);
-        hit(x, y, w, h, label, () -> switchTab(tab));
+
+    private void renderVerticalTab(GuiGraphicsExtractor g,int mx,int my,ModelPanelState.Tab tab,int x,int y,int w,int h,IconGlyph icon,Component label){
+        boolean selected=STATE.activeTab==tab;
+        if(selected||inside(mx,my,x,y,w,h))roundedSurface(g,x,y,w,h,3,0x18FFFFFF,0x00FFFFFF);
+        if(selected)fill(g,this.layout.left,y+4,2,h-8,RED);
+        drawIconScaled(g,icon,x+(w-12)/2,y+(h-12)/2,12);
+        hit(x,y,w,h,label,()->switchTab(tab));
     }
 
     private void switchTab(ModelPanelState.Tab tab) {
@@ -729,6 +807,7 @@ public class ModernPlayerModelScreen extends Screen {
             return;
         }
         if (STATE.activeTab != tab) {
+            cloudHistory.clear();
             closeCloudForm();
             STATE.activeTab = tab;
             if (tab == ModelPanelState.Tab.ACCOUNT) cloudAccountPage = CloudAccountPage.ACCOUNT;
@@ -753,34 +832,26 @@ public class ModernPlayerModelScreen extends Screen {
         return this.layout.contentWidth < 680 || this.layout.contentHeight < 260;
     }
 
-    private boolean compactModelLayout() {
-        return listPriority();
-    }
+    private boolean compactModelLayout() { return false; }
 
     private int modelLeftW() {
         return 0;
     }
 
-    private int modelRightW() {
-        if (compactModelLayout()) {
-            return 0;
-        }
-        int max = Math.max(72, Math.min(180, this.layout.contentWidth - modelLeftW() - modelListMinW() - 28));
-        return clamp(this.layout.contentWidth / 3, 72, max);
+    private int modelRightW(){return Math.max(24,this.layout.contentWidth-modelDetailListW()-4);}
+
+    private int modelListX(){return this.layout.contentLeft;}
+
+    private int modelListW(){return ModelPickerLayout.listWidth(this.layout.contentWidth,currentModelGridH());}
+
+    private int modelDetailListW(){
+        int w=modelListW(),h=currentModelGridH();
+        return gridMode(w,h)==ModelPickerLayout.GridMode.CARDS?ModelPickerLayout.cards(w,h).blockW():w;
     }
 
-    private int modelListX() {
-        if (compactModelLayout() || STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-            return this.layout.contentLeft + 8;
-        }
-        return modelLeftX() + modelLeftW() + 10;
-    }
-
-    private int modelListW() {
-        if (compactModelLayout()) {
-            return Math.max(60, this.layout.contentWidth - 16);
-        }
-        return Math.max(24, this.layout.contentWidth - modelLeftW() - modelRightW() - 28);
+    private int modelDetailHeight(){
+        int w=modelListW(),h=currentModelGridH();
+        return gridMode(w,h)==ModelPickerLayout.GridMode.CARDS?ModelPickerLayout.cards(w,h).blockH():h;
     }
 
     private int modelListMinW() {
@@ -792,256 +863,114 @@ public class ModernPlayerModelScreen extends Screen {
                 && (this.layout.contentWidth <= 640 || this.layout.contentHeight <= 360);
     }
 
-    private int compactLocalSearchWidth() {
-        return modelListW();
-    }
+    private int compactLocalSearchWidth() { return toolbarSearchWidth(); }
 
-    private boolean compactModelActionsInFilterRow() {
-        return false;
-    }
+
 
     private boolean compactCloudActionsInSearchRow() {
         return STATE.modelSource != ModelPanelState.ModelSource.LOCAL && modelListW() >= 260;
     }
 
-    private int compactCloudSearchWidth() {
-        return compactCloudActionsInSearchRow() ? Math.max(80, modelListW() - 180) : modelListW();
-    }
+    private int compactCloudSearchWidth() { return toolbarSearchWidth(); }
 
     private boolean hasSelectedModel() {
         return STATE.selectedModelId != null && !STATE.selectedModelId.isBlank();
     }
 
-    private void renderCompactModelActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y) {
-        int stride = denseModelToolbar() ? 15 : 24;
-        renderCompactActionButton(g, mouseX, mouseY, x, y, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.tooltip"), this::openImportPanel);
-        renderCompactActionButton(g, mouseX, mouseY, x + stride, y, IconGlyph.FOLDER, Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
-        renderCompactActionButton(g, mouseX, mouseY, x + stride * 2, y, IconGlyph.ROULETTE, Component.translatable("key.sparkle_morpher.animation_roulette.desc"), this::openRoulette);
-        renderCompactActionButton(g, mouseX, mouseY, x + stride * 3, y, IconGlyph.CATEGORY, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
-        renderCompactActionButton(g, mouseX, mouseY, x + stride * 4, y, IconGlyph.MULTI, Component.translatable("gui.sparkle_morpher.model_panel.multi_select"), () -> {
-            STATE.multiSelectMode = !STATE.multiSelectMode;
-            this.selectedModelIds.clear();
-        });
-    }
 
-    private void renderCompactActionButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, IconGlyph icon, Component tooltip, Runnable action) {
-        if (denseModelToolbar()) renderDenseIconButton(g, mouseX, mouseY, x, y, icon, tooltip, action);
-        else renderIconButton(g, mouseX, mouseY, x, y, icon, tooltip, action);
-    }
 
-    private void renderDenseLocalFooterActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y) {
-        int stride = 15;
-        if (STATE.multiSelectMode) {
-            renderDenseIconButton(g, mouseX, mouseY, x, y, IconGlyph.DELETE, Component.translatable("gui.sparkle_morpher.model_panel.delete"), this::deleteSelectedModels);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride, y, IconGlyph.MOVE, Component.translatable("gui.sparkle_morpher.model_panel.move"), () -> openCategoryPanel(""));
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 2, y, IconGlyph.CREATE, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 3, y, IconGlyph.CHECK, Component.translatable("gui.sparkle_morpher.model_select.tooltip.select_all"), this::selectAllVisibleModels);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 4, y, IconGlyph.CLEAR, Component.translatable("gui.sparkle_morpher.model_panel.clear_selection"), this::clearModelSelection);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 5, y, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
-        } else {
-            renderDenseIconButton(g, mouseX, mouseY, x, y, IconGlyph.TEXTURE, Component.translatable("gui.sparkle_morpher.model_panel.use_texture"), this::applySelectedTexture);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride, y, IconGlyph.STAR, Component.translatable("gui.sparkle_morpher.model_panel.toggle_favorite"), this::toggleSelectedStar);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 2, y, IconGlyph.RELOAD, Component.translatable("gui.sparkle_morpher.model_panel.reload_models"), () -> this.controller.reloadLocalModels(this::setStatus));
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 3, y, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 4, y, IconGlyph.MODE, pickerStyleLabel(pickerStyle()), this::cyclePickerStyle);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 5, y, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.tooltip"), this::openImportPanel);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 6, y, IconGlyph.FOLDER, Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 7, y, IconGlyph.ROULETTE, Component.translatable("key.sparkle_morpher.animation_roulette.desc"), this::openRoulette);
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 8, y, IconGlyph.CATEGORY, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
-            renderDenseIconButton(g, mouseX, mouseY, x + stride * 9, y, IconGlyph.MULTI, Component.translatable("gui.sparkle_morpher.model_panel.multi_select"), () -> {
-                STATE.multiSelectMode = true;
-                this.selectedModelIds.clear();
-            });
-        }
-    }
 
-    private int resourceListX() {
-        return this.layout.contentLeft + 8;
-    }
 
-    private int resourceRightW() {
-        boolean priority = listPriority();
-        int minRight = this.layout.contentWidth < 420 ? 90 : (priority ? 118 : 170);
-        int minList = this.layout.contentWidth < 420 ? 90 : 120;
-        int max = Math.max(minRight, Math.min(priority ? 190 : 260, this.layout.contentWidth - minList - 22));
-        return clamp(this.layout.contentWidth / (priority ? 4 : 3), minRight, max);
-    }
 
-    private int resourceListW() {
-        return Math.max(60, this.layout.contentWidth - resourceRightW() - 22);
-    }
 
-    private int resourceToolbarW() {
-        return ICON * 4 + 58 + 24;
-    }
+    private int resourceListX(){return this.layout.contentLeft;}
 
-    private int resourceToolbarX() {
-        return Math.max(resourceListX(), resourceListX() + resourceListW() - resourceToolbarW());
-    }
 
-    private int resourceSearchW() {
-        return Math.max(40, resourceToolbarX() - resourceListX() - 8);
-    }
 
-    private int secondaryPanelW() {
-        int max = Math.max(120, this.layout.width - 32);
-        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) return Math.min(420, max);
-        return clamp(this.layout.width * 2 / 3, Math.min(520, max), max);
-    }
+    private int resourceListW(){return this.layout.contentWidth;}
 
-    private int secondaryPanelH() {
-        int max = Math.max(96, this.layout.height - 32);
-        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) return Math.min(236, max);
-        return clamp(this.layout.height * 2 / 3, Math.min(300, max), max);
-    }
 
-    private int secondaryPanelX() {
-        return this.layout.left + (this.layout.width - secondaryPanelW()) / 2;
-    }
 
-    private int secondaryPanelY() {
-        return this.layout.top + (this.layout.height - secondaryPanelH()) / 2 + 8;
-    }
+
+
+
+
+    private int secondaryPanelW(){return this.layout.contentWidth;}
+
+    private int secondaryPanelH(){return this.layout.height;}
+
+    private int secondaryPanelX(){return this.layout.contentLeft;}
+
+    private int secondaryPanelY(){return this.layout.top;}
 
     private void renderModelTab(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        boolean compact = compactModelLayout();
-        int x = modelLeftX();
-        int y = this.layout.contentTop + 8;
-        int leftW = modelLeftW();
-        int rightW = modelRightW();
-        int listX = modelListX();
-        int listW = modelListW();
-        int detailX = listX + listW + 10;
-        int contentBottom = this.layout.footerTop - 6;
-
-        renderModelSourceTabs(g, mouseX, mouseY, listX, y, listW);
+        int x = modelListX(), y = this.layout.top + 4, w = modelListW();
+        int detailX = x + modelDetailListW() + 4, gridY = modelGridTop(), gridH = currentModelGridH();
+        renderModelSourceTabs(g, mouseX, mouseY, x, y, this.layout.contentWidth - 4);
+        roundedSurface(g,x,this.layout.top+32,toolbarSearchWidth(),this.width<560?18:22,3,0x0CFFFFFF,0x22FFFFFF);
+        if (modelSearchBox != null) {modelSearchBox.visible=true;modelSearchBox.active=true;modelSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);}
+        if (cloudSearchBox != null) {cloudSearchBox.visible=true;cloudSearchBox.active=true;cloudSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);}
+        int tx = x + toolbarSearchWidth() + 6, ty = this.layout.top + 32;
         if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-            int filtersY = y + 44;
-            int actionsX;
-            if (denseModelToolbar()) {
-                renderChip(g, listX, filtersY, 34, Component.translatable("gui.sparkle_morpher.model_panel.filter.all"), STATE.modelFilter == ModelPanelState.ModelFilter.ALL, () -> setModelFilter(ModelPanelState.ModelFilter.ALL));
-                renderChip(g, listX + 38, filtersY, 46, Component.translatable("gui.sparkle_morpher.model_panel.filter.star"), STATE.modelFilter == ModelPanelState.ModelFilter.STAR, () -> setModelFilter(ModelPanelState.ModelFilter.STAR));
-                renderChip(g, listX + 88, filtersY, 66, Component.translatable("gui.sparkle_morpher.model_panel.filter.not_star"), STATE.modelFilter == ModelPanelState.ModelFilter.NOT_STAR, () -> setModelFilter(ModelPanelState.ModelFilter.NOT_STAR));
-                actionsX = listX + 158;
-            } else {
-                renderChip(g, listX, filtersY, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.all"), STATE.modelFilter == ModelPanelState.ModelFilter.ALL, () -> setModelFilter(ModelPanelState.ModelFilter.ALL));
-                renderChip(g, listX + 42, filtersY, 50, Component.translatable("gui.sparkle_morpher.model_panel.filter.star"), STATE.modelFilter == ModelPanelState.ModelFilter.STAR, () -> setModelFilter(ModelPanelState.ModelFilter.STAR));
-                renderChip(g, listX + 96, filtersY, 72, Component.translatable("gui.sparkle_morpher.model_panel.filter.not_star"), STATE.modelFilter == ModelPanelState.ModelFilter.NOT_STAR, () -> setModelFilter(ModelPanelState.ModelFilter.NOT_STAR));
-                actionsX = listX + 174;
+            this.controller.requestCloudPreviews(List.of());
+            renderLocalToolbar(g, mouseX, mouseY, tx, ty);
+            if (!STATE.currentPath.isBlank()) {
+                hit(x, y, 34, 18, Component.literal("/" + STATE.currentPath), this::navigateUp);
             }
-            // Actions are grouped with the footer toolbar below the model grid.
-        } else if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-            glassPanel(g, x, y, leftW, contentBottom - y);
-            drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.model"), x + 8, y + 8);
-            renderCurrentModelSummary(g, x + 8, y + 26, leftW - 16);
-            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.filters"), x + 8, y + 88);
-            renderChip(g, x + 8, y + 104, 38, Component.translatable("gui.sparkle_morpher.model_panel.filter.all"), STATE.modelFilter == ModelPanelState.ModelFilter.ALL, () -> setModelFilter(ModelPanelState.ModelFilter.ALL));
-            renderChip(g, x + 50, y + 104, 50, Component.translatable("gui.sparkle_morpher.model_panel.filter.star"), STATE.modelFilter == ModelPanelState.ModelFilter.STAR, () -> setModelFilter(ModelPanelState.ModelFilter.STAR));
-            renderChip(g, x + 8, y + 124, 72, Component.translatable("gui.sparkle_morpher.model_panel.filter.not_star"), STATE.modelFilter == ModelPanelState.ModelFilter.NOT_STAR, () -> setModelFilter(ModelPanelState.ModelFilter.NOT_STAR));
-            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.actions"), x + 8, y + 160);
-            renderIconButton(g, mouseX, mouseY, x + 8, y + 176, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.tooltip"), () -> openImportPanel());
-            renderIconButton(g, mouseX, mouseY, x + 32, y + 176, IconGlyph.FOLDER, Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
-            renderIconButton(g, mouseX, mouseY, x + 56, y + 176, IconGlyph.ROULETTE, Component.translatable("key.sparkle_morpher.animation_roulette.desc"), this::openRoulette);
-            renderIconButton(g, mouseX, mouseY, x + 80, y + 176, IconGlyph.CATEGORY, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
-            renderIconButton(g, mouseX, mouseY, x + 104, y + 176, IconGlyph.MULTI, Component.translatable("gui.sparkle_morpher.model_panel.multi_select"), () -> {
-                STATE.multiSelectMode = !STATE.multiSelectMode;
-                this.selectedModelIds.clear();
-            });
+            renderModelGrid(g, mouseX, mouseY, x, gridY, w, gridH);
+            renderModelDetails(g, mouseX, mouseY, detailX, gridY, modelRightW(), modelDetailHeight(), partialTick);
+        } else {
+            renderCloudToolbar(g, mouseX, mouseY, tx, ty);
+            renderCloudGrid(g, mouseX, mouseY, x, gridY, w, gridH);
+            renderCloudDetails(g, mouseX, mouseY, detailX, gridY, modelRightW(), modelDetailHeight(), partialTick);
         }
+        renderModelBottomActions(g, mouseX, mouseY, x, this.height-this.layout.top-(this.width<560?18:this.width<800?20:22)-8, w, gridH);
+        boolean appliedNow = Minecraft.getInstance().player != null && PlayerCapability.get(Minecraft.getInstance().player)
+                .map(cap -> cap.getModelId().equals(STATE.selectedModelId)).orElse(false);
+        Component applied = Component.translatable(appliedNow ? "gui.sparkle_morpher.ui.current_applied" : "gui.sparkle_morpher.ui.preview");
+        drawMuted(g, Component.literal(trim(applied.getString(), modelRightW())), detailX, this.height-this.layout.top-22);
+        renderSourceTabMenu(g,mouseX,mouseY);
+        renderModelMoreMenu(g,mouseX,mouseY);
+    }
 
-        if (this.modelSearchBox != null) {
-            this.modelSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+    private void renderModelSourceTabs(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w){
+        var profiles=CloudManagementScreen.management().registry().profiles();
+        for(var profile:profiles)if(!STATE.cloudTabOrder.contains(profile.instanceId()))STATE.cloudTabOrder.add(profile.instanceId());
+        var open=profiles.stream().filter(p->!STATE.closedCloudTabs.contains(p.instanceId()))
+                .sorted(java.util.Comparator.comparingInt(p->STATE.cloudTabOrder.indexOf(p.instanceId()))).toList();
+        sourceTabHits.clear();
+        int localW=this.width<560?37:49,addW=24,available=Math.max(1,w-localW-addW);
+        int visible=Math.max(1,available/80),navW=open.size()>visible?36:0;
+        int tabW=Math.max(40,Math.min(this.width<560?89:103,(available-navW)/Math.max(1,Math.min(visible,open.size()))));
+        visible=Math.max(1,(available-navW)/tabW);
+        STATE.cloudTabOffset=clamp(STATE.cloudTabOffset,0,Math.max(0,open.size()-visible));
+        renderCloudBrowserTab(g,mx,my,x,y,localW,Component.translatable("gui.sparkle_morpher.model_source.local"),STATE.modelSource==ModelPanelState.ModelSource.LOCAL,()->switchModelSource(ModelPanelState.ModelSource.LOCAL));
+        int xx=x+localW+3;
+        for(int i=STATE.cloudTabOffset;i<Math.min(open.size(),STATE.cloudTabOffset+visible);i++){
+            var profile=open.get(i);int bx=xx;
+            boolean selected=STATE.modelSource!=ModelPanelState.ModelSource.LOCAL&&profile.instanceId().equals(STATE.selectedCloudInstanceId);
+            renderCloudBrowserTab(g,mx,my,bx,y,tabW,Component.literal(CloudManagementScreen.displayName(profile)),selected,()->{
+                draggingSourceTab=profile.instanceId();switchCloudInstance(profile);
+                if(CloudClientRuntime.state(profile.instanceId())==null)openCloudAccount();
+            });
+            sourceTabHits.add(new SourceTabHit(profile.instanceId(),bx,y,tabW));xx+=tabW+3;
         }
-        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
-            boolean inlineActions = compactCloudActionsInSearchRow();
-            renderCloudActions(g, mouseX, mouseY,
-                    inlineActions ? listX + compactCloudSearchWidth() + 4 : listX,
-                    inlineActions ? y + 22 : y + 44, listW);
+        if(navW>0){
+            int count=visible;
+            renderTextButton(g,mx,my,xx,y,18,18,Component.literal("‹"),()->STATE.cloudTabOffset=Math.max(0,STATE.cloudTabOffset-1));
+            renderTextButton(g,mx,my,xx+18,y,18,18,Component.literal("›"),()->STATE.cloudTabOffset=Math.min(Math.max(0,open.size()-count),STATE.cloudTabOffset+1));xx+=36;
         }
-        if (this.cloudSearchBox != null) this.cloudSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        int pathY = STATE.modelSource == ModelPanelState.ModelSource.LOCAL ? y + 64 : y + cloudPathOffset();
-        if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) renderPathBar(g, listX, pathY, listW);
-        else renderCloudViewTabs(g, mouseX, mouseY, listX, pathY, listW);
-        int gridY = pathY + 20;
-        boolean denseLocalToolbar = denseModelToolbar() && STATE.modelSource == ModelPanelState.ModelSource.LOCAL;
-        int actionsBandY = contentBottom - (denseLocalToolbar ? 0 : compact ? 22 : 28);
-        int detailStripH = compactDetailStripH();
-        int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
-        int gridH = STATE.modelSource == ModelPanelState.ModelSource.LOCAL
-                    ? Math.max(compact ? 34 : 50, actionsBandY - 4 - reserve - gridY)
-                    : cloudModelViewport().gridHeight();
-        if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) renderModelGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
-        else renderCloudGrid(g, mouseX, mouseY, listX, gridY, listW, gridH);
-        if (detailStripH > 0) {
-            renderCompactDetail(g, mouseX, mouseY, listX, gridY + gridH + 3, listW, detailStripH, partialTick);
-        }
-        renderModelBottomActions(g, mouseX, mouseY, listX, actionsBandY, listW, gridH);
-        if (!compact) {
-            if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-                renderModelDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
-            } else {
-                renderCloudDetails(g, mouseX, mouseY, detailX, y, rightW, contentBottom - y, partialTick);
-            }
+        renderIconButton(g,mx,my,xx+2,y+1,IconGlyph.PLUS,Component.translatable("gui.sparkle_morpher.ui.open_tab"),()->sourceTabMenu=!sourceTabMenu);
+        if(stateKeyValue.startsWith("fake:")&&x+w-xx>190){
+            String target=com.micaftic.morpher.fakeplayer.FakePlayerListCache.entries().stream().filter(e->stateKeyValue.equals("fake:"+e.uuid())).map(com.micaftic.morpher.fakeplayer.FakePlayerListEntry::displayName).findFirst().orElse("目标假人");
+            drawMuted(g,Component.literal(trim("为"+target+"选择外观",x+w-xx-36)),xx+36,y+8);
         }
     }
 
-    private void renderModelSourceTabs(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
-        var profiles = CloudManagementScreen.management().registry().profiles();
-        if (STATE.selectedCloudInstanceId.isBlank() && STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
-            CloudManagementScreen.management().registry().selected().ifPresent(profile -> {
-                STATE.selectedCloudInstanceId = profile.instanceId();
-                CloudManagementScreen.management().selectInstance(profile.instanceId());
-            });
-        }
-        int localW = Math.min(74, Math.max(38, w / 4));
-        int addW = 24;
-        int available = Math.max(1, w - localW - addW);
-        boolean overflow = profiles.size() * 92 > available;
-        int navW = overflow ? 36 : 0;
-        int cloudW = Math.max(1, Math.min(available - navW, 148 * Math.max(1, profiles.size())));
-        int visible = overflow ? Math.max(1, cloudW / 92) : Math.max(1, profiles.size());
-        STATE.cloudTabOffset = Math.min(STATE.cloudTabOffset, Math.max(0, profiles.size() - visible));
-        renderCloudBrowserTab(g, mouseX, mouseY, x, y, localW,
-                Component.translatable("gui.sparkle_morpher.model_source.local"),
-                STATE.modelSource == ModelPanelState.ModelSource.LOCAL,
-                () -> switchModelSource(ModelPanelState.ModelSource.LOCAL));
-        int tabW = Math.max(1, cloudW / visible);
-        for (int i = 0; i < visible && STATE.cloudTabOffset + i < profiles.size(); i++) {
-            var profile = profiles.get(STATE.cloudTabOffset + i);
-            boolean connected = CloudClientRuntime.state(profile.instanceId()) != null;
-            String name = CloudManagementScreen.displayName(profile);
-            String account = CloudManagementScreen.management().accountId(profile.instanceId());
-            boolean selected = STATE.modelSource != ModelPanelState.ModelSource.LOCAL
-                    && profile.instanceId().equals(STATE.selectedCloudInstanceId);
-            String label = (connected ? "● " : "○ ") + name;
-            renderCloudBrowserTab(g, mouseX, mouseY, x + localW + i * tabW, y, tabW,
-                    Component.literal(label), selected, () -> {
-                        switchCloudInstance(profile);
-                        if (!connected) openCloudAccount();
-                    });
-        }
-        if (overflow) {
-            int navX = x + localW + cloudW;
-            renderTextButton(g, mouseX, mouseY, navX, y, 18, 18, Component.literal("‹"),
-                    () -> STATE.cloudTabOffset = Math.max(0, STATE.cloudTabOffset - 1));
-            renderTextButton(g, mouseX, mouseY, navX + 18, y, 18, 18, Component.literal("›"),
-                    () -> STATE.cloudTabOffset = Math.min(Math.max(0, profiles.size() - visible), STATE.cloudTabOffset + 1));
-        }
-        renderTextButton(g, mouseX, mouseY, x + localW + cloudW + navW, y, addW, 18, Component.literal("+"),
-                this::openCloudInstanceForm);
-    }
-
-    private void renderCloudBrowserTab(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w,
-                                       Component label, boolean selected, Runnable action) {
-        boolean hover = inside(mouseX, mouseY, x, y, w, 18);
-        fill(g, x + 1, y + 1, w - 2, 17, selected ? 0xEE344C5C : hover ? 0xCC435B6B : 0xCC27333D);
-        fill(g, x + 1, y, w - 2, 1, selected ? RED : 0x99D5E5EF);
-        fill(g, x, y + 2, 1, 16, 0x55FFFFFF);
-        fill(g, x + w - 1, y + 2, 1, 16, 0x55FFFFFF);
-        if (!selected) fill(g, x + 1, y + 17, w - 2, 1, 0x55FFFFFF);
-        drawCentered(g, Component.literal(trim(label.getString(), w - 10)), x + w / 2, y + 5,
-                selected ? 0xFFFFFFFF : TEXT);
-        hit(x, y, w, 18, label, action);
+    private void renderCloudBrowserTab(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,Component label,boolean selected,Runnable action){
+        roundedSurface(g,x,y,w,uiButtonHeight(),4,selected?0x16FFFFFF:inside(mx,my,x,y,w,uiButtonHeight())?0x10FFFFFF:0x06FFFFFF,selected?0x22FFFFFF:0x0EFFFFFF);
+        drawText(g,Component.literal(trim(label.getString(),w-12)),x+6,UiElementLayout.centeredY(y,uiButtonHeight(),font.lineHeight));
+        hit(x,y,w,uiButtonHeight(),label,action);
     }
 
     private void switchCloudInstance(CloudInstanceRegistry.CloudInstanceProfile profile) {
@@ -1075,6 +1004,7 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void resetCloudPage() {
+        this.controller.retryCloudPreviews();
         this.cloudRequestGeneration++;
         this.cloudCursorGuard.reset();
         selectedCloudAssetIds.clear();
@@ -1154,6 +1084,7 @@ public class ModernPlayerModelScreen extends Screen {
             STATE.cloudBatchSize = Math.max(1, STATE.cloudBatchSize);
         }
         STATE.cloudLoading = true;
+        cloudPageError="";
         this.controller.listCloudAssets(scope, query, cursor, STATE.cloudBatchSize).whenComplete((page, failure) -> Minecraft.getInstance().execute(() -> {
             if (generation != this.cloudRequestGeneration || !key.equals(cloudPageKey())) return;
             STATE.cloudLoading = false;
@@ -1161,7 +1092,8 @@ public class ModernPlayerModelScreen extends Screen {
                 // Keep the current page and cursor; a failed next page can be retried.
                 STATE.cloudLoaded = true;
                 STATE.cloudLoadedKey = key;
-                setStatus(Component.translatable("gui.sparkle_morpher.cloud.search_failed", rootMessage(failure)), ChatFormatting.RED);
+                cloudPageError=rootMessage(failure);
+                setStatus(Component.translatable("gui.sparkle_morpher.cloud.search_failed", cloudPageError), ChatFormatting.RED);
                 return;
             }
             STATE.cloudLoaded = true;
@@ -1179,16 +1111,7 @@ public class ModernPlayerModelScreen extends Screen {
         }));
     }
 
-    private void renderCloudViewTabs(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
-        List<ModelPanelState.CloudView> views = STATE.cloudViews();
-        int tabW = w / views.size();
-        for (int i = 0; i < views.size(); i++) {
-            var view = views.get(i);
-            String label = view == ModelPanelState.CloudView.ALL ? "all_models" : view.name().toLowerCase(Locale.ROOT);
-            renderCloudBrowserTab(g, mouseX, mouseY, x + i * tabW, y, i == views.size() - 1 ? w - i * tabW : tabW,
-                    Component.translatable("gui.sparkle_morpher.model_source." + label), STATE.cloudView == view, () -> switchCloudView(view));
-        }
-    }
+
 
     private void switchCloudView(ModelPanelState.CloudView view) {
         if (STATE.cloudView == view) return;
@@ -1199,9 +1122,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderCloudGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
         List<CloudAssetSummary> visible = cloudVisibleEntries();
-        glassPanel(g, x, y, w, h);
         if (!this.controller.cloudAvailable()) {
-            drawCentered(g, Component.translatable("gui.sparkle_morpher.cloud.disconnected"), x + w / 2, y + h / 2 - 4, MUTED);
+            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.cloud.disconnected"),Component.literal("当前实例尚未连接；已保存的模型信息不会删除。"),cloudText("login"),this::openCloudAccount);
             return;
         }
         if (STATE.cloudLoading && visible.isEmpty()) {
@@ -1213,17 +1135,19 @@ public class ModernPlayerModelScreen extends Screen {
             return;
         }
         if (visible.isEmpty()) {
-            drawCentered(g, Component.translatable("gui.sparkle_morpher.cloud.no_models"), x + w / 2, y + h / 2 - 4, MUTED);
+            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.cloud.no_models"),Component.literal(cloudPageError.isBlank()?"保留搜索条件，可清除筛选后重试。":cloudPageError),Component.literal(cloudPageError.isBlank()?"清除筛选":"重试"),()->{if(cloudPageError.isBlank()){STATE.cloudSearchText="";switchCloudView(ModelPanelState.CloudView.ALL);init();}resetCloudPage();});
             return;
         }
         CloudModelPage page = cloudGridPage(w, h);
+        this.controller.requestCloudPreviews(visible.subList(page.start(), page.end()));
         g.enableScissor(x, y, x + w, y + h);
         if (gridMode(w, h) == ModelPickerLayout.GridMode.CARDS) {
             ModelPickerLayout.Cards cards = ModelPickerLayout.cards(w, h, visible.size(), denseModelToolbar());
             ensureCardPool(cards.capacity());
+            cardFrameNanos=System.nanoTime();cardRefreshBudget.beginFrame(cardFrameNanos,page.end()-page.start());
             for (int i = page.start(); i < page.end(); i++) {
                 int slot = i - page.start();
-                int cx = x + cards.originX(w) + (slot % cards.cols()) * (cards.cellW() + ModelPickerLayout.CARD_GAP);
+                int cx = x + cards.originX(w) + cards.columnX(w,slot % cards.cols());
                 int cy = y + cards.originY(h) + (slot / cards.cols()) * (cards.cellH() + ModelPickerLayout.CARD_GAP);
                 renderCloudCard(g, visible.get(i), slot, cx, cy, cards.cellW(), cards.cellH(), mouseX, mouseY);
             }
@@ -1266,7 +1190,8 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private Component cloudEntryTooltip(CloudAssetSummary entry) {
-        return Component.literal(cloudEntryName(entry) + "\n" + entry.ref().assetId() + "\n" + cloudEntryDetail(entry));
+        Component error=this.controller.cloudPreviewError(entry);
+        return Component.literal(cloudEntryName(entry)+"\n"+entry.ref().assetId()+"\n"+cloudEntryDetail(entry)+(error==null?"":"\n"+error.getString()));
     }
 
     private Component cloudVisibilityAction(CloudAssetSummary entry) {
@@ -1278,13 +1203,16 @@ public class ModernPlayerModelScreen extends Screen {
         String modelId = this.controller.cloudModelId(entry);
         boolean selected = cloudMultiSelectMode ? selectedCloudAssetIds.contains(entry.ref().assetId()) : modelId.equals(STATE.selectedModelId);
         boolean hover = inside(mouseX, mouseY, cx, cy, cw, ch);
-        int nameH = Math.min(ch - 8, ModelPickerLayout.nameBandH(ch));
-        int coverH = Math.max(1, ch - nameH);
-        fill(g, cx, cy, cw, ch, selected ? CARD_SELECT : hover ? CARD_BASE_HOVER : CARD_BASE);
+        var artwork = modelCardArtwork(modelId);
+        int coverH = artwork.coverHeight(ch,ModelPickerLayout.nameBandH(ch));
+        int nameH = ch-coverH;
+        roundedFill(g,cx,cy,cw,ch,UiElementLayout.CARD_RADIUS,selected?CARD_SELECT:hover?CARD_BASE_HOVER:CARD_BASE);
         ModelAssembly assembly = this.controller.assemblyOrNull(modelId);
         if (assembly != null) {
             renderCardMonster(g, slot, modelId, cx, cy, cw, ch, coverH);
-        } else if (pendingCloudImports.contains(modelId)) {
+        } else if(this.controller.cloudPreviewError(entry)!=null){
+            drawIconScaled(g,IconGlyph.INFO,cx+cw/2-7,cy+coverH/2-7,14);
+        } else if (pendingCloudImports.contains(modelId) || this.controller.cloudAvailable()) {
             drawCardLoading(g, cx, cy, cw, coverH);
         } else {
             int size = Math.max(1, Math.min(30, Math.min(cw - 12, coverH - 20)));
@@ -1292,13 +1220,14 @@ public class ModernPlayerModelScreen extends Screen {
             if (coverH >= 50) drawCentered(g, Component.literal(trim(Component.translatable("gui.sparkle_morpher.model_panel.cloud.download_use").getString(), cw - 8)),
                     cx + cw / 2, cy + coverH - 14, MUTED);
         }
-        fill(g, cx, cy + coverH, cw, nameH, CARD_NAME_BG);
+        if(!artwork.hasFramedNameArea())fillCardBand(g,cx,cy,cw,ch,cy+coverH,CARD_NAME_BG);
         drawCardName(g, new ModelEntry(modelId, cloudEntryName(entry), cloudEntryDetail(entry), false, false),
-                cx, cy + coverH, cw, nameH, false);
+                cx, cy + coverH, cw, nameH, false, artwork);
         if (cloudMultiSelectMode) renderCloudSelection(g, entry, cx + 4, cy + 4);
 
-        border(g, cx, cy, cw, ch, selected ? RED : hover ? CARD_NAME_TEXT : 0x55FFFFFF);
-        hit(cx, cy, cw, ch, cloudEntryTooltip(entry), () -> clickCloudAsset(entry));
+        cardBorder(g,cx,cy,cw,ch,selected?RED:hover?CARD_NAME_TEXT:0x55FFFFFF);
+        Component previewFailure=this.controller.cloudPreviewError(entry);
+        hit(cx, cy, cw, ch, previewFailure==null?cloudEntryTooltip(entry):previewFailure, () -> clickCloudAsset(entry));
     }
 
     private void renderCloudTextEntry(GuiGraphicsExtractor g, CloudAssetSummary entry, int cx, int cy, int cw, int ch, boolean dense, int mouseX, int mouseY) {
@@ -1321,24 +1250,9 @@ public class ModernPlayerModelScreen extends Screen {
         else if (STATE.cloudHasMore && !STATE.cloudLoading) requestCloudPage(true);
     }
 
-    private void renderCloudPageControls(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
-        List<CloudAssetSummary> visible = cloudVisibleEntries();
-        if (visible.isEmpty() && !STATE.cloudHasMore) return;
-        CloudModelPage page = cloudGridPage(w, h);
-        int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
-        int prevX = nextX - MODEL_PAGE_BUTTON_WIDTH - 4;
-        String range = "#" + (STATE.cloudPages.index() + 1) + "  " + (visible.isEmpty() ? 0 : page.start() + 1) + "-" + page.end() + "/" + visible.size() + (STATE.cloudHasMore ? "+" : "");
-        int room = prevX - (x + 106) - 8;
-        if (room >= 18) drawMuted(g, Component.literal(trim(range, room)), x + 106, y + 8);
-        renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT,
-                Component.translatable("gui.sparkle_morpher.pre_page"), () -> {
-                    if (STATE.cloudLoading) return;
-                    if (page.scroll() > 0) STATE.cloudScroll = page.previous();
-                    else if (STATE.cloudPages.hasPrevious()) requestCloudBatch(STATE.cloudPages.previous());
-                });
-        Component next = Component.translatable(STATE.cloudLoading ? "gui.sparkle_morpher.cloud.loading" : "gui.sparkle_morpher.next_page");
-        renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT,
-                next, () -> advanceCloudPage(w, h));
+    private void renderCloudPageControls(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h){
+        List<CloudAssetSummary> visible=cloudVisibleEntries();CloudModelPage page=cloudGridPage(w,h);int index=STATE.cloudPages.index()+1;
+        drawPagination(g,mx,my,x,y,w,index+" / "+(STATE.cloudHasMore?"…":index),Math.max(0,page.end()-page.start())+" / "+visible.size()+(STATE.cloudHasMore?"+":"")+" 个模型",!STATE.cloudLoading&&(page.scroll()>0||STATE.cloudPages.hasPrevious()),!STATE.cloudLoading&&(page.hasNext()||STATE.cloudHasMore),()->{if(page.scroll()>0)STATE.cloudScroll=page.previous();else if(STATE.cloudPages.hasPrevious())requestCloudBatch(STATE.cloudPages.previous());},()->advanceCloudPage(w,h));
     }
 
     private void changeCloudVisibility(CloudAssetSummary entry) {
@@ -1378,41 +1292,42 @@ public class ModernPlayerModelScreen extends Screen {
         STATE.selectedTextureId = selectedTextureOrDefault(assembly);
         applyModelAndTexture(cloudModelId, STATE.selectedTextureId, assembly);
     }
-    private void renderCurrentModelSummary(GuiGraphicsExtractor g, int x, int y, int w) {
-        LocalPlayer player = Minecraft.getInstance().player;
-        String model = "default";
-        String texture = "";
-        if (player != null) {
-            Optional<PlayerCapability> cap = PlayerCapability.get(player);
-            if (cap.isPresent()) {
-                model = cap.get().getModelId();
-                texture = cap.get().getCurrentTextureName();
-            }
-        }
-        drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.selected"), x, y);
-        drawText(g, Component.literal(trim(model, w)), x, y + 12);
-        if (!texture.isBlank()) {
-            drawMuted(g, Component.literal(trim(texture, w)), x, y + 24);
-        }
-        int count = this.controller.availableModelCount();
-        drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.loaded_count", count), x, y + 46);
-    }
 
-    private void renderPathBar(GuiGraphicsExtractor g, int x, int y, int w) {
-        fill(g, x, y, w, 16, GLASS_DARK);
-        String path = STATE.currentPath.isBlank() ? "/" : "/" + STATE.currentPath;
-        if (denseModelToolbar() && STATE.multiSelectMode) {
-            path = Component.translatable("gui.sparkle_morpher.model_panel.selected_count", this.selectedModelIds.size()).getString() + "  ·  " + path;
+
+
+
+    private void renderCardStage(GuiGraphicsExtractor g,int x,int y,int w,int h){
+        if(w<=0||h<=0)return;
+        RoundedRectGeometry.fill((rx,ry,rw,rh,unused)->g.fillGradient(rx,ry,rx+rw,ry+rh,UiElementLayout.mix(0xFF353535,0xFF292929,(ry-y)/(float)h),UiElementLayout.mix(0xFF353535,0xFF292929,(ry+rh-y)/(float)h)),x,y,w,h,UiElementLayout.CARD_RADIUS-1,0);
+        int sw=Math.max(4,w*2/3),sh=Math.min(5,Math.max(1,h/24));for(int row=0;row<sh;row++){int inset=Math.abs(row-sh/2)*2;fill(g,x+(w-sw)/2+inset,y+h-sh-3+row,Math.max(1,sw-inset*2),1,0x55202020);}
+    }
+    private void drawPagination(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,String label,String status,boolean previous,boolean next,Runnable prevAction,Runnable nextAction){
+        var p=PaginationLayout.measure(x+4,y,w-8,font.width(appearanceText(Component.literal(label))),uiButtonHeight());int ty=p.label().y()+(p.label().h()-9)/2;
+        if(p.status().w()>0)drawMuted(g,Component.literal(trim(status,p.status().w())),p.status().x(),ty);
+        drawCentered(g,Component.literal(trim(label,p.label().w()-6)),p.label().x()+p.label().w()/2,ty,MUTED);
+        for(int i=0;i<2;i++){var r=i==0?p.previous():p.next();boolean active=i==0?previous:next;roundedSurface(g,r.x(),r.y(),r.w(),r.h(),3,active&&inside(mx,my,r.x(),r.y(),r.w(),r.h())?0x18FFFFFF:0x08FFFFFF,0x22FFFFFF);drawIconScaled(g,i==0?IconGlyph.PREVIOUS:IconGlyph.NEXT,r.x()+(r.w()-10)/2,r.y()+(r.h()-10)/2,10);if(active)hit(r.x(),r.y(),r.w(),r.h(),Component.translatable(i==0?"gui.sparkle_morpher.pre_page":"gui.sparkle_morpher.next_page"),i==0?prevAction:nextAction);}
+    }
+    private void backFromCloud(){
+        if(STATE.secondaryPanel==ModelPanelState.SecondaryPanel.NONE&&cloudAccountPage==CloudAccountPage.ACCOUNT){
+            cloudHistory.clear();afterCloudLogin=null;closeCloudForm();
+            STATE.activeTab=ModelPanelState.Tab.SETTINGS;selectSettingsPage("general");
+        }else returnFromCloud();
+    }
+    private void returnFromCloud(){
+        var previous=cloudHistory.back();closeCloudForm();
+        if(previous.isPresent()){
+            var route=previous.get();STATE.activeTab=route.tab();settingsPanel().selectPage(route.settingsPage());
+            cloudAccountPage=route.cloudPage();STATE.secondaryPanel=route.form();editingCloudInstance=route.editing();
+            cloudAddressDraft=route.address();cloudNameDraft=route.name();cloudAccountScroll=0;cloudDetailScroll=0;init();return;
         }
-        drawMuted(g, Component.literal(trim(path, w - 32)), x + 5, y + 4);
-        renderIconButton(g, -1, -1, x + w - 22, y - 1, IconGlyph.UP, Component.translatable("gui.back"), this::navigateUp);
+        if(afterCloudLogin!=null){InputUtil.setScreen(afterCloudLogin);return;}
+        STATE.activeTab=cloudReturnTab;if(cloudReturnTab==ModelPanelState.Tab.SETTINGS)settingsPanel().selectPage(cloudReturnSettingsPage.equals("cloud")?"general":cloudReturnSettingsPage);init();
     }
 
     private void renderModelGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
-        glassPanel(g, x, y, w, h);
         List<ModelEntry> entries = collectModelEntries();
         if (entries.isEmpty()) {
-            drawCentered(g, Component.translatable("gui.sparkle_morpher.model_panel.no_models"), x + w / 2, y + h / 2 - 4, MUTED);
+            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.model_panel.no_models"),Component.translatable("gui.sparkle_morpher.model_panel.drop_files_hint"),Component.literal("清除筛选 / 导入模型"),()->{STATE.modelSearchText="";STATE.modelFilter=ModelPanelState.ModelFilter.ALL;if(collectModelEntries().isEmpty())openImportPanel();else init();});
             return;
         }
         ModelPickerLayout.GridMode mode = gridMode(w, h);
@@ -1440,47 +1355,14 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     /** 展示偏好：用户在本屏切换过就以本屏为准，否则读配置默认值。 */
-    private ModelPickerLayout.Style pickerStyle() {
-        if (!STATE.pickerStylePinned) {
-            ModelPickerLayout.Style configured = configuredPickerStyle();
-            if (configured != null) {
-                STATE.pickerStyle = configured;
-                STATE.pickerStylePinned = true;
-            }
-        }
-        return STATE.pickerStyle;
-    }
+    private ModelPickerLayout.Style pickerStyle() { return ModelPickerLayout.Style.CARDS; }
 
-    private static ModelPickerLayout.Style configuredPickerStyle() {
-        try {
-            GeneralConfig.ModelPickerStyle style = com.micaftic.morpher.core.config.ConfigPolicies.modelPickerStyle();
-            return style == null ? null : ModelPickerLayout.Style.valueOf(style.name());
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
+
 
     /** AUTO → CARDS → LIST 循环；切到 LIST 后再次点击回到 AUTO。 */
-    private void cyclePickerStyle() {
-        ModelPickerLayout.Style next = switch (pickerStyle()) {
-            case AUTO -> ModelPickerLayout.Style.CARDS;
-            case CARDS -> ModelPickerLayout.Style.LIST;
-            case LIST -> ModelPickerLayout.Style.AUTO;
-        };
-        STATE.pickerStyle = next;
-        STATE.pickerStylePinned = true;
-        STATE.modelScroll = 0;
-        STATE.cloudScroll = 0;
-    }
 
-    private Component pickerStyleLabel(ModelPickerLayout.Style style) {
-        String key = switch (style) {
-            case AUTO -> "gui.sparkle_morpher.model_panel.picker.auto";
-            case CARDS -> "gui.sparkle_morpher.model_panel.picker.cards";
-            case LIST -> "gui.sparkle_morpher.model_panel.picker.list";
-        };
-        return Component.translatable(key);
-    }
+
+
 
     /** 经典图标+文字网格（AUTO 面积不足时的降级路径，也是 LIST 强制形态）。 */
     private void renderModelTextGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, List<ModelEntry> entries, int x, int y, int w, int h) {
@@ -1494,7 +1376,7 @@ public class ModernPlayerModelScreen extends Screen {
             int cy = y + (i / metrics.cols()) * metrics.cellH() + 3;
             int cw = metrics.cellW() - 6;
             int ch = metrics.cellH() - 6;
-            boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
+            boolean selected = STATE.multiSelectMode ? this.selectedModelIds.contains(entry.modelId()) : entry.modelId().equals(STATE.selectedModelId);
             boolean hover = inside(mouseX, mouseY, cx, cy, cw, ch);
             boolean starred = !entry.folder() && starredModels.contains(entry.modelId());
             fill(g, cx, cy, cw, ch, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : 0x3E30363B);
@@ -1531,11 +1413,12 @@ public class ModernPlayerModelScreen extends Screen {
         int y0 = y + m.originY(h);
         Set<String> starred = starModels();
         ensureCardPool(m.capacity());
+        cardFrameNanos=System.nanoTime();cardRefreshBudget.beginFrame(cardFrameNanos,Math.min(m.capacity(),entries.size()-start));
         int hoverIndex = -1;
         for (int i = 0; i < m.capacity() && start + i < entries.size(); i++) {
             int r = i / m.cols();
             int c = i % m.cols();
-            int cx = x0 + c * (m.cellW() + ModelPickerLayout.CARD_GAP);
+            int cx = x0 + m.columnX(w,c);
             int cy = y0 + r * (m.cellH() + ModelPickerLayout.CARD_GAP);
             if (inside(mouseX, mouseY, cx, cy, m.cellW(), m.cellH())) {
                 hoverIndex = start + i;
@@ -1545,7 +1428,7 @@ public class ModernPlayerModelScreen extends Screen {
         for (int i = 0; i < m.capacity() && start + i < entries.size(); i++) {
             int r = i / m.cols();
             int c = i % m.cols();
-            int cx = x0 + c * (m.cellW() + ModelPickerLayout.CARD_GAP);
+            int cx = x0 + m.columnX(w,c);
             int cy = y0 + r * (m.cellH() + ModelPickerLayout.CARD_GAP);
             boolean hover = start + i == hoverIndex;
             renderModelCard(g, entries.get(start + i), i, cx, cy, m.cellW(), m.cellH(), hover, starred);
@@ -1584,17 +1467,18 @@ public class ModernPlayerModelScreen extends Screen {
     /** 单张卡：底 → 封面/实时小人 → 名字条 → 角标 → 描边 → 点击区。 */
     private void renderModelCard(GuiGraphicsExtractor g, ModelEntry entry, int slot, int cx, int cy, int cw, int ch, boolean hover, Set<String> starredModels) {
         boolean folder = entry.folder();
-        boolean selected = entry.modelId().equals(STATE.selectedModelId) || this.selectedModelIds.contains(entry.modelId());
+        boolean selected = STATE.multiSelectMode ? this.selectedModelIds.contains(entry.modelId()) : entry.modelId().equals(STATE.selectedModelId);
         boolean multiSelected = !folder && !entry.modelId().equals(STATE.selectedModelId) && this.selectedModelIds.contains(entry.modelId());
         boolean starred = !folder && starredModels.contains(entry.modelId());
         boolean locked = !folder && entry.locked();
-        int nameH = ModelPickerLayout.nameBandH(ch);
-        int coverH = Math.max(1, ch - nameH);
+        var artwork = folder || locked ? ModelCardArtwork.NONE : modelCardArtwork(entry.modelId());
+        int coverH = artwork.coverHeight(ch,ModelPickerLayout.nameBandH(ch));
+        int nameH = ch-coverH;
 
         if (folder) {
-            fill(g, cx, cy, cw, ch, hover ? CARD_FOLDER_HOVER : CARD_FOLDER);
+            roundedFill(g,cx,cy,cw,ch,UiElementLayout.CARD_RADIUS,hover?CARD_FOLDER_HOVER:CARD_FOLDER);
         } else {
-            fill(g, cx, cy, cw, ch, selected ? CARD_SELECT : hover ? CARD_BASE_HOVER : CARD_BASE);
+            roundedFill(g,cx,cy,cw,ch,UiElementLayout.CARD_RADIUS,selected?CARD_SELECT:hover?CARD_BASE_HOVER:CARD_BASE);
         }
 
         if (folder) {
@@ -1607,36 +1491,31 @@ public class ModernPlayerModelScreen extends Screen {
         }
 
         // 名字条压在封面之上，保证不被 3D 小人遮挡。
-        fill(g, cx, cy + coverH, cw, nameH, CARD_NAME_BG);
-        drawCardName(g, entry, cx, cy + coverH, cw, nameH, folder);
+        if(!artwork.hasFramedNameArea())fillCardBand(g,cx,cy,cw,ch,cy+coverH,CARD_NAME_BG);
+        drawCardName(g, entry, cx, cy + coverH, cw, nameH, folder, artwork);
 
         if (locked) {
-            fill(g, cx, cy, cw, ch, CARD_DIM);
+            roundedFill(g,cx,cy,cw,ch,UiElementLayout.CARD_RADIUS,CARD_DIM);
         } else if (!folder) {
-            if (multiSelected) {
-                drawIcon(g, IconGlyph.CHECK, cx + cw - 18, cy + 3);
+            if (selected || multiSelected) {
+                drawIconScaled(g,IconGlyph.CIRCLE_CHECK,cx+cw-12,cy+4,8);
             } else if (starred) {
                 drawIcon(g, IconGlyph.STAR, cx + cw - 18, cy + 3);
             }
         }
 
-        border(g, cx, cy, cw, ch, selected ? RED : hover ? CARD_NAME_TEXT : 0x55FFFFFF);
+        cardBorder(g,cx,cy,cw,ch,selected?RED:hover?CARD_NAME_TEXT:0x55FFFFFF);
         hit(cx, cy, cw, ch, Component.literal(entry.title()), () -> clickModelEntry(entry));
     }
 
-    /** 卡片名字条：单行居中；卡够高且有条目副标题时排两行。超长省略，悬停 tooltip 给全名。 */
-    private void drawCardName(GuiGraphicsExtractor g, ModelEntry entry, int bx, int by, int cw, int nameH, boolean folder) {
-        int w = Math.max(6, cw - 6);
-        String title = trim(entry.title(), w);
-        String sub = entry.subtitle();
-        boolean twoLine = !folder && nameH >= 28 && sub != null && !sub.isEmpty() && !"folder".equals(sub);
-        int tx = bx + 3;
-        if (twoLine) {
-            g.text(this.font, Component.literal(title), tx, by + 3, folder ? 0xFF2B2B2B : CARD_NAME_TEXT, false);
-            g.text(this.font, Component.literal(trim(sub, w)), tx, by + nameH - this.font.lineHeight - 3, MUTED, false);
-        } else {
-            g.text(this.font, Component.literal(title), tx, by + Math.max(2, (nameH - this.font.lineHeight) / 2), folder ? 0xFF2B2B2B : CARD_NAME_TEXT, false);
-        }
+    /** A single readable model name; the author artwork supplies its own frame. */
+    private void drawCardName(GuiGraphicsExtractor g,ModelEntry entry,int bx,int by,int cw,int nameH,boolean folder,ModelCardArtwork artwork){
+        boolean authoredFrame=artwork.hasFramedNameArea();
+        int inset=authoredFrame?Math.max(4,cw/16):3;
+        String title=trim(entry.title(),Math.max(6,cw-inset*2));
+        int color=authoredFrame?artwork.nameTextColor():CARD_NAME_TEXT;
+        int y=by+Math.max(2,(nameH-font.lineHeight)/2);
+        g.text(this.font,appearanceText(Component.literal(title)),bx+inset,y,color,true);
     }
 
     /** 文件夹卡封面：ysm_pack.json 里的贴图，缺省用内置默认图标。 */
@@ -1657,39 +1536,34 @@ public class ModernPlayerModelScreen extends Screen {
      * 卡片里的实时 3D 小人：YSM 卡面三层构图（背景图 → 模型 → 前景边框）的中间层。
      * 用 {@link GuiModelRenderer#enqueueLivingPreview} 的显式 yaw 入口（兼容 facade 已不暴露 yaw）。
      */
-    private void renderCardMonster(GuiGraphicsExtractor g, int slot, String modelId, int cx, int cy, int cw, int ch, int coverH) {
-        if (cw < 18 || coverH < 26) {
-            return;
-        }
-        // getModelContext 对懒模型会调度后台加载并返回 empty——正好用来「请求加载」；
-        // 落地后下一帧这里就拿到常驻 assembly，卡片自动升级为实时小人。
-        ModelAssembly asm = this.controller.assemblyOrNull(modelId);
-        if (asm == null) {
-            drawCardLoading(g, cx, cy, cw, coverH);
-            return;
-        }
-        // YSM 卡面是三层构图：背景图 → 实时模型 → 前景边框。背景整幅铺在整张卡上
-        // （含名字条区域），前景边框最后叠回，模型的头/脚就落在边框留白里，不会被裁。
-        ModelDisplayAssets assets = asm.getTextureRegistry();
-        AbstractTexture background = assets == null ? null : assets.getGuiBackground();
-        AbstractTexture foreground = assets == null ? null : assets.getGuiForeground();
-        boolean hasBackground = drawCoverImage(g, background, cx, cy, cw, ch);
-        if (!hasBackground) {
-            // 无卡图：退回前景（可能也是边框）或纯卡底色即可，无需额外处理。
-            drawCoverImage(g, foreground, cx, cy, cw, ch);
-        }
-        boolean drewFigure = false;
-        if (asm.getPresentationCapabilities().cardPreviewAvailable()) {
-            drewFigure = renderCardFigure(g, slot, modelId, asm, cx, cy, cw, coverH);
-        }
-        // 前景边框叠在小人之上（其中心透明，正好露出小人）；未被当作背景用过才叠。
-        if (foreground != null && foreground != background) {
-            drawCoverImage(g, foreground, cx, cy, cw, ch);
-        }
-        if (!drewFigure && !hasBackground && foreground == null) {
-            int size = Math.min(34, Math.min(cw - 8, coverH - 12));
-            drawIconScaled(g, IconGlyph.MODEL, cx + Math.max(0, (cw - size) / 2), cy + Math.max(2, (coverH - size) / 2), size);
-        }
+    private void renderCardMonster(GuiGraphicsExtractor g,int slot,String modelId,int cx,int cy,int cw,int ch,int coverH){
+        if(cw<18||coverH<26)return;
+        ModelAssembly assembly=this.controller.assemblyOrNull(modelId);
+        if(assembly==null){drawCardLoading(g,cx,cy,cw,coverH);return;}
+        var assets=assembly.getTextureRegistry();
+        renderCardStage(g,cx+1,cy+1,cw-2,coverH-2);
+        var frame=cardArtwork(assets.getGuiForeground());
+        var art=frame==ModelCardArtwork.NONE?cardArtwork(assets.getGuiBackground()):frame;
+        // Preserve authored transparent name space; cover-only artwork stays above the name band.
+        int canvasH=art.canvasHeightForCard(ch,coverH);
+        drawCardArtwork(g,assets.getGuiBackground(),cx+1,cy+1,cw-2,canvasH-2);
+        int figureH=frame.figureHeight(canvasH,coverH);
+        if(!assembly.getPresentationCapabilities().cardPreviewAvailable()||!renderCardFigure(g,slot,modelId,assembly,cx,cy,cw,figureH))
+            drawIconScaled(g,IconGlyph.MODEL,cx+cw/2-7,cy+coverH/2-7,14);
+        drawCardArtwork(g,assets.getGuiForeground(),cx+1,cy+1,cw-2,canvasH-2);
+    }
+
+    private static ModelCardArtwork cardArtwork(AbstractTexture texture){
+        if(!(texture instanceof OuterFileTexture outer))return ModelCardArtwork.NONE;
+        synchronized(CARD_ARTWORK){return CARD_ARTWORK.computeIfAbsent(texture,key->ModelCardArtwork.read(outer.getResourceData()));}
+    }
+    private ModelCardArtwork modelCardArtwork(String modelId){
+        var assembly=controller.assemblyOrNull(modelId);
+        if(assembly==null)return ModelCardArtwork.NONE;
+        var assets=assembly.getTextureRegistry();
+        var art=cardArtwork(assets.getGuiForeground());
+        if(art==ModelCardArtwork.NONE)art=cardArtwork(assets.getGuiBackground());
+        return art;
     }
 
     /**
@@ -1701,35 +1575,29 @@ public class ModernPlayerModelScreen extends Screen {
      */
     private boolean renderCardFigure(GuiGraphicsExtractor g, int slot, String modelId, ModelAssembly asm, int cx, int cy, int cw, int coverH) {
         try {
-            String textureId = selectedTextureOrDefault(asm);
-            PlayerPreviewEntity entity = cardPreviewEntity(slot, modelId, textureId, asm);
-            if (entity == null) {
-                return false;
+            if(!ModelPreviewRenderer.isDirectGuiPreviewSupported())return false;
+            String textureId=modelId.equals(STATE.selectedModelId)?selectedTextureOrDefault(asm):asm.getAnimationBundle().getDefaultTextureName();
+            var props=asm.getModelData().getModelProperties();
+            boolean disableRotation=props!=null&&props.isDisablePreviewRotation();
+            String animation=ModelCardArtwork.previewAnimation(props==null?null:props.getPreviewAnimation(),asm.getAnimationBundle().getMainAnimations().keySet());
+            Object key=new CardPreviewKey(previewViewId,slot,modelId,textureId,System.identityHashCode(asm),cw,coverH,animation);
+            long revision=animation.isEmpty()?0:CardPreviewRefreshBudget.animationRevision(cardFrameNanos,slot);
+            boolean refresh=cardRefreshBudget.mayRefresh(slot);
+            long started=System.nanoTime();
+            PlayerPreviewEntity entity=refresh?cardPreviewEntity(slot,modelId,textureId,asm):null;
+            refresh=refresh&&entity!=null&&entity.isModelReady();
+            if(refresh){
+                this.controller.markModelUsed(modelId);
+                entity.getAnimationStateMachine().setQueuedAnimation(animation);
             }
-            this.controller.markModelUsed(modelId);
-            if (!entity.isModelReady()) {
-                return false;
-            }
-            boolean disableRotation;
-            try {
-                var props = asm.getModelData().getModelProperties();
-                disableRotation = props != null && props.isDisablePreviewRotation();
-            } catch (Exception ignored) {
-                disableRotation = false;
-            }
-            float scale = ModelPickerLayout.figureScale(coverH);
-            float yaw = disableRotation ? 180.0f : 176.0f;
-            int left = cx + 1;
-            int top = cy + 1;
-            int right = cx + cw - 1;
-            int bottom = cy + coverH - 1;
-            GuiModelRenderer.enqueueLivingPreview(g, left, top, right, bottom,
-                    cx + cw / 2.0f, cy + coverH - 3.0f, scale, 0.0f, entity,
-                    RendererManager.getPlayerRenderer(), disableRotation, true, yaw, 0.0f, false, GuiModelRenderer.DollOptions.GUI_PREVIEW);
-            return true;
-        } catch (Exception ignored) {
-            return false;
-        }
+            float scale=ModelPickerLayout.figureScale(coverH);
+            boolean available=GuiModelRenderer.enqueueCachedLivingPreview(g,cx+UiElementLayout.CARD_RADIUS,cy+UiElementLayout.CARD_RADIUS,
+                    cx+cw-UiElementLayout.CARD_RADIUS,cy+coverH-1,cx+cw/2.0f,cy+coverH-3.0f,
+                    scale,animation.isEmpty()?0.0f:cardPartialTick,entity,RendererManager.getPlayerRenderer(),
+                    disableRotation,true,disableRotation?180.0f:176.0f,0.0f,false,GuiModelRenderer.DollOptions.GUI_PREVIEW,key,revision,refresh);
+            if(refresh)cardRefreshBudget.recordRefresh(System.nanoTime()-started);
+            return available;
+        }catch(Exception failed){return false;}
     }
 
     private void drawCardLoading(GuiGraphicsExtractor g, int cx, int cy, int cw, int coverH) {
@@ -1737,28 +1605,31 @@ public class ModernPlayerModelScreen extends Screen {
         g.text(this.font, Component.literal(s), cx + (cw - this.font.width(s)) / 2, cy + Math.max(4, (coverH - this.font.lineHeight) / 2), CARD_NAME_TEXT, false);
     }
 
-    /** 把封面等比 fit 进 (x,y,w,h)，居中不拉伸；拿不到资源/尺寸时返回 false。 */
-    private boolean drawCoverImage(GuiGraphicsExtractor g, AbstractTexture tex, int x, int y, int w, int h) {
-        if (tex == null || w <= 0 || h <= 0) {
-            return false;
-        }
-        int[] dims = coverDimensions(tex);
-        if (dims == null) {
-            return false;
-        }
-        Identifier loc = this.controller.textureLocation(tex, dims[0]);
-        if (loc == null) {
-            return false;
-        }
-        int texW = dims[0];
-        int texH = dims[1];
-        double fit = Math.min((double) w / texW, (double) h / texH);
-        int dw = Math.max(1, (int) Math.floor(texW * fit));
-        int dh = Math.max(1, (int) Math.floor(texH * fit));
-        int dx = x + (w - dw) / 2;
-        int dy = y + (h - dh) / 2;
-        g.blit(loc, dx, dy, dx + dw, dy + dh, 0.0f, 1.0f, 0.0f, 1.0f);
-        return true;
+    /** 背景按 cover 铺满 (x,y,w,h)，等比居中裁切；拿不到资源/尺寸时返回 false。 */
+    private boolean drawCoverImage(GuiGraphicsExtractor g,AbstractTexture tex,int x,int y,int w,int h){
+        if(tex==null||w<=0||h<=0)return false;int[] dims=coverDimensions(tex);if(dims==null)return false;
+        Identifier loc=controller.textureLocation(tex,dims[0]);if(loc==null)return false;
+        blitRounded(g,loc,x,y,w,h,UiElementLayout.cover(dims[0],dims[1],w,h));return true;
+    }
+
+
+    private boolean drawCardArtwork(GuiGraphicsExtractor g,AbstractTexture tex,int x,int y,int w,int h){
+        if(tex==null||w<=0||h<=0)return false;int[] dims=coverDimensions(tex);if(dims==null)return false;
+        Identifier loc=controller.textureLocation(tex,dims[0]);if(loc==null)return false;
+        blitRounded(g,loc,x,y,w,h,new UiElementLayout.Uv(0,0,1,1));return true;
+    }
+    private void blitRounded(GuiGraphicsExtractor g,Identifier image,int x,int y,int w,int h,UiElementLayout.Uv uv){
+        RoundedRectGeometry.fill((rx,ry,rw,rh,unused)->{
+            float u0=uv.u0()+(uv.u1()-uv.u0())*(rx-x)/w,u1=uv.u0()+(uv.u1()-uv.u0())*(rx+rw-x)/w;
+            float v0=uv.v0()+(uv.v1()-uv.v0())*(ry-y)/h,v1=uv.v0()+(uv.v1()-uv.v0())*(ry+rh-y)/h;
+            g.blit(image,rx,ry,rx+rw,ry+rh,u0,u1,v0,v1);
+        },x,y,w,h,UiElementLayout.CARD_RADIUS-1,0);
+    }
+    private void fillCardBand(GuiGraphicsExtractor g,int x,int y,int w,int h,int bandTop,int color){
+        RoundedRectGeometry.fill((rx,ry,rw,rh,c)->{int yy=Math.max(ry,bandTop),bottom=Math.min(y+h,ry+rh);if(bottom>yy)fill(g,rx,yy,rw,bottom-yy,c);},x,y,w,h,UiElementLayout.CARD_RADIUS,color);
+    }
+    private void cardBorder(GuiGraphicsExtractor g,int x,int y,int w,int h,int color){
+        com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedBorder(g,x,y,w,h,UiElementLayout.CARD_RADIUS,color);
     }
 
     /** 封面像素尺寸：GUI 图一定是 OuterFileTexture（构建链 toPng），直接读 PNG IHDR。 */
@@ -1799,7 +1670,7 @@ public class ModernPlayerModelScreen extends Screen {
         if (size <= 0) {
             return;
         }
-        g.blit(MODEL_PANEL_ICONS, x, y, x + size, y + size, icon.u / 128.0f, (icon.u + 16) / 128.0f, icon.v / 64.0f, (icon.v + 16) / 64.0f);
+        g.blit(MODEL_PANEL_ICONS, x, y, x + size, y + size, icon.u / 128.0f, (icon.u + 16) / 128.0f, icon.v / 128.0f, (icon.v + 16) / 128.0f);
     }
 
     private ModelListMetrics modelListMetrics(int w, int h, int entryCount) {
@@ -1833,184 +1704,31 @@ public class ModernPlayerModelScreen extends Screen {
         int end = Math.min(entries.size(), start + metrics.rows() * metrics.cols());
         return start >= end ? List.of() : entries.subList(start, end);
     }
-    private int currentModelGridH() {
-        int y = this.layout.contentTop + 8;
-        int contentBottom = this.layout.footerTop - 6;
-        boolean compact = compactModelLayout();
-        boolean denseLocalToolbar = denseModelToolbar() && STATE.modelSource == ModelPanelState.ModelSource.LOCAL;
-        int pathY = STATE.modelSource == ModelPanelState.ModelSource.LOCAL ? y + 64 : y + cloudPathOffset();
-        int gridY = pathY + 20;
-        int detailStripH = compactDetailStripH();
-        int reserve = detailStripH > 0 ? detailStripH + 3 : 0;
-        return Math.max(compact ? 34 : 50, contentBottom - (denseLocalToolbar ? 3 : compact ? 25 : 32) - reserve - gridY);
+    private int currentModelGridH(){return Math.max(1,this.layout.footerTop-10-modelGridTop());}
+
+    private void renderModelBottomActions(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h){
+        if(STATE.modelSource!=ModelPanelState.ModelSource.LOCAL){renderCloudPageControls(g,mx,my,x,y,w,h);return;}
+        List<ModelEntry> entries=collectModelEntries();var cards=ModelPickerLayout.cards(w,h,entries.size());int pages=cards.totalPages(entries.size()),page=clamp(STATE.modelScroll,0,pages-1);STATE.modelScroll=page;
+        drawPagination(g,mx,my,x,y,w,(page+1)+" / "+pages,Math.min(entries.size(),(page+1)*cards.capacity())+" / "+entries.size()+" 个模型",page>0,page<pages-1,()->STATE.modelScroll=Math.max(0,page-1),()->STATE.modelScroll=Math.min(pages-1,page+1));
     }
 
-    private void renderModelBottomActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int gridH) {
-        if (denseModelToolbar() && STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-            renderDenseLocalFooterActions(g, mouseX, mouseY, x + 4, y + 4);
-            renderModelPageControls(g, mouseX, mouseY, x + 160, y, Math.max(70, w - 160), gridH);
-            return;
-        }
-        fill(g, x, y, w, 24, GLASS_DARK);
-        int bx = x + 6;
-        if (STATE.multiSelectMode && STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.DELETE, Component.translatable("gui.sparkle_morpher.model_panel.delete"), this::deleteSelectedModels);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MOVE, Component.translatable("gui.sparkle_morpher.model_panel.move"), () -> openCategoryPanel(""));
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.CREATE, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.CHECK, Component.translatable("gui.sparkle_morpher.model_select.tooltip.select_all"), this::selectAllVisibleModels);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.CLEAR, Component.translatable("gui.sparkle_morpher.model_panel.clear_selection"), this::clearModelSelection);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
-            Component msg = Component.translatable("gui.sparkle_morpher.model_panel.selected_count", this.selectedModelIds.size());
-            drawMuted(g, msg, Math.min(x + w - this.font.width(msg) - 8, bx + 30), y + 8);
-        } else if (STATE.modelSource == ModelPanelState.ModelSource.LOCAL) {
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.TEXTURE, Component.translatable("gui.sparkle_morpher.model_panel.use_texture"), this::applySelectedTexture);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.STAR, Component.translatable("gui.sparkle_morpher.model_panel.toggle_favorite"), this::toggleSelectedStar);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.RELOAD, Component.translatable("gui.sparkle_morpher.model_panel.reload_models"), () -> this.controller.reloadLocalModels(this::setStatus));
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MODE, pickerStyleLabel(pickerStyle()), this::cyclePickerStyle);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.tooltip"), this::openImportPanel);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.FOLDER, Component.translatable("gui.sparkle_morpher.open_model_folder.open"), this::openModelFolder);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.ROULETTE, Component.translatable("key.sparkle_morpher.animation_roulette.desc"), this::openRoulette);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.CATEGORY, Component.translatable("gui.sparkle_morpher.model_select.new_category"), () -> openCategoryPanel(""));
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MULTI, Component.translatable("gui.sparkle_morpher.model_panel.multi_select"), () -> {
-                STATE.multiSelectMode = true;
-                this.selectedModelIds.clear();
-            });
-        } else {
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.INFO, Component.translatable("gui.sparkle_morpher.cloud_upload.login"), this::openCloudAccount);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.RELOAD, Component.translatable("gui.sparkle_morpher.model_panel.reload_models"), this::resetCloudPage);
-            bx += 24;
-            renderIconButton(g, mouseX, mouseY, bx, y + 3, IconGlyph.MODE, pickerStyleLabel(pickerStyle()), this::cyclePickerStyle);
-        }
-        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
-                ModelAssembly assembly = selectedAssembly();
-                renderIconButton(g, mouseX, mouseY, x + 78, y + 3, IconGlyph.TEXTURE,
-                        Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures"), () -> {
-                            if (assembly != null) openCloudTexturePicker(assembly, STATE.selectedModelId);
-                            else setStatus(Component.translatable("gui.sparkle_morpher.model_panel.select_model"), ChatFormatting.YELLOW);
-                        });
-            }
-            renderModelPageControls(g, mouseX, mouseY, x, y, w, gridH);
-    }
 
-    private void renderModelPageControls(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int gridH) {
-        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
-            renderCloudPageControls(g, mouseX, mouseY, x, y, w, gridH);
-            return;
-        }
-        List<ModelEntry> entries = collectModelEntries();
-        if (entries.isEmpty()) {
-            return;
-        }
-        int nextX = x + w - MODEL_PAGE_BUTTON_WIDTH - 6;
-        int prevX = nextX - MODEL_PAGE_BUTTON_WIDTH - 4;
-        if (gridMode(w, gridH) == ModelPickerLayout.GridMode.CARDS) {
-            // 卡片模式：滚动量是页号，整页前进/后退。
-            ModelPickerLayout.Cards cards = ModelPickerLayout.cards(w, gridH, entries.size());
-            int pages = cards.totalPages(entries.size());
-            int page = clamp(STATE.modelScroll, 0, pages - 1);
-            STATE.modelScroll = page;
-            int start = page * cards.capacity();
-            int end = Math.min(entries.size(), start + cards.capacity());
-            Component range = Component.literal((start + 1) + "-" + end + "/" + entries.size());
-            int labelX = Math.max(x + 82, prevX - this.font.width(range) - 8);
-            drawMuted(g, range, labelX, y + 8);
-            renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.pre_page"), () -> {
-                if (page > 0) {
-                    STATE.modelScroll = page - 1;
-                }
-            });
-            renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.next_page"), () -> {
-                if (page < pages - 1) {
-                    STATE.modelScroll = page + 1;
-                }
-            });
-            return;
-        }
-        ModelListMetrics metrics = modelListMetrics(w, gridH, entries.size());
-        STATE.modelScroll = clamp(STATE.modelScroll, 0, metrics.maxScroll());
-        int visible = metrics.rows() * metrics.cols();
-        int start = Math.min(entries.size(), STATE.modelScroll * metrics.cols());
-        int end = Math.min(entries.size(), start + visible);
-        Component range = Component.literal((start + 1) + "-" + end + "/" + entries.size());
-        int labelX = Math.max(x + 82, prevX - this.font.width(range) - 8);
-        drawMuted(g, range, labelX, y + 8);
-        renderTextButton(g, mouseX, mouseY, prevX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.pre_page"), () -> {
-            STATE.modelScroll = Math.max(0, STATE.modelScroll - metrics.rows());
-        });
-        renderTextButton(g, mouseX, mouseY, nextX, y + 3, MODEL_PAGE_BUTTON_WIDTH, MODEL_PAGE_BUTTON_HEIGHT, Component.translatable("gui.sparkle_morpher.next_page"), () -> {
-            STATE.modelScroll = Math.min(metrics.maxScroll(), STATE.modelScroll + metrics.rows());
-        });
-    }
 
-    private void renderModelDetails(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        glassPanel(g, x, y, w, h);
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.details"), x + 8, y + 8);
-        ModelAssembly assembly = selectedAssembly();
-        if (assembly == null) {
-            drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 8, y + 28);
-            return;
-        }
-        String modelId = STATE.selectedModelId;
-        int previewTop = y + 26;
-        int previewH = Math.min(118, Math.max(72, h / 3));
-        renderSelectedModelPreview(g, assembly, modelId, x + 8, previewTop, w - 16, previewH, mouseX, mouseY, partialTick);
-        drawText(g, Component.literal(trim(displayName(modelId, assembly), w - 16)), x + 8, previewTop + previewH + 8);
-        drawMuted(g, Component.literal(trim(modelId, w - 16)), x + 8, previewTop + previewH + 20);
-        Metadata metadata = assembly.getPresentationCapabilities().metadataAvailable()
-                ? assembly.getModelData().getExtraInfo() : null;
-        int yy = previewTop + previewH + 38;
-        if (metadata != null && metadata.getAuthors() != null && !metadata.getAuthors().isEmpty()) {
-            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.authors"), x + 8, yy);
-            yy += 12;
-            drawMuted(g, Component.literal(trim(authors(metadata), w - 16)), x + 8, yy);
-            yy += 18;
-        }
-        if (metadata != null && metadata.getTips() != null && !metadata.getTips().isBlank()) {
-            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.info"), x + 8, yy);
-            yy += 12;
-            for (String line : wrap(metadata.getTips(), w - 16, 3)) {
-                drawMuted(g, Component.literal(line), x + 8, yy);
-                yy += 10;
-            }
-            yy += 6;
-        }
-        drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.textures"), x + 8, yy);
-        yy += 12;
-        List<String> textures = assembly.getTextureNames();
-        for (int i = 0; i < Math.min(8, textures.size()) && yy + 16 < y + h - 8; i++) {
-            String texture = textures.get(i);
-            if (assembly.getPresentationCapabilities().textureSelectionAvailable()) {
-                boolean selected = texture.equals(selectedTextureOrDefault(assembly));
-                renderRowButton(g, mouseX, mouseY, x + 8, yy, w - 16, 14, Component.literal(trim(texture, w - 28)), selected, () -> {
-                    STATE.selectedTextureId = texture;
-                    applySelectedTexture();
-                });
-            } else {
-                drawMuted(g, Component.literal(trim(texture, w - 28)), x + 10, yy + 3);
-            }
-            yy += 16;
-        }
+    private void renderModelDetails(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float partialTick){
+        glassPanel(g,x,y,w,h);drawMuted(g,Component.translatable("gui.sparkle_morpher.ui.preview"),x+6,y+7);
+        ModelAssembly assembly=selectedAssembly();
+        if(assembly==null){drawMuted(g,Component.literal(trim(Component.translatable("gui.sparkle_morpher.model_panel.select_model").getString(),w-12)),x+6,y+24);return;}
+        var d=ModelDetailLayout.measure(y,h,w,false);
+        renderSelectedModelPreview(g,assembly,STATE.selectedModelId,x+5,d.previewY(),w-10,d.previewHeight(),mx,my,partialTick);
+        drawText(g,Component.literal(trim(displayName(STATE.selectedModelId,assembly),w-14)),x+7,d.nameY());
+        drawMuted(g,Component.literal(trim("local | "+assembly.getTextureNames().size()+" tex",w-14)),x+7,d.metadataY());
+        renderInlineTexture(g,mx,my,assembly,STATE.selectedModelId,x+7,d.textureY(),w-14,false);
     }
 
     private void renderSelectedModelPreview(GuiGraphicsExtractor g, ModelAssembly assembly, String modelId, int x, int y, int w, int h, int mouseX, int mouseY, float partialTick) {
-        fill(g, x, y, w, h, GLASS_DARK);
-        border(g, x, y, w, h, 0x33FFFFFF);
+        renderCardStage(g,x,y,w,h);
+        previewHitX=x;previewHitY=y;previewHitW=w;previewHitH=h;
+        cardBorder(g, x, y, w, h, 0x33FFFFFF);
         if (!assembly.getPresentationCapabilities().detailPreviewAvailable()) {
             drawIcon(g, IconGlyph.MODEL, x + w / 2 - 8, y + h / 2 - 8);
             return;
@@ -2025,11 +1743,11 @@ public class ModernPlayerModelScreen extends Screen {
         }
         if (this.previewEntity.isModelReady()) {
             try {
-                float scale = Math.max(28.0f, Math.min(54.0f, h * 0.43f));
+                float scale = Math.max(8.0f, h * 0.43f)*detailZoom;
                 int previewCenterX = x + w / 2;
                 int previewCenterY = y + h / 2;
                 int previewHalfSize = Math.max(24, Math.min(w, h) / 2);
-                ModelPreviewRenderer.renderLivingEntityPreview(g, previewCenterX - previewHalfSize, previewCenterY - previewHalfSize, previewCenterX + previewHalfSize, previewCenterY + previewHalfSize, x + w / 2.0f, y + h - 6.0f, scale, partialTick, this.previewEntity, RendererManager.getPlayerRenderer(), false, true, mouseX, mouseY);
+                GuiModelRenderer.enqueueLivingPreview(g,x,y,x+w,y+h,x+w/2.0f,y+h-6.0f,scale,partialTick,this.previewEntity,RendererManager.getPlayerRenderer(),false,true,detailYaw,detailPitch,false,GuiModelRenderer.DollOptions.GUI_PREVIEW);
             } catch (Exception ignored) {
                 drawIcon(g, IconGlyph.MODEL, x + w / 2 - 8, y + h / 2 - 8);
             }
@@ -2038,104 +1756,46 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
-    private void renderResourceTab(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        int x = resourceListX();
-        int y = this.layout.contentTop + 8;
-        int rightW = resourceRightW();
-        int listW = resourceListW();
-        int rightX = x + listW + 10;
-        int bottom = this.layout.footerTop - 6;
-        int bx = resourceToolbarX();
-
-        if (this.resourceSearchBox != null) {
-            this.resourceSearchBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+    private void renderResourceTab(GuiGraphicsExtractor g,int mx,int my,float pt){
+        if(resourceSearchBox!=null)resourceSearchBox.visible=resourceRoute==ResourceRoute.CATALOG;
+        if(resourceRoute==ResourceRoute.DETAIL){renderResourceDetailsReference(g,mx,my);return;}
+        if(resourceRoute==ResourceRoute.QUEUE){renderDownloadQueueReference(g,mx,my);return;}
+        if(resourceRoute==ResourceRoute.ERROR){renderDownloadErrorReference(g,mx,my);return;}
+        int x=this.layout.contentLeft,y=this.layout.top,w=this.layout.contentWidth;
+        drawTitle(g,Component.translatable("gui.sparkle_morpher.resource_station.title"),x,y+10);
+        renderReferenceTab(g,mx,my,x,y+35,92,22,Component.literal("资源目录"),true,()->{});
+        renderReferenceTab(g,mx,my,x+98,y+35,92,22,Component.literal("下载队列"),false,()->resourceRoute=ResourceRoute.QUEUE);
+        renderReferenceTab(g,mx,my,x+196,y+35,92,22,Component.literal("来源管理"),false,this::openSitesPanel);
+        int searchW=Math.min(320,w/2),ty=y+70;roundedSurface(g,x,ty,searchW,22,3,0x0CFFFFFF,0x22FFFFFF);
+        if(resourceSearchBox!=null){resourceSearchBox.visible=true;resourceSearchBox.active=true;resourceSearchBox.extractWidgetRenderState(g,mx,my,pt);}
+        int bx=x+searchW+6;
+        toolbarButton(g,mx,my,bx,ty,IconGlyph.SITES,Component.literal("选择资源来源"),false,this::openSitesPanel);
+        toolbarButton(g,mx,my,bx+26,ty,IconGlyph.REFRESH,Component.literal("刷新"),false,()->refreshResources(true));
+        toolbarButton(g,mx,my,bx+52,ty,IconGlyph.MULTI,Component.literal("多选资源"),STATE.resourceMultiSelectMode,this::toggleResourceMultiSelect);
+        toolbarButton(g,mx,my,bx+78,ty,IconGlyph.DOWNLOAD,Component.literal("下载所选资源"),false,()->{enqueueSelectedResources();resourceRoute=ResourceRoute.QUEUE;});
+        toolbarButton(g,mx,my,bx+104,ty,IconGlyph.MORE,Component.literal("来源与下载配置"),false,()->selectSettingsPage("resources"));
+        var entries=filteredResources();int columns=this.width<560?6:9,rows=2,capacity=columns*rows,pages=Math.max(1,(entries.size()+capacity-1)/capacity);STATE.resourceScroll=clamp(STATE.resourceScroll,0,pages-1);
+        int start=STATE.resourceScroll*capacity,end=Math.min(entries.size(),start+capacity),cw=(w-(columns-1)*6)/columns,ch=Math.min((int)Math.round(cw*280d/162),(this.height-(y+105)-54)/2);
+        this.controller.requestResourcePreviews(entries.subList(Math.min(start,entries.size()),end));
+        if(STATE.resourceLoading)drawMuted(g,Component.translatable("gui.sparkle_morpher.resource_station.loading"),x,y+140);
+        else if(entries.isEmpty()){drawTitle(g,Component.translatable("gui.sparkle_morpher.resource_station.no_results"),x+16,y+140);renderTextButton(g,mx,my,x+16,y+180,140,22,Component.literal("来源管理"),this::openSitesPanel);}
+        for(int i=start;i<end;i++){
+            var entry=entries.get(i);int n=i-start,cx=x+(n%columns)*(cw+6),cy=y+105+(n/columns)*(ch+6),nh=Math.max(30,ch/5);boolean selected=this.controller.isResourceSelected(entry);
+            roundedFill(g,cx,cy,cw,ch,UiElementLayout.CARD_RADIUS,0xFF303030);
+            renderCardStage(g,cx+1,cy+1,cw-2,ch-nh-2);
+            var cover=this.controller.resourcePreview(entry);if(cover==null||!drawCoverImage(g,cover,cx+2,cy+2,cw-4,ch-nh-4))drawIconScaled(g,IconGlyph.MODEL,cx+cw/2-10,cy+(ch-nh)/2-10,20);
+            fillCardBand(g,cx,cy,cw,ch,cy+ch-nh,0xD0101010);drawText(g,Component.literal(trim(entry.name(),cw-8)),cx+4,cy+ch-nh+5);drawMuted(g,Component.literal(trim(entry.author().isBlank()?(entry.size()>0?String.format(Locale.ROOT,"%.1f MB",entry.size()/1048576.0):"模型资源"):entry.author(),cw-8)),cx+4,cy+ch-13);
+            cardBorder(g,cx,cy,cw,ch,selected?RED:0x55FFFFFF);
+            hit(cx,cy,cw,ch,Component.literal(entry.name()+" · "+resourceDetail(entry)),()->{clickResource(entry);if(!STATE.resourceMultiSelectMode)resourceRoute=ResourceRoute.DETAIL;});
         }
-        renderIconButton(g, mouseX, mouseY, bx, y - 1, IconGlyph.REFRESH, Component.translatable("gui.sparkle_morpher.resource_station.refresh"), () -> refreshResources(true));
-        renderModeButton(g, mouseX, mouseY, bx + 24, y - 1, 58);
-        renderIconButton(g, mouseX, mouseY, bx + 88, y - 1, IconGlyph.MULTI, Component.translatable("gui.sparkle_morpher.model_panel.multi_select"), this::toggleResourceMultiSelect);
-        renderIconButton(g, mouseX, mouseY, bx + 112, y - 1, IconGlyph.SITES, Component.translatable("gui.sparkle_morpher.model_panel.sites"), () -> openSitesPanel());
-        renderIconButton(g, mouseX, mouseY, bx + 136, y - 1, IconGlyph.QUEUE, Component.translatable("gui.sparkle_morpher.model_panel.queue_selected"), this::enqueueSelectedResources);
-
-        int contentY = y + 26;
-        int contentH = bottom - y - 26;
-        renderResourceList(g, mouseX, mouseY, x, contentY, listW, contentH);
-        renderResourceRightPane(g, mouseX, mouseY, rightX, contentY, rightW, contentH);
+        int fy=this.height-this.layout.top-(this.width<560?18:this.width<800?20:22)-8;drawPagination(g,mx,my,x,fy,w,(STATE.resourceScroll+1)+" / "+pages,Math.max(0,end-start)+" / "+entries.size()+" 个资源"+(status.getString().isBlank()?"":" · "+status.getString()),STATE.resourceScroll>0,STATE.resourceScroll<pages-1,()->STATE.resourceScroll=Math.max(0,STATE.resourceScroll-1),()->STATE.resourceScroll=Math.min(pages-1,STATE.resourceScroll+1));
     }
 
-    private void renderResourceList(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
-        glassPanel(g, x, y, w, h);
-        List<ModelRepoEntry> entries = filteredResources();
-        int rows = Math.max(1, h / ROW);
-        int maxScroll = Math.max(0, entries.size() - rows);
-        STATE.resourceScroll = clamp(STATE.resourceScroll, 0, maxScroll);
-        if (STATE.resourceLoading) {
-            drawCentered(g, Component.translatable("gui.sparkle_morpher.resource_station.loading"), x + w / 2, y + 42, TEXT);
-            return;
-        }
-        if (entries.isEmpty()) {
-            drawCentered(g, Component.translatable("gui.sparkle_morpher.resource_station.no_results"), x + w / 2, y + 42, MUTED);
-            return;
-        }
-        boolean showBar = entries.size() > rows;
-        int ww = showBar ? w - 9 : w;
-        for (int i = 0; i < rows && STATE.resourceScroll + i < entries.size(); i++) {
-            ModelRepoEntry entry = entries.get(STATE.resourceScroll + i);
-            int rowY = y + i * ROW;
-            boolean selected = this.controller.isResourceSelected(entry);
-            boolean hover = inside(mouseX, mouseY, x + 3, rowY + 2, ww - 6, ROW - 4);
-            fill(g, x + 3, rowY + 2, ww - 6, ROW - 4, selected ? PANEL_ACTIVE : hover ? PANEL_HOVER : (i & 1) == 0 ? 0x3E30363B : 0x3630363B);
-            g.text(this.font, trim(entry.name(), ww - 78), x + 8, rowY + 5, TEXT, false);
-            g.text(this.font, trim(resourceDetail(entry), ww - 100), x + 8, rowY + 15, MUTED, false);
-            hit(x + 3, rowY + 2, ww - 38, ROW - 4, Component.literal(entry.name()), () -> this.controller.clickResource(entry));
-            renderIconButton(g, mouseX, mouseY, x + ww - 28, rowY + 4, this.controller.isQueued(entry) ? IconGlyph.QUEUE : IconGlyph.DOWNLOAD, Component.translatable("gui.sparkle_morpher.model_panel.download"), () -> enqueueResource(entry));
-        }
-        if (showBar) {
-            renderScrollbar(g, mouseX, mouseY, x + w - 7, y + 3, 4, h - 6, entries.size(), rows, STATE.resourceScroll);
-        }
-    }
 
-    private void renderResourceRightPane(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
-        glassPanel(g, x, y, w, h);
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.downloads"), x + 8, y + 8);
-        ModelRepoEntry selected = selectedResource();
-        int yy = y + 28;
-        if (selected != null) {
-            drawText(g, Component.literal(trim(selected.name(), w - 16)), x + 8, yy);
-            yy += 12;
-            for (String line : wrap(selected.description(), w - 16, 4)) {
-                drawMuted(g, Component.literal(line), x + 8, yy);
-                yy += 10;
-            }
-            drawMuted(g, Component.literal(trim(resourceDetail(selected), w - 16)), x + 8, yy + 4);
-            yy += 22;
-        }
-        drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.queue"), x + 8, yy);
-        yy += 12;
-        DownloadQueuePanel.View queueView = this.controller.queuePanelView();
-        List<DownloadQueuePanel.Row> rows = queueView.rows();
-        if (rows.isEmpty()) {
-            drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.no_downloads"), x + 8, yy);
-            yy += 14;
-        } else {
-            int visibleRows = queueView.visibleRowCount(yy, y + h - 30, 24);
-            for (int i = 0; i < visibleRows; i++) {
-                renderTaskRow(g, x + 8, yy, w - 16, rows.get(i));
-                yy += 24;
-            }
-        }
-        renderIconButton(g, mouseX, mouseY, x + 8, y + h - 24, IconGlyph.CLEAR, Component.translatable("gui.sparkle_morpher.resource_station.clear_finished"), this.controller::clearFinishedDownloads);
-        renderIconButton(g, mouseX, mouseY, x + 32, y + h - 24, IconGlyph.CANCEL, Component.translatable("gui.sparkle_morpher.model_panel.cancel_current"), this.controller::cancelCurrentDownload);
-    }
 
-    private void renderTaskRow(GuiGraphicsExtractor g, int x, int y, int w, DownloadQueuePanel.Row task) {
-        fill(g, x, y, w, 20, GLASS_DARK);
-        drawText(g, Component.literal(trim(task.name(), w - 58)), x + 4, y + 3);
-        int barX = x + 4;
-        int barY = y + 14;
-        int fillW = (int) ((w - 8) * clamp(task.progress(), 0f, 1f));
-        fill(g, barX, barY, w - 8, 3, 0xAA101010);
-        fill(g, barX, barY, fillW, 3, task.color());
-    }
+
+
+
 
     private boolean isCloudSettingsPage() {
         return STATE.activeTab == ModelPanelState.Tab.SETTINGS && settingsPanel().selectedPage().kind() == SettingsPageRegistry.Kind.CLOUD;
@@ -2149,13 +1809,11 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
-    private void openCloudSettings(CloudAccountPage page) {
-        closeCloudForm();
-        STATE.activeTab = ModelPanelState.Tab.SETTINGS;
-        settingsPanel().selectPage("cloud");
-        cloudAccountPage = page;
-        cloudAccountScroll = 0; cloudDetailScroll = 0;
-        init();
+    private void openCloudSettings(CloudAccountPage page){
+        if(isCloudSettingsPage()){setCloudAccountPage(page);return;}
+        cloudHistory.push(cloudRoute());cloudReturnTab=STATE.activeTab;cloudReturnSettingsPage=settingsPanel().selectedPage().id();
+        closeCloudForm();STATE.activeTab=ModelPanelState.Tab.SETTINGS;settingsPanel().selectPage("cloud");
+        cloudAccountPage=page;cloudAccountScroll=0;cloudDetailScroll=0;init();
     }
 
     private void selectPeerSection(PeerSettingsSection section) {
@@ -2165,48 +1823,42 @@ public class ModernPlayerModelScreen extends Screen {
         init();
     }
 
-    private void renderHierarchicalSettings(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick,
-                                            SettingsPageRegistry.Page page, SettingsPanelLayout.Columns columns) {
-        var sections = SettingsPanelLayout.sections(columns);
-        glassPanel(g, sections.optionsX(), sections.top(), sections.optionsWidth(), sections.height());
-        glassPanel(g, sections.detailsX(), sections.top(), sections.detailsWidth(), sections.height());
-        boolean peer = page.kind() == SettingsPageRegistry.Kind.PEER_LAN;
-        int x = sections.optionsX() + 4, width = sections.optionsWidth() - 8;
-        int firstHit = this.hits.size();
-        g.enableScissor(x, sections.top(), x + width, sections.top() + sections.height());
-        if (peer) {
-            int row = 0;
-            for (PeerSettingsSection section : PeerSettingsSection.values()) {
-                if (section == PeerSettingsSection.CONNECTION) continue;
-                renderRowButton(g, mouseX, mouseY, x, sections.top() + 6 + row++ * 24, width, 20,
-                        Component.literal(trim(settingsText("peer.section." + section.name().toLowerCase(Locale.ROOT)).getString(), width - 10)),
-                        peerSettingsSection == section || section == PeerSettingsSection.ROOM && peerSettingsSection == PeerSettingsSection.CONNECTION,
-                        () -> selectPeerSection(section));
-            }
-        } else {
-            int row = 0;
-            for (NetworkSettingsSection section : NetworkSettingsSection.values()) {
-                renderRowButton(g, mouseX, mouseY, x, sections.top() + 6 + row++ * 24, width, 20,
-                        Component.literal(trim(settingsText("network.section." + section.name().toLowerCase(Locale.ROOT)).getString(), width - 10)),
-                        networkSettingsSection == section, () -> { networkSettingsSection = section; STATE.settingsScroll = 0; setFocused(null); });
-            }
-        }
-        g.disableScissor();
-        this.hits.subList(firstHit, this.hits.size()).removeIf(hit -> hit.y() < sections.top() || hit.y() + hit.h() > sections.top() + sections.height());
-        x = sections.detailsX() + 8;
-        int w = Math.max(24, sections.detailsWidth() - 22);
-        int top = sections.top() + 6, bottom = sections.top() + sections.height() - 6;
-        firstHit = this.hits.size();
-        g.enableScissor(x, top, x + w, bottom);
-        if (peer) renderPeerSettingsDetail(g, mouseX, mouseY, partialTick, x, top, w, bottom);
-        else renderGeneralNetworkDetail(g, mouseX, mouseY, x, top, w, bottom);
-        g.disableScissor();
-        this.hits.subList(firstHit, this.hits.size()).removeIf(hit -> hit.y() < top || hit.y() + hit.h() > bottom);
+    private void renderHierarchicalSettings(GuiGraphicsExtractor g,int mx,int my,float partialTick,SettingsPageRegistry.Page page,SettingsPanelLayout.Columns columns){
+        boolean peer=page.kind()==SettingsPageRegistry.Kind.PEER_LAN;
+        int x=columns.detailX(),y=columns.top(),w=columns.detailWidth(),d=Math.max(1,w/4);
+        if(peer){int i=0;for(var section:PeerSettingsSection.values()){
+            if(section==PeerSettingsSection.CONNECTION||section==PeerSettingsSection.PROBE)continue;
+            var current=section;int xx=x+i++*d;
+            renderReferenceTab(g,mx,my,xx,y,d-4,uiButtonHeight(),settingsText("peer.section."+section.name().toLowerCase(Locale.ROOT)),peerSettingsSection==section||section==PeerSettingsSection.ROOM&&peerSettingsSection==PeerSettingsSection.CONNECTION,()->selectPeerSection(current));
+        }}else{int i=0;for(var section:NetworkSettingsSection.values()){
+            var current=section;int xx=x+i++*d;
+            renderReferenceTab(g,mx,my,xx,y,d-4,uiButtonHeight(),settingsText("network.section."+section.name().toLowerCase(Locale.ROOT)),networkSettingsSection==section,()->{networkSettingsSection=current;STATE.settingsScroll=0;setFocused(null);});
+        }}
+        int top=y+36,bottom=y+columns.height()-6,first=this.hits.size();
+        if(peer)renderPeerSettingsDetail(g,mx,my,partialTick,x,top,w,bottom);else renderGeneralNetworkDetail(g,mx,my,x,top,w,bottom);
+
     }
 
     private void renderGeneralNetworkDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int top, int w, int bottom) {
+        if (networkSettingsSection == NetworkSettingsSection.PRESETS) {
+            var presets = com.micaftic.morpher.core.network.NetworkPreset.values();
+            var current = com.micaftic.morpher.client.peer.ClientNetworkPreferences.preset();
+            var window = SettingsPanelLayout.window(top,top+presets.length*34,0,34,presets.length,0);
+            for (int i = window.firstRow(); i < window.endRowExclusive(); i++) {
+                var preset = presets[i]; int yy = top + (i-window.firstRow())*34;
+                String key = preset.name().toLowerCase(Locale.ROOT); boolean selected = current == preset;
+                roundedSurface(g,x,yy,w,30,3,selected?0x18FFFFFF:0x08FFFFFF,selected?RED:0x18FFFFFF);
+                roundedFill(g,x+10,yy+14,9,9,4,selected?RED:0xFF777777);
+                drawText(g,Component.literal(preset.name()),x+30,yy+12);
+                Component help=settingsText("network.preset_help."+key);
+                drawMuted(g,Component.literal(trim(help.getString(),Math.max(1,w-245))),x+225,yy+13);
+                hit(x,yy,w,30,help,()->com.micaftic.morpher.client.peer.ClientNetworkPreferences.select(preset));
+            }
+            if(window.maxScroll()>0)renderScrollbar(g,mouseX,mouseY,x+w-4,top,4,bottom-top,presets.length,window.visibleRows(),window.scroll());
+            return;
+        }
         int count = networkSettingsSection == NetworkSettingsSection.PRESETS ? 10 : networkSettingsSection == NetworkSettingsSection.PRIVACY ? 6 : 7;
-        var window = settingsPanel().layout(top, bottom, 0, 24, count);
+        var window = SettingsPanelLayout.window(top,top+count*24,0,24,count,0);
         int y = top - window.scroll() * 24;
         switch (networkSettingsSection) {
             case PRESETS -> {
@@ -2248,114 +1900,35 @@ public class ModernPlayerModelScreen extends Screen {
                 Math.max(14, bottom - top), count, window.visibleRows(), window.scroll());
     }
 
-    private void renderPeerSettingsDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick, int x, int top, int w, int bottom) {
-        boolean ready = minecraft.player != null && minecraft.level != null && !com.micaftic.morpher.client.PrivacyMode.isActive();
-        boolean running = com.micaftic.morpher.client.peer.ClientPeerRuntime.running();
-        String invite = com.micaftic.morpher.client.peer.ClientPeerRuntime.invitation();
-        int count = switch (peerSettingsSection) { case ROOM -> 10; case SHARING -> 7; case CONNECTION -> 14; default -> 25; };
-        var window = settingsPanel().layout(top, bottom, 0, 24, count);
-        int y = top - window.scroll() * 24;
-        int half = Math.max(20, (w - 6) / 2), buttonW = Math.min(76, Math.max(36, w / 3));
-        if(peerLocalRouteBox!=null){peerLocalRouteBox.visible=false;peerLocalRouteBox.active=false;}
-        if(peerListenerBox!=null){peerListenerBox.visible=false;peerListenerBox.active=false;}
-        if(peerEntranceBox!=null){peerEntranceBox.visible=false;peerEntranceBox.active=false;}
-        if (peerEndpointBox != null) { peerEndpointBox.visible = false; peerEndpointBox.active = false; }
-        if (peerInvitationBox != null) { peerInvitationBox.visible = false; peerInvitationBox.active = false; }
-        switch (peerSettingsSection) {
-            case ROOM -> {
-                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(), x, y, w);
-                networkLine(g, ready ? settingsText("peer.members", com.micaftic.morpher.client.peer.ClientPeerRuntime.members()) : settingsText("peer.world_required"), x, y + 24, w);
-                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.receiveStatusComponent(), x, y + 48, w);
-                networkLine(g, settingsText("peer.automatic_help"), x, y + 72, w);
-                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.observerStatusComponent(), x, y + 96, w);
-                boolean shared = com.micaftic.morpher.client.peer.ClientPeerRuntime.sharing();
-                if (running) renderSettingRow(g, mouseX, mouseY, x, y + 120, w,
-                        new SettingRow(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.settings.peer.sharing", shared, "",
-                                () -> com.micaftic.morpher.client.peer.ClientPeerRuntime.setSharing(!shared), null, null, null, null));
-                networkAction(g, mouseX, mouseY, x, y + 168, half, settingsText("peer.leave"), running, com.micaftic.morpher.client.peer.ClientPeerRuntime::leave);
-                networkAction(g, mouseX, mouseY, x + half + 6, y + 168, half, settingsText("peer.retry"), ready,
-                        () -> { if (running) com.micaftic.morpher.client.peer.ClientPeerRuntime.retrySharing(); else com.micaftic.morpher.client.peer.ClientPeerRuntime.enableAutomatic(); });
-                networkAction(g, mouseX, mouseY, x, y + 192, w, settingsText("peer.copy_diagnostics"), true,
-                        () -> minecraft.keyboardHandler.setClipboard(com.micaftic.morpher.client.peer.ClientPeerRuntime.diagnostics()));
-                networkAction(g, mouseX, mouseY, x, y + 216, w, settingsText("peer.section.connection"), true,
-                        () -> selectPeerSection(PeerSettingsSection.CONNECTION));
-            }
-            case SHARING -> {
-                boolean shared = com.micaftic.morpher.client.peer.ClientPeerRuntime.sharing();
-                if (running) renderSettingRow(g, mouseX, mouseY, x, y, w,
-                        new SettingRow(ModelPanelState.SettingGroup.GENERAL, "gui.sparkle_morpher.settings.peer.sharing", shared, "",
-                                () -> com.micaftic.morpher.client.peer.ClientPeerRuntime.setSharing(!shared), null, null, null, null));
-                else networkLine(g, settingsText("peer.sharing_off"), x, y, w);
-                networkLine(g, com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(), x, y + 24, w);
-                networkLine(g, settingsText("peer.sharing_help"), x, y + 48, w);
-                networkLine(g, settingsText("network.priority"), x, y + 72, w);
-                networkAction(g, mouseX, mouseY, x, y + 120, w, settingsText("peer.retry"), ready && running,
-                        com.micaftic.morpher.client.peer.ClientPeerRuntime::retrySharing);
-            }
-            case CONNECTION -> {
-                networkAction(g, mouseX, mouseY, x, y, w, settingsText("peer.section.room"), true,
-                        () -> selectPeerSection(PeerSettingsSection.ROOM));
-                y += 24;
-                networkLine(g, settingsText("peer.endpoint"), x, y, w);
-                renderPeerField(g, mouseX, mouseY, partialTick, peerEndpointBox, x, y + 24, w, top, bottom);
-                networkAction(g, mouseX, mouseY, x, y + 48, w, settingsText("peer.next_adapter"), true, () -> {
-                    peerEndpointDraft = com.micaftic.morpher.client.peer.ClientPeerRuntime.nextSuggestedEndpoint(peerEndpointDraft);
-                    if (peerEndpointBox != null) peerEndpointBox.setValue(peerEndpointDraft);
-                });
-                networkLine(g, settingsText("peer.endpoint_help"), x, y + 72, w);
-                networkAction(g, mouseX, mouseY, x, y + 120, half, settingsText("peer.host"), ready && !running,
-                        () -> com.micaftic.morpher.client.peer.ClientPeerRuntime.host(peerEndpointDraft.trim()));
-                networkAction(g, mouseX, mouseY, x + half + 6, y + 120, half, settingsText("peer.copy"), invite != null, () -> minecraft.keyboardHandler.setClipboard(invite));
-                networkLine(g, settingsText(com.micaftic.morpher.client.peer.ClientPeerRuntime.automatic() ? "peer.automatic_active" : "peer.invitation_help"), x, y + 144, w);
-                renderPeerField(g, mouseX, mouseY, partialTick, peerInvitationBox, x, y + 168, w - buttonW - 6, top, bottom);
-                networkAction(g, mouseX, mouseY, x + w - buttonW, y + 168, buttonW, settingsText("peer.join"), ready && !peerInvitationDraft.isBlank(), this::joinPeerInvitation);
-                networkAction(g, mouseX, mouseY, x, y + 192, w, settingsText("peer.clipboard_join"), ready, () -> { peerInvitationDraft = minecraft.keyboardHandler.getClipboard(); joinPeerInvitation(); });
-                networkAction(g, mouseX, mouseY, x, y + 264, w, settingsText("peer.leave"), running, com.micaftic.morpher.client.peer.ClientPeerRuntime::leave);
-            }
-            case PUBLIC, TUNNEL -> {
-                networkLine(g, settingsText(peerSettingsSection==PeerSettingsSection.TUNNEL?"peer.sakura_help":"peer.public_help"),x,y,w);
-                networkLine(g, settingsText("peer.listeners"),x,y+48,w);
-                renderPeerField(g,mouseX,mouseY,partialTick,peerListenerBox,x,y+72,w,top,bottom);
-                networkLine(g, settingsText("peer.entrances"),x,y+120,w);
-                renderPeerField(g,mouseX,mouseY,partialTick,peerEntranceBox,x,y+144,w,top,bottom);
-                networkLine(g, settingsText("peer.mapping_help"),x,y+168,w);
-                networkAction(g,mouseX,mouseY,x,y+216,half,settingsText("peer.host"),ready&&!running,
-                        ()->com.micaftic.morpher.client.peer.ClientPeerRuntime.hostEntrances(peerListenerDraft,peerEntranceDraft));
-                networkAction(g,mouseX,mouseY,x+half+6,y+216,half,settingsText("peer.copy"),invite!=null,()->minecraft.keyboardHandler.setClipboard(invite));
-                networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),x,y+240,w);
-                networkLine(g,settingsText("peer.coverage",com.micaftic.morpher.client.peer.ClientPeerRuntime.listenerCoverage()),x,y+264,w);
-                renderPeerField(g,mouseX,mouseY,partialTick,peerInvitationBox,x,y+312,w,top,bottom);
-                networkLine(g,settingsText("peer.local_route"),x,y+336,w);
-                renderPeerField(g,mouseX,mouseY,partialTick,peerLocalRouteBox,x,y+360,w,top,bottom);
-                networkAction(g,mouseX,mouseY,x,y+408,half,settingsText("peer.probe"),!peerInvitationDraft.isBlank(),
-                        ()->com.micaftic.morpher.client.peer.ClientPeerRuntime.probeInvitation(peerInvitationDraft.trim(),peerLocalRouteDraft));
-                networkAction(g,mouseX,mouseY,x+half+6,y+408,half,settingsText("peer.join"),ready&&!peerInvitationDraft.isBlank(),this::joinPeerInvitation);
-                networkAction(g,mouseX,mouseY,x,y+432,w,settingsText("peer.clipboard_probe"),true,()->{peerInvitationDraft=minecraft.keyboardHandler.getClipboard();if(peerInvitationBox!=null)peerInvitationBox.setValue(peerInvitationDraft);com.micaftic.morpher.client.peer.ClientPeerRuntime.probeInvitation(peerInvitationDraft.trim(),peerLocalRouteDraft);});
-                networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.probeStatusComponent(),x,y+480,w);
-                networkLine(g,settingsText("peer.probe_boundary"),x,y+504,w);
-                networkAction(g,mouseX,mouseY,x,y+552,w,settingsText("peer.leave"),running,com.micaftic.morpher.client.peer.ClientPeerRuntime::leave);
-            }
+    private void renderPeerSettingsDetail(GuiGraphicsExtractor g,int mx,int my,float pt,int x,int top,int w,int bottom){
+        boolean ready=minecraft.player!=null&&minecraft.level!=null&&!com.micaftic.morpher.client.PrivacyMode.isActive(),running=com.micaftic.morpher.client.peer.ClientPeerRuntime.running();String invite=com.micaftic.morpher.client.peer.ClientPeerRuntime.invitation();
+        if(peerLocalRouteBox!=null)peerLocalRouteBox.visible=false;if(peerListenerBox!=null)peerListenerBox.visible=false;if(peerEntranceBox!=null)peerEntranceBox.visible=false;if(peerEndpointBox!=null)peerEndpointBox.visible=false;if(peerInvitationBox!=null)peerInvitationBox.visible=false;
+        if(peerSettingsSection==PeerSettingsSection.ROOM){
+            drawTitle(g,settingsText("peer.section.room"),x,top+4);networkLine(g,settingsText("peer.automatic_help"),x,top+26,w);
+            fill(g,x,top+58,w,24,0x0CFFFFFF);drawMuted(g,Component.literal("房间状态"),x+10,top+66);drawMuted(g,Component.literal("当前状态"),x+w/2,top+66);
+            String[] labels={"网络","房间成员","模型接收","同步情况"};Component[] values={com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),ready?settingsText("peer.members",com.micaftic.morpher.client.peer.ClientPeerRuntime.members()):settingsText("peer.world_required"),com.micaftic.morpher.client.peer.ClientPeerRuntime.receiveStatusComponent(),com.micaftic.morpher.client.peer.ClientPeerRuntime.observerStatusComponent()};
+            for(int i=0;i<4;i++){int yy=top+82+i*38;drawText(g,Component.literal(labels[i]),x+10,yy+12);drawMuted(g,Component.literal(trim(values[i].getString(),w/2-20)),x+w/2,yy+12);}
+            int yy=top+240;networkAction(g,mx,my,x,yy,126,settingsText("peer.retry"),ready,()->{if(running)com.micaftic.morpher.client.peer.ClientPeerRuntime.retrySharing();else com.micaftic.morpher.client.peer.ClientPeerRuntime.enableAutomatic();});networkAction(g,mx,my,x+134,yy,126,settingsText("peer.copy_diagnostics"),true,()->minecraft.keyboardHandler.setClipboard(com.micaftic.morpher.client.peer.ClientPeerRuntime.diagnostics()));networkAction(g,mx,my,x+268,yy,146,settingsText("peer.section.connection"),true,()->selectPeerSection(PeerSettingsSection.CONNECTION));networkAction(g,mx,my,x,yy+42,126,settingsText("peer.leave"),running,com.micaftic.morpher.client.peer.ClientPeerRuntime::leave);return;
         }
-        if (window.maxScroll() > 0) renderScrollbar(g, mouseX, mouseY, x + w - 4, top, 4,
-                Math.max(14, bottom - top), count, window.visibleRows(), window.scroll());
+        if(peerSettingsSection==PeerSettingsSection.SHARING){
+            boolean shared=com.micaftic.morpher.client.peer.ClientPeerRuntime.sharing();renderSettingRow(g,mx,my,x,top,w,new SettingRow(ModelPanelState.SettingGroup.GENERAL,"gui.sparkle_morpher.settings.peer.sharing",shared,"",()->{if(running)com.micaftic.morpher.client.peer.ClientPeerRuntime.setSharing(!shared);},null,null,null,null));networkLine(g,settingsText("peer.sharing_help"),x+10,top+30,w-20);
+            String[] labels={"连接状态","模型接收"};Component[] values={com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),com.micaftic.morpher.client.peer.ClientPeerRuntime.receiveStatusComponent()};for(int i=0;i<2;i++){int yy=top+58+i*47;drawText(g,Component.literal(labels[i]),x+10,yy+12);roundedSurface(g,x+w-160,yy+7,150,22,3,0x0CFFFFFF,0x22FFFFFF);drawCentered(g,Component.literal(trim(values[i].getString(),138)),x+w-85,yy+14,MUTED);}
+            networkAction(g,mx,my,x,top+184,138,settingsText("peer.retry"),ready&&running,com.micaftic.morpher.client.peer.ClientPeerRuntime::retrySharing);return;
+        }
+        if(peerSettingsSection==PeerSettingsSection.PUBLIC||peerSettingsSection==PeerSettingsSection.TUNNEL){
+            drawTitle(g,settingsText(peerSettingsSection==PeerSettingsSection.TUNNEL?"peer.section.tunnel":"peer.section.public"),x,top+4);networkLine(g,settingsText(peerSettingsSection==PeerSettingsSection.TUNNEL?"peer.sakura_help":"peer.public_help"),x,top+28,w);
+            networkLine(g,settingsText("peer.listeners"),x,top+48,w);renderReferenceField(g,mx,my,pt,peerListenerBox,x,top+69,w,24);peerListenerBox.visible=true;
+            networkLine(g,settingsText("peer.entrances"),x,top+124,w);renderReferenceField(g,mx,my,pt,peerEntranceBox,x,top+145,w,24);peerEntranceBox.visible=true;
+            networkLine(g,settingsText("peer.mapping_help"),x,top+178,w);
+            networkAction(g,mx,my,x,top+208,108,settingsText("peer.host"),ready&&!running,()->com.micaftic.morpher.client.peer.ClientPeerRuntime.hostEntrances(peerListenerDraft,peerEntranceDraft));networkAction(g,mx,my,x+116,top+208,108,settingsText("peer.copy"),invite!=null,()->minecraft.keyboardHandler.setClipboard(invite));networkAction(g,mx,my,x,top+248,180,Component.literal("访客加入 / 探测 ›"),true,()->selectPeerSection(PeerSettingsSection.PROBE));networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),x,top+288,w);return;
+        }
     }
 
-    private void renderCloudSettingField(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick, EditBox field,
-                                         int x, int y, int w) {
-        if (field == null) return;
-        var panels = accountPanelLayout();
-        field.setX(x); field.setY(y); field.setWidth(w);
-        field.visible = STATE.secondaryPanel == ModelPanelState.SecondaryPanel.NONE
-                && y >= panels.detailY() && y + 18 <= panels.detailY() + panels.detailHeight();
-        field.active = field.visible;
-        if (field.visible) field.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-        else if (getFocused() == field) setFocused(null);
-    }
 
-    private SettingsPanelLayout.Columns settingsColumns() {
-        int bottom = this.status.getString().isBlank() ? this.layout.top + this.layout.height - 6 : this.layout.footerTop - 6;
-        return SettingsPanelLayout.columns(this.layout.contentLeft + 6, this.layout.contentTop + 6,
-                this.layout.contentWidth - 12, bottom - this.layout.contentTop - 6);
+
+    private SettingsPanelLayout.Columns settingsColumns(){
+        int top=this.layout.top+49,bottom=this.layout.top+this.layout.height-12;
+        return SettingsPanelLayout.columns(this.layout.contentLeft,top,this.layout.contentWidth,bottom-top);
     }
 
     private Component settingsText(String key, Object... args) {
@@ -2363,6 +1936,8 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void selectSettingsPage(String id) {
+        if(id.equals("cloud")&&!isCloudSettingsPage()){cloudHistory.push(cloudRoute());cloudReturnTab=STATE.activeTab;cloudReturnSettingsPage=settingsPanel().selectedPage().id();cloudAccountPage=CloudAccountPage.ACCOUNT;}
+        if(!id.equals("cloud"))cloudHistory.clear();
         settingsPanel().selectPage(id);
         if (!isCloudSettingsPage() && cloudIdentityFlow != null) {
             cloudIdentityFlow.invalidate(); cloudIdentityFlow = null; cloudIdentityGateway = null;
@@ -2371,65 +1946,49 @@ public class ModernPlayerModelScreen extends Screen {
         init();
     }
 
-    private void renderSettingsTab(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        var columns = settingsColumns();
-        glassPanel(g, columns.navigationX(), columns.top(), columns.navigationWidth(), columns.height());
-        renderSettingGroups(g, mouseX, mouseY, columns);
-        var page = settingsPanel().selectedPage();
-        if (page.kind() == SettingsPageRegistry.Kind.CLOUD) {
-            renderCloudAccountPanel(g, mouseX, mouseY, columns.detailX(), columns.top(), columns.detailWidth(), columns.height(), partialTick);
-            return;
+    private void renderSettingsTab(GuiGraphicsExtractor g,int mx,int my,float partialTick){
+        var columns=settingsColumns();var page=settingsPanel().selectedPage();
+        if(page.kind()==SettingsPageRegistry.Kind.CLOUD){renderCloudAccountPanel(g,mx,my,layout.contentLeft,layout.top,layout.contentWidth,layout.height,partialTick);return;}
+        if(page.kind()==SettingsPageRegistry.Kind.PEER_LAN&&(peerSettingsSection==PeerSettingsSection.CONNECTION||peerSettingsSection==PeerSettingsSection.PROBE)){
+            pageHeader(g,mx,my,Component.literal(peerSettingsSection==PeerSettingsSection.PROBE?"访客加入 / 探测":"高级：局域网手动连接"),Component.literal("P2P / 高级连接"),()->selectPeerSection(PeerSettingsSection.ROOM));
+            renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+42,layout.contentWidth,height-layout.top-12,offset->renderPeerConnectionReference(g,mx,my+offset,partialTick));return;
         }
-        if (page.kind() == SettingsPageRegistry.Kind.NETWORK || page.kind() == SettingsPageRegistry.Kind.PEER_LAN) {
-            renderHierarchicalSettings(g, mouseX, mouseY, partialTick, page, columns);
-            return;
-        }
-        glassPanel(g, columns.detailX(), columns.top(), columns.detailWidth(), columns.height());
-        int x = columns.detailX() + 8;
-        int w = Math.max(24, columns.detailWidth() - 22);
-        int bodyTop = columns.top() + 6, bottom = columns.top() + columns.height() - 6;
-        int firstHit = this.hits.size();
-        g.enableScissor(x, bodyTop, x + w, bottom);
-        if (page.kind() == SettingsPageRegistry.Kind.OPTIONS) {
-            List<SettingRow> rows = settingsRows();
-            var window = settingsPanel().layout(bodyTop, bottom, 0, 22, rows.size());
-            int rowY = bodyTop;
-            for (int i = window.firstRow(); i < window.endRowExclusive(); i++) {
-                renderSettingRow(g, mouseX, mouseY, x, rowY, w, rows.get(i));
-                rowY += 22;
-            }
-            if (window.maxScroll() > 0) renderScrollbar(g, mouseX, mouseY, x + w - 4, bodyTop, 4,
-                    Math.max(14, bottom - bodyTop), rows.size(), window.visibleRows(), window.scroll());
-        } else {
-            renderNetworkSettings(g, mouseX, mouseY, partialTick, page, x, bodyTop, w, bottom);
-        }
-        g.disableScissor();
-        this.hits.subList(firstHit, this.hits.size()).removeIf(hit -> hit.y() < bodyTop || hit.y() + hit.h() > bottom);
+        drawTitle(g,Component.translatable("gui.sparkle_morpher.model_panel.settings"),columns.navigationX(),layout.top+12);
+        renderSettingGroups(g,mx,my,columns);
+        drawTitle(g,Component.translatable(page.titleKey()),columns.detailX(),layout.top+12);
+
+        renderSettingsViewport(g,mx,my,columns.detailX(),columns.top(),columns.detailWidth(),columns.top()+columns.height()-6,offset->{
+            int mouseY=my+offset;
+            if(page.kind()==SettingsPageRegistry.Kind.OPTIONS&&settingsPanel().selectedGroup()==ModelPanelState.SettingGroup.PERFORMANCE){renderPerformanceReference(g,mx,mouseY);return;}
+            if(page.kind()==SettingsPageRegistry.Kind.OPTIONS&&settingsPanel().selectedGroup()==ModelPanelState.SettingGroup.DEVELOPER&&!developerAdvanced){renderDeveloperReference(g,mx,mouseY,columns);return;}
+            if(page.kind()==SettingsPageRegistry.Kind.APPEARANCE){renderAppearanceSettings(g,mx,mouseY,columns);return;}
+            if(page.kind()==SettingsPageRegistry.Kind.NETWORK||page.kind()==SettingsPageRegistry.Kind.PEER_LAN){renderHierarchicalSettings(g,mx,mouseY,partialTick,page,columns);return;}
+            if(page.kind()==SettingsPageRegistry.Kind.OPTIONS){
+                int rowY=columns.top();for(var row:settingsRows()){renderSettingRow(g,mx,mouseY,columns.detailX(),rowY,columns.detailWidth(),row);rowY += settingRowHeight();}
+            }else renderNetworkSettings(g,mx,mouseY,partialTick,page,columns.detailX(),columns.top(),columns.detailWidth(),columns.top()+columns.height()-6);
+        });
+    }
+    private void renderSettingsViewport(GuiGraphicsExtractor g,int mx,int my,int x,int top,int w,int bottom,java.util.function.IntConsumer render){
+        var view=settingsViewport();int offset=view.offset(),first=hits.size();settingsViewportFields.clear();
+        settingsDrawingOffset=offset;settingsContentBottom=top;settingsDrawingBody=true;
+        g.enableScissor(x,top,x+w,bottom);g.pose().pushMatrix();g.pose().translate(0,-offset);
+        try{render.accept(offset);}finally{g.pose().popMatrix();g.disableScissor();settingsDrawingBody=false;}
+        var logical=new ArrayList<>(hits.subList(first,hits.size()));hits.subList(first,hits.size()).clear();
+        for(var hit:logical){int yy=hit.y()-offset;if(yy>=top&&yy+hit.h()<=bottom)hits.add(new Hit(hit.x(),yy,hit.w(),hit.h(),hit.tooltip(),hit.action()));}
+        for(var field:settingsViewportFields)if(field.getY()<top||field.getY()+field.getHeight()>bottom){field.visible=false;field.active=false;}
+        view.measure(top,bottom,settingsContentBottom+4);
+        if(view.maxOffset()>0)renderScrollbar(g,mx,my,x+w-4,top,4,bottom-top,view.maxOffset()+bottom-top,bottom-top,offset);
     }
 
-    private void renderSettingGroups(GuiGraphicsExtractor g, int mouseX, int mouseY, SettingsPanelLayout.Columns columns) {
-        List<SettingsPageRegistry.Page> navigation = SettingsPageRegistry.pages();
-        int top = columns.top() + 6, bottom = columns.top() + columns.height() - 6;
-        int visible = Math.max(1, (bottom - top) / 22);
-        int scroll = settingsPanel().navigationScroll(navigation.size(), visible);
-        int x = columns.navigationX() + 5, w = Math.max(20, columns.navigationWidth() - 14);
-        g.enableScissor(x, top, x + w, bottom);
-        int firstHit = this.hits.size();
-        for (int i = scroll; i < Math.min(navigation.size(), scroll + visible); i++) {
-            int y = top + (i - scroll) * 22;
-            var page = navigation.get(i);
-            boolean selected = page.id().equals(settingsPanel().selectedPage().id());
-            Component label = Component.translatable(page.titleKey());
-            renderRowButton(g, mouseX, mouseY, x, y, w, 20,
-                    Component.literal(trim(label.getString(), w - 12)), selected, () -> selectSettingsPage(page.id()));
-            // Full page descriptions stay available even when the narrow navigation truncates labels.
-            Hit previous = this.hits.remove(this.hits.size() - 1);
-            hit(previous.x(), previous.y(), previous.w(), previous.h(), Component.translatable(page.descriptionKey()), previous.action());
+    private void renderSettingGroups(GuiGraphicsExtractor g,int mx,int my,SettingsPanelLayout.Columns columns){
+        var pages=SettingsPageRegistry.pages();int stride=28;
+        int top=columns.top(),visible=Math.max(1,columns.height()/stride),scroll=settingsPanel().navigationScroll(pages.size(),visible);
+        for(int i=scroll;i<Math.min(pages.size(),scroll+visible);i++){
+            int y=top+(i-scroll)*stride;var page=pages.get(i);boolean selected=page.id().equals(settingsPanel().selectedPage().id());
+            if(selected){roundedFill(g,columns.navigationX(),y,columns.navigationWidth(),24,3,0x18FFFFFF);fill(g,columns.navigationX(),y+5,2,14,RED);}
+            drawMuted(g,Component.literal(trim(Component.translatable(page.titleKey()).getString(),columns.navigationWidth()-12)),columns.navigationX()+6,y+7);
+            hit(columns.navigationX(),y,columns.navigationWidth(),24,Component.translatable(page.descriptionKey()),()->selectSettingsPage(page.id()));
         }
-        g.disableScissor();
-        this.hits.subList(firstHit, this.hits.size()).removeIf(hit -> hit.y() < top || hit.y() + hit.h() > bottom);
-        if (navigation.size() > visible) renderScrollbar(g, mouseX, mouseY, columns.navigationX() + columns.navigationWidth() - 6,
-                top, 3, Math.max(14, bottom - top), navigation.size(), visible, scroll);
     }
 
     private EditBox peerField(int width, String key, int maxLength) {
@@ -2443,17 +2002,7 @@ public class ModernPlayerModelScreen extends Screen {
         return field;
     }
 
-    private void renderPeerField(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick,
-                                 EditBox field, int x, int y, int w, int top, int bottom) {
-        if (field == null) return;
-        field.visible = y >= top && y + 20 <= bottom && STATE.secondaryPanel == ModelPanelState.SecondaryPanel.NONE;
-        field.active = field.visible;
-        if (!field.visible) { if (getFocused() == field) setFocused(null); return; }
-        fill(g, x, y, w, 20, GLASS_DARK);
-        border(g, x, y, w, 20, field.isFocused() ? RED : BORDER);
-        field.setX(x + 5); field.setY(y + 6); field.setWidth(Math.max(8, w - 10));
-        field.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
-    }
+
 
     private void networkLine(GuiGraphicsExtractor g, Component text, int x, int y, int w) {
         fill(g, x, y, w, 20, 0x44202020);
@@ -2463,224 +2012,75 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void networkAction(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w,
                                Component label, boolean enabled, Runnable action) {
-        if (enabled) renderTextButton(g, mouseX, mouseY, x, y, w, 20, label, action);
+        int h=uiButtonHeight();
+        if (enabled) renderTextButton(g, mouseX, mouseY, x, y, w, h, label, action);
         else {
-            fill(g, x, y, w, 20, GLASS_DARK);
-            border(g, x, y, w, 20, 0x33FFFFFF);
-            drawCentered(g, Component.literal(trim(label.getString(), w - 8)), x + w / 2, y + 5, MUTED);
+            roundedSurface(g,x,y,w,h,UiElementLayout.BUTTON_RADIUS,GLASS_DARK,0x33FFFFFF);
+            drawCentered(g, Component.literal(trim(label.getString(), w - 8)), x + w / 2, UiElementLayout.centeredY(y,h,font.lineHeight), MUTED);
         }
     }
 
     private void joinPeerInvitation() {
-        com.micaftic.morpher.client.peer.ClientPeerRuntime.join(peerInvitationDraft.trim(),peerSettingsSection==PeerSettingsSection.PUBLIC||peerSettingsSection==PeerSettingsSection.TUNNEL?peerLocalRouteDraft:"");
+        com.micaftic.morpher.client.peer.ClientPeerRuntime.join(peerInvitationDraft.trim(),peerSettingsSection==PeerSettingsSection.PUBLIC||peerSettingsSection==PeerSettingsSection.TUNNEL||peerSettingsSection==PeerSettingsSection.PROBE?peerLocalRouteDraft:"");
         peerInvitationDraft = "";
         if (peerInvitationBox != null) peerInvitationBox.setValue("");
     }
 
-    private void renderNetworkSettings(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick,
-                                       SettingsPageRegistry.Page page, int x, int top, int w, int bottom) {
-        var window = settingsPanel().layout(top, bottom, 0, 24, 5);
-        int y = top - window.scroll() * 24;
-        networkLine(g, settingsText("resources.route", modeLabel()), x, y, w);
-        networkAction(g, mouseX, mouseY, x, y + 48, w, settingsText("resources.switch_route"), true, this::toggleResourceMode);
-        networkAction(g, mouseX, mouseY, x, y + 72, w, Component.translatable("gui.sparkle_morpher.resource_station.title"), true, () -> switchTab(ModelPanelState.Tab.RESOURCE));
-        networkAction(g, mouseX, mouseY, x, y + 96, w, Component.translatable("gui.sparkle_morpher.model_panel.sites"), true, this::openSitesPanel);
-        if (window.maxScroll() > 0) renderScrollbar(g, mouseX, mouseY, x + w - 4, top, 4,
-                Math.max(14, bottom - top), 5, window.visibleRows(), window.scroll());
+    private void renderNetworkSettings(GuiGraphicsExtractor g,int mx,int my,float pt,SettingsPageRegistry.Page page,int x,int top,int w,int bottom){
+        String[] labels={"资源来源","下载队列","本地模型目录"};Runnable[] actions={this::openSitesPanel,()->{STATE.activeTab=ModelPanelState.Tab.RESOURCE;resourceRoute=ResourceRoute.QUEUE;init();},this::openModelFolder};
+        for(int i=0;i<3;i++){int yy=top+i*47;drawText(g,Component.literal(labels[i]),x+10,yy+12);renderTextButton(g,mx,my,x+w-160,yy+7,150,22,Component.literal(i==1?"查看任务 ›":"打开 ›"),actions[i]);}
     }
 
-    private void renderSettingRow(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, SettingRow row) {
-        if (row.sectionKey() != null) {
-            drawSection(g, Component.translatable(row.sectionKey()), x + 6, y + 6);
-            return;
-        }
-        boolean enabled = Boolean.TRUE.equals(row.booleanValue());
-        fill(g, x, y, w, 19, enabled ? 0x775B3544 : inside(mouseX, mouseY, x, y, w, 19) ? PANEL_HOVER : 0x44202020);
-        if (enabled) fill(g, x, y, 3, 19, RED);
-        Component label = Component.translatable(row.labelKey());
-        if (row.segmented() != null) {
-            SegmentedSetting segmented = row.segmented();
-            int leftW = Math.max(50, this.font.width(segmented.left()) + 16);
-            int rightW = Math.max(64, this.font.width(segmented.right()) + 16);
-            int totalW = Math.min(w - 96, leftW + rightW + 2);
-            if (totalW < leftW + rightW + 2) {
-                leftW = Math.max(42, (totalW - 2) / 2);
-                rightW = Math.max(42, totalW - 2 - leftW);
-            }
-            int sx = x + w - totalW - 8;
-            g.text(this.font, trim(label.getString(), sx - x - 12), x + 6, y + 6, TEXT, false);
-            renderSegmentedOption(g, sx, y + 2, leftW, 15, segmented.left(), segmented.leftSelected(), segmented.leftAction());
-            renderSegmentedOption(g, sx + leftW + 2, y + 2, rightW, 15, segmented.right(), !segmented.leftSelected(), segmented.rightAction());
-            return;
-        }
-        if (row.booleanValue() != null) {
-            g.text(this.font, trim(label.getString(), w - 82), x + 6, y + 6, TEXT, false);
-            int bx = x + w - 34;
-            fill(g, bx, y + 4, 26, 11, row.booleanValue() ? RED : 0xAA202020);
-            border(g, bx, y + 4, 26, 11, row.booleanValue() ? RED : 0x887C878E);
-            fill(g, bx + (row.booleanValue() ? 15 : 2), y + 5, 9, 9, 0xFFEDE1CC);
-            hit(x, y, w, 19, label, row.action());
-        } else if (row.decrement() == null && row.increment() == null) {
-            int valueW = Math.min(104, Math.max(48, this.font.width(row.valueText()) + 14));
-            int valueX = x + w - valueW - 8;
-            g.text(this.font, trim(label.getString(), valueX - x - 12), x + 6, y + 6, TEXT, false);
-            if (row.action() != null) {
-                hit(x, y, w, 19, label, row.action());
-            }
-            renderTextButton(g, mouseX, mouseY, valueX, y + 2, valueW, 15, Component.literal(row.valueText()), row.action());
-        } else {
-            g.text(this.font, trim(label.getString(), w - 82), x + 6, y + 6, TEXT, false);
-            if (row.decrement() != null) {
-                renderIconButton(g, mouseX, mouseY, x + w - 50, y + 1, IconGlyph.MINUS, Component.translatable(row.labelKey()), row.decrement());
-            }
-            if (row.increment() != null) {
-                renderIconButton(g, mouseX, mouseY, x + w - 24, y + 1, IconGlyph.PLUS, Component.translatable(row.labelKey()), row.increment());
-            }
-            drawMuted(g, Component.literal(row.valueText()), x + w - 90, y + 6);
-            if (row.action() != null) {
-                hit(x, y, w - 56, 19, label, row.action());
-            }
+    private void renderSettingRow(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,SettingRow row){
+        int h=settingRowHeight(),bh=uiButtonHeight(),cy=y+(h-bh)/2,ty=UiElementLayout.centeredY(y,h,font.lineHeight);
+        settingsExtent(y+h);
+        if(row.sectionKey()!=null){drawSection(g,Component.translatable(row.sectionKey()),x+8,ty);return;}
+        Component label=Component.translatable(row.labelKey());
+        int controlW=Math.min(width<560?126:150,w/2),cx=x+w-controlW-8;
+        drawText(g,Component.literal(trim(label.getString(),cx-x-16)),x+8,ty);
+        if(row.segmented()!=null){var part=row.segmented();int half=(controlW-4)/2;renderSegmentedOption(g,cx,cy,half,bh,part.left(),part.leftSelected(),part.leftAction());renderSegmentedOption(g,cx+half+4,cy,half,bh,part.right(),!part.leftSelected(),part.rightAction());return;}
+        if(row.booleanValue()!=null){int bx=x+w-34,sy=y+(h-12)/2;boolean enabled=Boolean.TRUE.equals(row.booleanValue());roundedFill(g,bx,sy,26,12,6,enabled?RED:0x66444444);roundedFill(g,bx+(enabled?15:2),sy+1,9,10,4,TEXT);hit(x,y,w,h-1,label,row.action());return;}
+        if(row.action()!=null&&row.decrement()==null&&row.increment()==null){renderTextButton(g,mx,my,cx,cy,controlW,bh,Component.literal(trim(row.valueText(),controlW-12)),row.action());return;}
+        roundedSurface(g,cx,cy,controlW,bh,4,inside(mx,my,cx,cy,controlW,bh)?0x18FFFFFF:0x0CFFFFFF,0x22FFFFFF);drawCentered(g,Component.literal(row.valueText()),cx+controlW/2,ty,MUTED);
+        if(row.decrement()!=null)hit(cx,cy,controlW/2,bh,label.copy().append(" · 左侧减少"),row.decrement());if(row.increment()!=null)hit(cx+controlW/2,cy,controlW-controlW/2,bh,label.copy().append(" · 右侧增加"),row.increment());
+    }
+
+    private void renderSegmentedOption(GuiGraphicsExtractor g,int x,int y,int w,int h,Component label,boolean selected,Runnable action){
+        roundedSurface(g,x,y,w,h,UiElementLayout.BUTTON_RADIUS,selected?PANEL_ACTIVE:0x55303030,selected?RED:0x33FFFFFF);
+        drawCentered(g,Component.literal(trim(label.getString(),w-12)),x+w/2,UiElementLayout.centeredY(y,h,font.lineHeight),selected?0xFFFFFFFF:TEXT);hit(x,y,w,h,label,action);
+    }
+
+    private void renderSecondaryPanel(GuiGraphicsExtractor g,int mx,int my,float partialTick){
+        if(STATE.secondaryPanel==ModelPanelState.SecondaryPanel.NONE)return;
+        int x=secondaryPanelX(),y=secondaryPanelY(),w=secondaryPanelW(),h=secondaryPanelH();
+        this.hits.clear();renderTabs(g,mx,my);
+        switch(STATE.secondaryPanel){
+            case SITES -> renderSitesPanel(g,mx,my,x,y,w,h,partialTick);
+            case CATEGORIES -> renderCategoryPanel(g,mx,my,x,y,w,h,partialTick);
+            case IMPORT -> renderImportPanel(g,mx,my,x,y,w,h);
+            case CLOUD_LOGIN,CLOUD_INSTANCE -> renderCloudForm(g,mx,my,x,y,w,h,partialTick);
+            default -> {}
         }
     }
 
-    private void renderSegmentedOption(GuiGraphicsExtractor g, int x, int y, int w, int h, Component label, boolean selected, Runnable action) {
-        fill(g, x, y, w, h, selected ? PANEL_ACTIVE : 0x55303030);
-        border(g, x, y, w, h, selected ? RED : 0x33FFFFFF);
-        drawCentered(g, Component.literal(trim(label.getString(), w - 6)), x + w / 2, y + 4, selected ? 0xFFFFFFFF : TEXT);
-        hit(x, y, w, h, label, action);
-    }
-
-    private void renderSecondaryPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.NONE) {
-            return;
-        }
-        int x = secondaryPanelX();
-        int y = secondaryPanelY();
-        int w = secondaryPanelW();
-        int h = secondaryPanelH();
-        this.hits.clear();
-        fill(g, this.layout.left, this.layout.top, this.layout.width, this.layout.height, 0x42000000);
-        hit(this.layout.left, this.layout.top, this.layout.width, this.layout.height, Component.empty(), () -> setFocused(null));
-        secondaryGlassPanel(g, x, y, w, h);
-        border(g, x, y, w, h, BORDER);
-        renderIconButton(g, mouseX, mouseY, x + w - 24, y + 6, IconGlyph.CLOSE, Component.translatable("gui.sparkle_morpher.model_panel.close"), () -> {
-            closeCloudForm();
-            init();
-            if (afterCloudLogin != null) {
-                Screen next = afterCloudLogin;
-                afterCloudLogin = null;
-                InputUtil.setScreen(next);
+    private void renderCloudAccountPanel(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float partialTick){
+        Component heading=switch(cloudAccountPage){
+            case ACCOUNT->cloudText("title");case INSTANCES->cloudText("instances");case SCOPES->cloudText("scopes");case PERFORMANCE->settingsText("cloud.performance");
+            case IDENTITY->cloudText("identity_panel.title");case CLAIM->cloudText("identity_panel.claim_title");case APPROVAL->cloudText("identity_panel.admin_title");
+        };
+        pageHeader(g,mx,my,heading,Component.empty(),()->{if(scopeCreateForm){scopeCreateForm=false;init();}else backFromCloud();});
+        renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+34,layout.contentWidth,height-layout.top-24,offset->{
+            int mouseY=my+offset;
+            switch(cloudAccountPage){
+                case ACCOUNT->renderAccountReference(g,mx,mouseY,partialTick);case INSTANCES->renderInstancesReference(g,mx,mouseY,partialTick);
+                case PERFORMANCE->renderCloudPerformanceReference(g,mx,mouseY);case SCOPES->renderScopesReference(g,mx,mouseY,partialTick);
+                case IDENTITY,CLAIM,APPROVAL->renderIdentityReference(g,mx,mouseY,partialTick);
             }
         });
-        switch (STATE.secondaryPanel) {
-            case SITES -> renderSitesPanel(g, mouseX, mouseY, x, y, w, h, partialTick);
-            case CATEGORIES -> renderCategoryPanel(g, mouseX, mouseY, x, y, w, h, partialTick);
-            case IMPORT -> renderImportPanel(g, mouseX, mouseY, x, y, w, h);
-            case CLOUD_LOGIN, CLOUD_INSTANCE -> renderCloudForm(g, mouseX, mouseY, x, y, w, h, partialTick);
-            default -> {
-            }
-        }
+        if(!cloudPanelStatus.getString().isBlank())drawMuted(g,Component.literal(trim(cloudPanelStatus.getString(),w)),x,height-layout.top-16);
     }
 
-    private void renderCloudAccountPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        var selected = CloudManagementScreen.management().registry().selected();
-        String instanceId = selected.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("");
-        boolean connected = CloudClientRuntime.state(instanceId) != null;
-        var sections = SettingsPanelLayout.sections(settingsColumns());
-        AccountPanelLayout panels = accountPanelLayout();
-        glassPanel(g, sections.optionsX(), sections.top(), sections.optionsWidth(), sections.height());
-        if (panels.listWidth() > 0) glassPanel(g, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight());
-        glassPanel(g, panels.detailX(), panels.detailY(), panels.detailWidth(), panels.detailHeight());
-        boolean account = cloudAccountPage != CloudAccountPage.PERFORMANCE && cloudAccountPage != CloudAccountPage.INSTANCES && cloudAccountPage != CloudAccountPage.SCOPES;
-        renderRowButton(g, mouseX, mouseY, sections.optionsX() + 4, sections.top() + 4, sections.optionsWidth() - 8, 20,
-                settingsText("cloud.accounts"), account, () -> setCloudAccountPage(CloudAccountPage.ACCOUNT));
-        renderRowButton(g, mouseX, mouseY, sections.optionsX() + 4, sections.top() + 28, sections.optionsWidth() - 8, 20,
-                settingsText("cloud.instances"), cloudAccountPage == CloudAccountPage.INSTANCES || cloudAccountPage == CloudAccountPage.SCOPES, () -> setCloudAccountPage(CloudAccountPage.INSTANCES));
-        renderRowButton(g, mouseX, mouseY, sections.optionsX() + 4, sections.top() + 52, sections.optionsWidth() - 8, 20,
-                settingsText("cloud.performance"), cloudAccountPage == CloudAccountPage.PERFORMANCE, () -> setCloudAccountPage(CloudAccountPage.PERFORMANCE));
-        if (panels.listWidth() > 0) {
-            int firstListHit = this.hits.size();
-            g.enableScissor(panels.listX(), panels.listY(), panels.listX() + panels.listWidth(), panels.listY() + panels.listHeight());
-            renderCloudAccountList(g, mouseX, mouseY, panels);
-            g.disableScissor();
-            this.hits.subList(firstListHit, this.hits.size()).removeIf(hit -> hit.y() < panels.listY() || hit.y() + hit.h() > panels.listY() + panels.listHeight());
-        }
-        var details = cloudDetailLayout();
-        int firstDetailHit = this.hits.size();
-        g.enableScissor(panels.detailX(), panels.detailY(), panels.detailX() + panels.detailWidth(), panels.detailY() + panels.detailHeight());
-        switch (cloudAccountPage) {
-            case PERFORMANCE -> {
-                int px = details.fieldX(), py = details.detailY() + 12, pw = details.fieldWidth();
-                drawSection(g, settingsText("cloud.performance.preset"), px, py);
-                var presets = com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.values();
-                int presetColumns = Math.max(1, Math.min(presets.length, pw / 72));
-                int presetWidth = Math.max(1, (pw - (presetColumns - 1) * 4) / presetColumns);
-                for (int i = 0; i < presets.length; i++) {
-                    var preset = presets[i];
-                    renderRowButton(g, mouseX, mouseY, px + i % presetColumns * (presetWidth + 4), py + 20 + i / presetColumns * 24,
-                            presetWidth, 20, Component.literal(trim(settingsText("cloud.performance.preset." + preset.name().toLowerCase(Locale.ROOT)).getString(), presetWidth - 12)),
-                            com.micaftic.morpher.cloud.client.CloudClientPerformance.preset() == preset,
-                            () -> com.micaftic.morpher.cloud.client.CloudClientPerformance.select(preset));
-                }
-                int limitsY = py + cloudPerformancePresetHeight();
-                renderSettingRow(g, mouseX, mouseY, px, limitsY, pw, cloudConcurrencyRow(true));
-                renderSettingRow(g, mouseX, mouseY, px, limitsY + 32, pw, cloudConcurrencyRow(false));
-                networkLine(g, settingsText("cloud.performance.custom_help"), px, limitsY + 64, pw);
-                networkLine(g, settingsText("cloud.performance.unlimited_help"), px, limitsY + 88, pw);
-                networkLine(g, settingsText("cloud.performance.live_help"), px, limitsY + 112, pw);
-            }
-            case ACCOUNT -> renderCloudAccountDetails(g, mouseX, mouseY, details, connected, selected.map(CloudInstanceRegistry::isBuiltinOfficial).orElse(false), partialTick);
-            case INSTANCES -> renderCloudInstances(g, mouseX, mouseY, details, partialTick);
-            case SCOPES -> renderCloudScopes(g, mouseX, mouseY, details, partialTick);
-            case IDENTITY, CLAIM, APPROVAL -> renderCloudIdentityDetails(g, mouseX, mouseY, details, partialTick);
-        }
-        g.disableScissor();
-        this.hits.subList(firstDetailHit, this.hits.size()).removeIf(hit -> hit.y() < panels.detailY() || hit.y() + hit.h() > panels.detailY() + panels.detailHeight());
-        int detailContentHeight = cloudIdentityContentHeight();
-        if (detailContentHeight > panels.detailHeight()) renderScrollbar(g, mouseX, mouseY, panels.detailX() + panels.detailWidth() - 6,
-                panels.detailY() + 4, 4, Math.max(14, panels.detailHeight() - 8), detailContentHeight, panels.detailHeight(), cloudDetailScroll);
-        Component message = isCloudIdentityPage() && cloudIdentityFlow != null
-                ? cloudText("identity_panel." + (cloudIdentityFlow.busy() ? "working" : cloudIdentityFlow.message())) : cloudPanelStatus;
-        if (!message.getString().isBlank()) setStatus(message);
-    }
 
-    private void renderCloudAccountList(GuiGraphicsExtractor g, int mouseX, int mouseY, AccountPanelLayout panels) {
-        if (isCloudIdentityPage()) { renderCloudIdentityList(g, mouseX, mouseY, panels); return; }
-        int x = panels.listX(), y = panels.listY(), w = panels.listWidth();
-        int listY = y + 38;
-        int rows = panels.listRows();
-        var management = CloudManagementScreen.management();
-        drawTitle(g, cloudText(cloudAccountPage == CloudAccountPage.ACCOUNT ? "multi_account" : cloudAccountPage == CloudAccountPage.SCOPES ? "scopes" : "instances"), x + 10, y + 12);
-        if (cloudAccountPage == CloudAccountPage.SCOPES) {
-            var scopes = management.snapshot().scopes();
-            cloudAccountScroll = clamp(cloudAccountScroll, 0, Math.max(0, scopes.size() - rows));
-            for (int i = 0; i < rows && cloudAccountScroll + i < scopes.size(); i++) {
-                var scope = scopes.get(cloudAccountScroll + i);
-                renderRowButton(g, mouseX, mouseY, x + 8, listY + i * 36, w - 16, 30,
-                        Component.literal(trim(scope.name(), w - 28)), management.snapshot().selectedScope() != null && management.snapshot().selectedScope().scopeId().equals(scope.scopeId()), () -> selectCloudScope(scope.scopeId()));
-            }
-            if (scopes.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4, panels.listHeight() - 46, scopes.size(), rows, cloudAccountScroll);
-            return;
-        }
-        var profiles = management.registry().profiles();
-        cloudAccountScroll = clamp(cloudAccountScroll, 0, Math.max(0, profiles.size() - rows));
-        for (int i = 0; i < rows && cloudAccountScroll + i < profiles.size(); i++) {
-            var profile = profiles.get(cloudAccountScroll + i);
-            int rowY = listY + i * 36;
-            boolean active = management.registry().selected().map(current -> current.instanceId().equals(profile.instanceId())).orElse(false);
-            boolean hover = inside(mouseX, mouseY, x + 8, rowY, w - 16, 32);
-            fill(g, x + 8, rowY, w - 16, 32, active ? 0xCC344C5C : hover ? PANEL_HOVER : 0x8827333D);
-            if (active) fill(g, x + 8, rowY, 2, 32, RED);
-            drawText(g, Component.literal(trim(CloudManagementScreen.displayName(profile), w - 32)), x + 16, rowY + 5);
-            String account = management.accountId(profile.instanceId());
-            String detail = cloudAccountPage == CloudAccountPage.ACCOUNT
-                    ? (CloudClientRuntime.state(profile.instanceId()) == null ? CloudManagementScreen.text("disconnected") : account)
-                    : profile.instance().origin().toString();
-            drawMuted(g, Component.literal(trim(detail, w - 32)), x + 16, rowY + 19);
-            hit(x + 8, rowY, w - 16, 32, Component.literal(CloudManagementScreen.displayName(profile) + " · " + detail), () -> selectCloudInstance(profile));
-        }
-        if (profiles.size() > rows) renderScrollbar(g, mouseX, mouseY, x + w - 6, listY, 4, panels.listHeight() - 46, profiles.size(), rows, cloudAccountScroll);
-    }
 
     private boolean isCloudIdentityPage() {
         return isCloudSettingsPage() && (cloudAccountPage == CloudAccountPage.IDENTITY || cloudAccountPage == CloudAccountPage.CLAIM || cloudAccountPage == CloudAccountPage.APPROVAL);
@@ -2711,11 +2111,9 @@ public class ModernPlayerModelScreen extends Screen {
         } catch (RuntimeException failure) { cloudPanelStatus = cloudText("identity_panel.login_required"); }
     }
 
-    private void openCloudIdentityPage(CloudAccountPage page) {
-        STATE.activeTab = ModelPanelState.Tab.ACCOUNT;
-        cloudAccountPage = page; cloudAccountScroll = 0; cloudDetailScroll = 0; cloudIdentityChoicePage = 0;
-        if (CloudManagementScreen.management().snapshot().scopes().isEmpty()) refreshCloudScopes();
-        init();
+    private void openCloudIdentityPage(CloudAccountPage page){
+        setCloudAccountPage(page);cloudIdentityChoicePage=0;
+        if(CloudManagementScreen.management().snapshot().scopes().isEmpty())refreshCloudScopes();
     }
 
     private int cloudIdentityListSize() {
@@ -2760,78 +2158,7 @@ public class ModernPlayerModelScreen extends Screen {
         drawMuted(g, Component.literal(trim(cloudText("identity_panel." + key).getString(), w)), x, y);
     }
 
-    private void renderCloudIdentityDetails(GuiGraphicsExtractor g, int mx, int my, AccountPanelLayout panels, float partialTick) {
-        ensureCloudIdentityFlow();
-        if (cloudIdentityCodeBox != null) cloudIdentityCodeBox.visible = false;
-        int x = panels.fieldX(), y = panels.detailY(), w = panels.fieldWidth();
-        identityAction(g, mx, my, x, y + 8, w, "back", true, () -> {
-            cloudAccountPage = CloudAccountPage.ACCOUNT; cloudDetailScroll = 0; init();
-        });
-        if (cloudIdentityFlow == null) { identityLine(g, "login_required", x, y + 44, w); return; }
-        var flow = cloudIdentityFlow;
-        drawTitle(g, cloudText("identity_panel." + switch (cloudAccountPage) { case CLAIM -> "claim_title"; case APPROVAL -> "admin_title"; default -> "title"; }), x, y + 42);
-        drawText(g, Component.literal(trim(flow.context().profileName(), w)), x, y + 62);
-        if (cloudAccountPage == CloudAccountPage.IDENTITY) {
-            identityLine(g, "identity_help", x, y + 82, w);
-            identityAction(g, mx, my, x, y + 106, w, "refresh", !flow.busy(), flow::refresh);
-            if (flow.catalog().providers().isEmpty()) identityLine(g, "no_provider", x, y + 138, w);
-            else {
-                identityAction(g, mx, my, x, y + 134, w, "verify", !flow.busy(), flow::verify);
-                var provider = flow.catalog().providers().stream().filter(p -> p.providerId().equals(flow.providerId())).findFirst().orElse(null);
-                if (provider != null) {
-                    Component name = Component.literal(trim(provider.displayName(), w - 8));
-                    if (flow.catalog().providers().size() > 1) renderTextButton(g, mx, my, x, y + 162, w, 20, name, flow::nextProvider);
-                    else drawMuted(g, name, x, y + 170);
-                }
-            }
-            var selectedIdentity = flow.selectedIdentity();
-            if (selectedIdentity != null) identityLine(g, "VERIFIED".equals(selectedIdentity.verificationStatus()) ? "verified" : "registered", x, y + 194, w);
-            identityAction(g, mx, my, x, y + 224, w, "use_world", !flow.busy(), () -> openCloudIdentityPage(CloudAccountPage.CLAIM));
-            return;
-        }
-        var scope = flow.context().scope();
-        if (scope == null) {
-            identityLine(g, "choose_world", x, y + 86, w);
-            identityAction(g, mx, my, x, y + 112, w, "refresh_worlds", !flow.busy(), this::refreshCloudScopes);
-            return;
-        }
-        drawMuted(g, Component.literal(trim(scope.name(), w)), x, y + 82);
-        if (!flow.loaded()) { identityLine(g, "loading", x, y + 106, w); identityAction(g, mx, my, x, y + 132, w, "refresh", !flow.busy(), flow::refresh); return; }
-        if (flow.catalog().permissions() == null) { identityLine(g, "server_update", x, y + 106, w); identityAction(g, mx, my, x, y + 134, w, "refresh", !flow.busy(), flow::refresh); return; }
-        if (cloudAccountPage == CloudAccountPage.APPROVAL) { renderCloudIdentityAdmin(g, mx, my, x, y, w); return; }
-        identityLine(g, "claim_help", x, y + 102, w);
-        if (flow.canManage()) identityAction(g, mx, my, x, y + (flow.claimPolicy() ? 274 : 340), w, "manage", !flow.busy(), () -> openCloudIdentityPage(CloudAccountPage.APPROVAL));
-        if ("DISABLED".equals(flow.policy())) { identityLine(g, "disabled", x, y + 136, w); return; }
-        if (!flow.canEdit()) { identityLine(g, "need_edit", x, y + 136, w); return; }
-        if (flow.localOfflineIdentity() == null) {
-            identityLine(g, "register_help", x, y + 136, w);
-            identityAction(g, mx, my, x, y + 164, w, "register", flow.canRegister(), flow::register);
-            return;
-        }
-        if (flow.hasBinding()) {
-            var binding = flow.catalog().bindings().stream().filter(b -> b.entityUuid().equals(flow.context().profileId().toString()) && b.accountId().equals(flow.context().accountId())
-                    && ("APPROVED".equals(b.status()) || "PENDING_APPROVAL".equals(b.status()))).findFirst().orElseThrow();
-            identityLine(g, "APPROVED".equals(binding.status()) ? "binding_approved" : "requested", x, y + 136, w);
-            drawText(g, Component.literal(trim(flow.targetName(binding.targetId()), w)), x, y + 156);
-            identityAction(g, mx, my, x, y + 184, w, "refresh", !flow.busy(), flow::refresh);
-            return;
-        }
-        if ("STRICT_APPROVAL".equals(flow.policy())) {
-            renderCloudIdentityTargets(g, mx, my, x, y + 126, w);
-            identityAction(g, mx, my, x, y + 246, w, "request", flow.canRequest(), flow::request);
-            identityLine(g, "approval_help", x, y + 278, w);
-            identityAction(g, mx, my, x, y + 318, w, "refresh", !flow.busy(), flow::refresh);
-        } else if (flow.claimPolicy()) {
-            identityLine(g, "code_help", x, y + 134, w);
-            if (cloudIdentityCodeBox != null) {
-                cloudIdentityCodeBox.setY(y + 158);
-                cloudIdentityCodeBox.visible = true; cloudIdentityCodeBox.setEditable(!flow.busy());
-                cloudIdentityCodeBox.extractWidgetRenderState(g, mx, my, partialTick);
-            }
-            identityAction(g, mx, my, x, y + 190, w, "redeem", flow.canRedeem(), flow::redeem);
-            identityAction(g, mx, my, x, y + 242, w, "refresh", !flow.busy(), flow::refresh);
-        }
-    }
+
 
     private void renderCloudIdentityTargets(GuiGraphicsExtractor g, int mx, int my, int x, int y, int w) {
         var flow = cloudIdentityFlow;
@@ -2850,146 +2177,18 @@ public class ModernPlayerModelScreen extends Screen {
         }
     }
 
-    private void renderCloudIdentityAdmin(GuiGraphicsExtractor g, int mx, int my, int x, int y, int w) {
-        var flow = cloudIdentityFlow;
-        if (!flow.canManage()) { identityLine(g, "permission_denied", x, y + 110, w); return; }
-        identityAction(g, mx, my, x, y + 102, w, "refresh", !flow.busy(), flow::refresh);
-        if ("STRICT_APPROVAL".equals(flow.policy())) {
-            if (flow.pending().isEmpty()) { identityLine(g, "no_requests", x, y + 140, w); return; }
-            var range = CloudScreenPagination.range(flow.pending().size(), 3, cloudIdentityChoicePage);
-            cloudIdentityChoicePage = range.page();
-            int row = 0;
-            for (var binding : flow.pending().subList(range.startInclusive(), range.endExclusive())) {
-                String player = binding.identityDisplayName() != null ? binding.identityDisplayName() : flow.catalog().players().stream().filter(p -> p.id().toString().equals(binding.entityUuid())).findFirst()
-                        .map(com.micaftic.morpher.cloud.client.CloudIdentityWorkflow.Player::name).orElse(cloudText("identity_panel.offline_player").getString());
-                renderRowButton(g, mx, my, x, y + 134 + row++ * 28, w, 24, Component.literal(trim(player + " → " + flow.targetName(binding.targetId()), w - 12)),
-                        binding.equals(flow.selectedBinding()), () -> flow.selectBinding(binding.bindingId()));
-            }
-            int half = Math.max(30, (w - 6) / 2);
-            identityAction(g, mx, my, x, y + 222, half, "previous", !flow.busy() && range.page() > 0, () -> cloudIdentityChoicePage--);
-            identityAction(g, mx, my, x + half + 6, y + 222, half, "next", !flow.busy() && range.page() + 1 < range.pageCount(), () -> cloudIdentityChoicePage++);
-            identityAction(g, mx, my, x, y + 252, half, "approve", flow.canApprove(), () -> flow.approve(true));
-            identityAction(g, mx, my, x + half + 6, y + 252, half, "reject", flow.canApprove(), () -> flow.approve(false));
-            identityLine(g, "review_help", x, y + 284, w);
-        } else if (flow.claimPolicy()) {
-            renderCloudIdentityTargets(g, mx, my, x, y + 134, w);
-            var player = flow.selectedPlayer();
-            Component playerName = Component.literal(trim(player == null ? cloudText("identity_panel.no_players").getString() : player.name(), w - 8));
-            renderTextButton(g, mx, my, x, y + 248, w, 20, playerName, flow::nextPlayer);
-            identityAction(g, mx, my, x, y + 278, w, "issue", flow.canIssue(), flow::issue);
-            if (flow.issued() != null) {
-                identityLine(g, flow.issuedExpired() ? "code_expired" : "issued", x, y + 308, w);
-                identityAction(g, mx, my, x, y + 330, w, "copy", !flow.busy() && !flow.issuedExpired(), () -> {
-                    Minecraft.getInstance().keyboardHandler.setClipboard(flow.issued().code());
-                    flow.copied();
-                });
-                identityAction(g, mx, my, x, y + 358, w, "revoke", !flow.busy(), flow::revoke);
-            }
-            identityLine(g, "invite_help", x, y + 394, w);
-        } else identityLine(g, "disabled", x, y + 140, w);
-    }
 
-    private void renderCloudAccountDetails(GuiGraphicsExtractor g, int mouseX, int mouseY,
-                                           AccountPanelLayout panels, boolean connected, boolean official, float partialTick) {
-        int x = panels.fieldX();
-        int y = panels.detailY();
-        int w = panels.fieldWidth();
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, y + 12);
-        if (connected) {
-            String instanceId = CloudManagementScreen.management().registry().selected()
-                    .map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("");
-            drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.account"), x, y + 40);
-            drawText(g, Component.translatable("gui.sparkle_morpher.cloud_upload.account",
-                    CloudManagementScreen.management().accountId(instanceId)), x, y + 56);
-            int half = panels.buttonWidth(2);
-            renderTextButton(g, mouseX, mouseY, x, y + 82, half, 20,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.logout"), () -> {
-                        CloudManagementScreen.management().logout();
-                        resetCloudPage();
-                        init();
-                    });
-            renderTextButton(g, mouseX, mouseY, x + half + 6, y + 82, half, 20,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.switch_account"), () -> {
-                        CloudManagementScreen.management().logout();
-                        resetCloudPage();
-                        openCloudLoginForm(false);
-                    });
-            renderTextButton(g, mouseX, mouseY, x, y + 116, w, 20,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.identity.bind_current"), () -> {
-                        var context = CloudManagementScreen.accountContext();
-                        var runtime = context.runtime();
-                        cloudPanelStatus = Component.translatable("gui.sparkle_morpher.cloud.manage.working");
-                        CloudManagementScreen.bindCurrentGameAccount().whenComplete((identity, failure) ->
-                                Minecraft.getInstance().execute(() -> {
-                                    try { context.check(runtime); } catch (java.util.concurrent.CancellationException stale) { return; }
-                                    cloudPanelStatus = failure == null
-                                            ? Component.translatable("gui.sparkle_morpher.cloud.manage.identity.bound", identity.displayName())
-                                            : Component.literal(CloudManagementScreen.errorText(failure));
-                                }));
-                    });
-            renderTextButton(g, mouseX, mouseY, x, y + 144, w, 20,
-                    cloudText("identity_panel.title"),
-                    () -> openCloudIdentityPage(CloudAccountPage.IDENTITY));
-        } else {
-            drawMuted(g, Component.literal(trim(cloudText("account_intro").getString(), w)), x, y + 40);
-            renderTextButton(g, mouseX, mouseY, x, y + 66, w, 24, cloudText("quick_connect"),
-                    () -> { if (!cloudFormBusy) runCloudAccount(CloudManagementScreen.connectOfficialAccount(), "quick_success"); });
-            int half = panels.buttonWidth(2);
-            renderTextButton(g, mouseX, mouseY, x, y + 102, half, 20, cloudText("login"), () -> openCloudLoginForm(false));
-            renderTextButton(g, mouseX, mouseY, x + half + 6, y + 102, half, 20, cloudText("register_short"), () -> openCloudLoginForm(true));
-        }
-    }
 
-    private void renderCloudInstances(GuiGraphicsExtractor g, int mouseX, int mouseY, AccountPanelLayout panels, float partialTick) {
-        int x = panels.fieldX(), y = panels.detailY(), w = panels.fieldWidth();
-        drawTitle(g, cloudText("instance_management"), x, y + 12);
-        var selected = CloudManagementScreen.management().registry().selected();
-        if (selected.isPresent()) {
-            var profile = selected.get();
-            drawText(g, Component.literal(trim(CloudManagementScreen.displayName(profile), w)), x, y + 40);
-            drawMuted(g, Component.literal(trim(profile.instance().origin().toString(), w)), x, y + 58);
-            boolean connected = CloudClientRuntime.state(profile.instanceId()) != null;
-            drawText(g, cloudText(connected ? "connected" : "disconnected"), x, y + 80);
-            renderTextButton(g, mouseX, mouseY, x, y + 106, w, 22, cloudText("manage_account"), this::openCloudAccount);
-            if (!CloudInstanceRegistry.isBuiltinOfficial(profile)) renderTextButton(g, mouseX, mouseY, x, y + 136, w, 20, cloudText("remove_instance"), this::removeCloudInstance);
-        }
-        renderTextButton(g, mouseX, mouseY, x, y + 166, w, 22, cloudText("add_instance"), this::openCloudInstanceForm);
-        renderTextButton(g, mouseX, mouseY, x, y + 196, w, 20, cloudText("scopes"), () -> setCloudAccountPage(CloudAccountPage.SCOPES));
-    }
 
-    private void renderCloudScopes(GuiGraphicsExtractor g, int mouseX, int mouseY,
-                                   AccountPanelLayout panels, float partialTick) {
-        int x = panels.fieldX();
-        renderTextButton(g, mouseX, mouseY, x, panels.detailY() + 8, panels.fieldWidth(), 20, cloudText("back_instances"), () -> setCloudAccountPage(CloudAccountPage.INSTANCES));
-        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scope_id"), x, panels.fieldY(0) - 14);
-        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.scope_name"), x, panels.fieldY(1) - 14);
-        drawSection(g, Component.translatable("gui.sparkle_morpher.cloud.manage.world_epoch"), x, panels.fieldY(2) - 14);
-        renderCloudSettingField(g, mouseX, mouseY, partialTick, cloudScopeIdBox, x, panels.fieldY(0), panels.fieldWidth());
-        renderCloudSettingField(g, mouseX, mouseY, partialTick, cloudScopeNameBox, x, panels.fieldY(1), panels.fieldWidth());
-        renderCloudSettingField(g, mouseX, mouseY, partialTick, cloudWorldEpochBox, x, panels.fieldY(2), panels.fieldWidth());
-        int bw = panels.buttonWidth(3);
-        int buttonY = panels.actionY(3);
-        renderTextButton(g, mouseX, mouseY, x, buttonY, bw, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.refresh_scopes"),
-                this::refreshCloudScopes);
-        renderTextButton(g, mouseX, mouseY, x + bw + 6, buttonY, bw, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.create_scope"), this::createCloudScope);
-        renderTextButton(g, mouseX, mouseY, x + (bw + 6) * 2, buttonY, bw, 20,
-                Component.translatable("gui.sparkle_morpher.cloud.manage.join_selected"), this::joinCloudScope);
-        if (CloudManagementScreen.management().snapshot().selectedScope() != null) {
-            renderTextButton(g, mouseX, mouseY, x, buttonY + 28, panels.fieldWidth(), 20,
-                    Component.translatable("gui.sparkle_morpher.cloud.manage.targets_acl"), () ->
-                            InputUtil.setScreen(new CloudTargetManagementScreen(this, CloudManagementScreen.management())));
-        }
-    }
 
-    private void setCloudAccountPage(CloudAccountPage page) {
-        if (cloudAccountPage == page) return;
-        cloudAccountPage = page;
-        cloudAccountScroll = 0;
-        cloudDetailScroll = 0;
-        cloudPanelStatus = Component.empty();
-        init();
+
+
+
+
+    private void setCloudAccountPage(CloudAccountPage page){
+        if(cloudAccountPage==page&&STATE.secondaryPanel==ModelPanelState.SecondaryPanel.NONE)return;
+        cloudHistory.push(cloudRoute());closeCloudForm();STATE.activeTab=ModelPanelState.Tab.SETTINGS;settingsPanel().selectPage("cloud");
+        cloudAccountPage=page;cloudAccountScroll=0;cloudDetailScroll=0;cloudPanelStatus=Component.empty();init();
     }
 
     private void selectCloudInstance(CloudInstanceRegistry.CloudInstanceProfile profile) {
@@ -3024,10 +2223,10 @@ public class ModernPlayerModelScreen extends Screen {
                             return;
                         }
                         try {
-                            if (existing.isEmpty()) registry.addOrReplace(profile);
+                            if (existing.isEmpty() || editingCloudInstance) registry.addOrReplace(profile);
                             CloudManagementScreen.management().saveInstances();
-                            closeCloudForm();
-                            selectCloudInstance(existing.orElse(profile));
+                            returnFromCloud();
+                            selectCloudInstance(profile);
                             cloudPanelStatus = cloudText("instance_added");
                         } catch (java.io.IOException | RuntimeException error) {
                             cloudPanelStatus = Component.literal(CloudManagementScreen.errorText(error));
@@ -3107,16 +2306,7 @@ public class ModernPlayerModelScreen extends Screen {
         screen.openCloudAccount();
     }
 
-    void openCloudAccount() {
-        closeCloudForm();
-        STATE.activeTab = ModelPanelState.Tab.ACCOUNT;
-        STATE.secondaryPanel = ModelPanelState.SecondaryPanel.NONE;
-        cloudAccountPage = CloudAccountPage.ACCOUNT;
-        cloudAccountScroll = 0;
-        cloudPanelStatus = Component.empty();
-        registerCloudAccount = false;
-        init();
-    }
+    void openCloudAccount(){openCloudSettings(CloudAccountPage.ACCOUNT);}
 
     void openCloudAccountForUpload(Screen uploadScreen, String instanceId) {
         if (CloudManagementScreen.management().registry().find(instanceId).isPresent()) {
@@ -3158,7 +2348,7 @@ public class ModernPlayerModelScreen extends Screen {
                 if (ignored instanceof com.micaftic.morpher.cloud.client.CloudSession session) {
                     try { context.checkSession(session); } catch (java.util.concurrent.CancellationException stale) { return; }
                 }
-                closeCloudForm();
+                if(STATE.secondaryPanel==ModelPanelState.SecondaryPanel.CLOUD_LOGIN)returnFromCloud();
                 resetCloudPage();
                 var runtime = context.runtime();
                 CloudManagementScreen.currentIdentityBound(context).whenComplete((bound, identityFailure) -> Minecraft.getInstance().execute(() -> {
@@ -3182,76 +2372,60 @@ public class ModernPlayerModelScreen extends Screen {
         }));
     }
 
-    private void renderSitesPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.sites"), x + 10, y + 10);
-        drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.url"), x + 16, y + 28);
-        if (this.siteEditBox != null) {
-            this.siteEditBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+    private void renderSitesPanel(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float pt){
+        if(sourceEditMode){renderSourceEditReference(g,mx,my,pt);return;}
+        pageHeader(g,mx,my,Component.literal("来源管理"),Component.literal("已配置来源决定资源目录内容"),()->{closeCloudForm();init();});
+        int pad=8,left=x+pad,right=x+w-pad,inner=right-left,bh=uiButtonHeight(),toolbarY=y+42;
+        renderPrimaryButton(g,mx,my,right-(width<560?88:110),toolbarY,width<560?88:110,bh,Component.literal("添加来源"),()->{sourceNameDraft="";STATE.siteEditText="";sourceEditMode=true;init();});
+        int hy=toolbarY+bh+12,rowH=width<560?38:width<800?46:58,footer=this.height-this.layout.top-bh-10;
+        int addressX=left+inner/4,actionsX=right-2*bh-6;
+        roundedFill(g,left,hy,inner,22,4,0x0CFFFFFF);drawMuted(g,Component.literal("来源名称"),left+8,hy+7);drawMuted(g,Component.literal("地址"),addressX,hy+7);
+        var urls=this.controller.siteUrls();int visible=Math.max(1,(footer-hy-34)/rowH);STATE.sitesScroll=clamp(STATE.sitesScroll,0,Math.max(0,urls.size()-visible));
+        for(int i=STATE.sitesScroll;i<Math.min(urls.size(),STATE.sitesScroll+visible);i++){
+            String url=urls.get(i);int yy=hy+26+(i-STATE.sitesScroll)*rowH;boolean selected=url.equals(this.controller.selectedSite());
+            roundedSurface(g,left,yy,inner,rowH-4,4,selected?0x16FFFFFF:0x06FFFFFF,selected?0x55DC4F5D:0x16FFFFFF);
+            int ty=UiElementLayout.centeredY(yy,rowH-4,font.lineHeight);
+            drawText(g,Component.literal(trim(ResourceSourceLabels.get(url),inner/4-16)),left+8,ty);
+            drawMuted(g,Component.literal(trim(url,actionsX-addressX-12)),addressX,ty);
+            hit(left,yy,inner,rowH-4,Component.literal(url),()->selectSite(url));
+            int ay=yy+(rowH-4-bh)/2;
+            toolbarButton(g,mx,my,actionsX,ay,IconGlyph.EDIT,Component.literal("编辑来源"),false,()->{selectSite(url);sourceNameDraft=ResourceSourceLabels.get(url);sourceEditMode=true;init();});
+            toolbarButton(g,mx,my,right-bh,ay,IconGlyph.DELETE,Component.literal("删除来源"),false,()->{selectSite(url);deleteSite();});
         }
-        int by = y + 66;
-        renderIconButton(g, mouseX, mouseY, x + 16, by, IconGlyph.CREATE, Component.translatable("gui.sparkle_morpher.model_panel.add_site"), this::saveSite);
-        renderIconButton(g, mouseX, mouseY, x + 42, by, IconGlyph.SAVE, Component.translatable("gui.sparkle_morpher.model_panel.save"), this::saveSite);
-        renderIconButton(g, mouseX, mouseY, x + 68, by, IconGlyph.DELETE, Component.translatable("gui.sparkle_morpher.model_panel.delete"), this::deleteSite);
-        int listX = x + 16;
-        int listY = y + 96;
-        int listW = w - 32;
-        glassPanel(g, listX, listY, listW, h - 108);
-        int rows = Math.max(1, (h - 112) / 20);
-        List<String> urls = this.controller.siteUrls();
-        int maxScroll = Math.max(0, urls.size() - rows);
-        STATE.sitesScroll = clamp(STATE.sitesScroll, 0, maxScroll);
-        for (int i = 0; i < rows && STATE.sitesScroll + i < urls.size(); i++) {
-            String url = urls.get(STATE.sitesScroll + i);
-            boolean selected = url.equals(this.controller.selectedSite());
-            int rowY = listY + 4 + i * 20;
-            renderRowButton(g, mouseX, mouseY, listX + 4, rowY, listW - 8, 17, Component.literal(trim(url, listW - 18)), selected, () -> selectSite(url));
-        }
+        renderTextButton(g,mx,my,left,footer,Math.min(160,inner),bh,Component.literal("资源与下载配置 ›"),()->{closeCloudForm();selectSettingsPage("resources");});
     }
 
-    private void renderCategoryPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.categories"), x + 10, y + 10);
-        drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.name_target"), x + 16, y + 28);
-        if (this.categoryEditBox != null) {
-            this.categoryEditBox.extractWidgetRenderState(g, mouseX, mouseY, partialTick);
+    private void renderCategoryPanel(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float pt){
+        if(!settingsDrawingBody){Component heading=Component.translatable("gui.sparkle_morpher.model_panel.categories");Runnable back=()->{closeCloudForm();init();};pageHeader(g,mx,my,heading,Component.empty(),back);renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+40,layout.contentWidth,height-layout.top-12,offset->renderCategoryPanel(g,mx,my+offset,x,y,w,h,pt));return;}
+
+        pageHeader(g,mx,my,Component.translatable("gui.sparkle_morpher.model_panel.categories"),Component.translatable("gui.sparkle_morpher.model_panel.name_target"),()->{closeCloudForm();init();});
+        renderReferenceField(g,mx,my,pt,categoryEditBox,x,70,Math.min(260,w-40),22);toolbarButton(g,mx,my,x+w-22,70,IconGlyph.PLUS,Component.translatable("gui.sparkle_morpher.model_panel.create"),false,()->setStatus(this.controller.createCategory(categoryEditBox==null?"":categoryEditBox.getValue())));
+        int hy=104;fill(g,x,hy,w,24,0x0CFFFFFF);drawMuted(g,Component.literal("目录"),x+10,hy+8);drawMuted(g,Component.literal("模型数量"),x+(int)(w*.3),hy+8);drawMuted(g,Component.literal("路径"),x+(int)(w*.51),hy+8);
+        var categories=this.controller.listCategories();
+        var ids=this.controller.availableModelIds();
+        for(int i=0;i<categories.size();i++){String category=categories.get(i);int yy=hy+24+i*44;boolean selected=category.equals(STATE.categoryEditText);long count=ids.stream().filter(id->id.startsWith(category+"/")).count();
+            if(selected){fill(g,x,yy,w,42,0x16FFFFFF);fill(g,x,yy+8,2,24,RED);}drawText(g,Component.literal(trim(category,w/3-20)),x+10,yy+16);drawMuted(g,Component.literal(Long.toString(count)),x+(int)(w*.3),yy+16);drawMuted(g,Component.literal(trim("custom / "+category,w/2-10)),x+(int)(w*.51),yy+16);hit(x,yy,w,42,Component.literal(category),()->{STATE.categoryEditText=category;if(categoryEditBox!=null)categoryEditBox.setValue(category);});
         }
-        int by = y + 66;
-        renderIconButton(g, mouseX, mouseY, x + 16, by, IconGlyph.CREATE, Component.translatable("gui.sparkle_morpher.model_panel.create"), () -> setStatus(this.controller.createCategory(STATE.categoryEditText)));
-        renderIconButton(g, mouseX, mouseY, x + 42, by, IconGlyph.MOVE, Component.translatable("gui.sparkle_morpher.model_panel.move"), () -> moveSelectionToCategory(STATE.categoryEditText));
-        renderIconButton(g, mouseX, mouseY, x + 68, by, IconGlyph.DELETE, Component.translatable("gui.sparkle_morpher.model_panel.delete"), () -> setStatus(this.controller.deleteCategory(STATE.categoryEditText, false)));
-        List<String> categories = this.controller.listCategories();
-        int listX = x + 16;
-        int listY = y + 96;
-        int listW = w - 32;
-        glassPanel(g, listX, listY, listW, h - 108);
-        int rows = Math.max(1, (h - 112) / 20);
-        int maxScroll = Math.max(0, categories.size() - rows);
-        STATE.categoryScroll = clamp(STATE.categoryScroll, 0, maxScroll);
-        for (int i = 0; i < rows && STATE.categoryScroll + i < categories.size(); i++) {
-            String category = categories.get(STATE.categoryScroll + i);
-            int rowY = listY + 4 + i * 20;
-            renderRowButton(g, mouseX, mouseY, listX + 4, rowY, listW - 8, 17, Component.literal(trim(category, listW - 18)), category.equals(STATE.categoryEditText), () -> {
-                STATE.categoryEditText = category;
-                if (this.categoryEditBox != null) {
-                    this.categoryEditBox.setValue(category);
-                }
-            });
-        }
+        int by=Math.max(this.height-this.layout.top-34,hy+32+categories.size()*44);drawMuted(g,Component.literal(trim("移动到："+STATE.categoryEditText,w-220)),x,by+7);renderTextButton(g,mx,my,x+w-184,by,76,22,Component.translatable("gui.cancel"),()->{closeCloudForm();init();});renderPrimaryButton(g,mx,my,x+w-100,by,100,22,Component.translatable("gui.sparkle_morpher.model_panel.move"),()->moveSelectionToCategory(STATE.categoryEditText));
     }
 
-    private void renderImportPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.import.title"), x + 10, y + 10);
-        renderIconButton(g, mouseX, mouseY, x + 12, y + 34, IconGlyph.IMPORT, Component.translatable("gui.sparkle_morpher.import.choose_file"), this::openFilePicker);
-        int yy = y + 70;
-        drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.drop_files_hint"), x + 12, yy);
-        yy += 20;
-        if (this.controller.localImportInProgress()) {
-            drawText(g, Component.translatable("gui.sparkle_morpher.model_panel.importing"), x + 12, yy);
-        } else {
-            drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.no_active_import"), x + 12, yy);
-        }
+    private void renderImportPanel(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h){
+        pageHeader(g,mx,my,Component.translatable("gui.sparkle_morpher.import.title"),Component.translatable("gui.sparkle_morpher.model_panel.drop_files_hint"),()->{closeCloudForm();init();});
+        roundedSurface(g,x,70,w,138,4,0x08FFFFFF,0x1CFFFFFF);drawTitle(g,Component.literal("选择模型文件"),x+20,96);drawMuted(g,Component.translatable("gui.sparkle_morpher.model_panel.drop_files_hint"),x+20,124);
+        renderPrimaryButton(g,mx,my,x+20,158,110,22,Component.translatable("gui.sparkle_morpher.import.choose_file"),this::openFilePicker);toolbarButton(g,mx,my,x+138,158,IconGlyph.FOLDER,Component.translatable("gui.sparkle_morpher.open_model_folder.open"),false,this::openModelFolder);
+        int ry=224;String[] labels={"本地模型文件夹","本地模型扫描","当前导入任务"};String[] details={com.micaftic.morpher.core.storage.ModelStoragePaths.custom().toString(),"重新扫描文件夹中的模型",this.controller.localImportInProgress()?"正在导入":"当前没有进行中的导入"};
+        Runnable[] actions={this::openModelFolder,()->this.controller.reloadLocalModels(this::setStatus),this::openFilePicker};
+        for(int i=0;i<3;i++){int yy=ry+i*47;drawText(g,Component.literal(labels[i]),x+10,yy+7);drawMuted(g,Component.literal(trim(details[i],w-190)),x+10,yy+23);renderTextButton(g,mx,my,x+w-160,yy+7,150,22,Component.literal(i==0?"打开目录 ›":i==1?"重新扫描":"选择文件…"),actions[i]);}
+        renderTextButton(g,mx,my,x+w-130,this.height-this.layout.top-34,130,22,Component.literal("Cloud 上传 ›"),this::openCloudUpload);
     }
 
     private void renderFooter(GuiGraphicsExtractor g) {
+        if(STATE.activeTab==ModelPanelState.Tab.RESOURCE)return;
+        if (STATE.activeTab == ModelPanelState.Tab.MODEL) {
+            if (!this.status.getString().isBlank()) hit(this.layout.contentLeft, this.layout.footerTop,
+                    this.layout.contentWidth, this.layout.footerHeight, this.status, () -> {});
+            return;
+        }
         if (STATE.activeTab == ModelPanelState.Tab.SETTINGS && this.status.getString().isBlank()) return;
         fill(g, this.layout.left, this.layout.footerTop, this.layout.width, 1, 0x55303030);
         Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatus() : this.status;
@@ -3271,7 +2445,7 @@ public class ModernPlayerModelScreen extends Screen {
             }
         }
         int c = chatColor(color);
-        g.text(this.font, trim(line.getString(), this.layout.width - 20), this.layout.left + 10, this.layout.footerTop + 8, c, false);
+        g.text(this.font, trim(line.getString(), this.layout.contentWidth - 20), this.layout.contentLeft + 10, this.layout.footerTop + 8, c, false);
     }
 
     private int chatColor(ChatFormatting color) {
@@ -3294,6 +2468,7 @@ public class ModernPlayerModelScreen extends Screen {
             Hit hit = this.hits.get(i);
             if (!inside(mouseX, mouseY, hit.x(), hit.y(), hit.w(), hit.h())) continue;
             if (hit.tooltip().getString().isBlank()) return;
+            String identity=hit.x()+":"+hit.y()+":"+hit.tooltip().getString();long now=System.nanoTime();if(!identity.equals(tooltipIdentity)){tooltipIdentity=identity;tooltipSince=now;return;}if(now-tooltipSince<450_000_000L)return;
             int maxWidth = Math.max(8, Math.min(220, this.width - 18));
             int maxLines = Math.max(1, (this.height - 18) / this.font.lineHeight);
             var lines = this.font.split(hit.tooltip(), maxWidth).stream().limit(maxLines).toList();
@@ -3307,6 +2482,7 @@ public class ModernPlayerModelScreen extends Screen {
                 g.text(this.font, lines.get(line), tx + 5, ty + 5 + line * this.font.lineHeight, 0xFFFFFFFF, false);
             return;
         }
+        tooltipIdentity="";
     }
 
     @Override
@@ -3314,6 +2490,9 @@ public class ModernPlayerModelScreen extends Screen {
         double mouseX = event.x();
         double mouseY = event.y();
         int button = event.button();
+        if(STATE.activeTab==ModelPanelState.Tab.MODEL&&STATE.secondaryPanel==ModelPanelState.SecondaryPanel.NONE&&!textureMenuOpen&&!sourceTabMenu&&!modelMenuOpen&&pendingConfirmation==null&&button==0&&inside(mouseX,mouseY,previewHitX,previewHitY,previewHitW,previewHitH)){previewDragging=true;setDragging(true);return true;}
+        if(pendingConfirmation!=null){if(button==0)for(int i=hits.size()-1;i>=0;i--){var h=hits.get(i);if(inside(mouseX,mouseY,h.x(),h.y(),h.w(),h.h())){h.action().run();break;}}return true;}
+
         if (STATE.activeTab == ModelPanelState.Tab.SETTINGS && STATE.secondaryPanel == ModelPanelState.SecondaryPanel.NONE) {
             if(peerLocalRouteBox!=null&&peerLocalRouteBox.visible&&peerLocalRouteBox.mouseClicked(event,flag)){setFocused(peerLocalRouteBox);return true;}
             if(peerListenerBox!=null&&peerListenerBox.visible&&peerListenerBox.mouseClicked(event,flag)){setFocused(peerListenerBox);return true;}
@@ -3321,9 +2500,7 @@ public class ModernPlayerModelScreen extends Screen {
             if (peerEndpointBox != null && peerEndpointBox.visible && peerEndpointBox.mouseClicked(event, flag)) { setFocused(peerEndpointBox); return true; }
             if (peerInvitationBox != null && peerInvitationBox.visible && peerInvitationBox.mouseClicked(event, flag)) { setFocused(peerInvitationBox); return true; }
         }
-        if (button == 0 && beginResourceScrollDrag(mouseX, mouseY)) {
-            return true;
-        }
+
         if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE && this.cloudAccountBox != null
                 && this.cloudAccountBox.mouseClicked(event, flag)) {
             setFocused(this.cloudAccountBox);
@@ -3367,7 +2544,8 @@ public class ModernPlayerModelScreen extends Screen {
             if (this.cloudInstanceNameBox != null && this.cloudInstanceNameBox.mouseClicked(event, flag)) { setFocused(this.cloudInstanceNameBox); return true; }
         }
         if (STATE.secondaryPanel != ModelPanelState.SecondaryPanel.NONE) {
-            if (this.siteEditBox != null && this.siteEditBox.mouseClicked(event, flag)) {
+            if(sourceEditMode&&sourceNameBox!=null&&sourceNameBox.mouseClicked(event,flag)){setFocused(sourceNameBox);return true;}
+            if (sourceEditMode && this.siteEditBox != null && this.siteEditBox.mouseClicked(event, flag)) {
                 setFocused(this.siteEditBox);
                 return true;
             }
@@ -3385,6 +2563,8 @@ public class ModernPlayerModelScreen extends Screen {
             setFocused(null);
             return true;
         }
+        if(this.sourceEditMode&&this.sourceNameBox!=null&&this.sourceNameBox.mouseClicked(event,flag)){setFocused(this.sourceNameBox);return true;}
+        if(this.instanceSearchBox!=null&&this.instanceSearchBox.mouseClicked(event,flag)){setFocused(this.instanceSearchBox);return true;}
         if (this.modelSearchBox != null && this.modelSearchBox.mouseClicked(event, flag)) {
             setFocused(this.modelSearchBox);
             return true;
@@ -3403,7 +2583,7 @@ public class ModernPlayerModelScreen extends Screen {
             setFocused(this.resourceSearchBox);
             return true;
         }
-        if (this.siteEditBox != null && this.siteEditBox.mouseClicked(event, flag)) {
+        if (sourceEditMode && this.siteEditBox != null && this.siteEditBox.mouseClicked(event, flag)) {
             setFocused(this.siteEditBox);
             return true;
         }
@@ -3424,40 +2604,33 @@ public class ModernPlayerModelScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if(textureMenuOpen&&scrollY!=0){inlineTexturePage=Math.max(0,inlineTexturePage+(scrollY>0?-1:1));return true;}
+        if(STATE.activeTab==ModelPanelState.Tab.MODEL&&STATE.secondaryPanel==ModelPanelState.SecondaryPanel.NONE&&!textureMenuOpen&&!sourceTabMenu&&!modelMenuOpen&&inside(mouseX,mouseY,previewHitX,previewHitY,previewHitW,previewHitH)){detailZoom=Math.max(.5f,Math.min(2f,detailZoom*(float)Math.pow(1.12,scrollY)));return true;}
+        if(scrollY==0)return super.mouseScrolled(mouseX,mouseY,scrollX,scrollY);
         int delta = scrollY > 0 ? -1 : 1;
         if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_LOGIN || STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CLOUD_INSTANCE) return true;
-        if (isCloudSettingsPage()) {
-            AccountPanelLayout panels = accountPanelLayout();
-            if (inside(mouseX, mouseY, panels.detailX(), panels.detailY(), panels.detailWidth(), panels.detailHeight())) {
-                cloudDetailScroll += delta * 24;
-                cloudDetailLayout();
-                if (isCloudIdentityPage()) init();
-                return true;
+        if(isCloudSettingsPage()&&STATE.secondaryPanel==ModelPanelState.SecondaryPanel.NONE){
+            if(cloudAccountPage==CloudAccountPage.INSTANCES){
+                var r=FinalUiLayout.scene("instances",width,height).area("listRect");
+                if(inside(mouseX,mouseY,r.x(),r.y(),r.w(),height-r.y()-layout.top-24)){
+                    int rowH=width<560?43:66,visible=Math.max(1,(height-r.y()-45)/(rowH+6));
+                    int count=CloudManagementScreen.management().registry().profiles().size();cloudAccountScroll=clamp(cloudAccountScroll+delta,0,Math.max(0,count-visible));return true;
+                }
             }
-            if (!inside(mouseX, mouseY, panels.listX(), panels.listY(), panels.listWidth(), panels.listHeight())) {
-                var columns = settingsColumns();
-                if (inside(mouseX, mouseY, columns.navigationX(), columns.top(), columns.navigationWidth(), columns.height())) { settingsPanel().scrollNavigationBy(delta); return true; }
-                return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-            }
-            int count = cloudAccountPage == CloudAccountPage.PERFORMANCE ? com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.values().length : isCloudIdentityPage() ? cloudIdentityListSize() : cloudAccountPage == CloudAccountPage.SCOPES
-                    ? CloudManagementScreen.management().snapshot().scopes().size()
-                    : CloudManagementScreen.management().registry().profiles().size();
-            cloudAccountScroll = clamp(cloudAccountScroll + delta, 0, Math.max(0, count - panels.listRows()));
-            return true;
+            if(cloudAccountPage==CloudAccountPage.CLAIM){var p=accountPanelLayout();if(inside(mouseX,mouseY,p.listX(),p.listY(),p.listWidth(),p.listHeight())){cloudAccountScroll=clamp(cloudAccountScroll+delta,0,Math.max(0,cloudIdentityListSize()-p.listRows()));return true;}}
+            if(inside(mouseX,mouseY,layout.contentLeft,layout.top+34,layout.contentWidth,height-layout.top-24-(layout.top+34)))return settingsViewport().scroll(scrollY);
+            return super.mouseScrolled(mouseX,mouseY,scrollX,scrollY);
         }
+        if((STATE.secondaryPanel==ModelPanelState.SecondaryPanel.SITES&&sourceEditMode)||STATE.secondaryPanel==ModelPanelState.SecondaryPanel.CATEGORIES){settingsViewport().scroll(scrollY);return true;}
         if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.SITES) {
             STATE.sitesScroll = Math.max(0, STATE.sitesScroll + delta);
-            return true;
-        }
-        if (STATE.secondaryPanel == ModelPanelState.SecondaryPanel.CATEGORIES) {
-            STATE.categoryScroll = Math.max(0, STATE.categoryScroll + delta);
             return true;
         }
         switch (STATE.activeTab) {
             case MODEL -> {
                 if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
                     CloudModelPage page = cloudGridPage(modelListW(), currentModelGridH());
-                    STATE.cloudScroll = clamp(STATE.cloudScroll + delta, 0, page.maxScroll());
+                    if(!STATE.cloudLoading){if(delta>0)advanceCloudPage(modelListW(),currentModelGridH());else if(page.scroll()>0)STATE.cloudScroll=page.previous();else if(STATE.cloudPages.hasPrevious())requestCloudBatch(STATE.cloudPages.previous());}
                     return true;
                 }
                 if (gridMode(modelListW(), currentModelGridH()) == ModelPickerLayout.GridMode.CARDS) {
@@ -3469,24 +2642,21 @@ public class ModernPlayerModelScreen extends Screen {
                     STATE.modelScroll = Math.max(0, STATE.modelScroll + delta);
                 }
             }
-            case RESOURCE -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll + delta);
+            case RESOURCE -> {if(resourceRoute==ResourceRoute.DETAIL||resourceRoute==ResourceRoute.ERROR)settingsViewport().scroll(scrollY);else STATE.resourceScroll=Math.max(0,STATE.resourceScroll+delta);}
             case ACCOUNT, INSTANCE -> { }
             case SETTINGS -> {
-                var columns = settingsColumns();
-                if (inside(mouseX, mouseY, columns.navigationX(), columns.top(), columns.navigationWidth(), columns.height())) settingsPanel().scrollNavigationBy(delta);
-                else {
-                    var page = settingsPanel().selectedPage();
-                    var sections = SettingsPanelLayout.sections(columns);
-                    boolean nested = page.kind() == SettingsPageRegistry.Kind.NETWORK || page.kind() == SettingsPageRegistry.Kind.PEER_LAN;
-                    if (nested ? inside(mouseX, mouseY, sections.detailsX(), sections.top(), sections.detailsWidth(), sections.height())
-                            : inside(mouseX, mouseY, columns.detailX(), columns.top(), columns.detailWidth(), columns.height())) settingsPanel().scrollBy(delta);
-                }
+                var columns=settingsColumns();
+                if(fontMenuOpen){fontPage=Math.max(0,fontPage+delta);return true;}
+                boolean connection=settingsPanel().selectedPage().kind()==SettingsPageRegistry.Kind.PEER_LAN&&(peerSettingsSection==PeerSettingsSection.CONNECTION||peerSettingsSection==PeerSettingsSection.PROBE);
+                if(!connection&&inside(mouseX,mouseY,columns.navigationX(),columns.top(),columns.navigationWidth(),columns.height()))settingsPanel().scrollNavigationBy(delta);
+                else if(inside(mouseX,mouseY,connection?layout.contentLeft:columns.detailX(),connection?layout.top+42:columns.top(),connection?layout.contentWidth:columns.detailWidth(),height-layout.top-12-(connection?layout.top+42:columns.top())))settingsViewport().scroll(scrollY);
             }
         }
         return true;
     }
 
     private List<ModelEntry> collectModelEntries() {
+        if(extractingPage&&frameModelEntries!=null)return frameModelEntries;
         List<ModelEntry> out = new ArrayList<>();
         String query = STATE.modelSearchText.trim().toLowerCase(Locale.ROOT);
         boolean searching = !query.isBlank();
@@ -3559,7 +2729,7 @@ public class ModernPlayerModelScreen extends Screen {
                 .<ModelEntry, Boolean>comparing(e -> !stars.contains(e.modelId()))
                 .thenComparing(Comparator.<ModelEntry, Boolean>comparing(entry -> entry.folder()).reversed())
                 .thenComparing(e -> e.title().toLowerCase(Locale.ROOT)));
-        return out;
+        if(extractingPage)frameModelEntries=out;return out;
     }
 
     private boolean matchesModelFilter(String modelId, ModelAssembly assembly, Set<String> auth, Set<String> stars) {
@@ -3611,6 +2781,7 @@ public class ModernPlayerModelScreen extends Screen {
             return;
         }
         if (STATE.multiSelectMode) {
+            STATE.selectedModelId = entry.modelId();
             if (!this.selectedModelIds.add(entry.modelId())) {
                 this.selectedModelIds.remove(entry.modelId());
             }
@@ -3665,7 +2836,7 @@ public class ModernPlayerModelScreen extends Screen {
                         if (modelId.equals(this.controller.cloudModelId(entry))) { this.controller.markCloudApplied(entry); break; }
                     }
                 }
-                setStatus(Component.translatable("gui.sparkle_morpher.model_panel.applied_model", modelId), ChatFormatting.GREEN);
+                setStatus(Component.empty(), ChatFormatting.WHITE);
         }
     }
 
@@ -3682,6 +2853,12 @@ public class ModernPlayerModelScreen extends Screen {
             }
             return;
         }
+        if (STATE.multiSelectMode) {
+            Set<String> stars = starModels();
+            boolean remove = !selectedModelIds.isEmpty() && selectedModelIds.stream().allMatch(stars::contains);
+            for (String id : List.copyOf(selectedModelIds)) if (stars.contains(id) == remove) this.controller.toggleStar(id);
+            return;
+        }
         boolean wasStarred = starModels().contains(STATE.selectedModelId);
         if (this.controller.toggleStar(STATE.selectedModelId)) {
             setStatus(Component.translatable(wasStarred
@@ -3693,17 +2870,10 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     /** §24.7：转发到 Service（保留本方法名，行为不变）。 */
-    private void deleteSelectedModels() {
-        Collection<String> models = this.selectedModelIds.isEmpty() && !STATE.selectedModelId.isBlank() ? List.of(STATE.selectedModelId) : new HashSet<>(this.selectedModelIds);
-        if (models.isEmpty()) {
-            return;
-        }
-        setStatus(this.controller.deleteModels(models));
-        this.selectedModelIds.clear();
-        STATE.selectedModelId = "";
-        STATE.selectedTextureId = "";
-        STATE.multiSelectMode = false;
-        this.controller.reloadLocalModels(this::setStatus);
+    private void deleteSelectedModels(){
+        List<String> models=List.copyOf(this.selectedModelIds.isEmpty()&&!STATE.selectedModelId.isBlank()?List.of(STATE.selectedModelId):this.selectedModelIds);if(models.isEmpty())return;
+        confirmationAction=Component.translatable("gui.sparkle_morpher.model_panel.delete");confirmationTitle=Component.literal("删除 "+models.size()+" 个本地模型？");confirmationBody=Component.literal("仅删除所选本地模型。此操作无法撤销。\n"+String.join("\n",models.stream().limit(4).toList()));
+        pendingConfirmation=()->{setStatus(this.controller.deleteModels(models));this.selectedModelIds.clear();STATE.selectedModelId="";STATE.selectedTextureId="";STATE.multiSelectMode=false;this.controller.reloadLocalModels(this::setStatus);};
     }
 
     private void selectAllVisibleModels() {
@@ -3781,11 +2951,7 @@ public class ModernPlayerModelScreen extends Screen {
         init();
     }
 
-    private void toggleResourceMode() {
-        this.controller.toggleMainlandChinaMode();
-        STATE.resourceLoaded = false;
-        refreshResources(false);
-    }
+
 
     private void openCategoryPanel(String seed) {
         STATE.secondaryPanel = ModelPanelState.SecondaryPanel.CATEGORIES;
@@ -4374,95 +3540,63 @@ public class ModernPlayerModelScreen extends Screen {
         this.resourceStatusMessage = true;
     }
 
-    private void renderChip(GuiGraphicsExtractor g, int x, int y, int w, Component label, boolean selected, Runnable action) {
-        fill(g, x, y, w, 15, selected ? RED_SOFT : 0x55303030);
-        drawCentered(g, Component.literal(trim(label.getString(), w - 4)), x + w / 2, y + 4, selected ? 0xFFFFFFFF : MUTED);
-        hit(x, y, w, 15, label, action);
-    }
 
-    private void renderDenseIconButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, IconGlyph icon, Component tooltip, Runnable action) {
-        int size = 14;
-        boolean hover = inside(mouseX, mouseY, x, y, size, size);
-        fill(g, x, y, size, size, hover ? PANEL_HOVER : 0x66303030);
-        border(g, x, y, size, size, hover ? RED : 0x33FFFFFF);
-        drawIconScaled(g, icon, x, y, size);
-        hit(x, y, size, size, tooltip, action);
-    }
 
-    private void renderIconButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, IconGlyph icon, Component tooltip, Runnable action) {
-        boolean hover = inside(mouseX, mouseY, x, y, ICON, ICON);
-        fill(g, x, y, ICON, ICON, hover ? PANEL_HOVER : 0x66303030);
-        border(g, x, y, ICON, ICON, hover ? RED : 0x33FFFFFF);
-        drawIcon(g, icon, x + 1, y + 1);
-        hit(x, y, ICON, ICON, tooltip, action);
+
+
+    private void renderIconButton(GuiGraphicsExtractor g,int mx,int my,int x,int y,IconGlyph icon,Component tooltip,Runnable action){
+        int size=this.width<560?18:22;
+        boolean hover=inside(mx,my,x,y,size,size);
+        roundedSurface(g,x,y,size,size,3,hover?0x22FFFFFF:0x0CFFFFFF,0x22FFFFFF);
+        int glyph=size<=18?12:14;
+        drawIconScaled(g,icon,x+(size-glyph)/2,y+(size-glyph)/2,glyph);
+        hit(x,y,size,size,tooltip,action);
     }
 
     private void drawIcon(GuiGraphicsExtractor g, IconGlyph icon, int x, int y) {
-        g.blit(MODEL_PANEL_ICONS, x, y, x + 16, y + 16, icon.u / 128.0f, (icon.u + 16) / 128.0f, icon.v / 64.0f, (icon.v + 16) / 64.0f);
+        g.blit(MODEL_PANEL_ICONS, x, y, x + 16, y + 16, icon.u / 128.0f, (icon.u + 16) / 128.0f, icon.v / 128.0f, (icon.v + 16) / 128.0f);
     }
 
-    private void renderModeButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
-        boolean hover = inside(mouseX, mouseY, x, y, w, ICON);
-        boolean mainland = isMainlandResourceMode();
-        fill(g, x, y, w, ICON, hover ? PANEL_HOVER : mainland ? RED_SOFT : 0x66303030);
-        border(g, x, y, w, ICON, mainland ? RED : hover ? RED : 0x33FFFFFF);
-        drawCentered(g, Component.literal(trim(modeLabel().getString(), w - 8)), x + w / 2, y + 5, 0xFFFFFFFF);
-        hit(x, y, w, ICON, modeLabel(), this::toggleResourceMode);
-    }
+
 
     private void renderTextButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, Component label, Runnable action) {
         boolean hover = inside(mouseX, mouseY, x, y, w, h);
-        fill(g, x, y, w, h, hover ? PANEL_HOVER : 0x66303030);
-        border(g, x, y, w, h, hover ? RED : 0x33FFFFFF);
-        drawCentered(g, Component.literal(trim(label.getString(), w - 8)), x + w / 2, y + 5, 0xFFFFFFFF);
+        roundedSurface(g,x,y,w,h,UiElementLayout.BUTTON_RADIUS,hover?0x18FFFFFF:0x0CFFFFFF,0x22FFFFFF);
+        drawCentered(g, Component.literal(trim(label.getString(), w - 8)), x + w / 2, UiElementLayout.centeredY(y,h,font.lineHeight), 0xFFFFFFFF);
         hit(x, y, w, h, label, action);
     }
 
-    private void renderRowButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, Component label, boolean selected, Runnable action) {
-        boolean hover = inside(mouseX, mouseY, x, y, w, h);
-        fill(g, x, y, w, h, selected ? 0xE05B3544 : hover ? PANEL_HOVER : 0x55303030);
-        if (selected) {
-            border(g, x, y, w, h, RED);
-            fill(g, x, y, 3, h, RED);
-        }
-        g.text(this.font, selected ? label.copy().withStyle(ChatFormatting.BOLD) : label, x + 6, y + 4, selected ? 0xFFFFFFFF : TEXT, false);
-        hit(x, y, w, h, label, action);
+    private void renderRowButton(GuiGraphicsExtractor g,int mouseX,int mouseY,int x,int y,int w,int h,Component label,boolean selected,Runnable action){
+        boolean hover=inside(mouseX,mouseY,x,y,w,h);roundedSurface(g,x,y,w,h,UiElementLayout.BUTTON_RADIUS,selected?0x443F3F3F:hover?PANEL_HOVER:0x55303030,selected?RED:0x33FFFFFF);
+        drawCentered(g,Component.literal(trim(label.getString(),w-12)),x+w/2,UiElementLayout.centeredY(y,h,font.lineHeight),TEXT);hit(x,y,w,h,label,action);
     }
 
-    private void drawCentered(GuiGraphicsExtractor g, Component text, int centerX, int y, int color) {
-        g.text(this.font, text, centerX - this.font.width(text) / 2, y, color, false);
+    private void drawCentered(GuiGraphicsExtractor g,Component text,int centerX,int y,int color){
+        settingsExtent(y+font.lineHeight);var styled=appearanceText(text);g.text(this.font,styled,centerX-this.font.width(styled)/2,y,color,false);
     }
 
-    private void drawTitle(GuiGraphicsExtractor g, Component text, int x, int y) {
-        g.text(this.font, text.copy().withStyle(ChatFormatting.BOLD), x, y, TEXT, false);
-    }
+    private void drawTitle(GuiGraphicsExtractor g,Component text,int x,int y){g.pose().pushMatrix();g.pose().translate(x,y);g.pose().scale(1.25f,1.25f);g.text(this.font,appearanceText(text),0,0,TEXT,false);g.pose().popMatrix();}
 
     private void drawSection(GuiGraphicsExtractor g, Component text, int x, int y) {
-        g.text(this.font, text.copy().withStyle(ChatFormatting.GRAY), x, y, MUTED, false);
+        g.text(this.font, appearanceText(text.copy().withStyle(ChatFormatting.GRAY)), x, y, MUTED, false);
     }
 
     private void drawText(GuiGraphicsExtractor g, Component text, int x, int y) {
-        g.text(this.font, text, x, y, TEXT, false);
+        settingsExtent(y+font.lineHeight);g.text(this.font, appearanceText(text), x, y, TEXT, false);
     }
 
     private void drawMuted(GuiGraphicsExtractor g, Component text, int x, int y) {
-        g.text(this.font, text, x, y, MUTED, false);
+        settingsExtent(y+font.lineHeight);g.text(this.font, appearanceText(text), x, y, MUTED, false);
     }
 
     private void fill(GuiGraphicsExtractor g, int x, int y, int w, int h, int color) {
         g.fillGradient(x, y, x + w, y + h, color, color);
     }
 
-    private void glassPanel(GuiGraphicsExtractor g, int x, int y, int w, int h) {
-        blurGlass(g, x, y, w, h, 0x34F1FBFF, 8.0f);
-        fill(g, x, y, w, h, GLASS);
-        border(g, x, y, w, h, BORDER);
-    }
+    private void glassPanel(GuiGraphicsExtractor g,int x,int y,int w,int h){roundedSurface(g,x,y,w,h,4,0x09FFFFFF,0x1AFFFFFF);}
 
-    private void secondaryGlassPanel(GuiGraphicsExtractor g, int x, int y, int w, int h) {
-        blurGlass(g, x, y, w, h, 0x58F7FBFF, 12.0f);
-        fill(g, x, y, w, h, 0xD21F282E);
-        border(g, x, y, w, h, 0xC8E4F5FF);
+    private void secondaryGlassPanel(GuiGraphicsExtractor g,int x,int y,int w,int h){
+        com.micaftic.morpher.core.gui.RoulettePanelStyle.secondaryGlassPanel(g,x,y,w,h);
     }
 
     private void blurGlass(GuiGraphicsExtractor g, int x, int y, int w, int h, int tint, float radius) {
@@ -4481,24 +3615,19 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void hit(int x, int y, int w, int h, Component tooltip, Runnable action) {
-        this.hits.add(new Hit(x, y, w, h, tooltip, action));
+        settingsExtent(y+h);this.hits.add(new Hit(x, y, w, h, tooltip, action));
     }
 
     private static boolean inside(double px, double py, int x, int y, int w, int h) {
         return px >= x && py >= y && px < x + w && py < y + h;
     }
 
-    private String trim(String value, int maxWidth) {
-        String text = value == null ? "" : value;
-        if (this.font.width(text) <= maxWidth) {
-            return text;
-        }
-        String ellipsis = "...";
-        int keep = text.length();
-        while (keep > 0 && this.font.width(text.substring(0, keep) + ellipsis) > maxWidth) {
-            keep--;
-        }
-        return text.substring(0, Math.max(0, keep)) + ellipsis;
+    private String trim(String value,int maxWidth){
+        String text=value==null?"":value;if(maxWidth<=0)return "";
+        if(font.width(appearanceText(Component.literal(text)))<=maxWidth)return text;
+        String ellipsis="...";int available=maxWidth-font.width(appearanceText(Component.literal(ellipsis)));
+        if(available<=0)return "";
+        return font.substrByWidth(appearanceText(Component.literal(text)),available).getString()+ellipsis;
     }
 
     private List<String> wrap(String value, int maxWidth, int maxLines) {
@@ -4589,77 +3718,7 @@ public class ModernPlayerModelScreen extends Screen {
         return STATE.compactPreviewExpanded ? 112 : 18;
     }
 
-    private void renderCompactDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        if (STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
-            renderCloudCompactDetail(g, mouseX, mouseY, x, y, w, h, partialTick); return;
-        }
-        int barH = 18;
-        fill(g, x, y, w, h, GLASS_DARK);
-        border(g, x, y, w, h, 0x33FFFFFF);
-        boolean expanded = STATE.compactPreviewExpanded;
-        renderIconButton(g, mouseX, mouseY, x + 1, y, expanded ? IconGlyph.MINUS : IconGlyph.PLUS,
-                Component.translatable("gui.sparkle_morpher.model_panel.details"), () -> STATE.compactPreviewExpanded = !STATE.compactPreviewExpanded);
-        ModelAssembly assembly = selectedAssembly();
-        String modelId = STATE.selectedModelId;
-        if (assembly == null) {
-            drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 22, y + 5);
-            return;
-        }
-        List<String> textures = assembly.getTextureNames();
-        boolean textureSelectionAvailable = assembly.getPresentationCapabilities().textureSelectionAvailable();
-        String selectedTexture = textureSelectionAvailable ? selectedTextureOrDefault(assembly) : "";
-        int quickButtonW = 52;
-        int quickCount = textureSelectionAvailable
-                ? Math.min(textures.size(), Math.max(0, Math.min(3, (w - 150) / (quickButtonW + 2)))) : 0;
-        int quickStartIndex = 0;
-        int selectedTextureIndex = textures.indexOf(selectedTexture);
-        if (quickCount > 0 && selectedTextureIndex >= quickCount) {
-            quickStartIndex = Math.min(selectedTextureIndex, textures.size() - quickCount);
-        }
-        int quickStartX = x + w - 22 - quickCount * (quickButtonW + 2);
-        drawText(g, Component.literal(trim(displayName(modelId, assembly), Math.max(24, quickStartX - x - 26))), x + 22, y + 5);
-        for (int i = 0; i < quickCount; i++) {
-            String texture = textures.get(quickStartIndex + i);
-            int buttonX = quickStartX + i * (quickButtonW + 2);
-            renderRowButton(g, mouseX, mouseY, buttonX, y + 2, quickButtonW, 14,
-                    Component.literal(trim(texture, quickButtonW - 10)), texture.equals(selectedTexture), () -> {
-                        STATE.selectedTextureId = texture;
-                        applySelectedTexture();
-                    });
-        }
-        renderIconButton(g, mouseX, mouseY, x + w - 19, y, IconGlyph.INFO,
-                Component.translatable("gui.sparkle_morpher.model_panel.info"), () -> STATE.compactPreviewExpanded = true);
-        if (!expanded) {
-            return;
-        }
-        int py = y + barH + 2;
-        int ph = h - barH - 4;
-        int previewW = Math.min(w - 8, Math.max(56, ph));
-        renderSelectedModelPreview(g, assembly, modelId, x + 3, py, previewW, ph, mouseX, mouseY, partialTick);
-        int ix = x + previewW + 8;
-        int iw = x + w - 4 - ix;
-        if (iw > 40) {
-            int iy = py + 2;
-            drawMuted(g, Component.literal(trim(modelId, iw)), ix, iy);
-            iy += 12;
-            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.textures"), ix, iy);
-            iy += 11;
-            int visibleTextures = Math.min(textures.size(), Math.max(1, Math.min(4, (py + ph - iy) / 16)));
-            int textureStart = 0;
-            if (visibleTextures > 0 && selectedTextureIndex >= visibleTextures) {
-                textureStart = Math.min(selectedTextureIndex, textures.size() - visibleTextures);
-            }
-            for (int i = 0; i < visibleTextures; i++) {
-                String texture = textures.get(textureStart + i);
-                renderRowButton(g, mouseX, mouseY, ix, iy, iw, 14, Component.literal(trim(texture, iw - 10)),
-                        texture.equals(selectedTexture), () -> {
-                            STATE.selectedTextureId = texture;
-                            applySelectedTexture();
-                        });
-                iy += 16;
-            }
-        }
-    }
+
 
     private void renderScrollbar(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, int total, int visible, int scroll) {
         fill(g, x, y, w, h, 0x50101418);
@@ -4672,13 +3731,9 @@ public class ModernPlayerModelScreen extends Screen {
         border(g, x, thumbY, w, thumbH, 0x66FFFFFF);
     }
 
-    private int resourceListContentY() {
-        return this.layout.contentTop + 8 + 26;
-    }
+    private int resourceListContentY(){return this.layout.top+105;}
 
-    private int resourceListContentH() {
-        return (this.layout.footerTop - 6) - (this.layout.contentTop + 8) - 26;
-    }
+    private int resourceListContentH(){return Math.max(1,this.height-this.layout.top-40-resourceListContentY());}
 
     private int[] resourceScrollbarTrack() {
         List<ModelRepoEntry> entries = filteredResources();
@@ -4726,6 +3781,15 @@ public class ModernPlayerModelScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if(previewDragging&&event.button()==0){detailYaw+=(float)dragX*.8f;detailPitch=Math.max(-35,Math.min(35,detailPitch+(float)dragY*.6f));return true;}
+        if (event.button() == 0 && draggingSourceTab != null) {
+            for (var tab : sourceTabHits) if (inside(event.x(),event.y(),tab.x(),tab.y(),tab.w(),18) && !tab.instanceId().equals(draggingSourceTab)) {
+                int from=STATE.cloudTabOrder.indexOf(draggingSourceTab),to=STATE.cloudTabOrder.indexOf(tab.instanceId());
+                if(from>=0&&to>=0){STATE.cloudTabOrder.remove(from);STATE.cloudTabOrder.add(to,draggingSourceTab);}
+                return true;
+            }
+        }
+
         if (this.draggingResourceScroll) {
             updateResourceScrollFromMouse(event.y());
             return true;
@@ -4735,6 +3799,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
+        if(previewDragging&&event.button()==0){previewDragging=false;setDragging(false);return true;}
+        draggingSourceTab=null;
         if (this.draggingResourceScroll && event.button() == 0) {
             this.draggingResourceScroll = false;
             return true;
@@ -4766,7 +3832,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private List<CloudAssetSummary> cloudVisibleEntries() {
         String query = STATE.cloudView == ModelPanelState.CloudView.RECENT || STATE.cloudView == ModelPanelState.CloudView.FAVORITES ? STATE.cloudSearchText : "";
-        return CloudModelBrowserFilter.filter(STATE.cloudEntries, query, STATE.cloudView == ModelPanelState.CloudView.PUBLIC ? "PUBLIC" : cloudVisibilityFilter);
+        return CloudModelBrowserFilter.filter(STATE.cloudEntries, query, (STATE.cloudView == ModelPanelState.CloudView.PUBLIC || STATE.cloudView == ModelPanelState.CloudView.ALL) ? "PUBLIC" : cloudVisibilityFilter);
     }
 
     private List<CloudAssetSummary> cloudActionTargets() {
@@ -4807,37 +3873,7 @@ public class ModernPlayerModelScreen extends Screen {
                 });
     }
 
-    private void renderCloudActions(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w) {
-        List<CloudAssetSummary> targets = cloudActionTargets();
-        Component multi = Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (cloudMultiSelectMode ? "multi_done" : "multi"), selectedCloudAssetIds.size());
-        renderIconButton(g, mouseX, mouseY, x, y, cloudMultiSelectMode ? IconGlyph.CHECK : IconGlyph.MULTI, multi,
-                () -> { cloudMultiSelectMode = !cloudMultiSelectMode; selectedCloudAssetIds.clear(); });
-        boolean allFavorite = !targets.isEmpty() && targets.stream().allMatch(this.controller::isCloudFavorite);
-        int stride = 22;
-        renderIconButton(g, mouseX, mouseY, x + stride, y, IconGlyph.STAR,
-                Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (allFavorite ? "unfavorite" : "favorite")),
-                () -> setCloudFavorites(cloudActionTargets(), !allFavorite));
-        renderIconButton(g, mouseX, mouseY, x + stride * 2, y, IconGlyph.SITES,
-                Component.translatable("gui.sparkle_morpher.cloud_upload.make_public"), () -> changeCloudVisibilityBatch("PUBLIC"));
-        renderIconButton(g, mouseX, mouseY, x + stride * 3, y, IconGlyph.LOCK,
-                Component.translatable("gui.sparkle_morpher.cloud_upload.make_private"), () -> changeCloudVisibilityBatch("PRIVATE"));
-        renderIconButton(g, mouseX, mouseY, x + stride * 4, y, IconGlyph.CHECK,
-                Component.translatable("gui.sparkle_morpher.model_panel.cloud.select_results"), () -> {
-                    cloudMultiSelectMode = true; selectedCloudAssetIds.clear();
-                    for (CloudAssetSummary entry : cloudVisibleEntries()) selectedCloudAssetIds.add(entry.ref().assetId());
-                });
-        renderIconButton(g, mouseX, mouseY, x + stride * 5, y, IconGlyph.CLEAR,
-                Component.translatable("gui.sparkle_morpher.model_panel.clear_selection"), () -> selectedCloudAssetIds.clear());
-        Component filter = Component.translatable("gui.sparkle_morpher.model_panel.cloud.filter_" +
-                (cloudVisibilityFilter.isEmpty() ? "all" : cloudVisibilityFilter.toLowerCase(Locale.ROOT)));
-        renderIconButton(g, mouseX, mouseY, x + stride * 6, y, IconGlyph.MODE, filter, () -> {
-            if (STATE.cloudView == ModelPanelState.CloudView.PUBLIC) return;
-            cloudVisibilityFilter = cloudVisibilityFilter.isEmpty() ? "PRIVATE" : cloudVisibilityFilter.equals("PRIVATE") ? "PUBLIC" : "";
-            STATE.cloudScroll = 0; selectedCloudAssetIds.clear();
-        });
-        renderIconButton(g, mouseX, mouseY, x + stride * 7, y, IconGlyph.SITES,
-                Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"), this::openCloudUpload);
-    }
+
 
     private void setCloudFavorites(List<CloudAssetSummary> targets, boolean value) {
         if (targets.isEmpty()) { setStatus(Component.translatable("gui.sparkle_morpher.model_panel.select_model"), ChatFormatting.YELLOW); return; }
@@ -4912,129 +3948,451 @@ public class ModernPlayerModelScreen extends Screen {
         }));
     }
 
-    private void renderCloudDetails(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        glassPanel(g, x, y, w, h);
-        drawTitle(g, Component.translatable("gui.sparkle_morpher.model_panel.details"), x + 8, y + 8);
-        CloudAssetSummary entry = focusedCloudAsset();
-        if (entry == null) { drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 8, y + 28); return; }
-        String modelId = this.controller.cloudModelId(entry);
-        ModelAssembly assembly = this.controller.assemblyOrNull(modelId);
-        int yy = y + 26;
-        drawText(g, Component.literal(trim(cloudEntryName(entry), w - 16)), x + 8, yy); yy += 13;
-        drawMuted(g, Component.literal(trim(cloudEntryDetail(entry), w - 16)), x + 8, yy); yy += 13;
-        drawMuted(g, Component.literal(trim(this.controller.formatBytes(entry.byteLength()) + " · r" + entry.ref().revision(), w - 16)), x + 8, yy); yy += 15;
-        renderTextButton(g, mouseX, mouseY, x + 8, yy, w - 16, 18,
-                Component.translatable("gui.sparkle_morpher.model_panel.cloud." + (this.controller.isCloudFavorite(entry) ? "unfavorite" : "favorite")),
-                () -> setCloudFavorites(List.of(entry), !this.controller.isCloudFavorite(entry))); yy += 21;
-        renderTextButton(g, mouseX, mouseY, x + 8, yy, w - 16, 18,
-                Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_local_copy"), this.controller::openCloudModelFolder); yy += 21;
-        if (canChangeCloudVisibility(entry)) {
-            renderTextButton(g, mouseX, mouseY, x + 8, yy, w - 16, 18, cloudVisibilityAction(entry), () -> changeCloudVisibility(entry)); yy += 21;
+    private void renderCloudDetails(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float partialTick){
+        glassPanel(g,x,y,w,h);drawMuted(g,Component.translatable("gui.sparkle_morpher.ui.preview"),x+6,y+7);
+        CloudAssetSummary entry=focusedCloudAsset();
+        if(entry==null){drawMuted(g,Component.literal(trim(Component.translatable("gui.sparkle_morpher.model_panel.select_model").getString(),w-12)),x+6,y+24);return;}
+        String id=this.controller.cloudModelId(entry);ModelAssembly assembly=this.controller.assemblyOrNull(id);boolean editable=canChangeCloudVisibility(entry);
+        var d=ModelDetailLayout.measure(y,h,w,editable);
+        if(assembly!=null)renderSelectedModelPreview(g,assembly,id,x+5,d.previewY(),w-10,d.previewHeight(),mx,my,partialTick);
+        else drawCardLoading(g,x+5,d.previewY(),w-10,d.previewHeight());
+        drawText(g,Component.literal(trim(cloudEntryName(entry),w-14)),x+7,d.nameY());
+        drawMuted(g,Component.literal(trim(cloudEntryDetail(entry),w-14)),x+7,d.metadataY());
+        if(assembly!=null)renderInlineTexture(g,mx,my,assembly,id,x+7,d.textureY(),w-14,true);
+        if(editable){int vw=(w-18)/2;
+            renderRowButton(g,mx,my,x+7,d.actionsY(),vw,d.controlHeight(),Component.translatable("gui.sparkle_morpher.model_panel.cloud.public"),entry.isPublic(),()->startCloudVisibilityBatch(List.of(entry),"PUBLIC"));
+            renderRowButton(g,mx,my,x+11+vw,d.actionsY(),vw,d.controlHeight(),Component.translatable("gui.sparkle_morpher.model_panel.cloud.private"),!entry.isPublic(),()->startCloudVisibilityBatch(List.of(entry),"PRIVATE"));
         }
-        if (assembly == null) {
-            renderTextButton(g, mouseX, mouseY, x + 8, yy, w - 16, 18,
-                    Component.translatable("gui.sparkle_morpher.model_panel.cloud.download_use"), () -> clickCloudAsset(entry));
+    }
+
+        private int uiButtonHeight(){return this.width<560?18:this.width<800?20:22;}
+    private int toolbarSearchWidth(){return this.width<560?106:this.width<800?170:260;}
+    private int toolbarStride(){return this.width<560?21:this.width<800?24:26;}
+    private int modelGridTop(){return this.layout.top+(this.width<560?58:66);}
+    private int modelGridBottom(){return modelGridTop()+currentModelGridH();}
+    private void toolbarButton(GuiGraphicsExtractor g,int mx,int my,int x,int y,IconGlyph icon,Component label,boolean selected,Runnable action){
+        int h=uiButtonHeight(),size=this.width<560?11:this.width<800?12:14;
+        boolean hover=inside(mx,my,x,y,h,h);
+        roundedSurface(g,x,y,h,h,3,selected?0x21FFFFFF:hover?0x18FFFFFF:0x0CFFFFFF,selected?RED:0x22FFFFFF);
+        drawIconScaled(g,icon,x+(h-size)/2,y+(h-size)/2,size);
+        hit(x,y,h,h,label,action);
+    }
+    private void renderLocalToolbar(GuiGraphicsExtractor g,int mx,int my,int x,int y){
+        if(STATE.multiSelectMode){renderBatchToolbar(g,mx,my,x,y,false);return;}
+        int d=toolbarStride();
+        toolbarButton(g,mx,my,x,y,IconGlyph.RELOAD,Component.translatable("gui.sparkle_morpher.model_panel.reload_models"),false,()->this.controller.reloadLocalModels(this::setStatus));
+        toolbarButton(g,mx,my,x+d,y,IconGlyph.FOLDER,Component.translatable("gui.sparkle_morpher.model_select.new_category"),false,()->openCategoryPanel(""));
+        toolbarDivider(g,x+d*2+1,y);
+        ModelPanelState.ModelFilter[] filters={ModelPanelState.ModelFilter.ALL,ModelPanelState.ModelFilter.STAR,ModelPanelState.ModelFilter.NOT_STAR};
+        IconGlyph[] icons={IconGlyph.RESOURCE,IconGlyph.STAR,IconGlyph.STAR_OFF};String[] keys={"all","star","not_star"};
+        for(int i=0;i<3;i++){var f=filters[i];toolbarButton(g,mx,my,x+toolbarOffset(i+2),y,icons[i],Component.translatable("gui.sparkle_morpher.model_panel.filter."+keys[i]),STATE.modelFilter==f,()->setModelFilter(f));}
+        toolbarDivider(g,x+toolbarOffset(5)-7,y);
+        toolbarButton(g,mx,my,x+toolbarOffset(5),y,IconGlyph.UPLOAD,Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"),false,this::openCloudUpload);
+        toolbarButton(g,mx,my,x+toolbarOffset(6),y,IconGlyph.IMPORT,Component.translatable("gui.sparkle_morpher.import.tooltip"),false,this::openImportPanel);
+        toolbarButton(g,mx,my,x+toolbarOffset(7),y,IconGlyph.FOLDER,Component.translatable("gui.sparkle_morpher.open_model_folder.open"),false,this::openModelFolder);
+        toolbarButton(g,mx,my,x+toolbarOffset(8),y,IconGlyph.MULTI,Component.translatable("gui.sparkle_morpher.model_panel.multi_select"),false,()->{STATE.multiSelectMode=true;selectedModelIds.clear();});
+        toolbarButton(g,mx,my,x+toolbarOffset(9),y,IconGlyph.MORE,Component.translatable("gui.sparkle_morpher.ui.more"),modelMenuOpen,()->modelMenuOpen=!modelMenuOpen);
+        toolbarDivider(g,x+toolbarOffset(10)-7,y);
+        toolbarButton(g,mx,my,x+toolbarOffset(10),y,IconGlyph.ROULETTE,Component.translatable("key.sparkle_morpher.animation_roulette.desc"),false,this::openRoulette);
+    }
+    private void renderCloudToolbar(GuiGraphicsExtractor g,int mx,int my,int x,int y){
+        if(cloudMultiSelectMode){renderBatchToolbar(g,mx,my,x,y,true);return;}
+        int d=toolbarStride();
+        toolbarButton(g,mx,my,x,y,IconGlyph.REFRESH,Component.translatable("gui.sparkle_morpher.model_panel.reload_models"),false,this::resetCloudPage);
+        toolbarButton(g,mx,my,x+d,y,IconGlyph.FOLDER,Component.translatable("gui.sparkle_morpher.model_select.new_category"),false,()->openCategoryPanel(""));
+        toolbarDivider(g,x+d*2+1,y);
+        var views=STATE.cloudViews().stream().filter(v->v!=ModelPanelState.CloudView.PUBLIC).toList();
+        IconGlyph[] icons={IconGlyph.RESOURCE,IconGlyph.CLOCK,IconGlyph.STAR,IconGlyph.USER};
+        for(int i=0;i<views.size();i++){var v=views.get(i);String key=v==ModelPanelState.CloudView.ALL?"all_models":v.name().toLowerCase(Locale.ROOT);toolbarButton(g,mx,my,x+d*(i+2)+8,y,icons[i],Component.translatable("gui.sparkle_morpher.model_source."+key),STATE.cloudView==v,()->switchCloudView(v));}
+        int bx=x+d*(views.size()+2)+16;toolbarDivider(g,bx-7,y);
+        toolbarButton(g,mx,my,bx,y,IconGlyph.UPLOAD,Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"),false,this::openCloudUpload);
+        toolbarButton(g,mx,my,bx+d,y,IconGlyph.MULTI,Component.translatable("gui.sparkle_morpher.model_panel.multi_select"),false,()->{cloudMultiSelectMode=true;selectedCloudAssetIds.clear();});
+        toolbarButton(g,mx,my,bx+d*2,y,IconGlyph.MORE,Component.translatable("gui.sparkle_morpher.ui.more"),modelMenuOpen,()->modelMenuOpen=!modelMenuOpen);
+    }
+    private CloudModelViewport cloudModelViewport() { return CloudModelViewport.measure(currentModelGridH(), false, false); }
+    private void renderInlineTexture(GuiGraphicsExtractor g,int mx,int my,ModelAssembly assembly,String modelId,int x,int y,int w,boolean cloud){
+        List<String> textures=assembly.getTextureNames();if(textures.isEmpty())return;String texture=selectedTextureOrDefault(assembly);int h=uiButtonHeight();
+        roundedSurface(g,x,y,w,h,3,0x0CFFFFFF,0x22FFFFFF);drawText(g,Component.literal(trim(Component.translatable("gui.sparkle_morpher.model_panel.textures").getString()+": "+texture,w-22)),x+6,UiElementLayout.centeredY(y,h,font.lineHeight));drawIconScaled(g,IconGlyph.CHEVRON_DOWN,x+w-15,y+(h-10)/2,10);
+        hit(x,y,w,h,Component.literal(texture),()->{if(!modelId.equals(textureMenuModel)){textureMenuOpen=true;textureMenuModel=modelId;inlineTexturePage=0;}else textureMenuOpen=!textureMenuOpen;});
+        if(textureMenuOpen&&modelId.equals(textureMenuModel)){
+            int visible=Math.min(6,textures.size()),pages=(textures.size()+5)/6;inlineTexturePage=clamp(inlineTexturePage,0,pages-1);int extra=pages>1?20:0,top=Math.max(this.layout.top+32,y-visible*18-extra-3);
+            roundedSurface(g,x,top,w,visible*18+extra+2,3,0xFC2C2C2C,0x33FFFFFF);
+            for(int i=0;i<visible&&inlineTexturePage*6+i<textures.size();i++){String t=textures.get(inlineTexturePage*6+i);renderRowButton(g,mx,my,x+1,top+1+i*18,w-2,18,Component.literal(trim(t,w-12)),t.equals(texture),()->{STATE.selectedTextureId=t;textureMenuOpen=false;if(!(STATE.multiSelectMode||cloudMultiSelectMode))applySelectedTexture();});}
+            if(pages>1){int yy=top+visible*18;renderTextButton(g,mx,my,x+2,yy,22,18,Component.literal("‹"),()->inlineTexturePage=Math.max(0,inlineTexturePage-1));drawCentered(g,Component.literal((inlineTexturePage+1)+" / "+pages),x+w/2,yy+5,MUTED);renderTextButton(g,mx,my,x+w-24,yy,22,18,Component.literal("›"),()->inlineTexturePage=Math.min(pages-1,inlineTexturePage+1));}
+        }
+    }
+    private void renderSourceTabMenu(GuiGraphicsExtractor g,int mx,int my){
+        if(!sourceTabMenu)return;
+        var profiles=CloudManagementScreen.management().registry().profiles();
+        int w=Math.min(180,this.layout.contentWidth-12),x=modelListX()+44,y=this.layout.contentTop+28;
+        glassPanel(g,x,y,w,(profiles.size()+1)*21+8);
+        for(int i=0;i<profiles.size();i++){
+            var profile=profiles.get(i);
+            renderTextButton(g,mx,my,x+4,y+4+i*21,w-8,18,Component.literal(CloudManagementScreen.displayName(profile)),()->{
+                STATE.closedCloudTabs.remove(profile.instanceId());sourceTabMenu=false;switchCloudInstance(profile);
+            });
+        }
+        renderTextButton(g,mx,my,x+4,y+4+profiles.size()*21,w-8,18,Component.translatable("gui.sparkle_morpher.ui.add_instance"),()->{sourceTabMenu=false;openCloudInstanceForm();});
+    }
+    private void roundedSurface(GuiGraphicsExtractor g,int x,int y,int w,int h,int radius,int color,int outline){com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedSurface(g,x,y,w,h,radius,color,outline);}
+    private void roundedFill(GuiGraphicsExtractor g,int x,int y,int w,int h,int radius,int color){com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,y,w,h,radius,color);}
+    private int toolbarOffset(int index){return index*toolbarStride()+(index>=2?8:0)+(index>=5?8:0)+(index>=10?8:0);}
+    private void toolbarDivider(GuiGraphicsExtractor g,int x,int y){fill(g,x,y+4,1,(this.width<560?18:22)-8,0x22FFFFFF);}
+    private void renderBatchToolbar(GuiGraphicsExtractor g,int mx,int my,int x,int y,boolean cloud){
+        int d=toolbarStride();
+        toolbarButton(g,mx,my,x,y,IconGlyph.CHECK,Component.translatable("gui.done"),true,()->{if(cloud){cloudMultiSelectMode=false;selectedCloudAssetIds.clear();}else clearModelSelection();});
+        toolbarButton(g,mx,my,x+d,y,IconGlyph.MULTI,Component.translatable("gui.sparkle_morpher.ui.select_page"),false,()->{
+            if(cloud){CloudModelPage page=cloudGridPage(modelListW(),currentModelGridH());for(var e:cloudVisibleEntries().subList(page.start(),page.end()))selectedCloudAssetIds.add(e.ref().assetId());}
+            else selectAllVisibleModels();
+        });
+        toolbarButton(g,mx,my,x+d*2,y,IconGlyph.CLOSE,Component.translatable("gui.sparkle_morpher.model_panel.clear_selection"),false,()->{if(cloud)selectedCloudAssetIds.clear();else selectedModelIds.clear();});
+        toolbarDivider(g,x+d*3+1,y);int bx=x+d*3+8;
+        toolbarButton(g,mx,my,bx,y,IconGlyph.STAR,Component.translatable("gui.sparkle_morpher.model_panel.cloud.favorite"),false,()->{if(cloud)setCloudFavorites(cloudActionTargets(),true);else setLocalSelectionFavorites(true);});
+        toolbarButton(g,mx,my,bx+d,y,IconGlyph.STAR_OFF,Component.translatable("gui.sparkle_morpher.model_panel.cloud.unfavorite"),false,()->{if(cloud)setCloudFavorites(cloudActionTargets(),false);else setLocalSelectionFavorites(false);});
+        if(cloud){
+            toolbarButton(g,mx,my,bx+d*2,y,IconGlyph.GLOBE,Component.translatable("gui.sparkle_morpher.cloud_upload.make_public"),false,()->changeCloudVisibilityBatch("PUBLIC"));
+            toolbarButton(g,mx,my,bx+d*3,y,IconGlyph.LOCK,Component.translatable("gui.sparkle_morpher.cloud_upload.make_private"),false,()->changeCloudVisibilityBatch("PRIVATE"));
+        }else{
+            toolbarButton(g,mx,my,bx+d*2,y,IconGlyph.FOLDER,Component.translatable("gui.sparkle_morpher.model_panel.move"),false,()->openCategoryPanel(""));
+            toolbarButton(g,mx,my,bx+d*3,y,IconGlyph.UPLOAD,Component.translatable("gui.sparkle_morpher.model_panel.upload_cloud"),false,this::openCloudUpload);
+            toolbarButton(g,mx,my,bx+d*4,y,IconGlyph.DELETE,Component.translatable("gui.sparkle_morpher.model_panel.delete"),false,this::deleteSelectedModels);
+        }
+    }
+    private void setLocalSelectionFavorites(boolean value){
+        Set<String> stars=starModels();for(String id:List.copyOf(selectedModelIds))if(stars.contains(id)!=value)this.controller.toggleStar(id);
+    }
+    private void renderTabClose(GuiGraphicsExtractor g,int mx,int my,int x,int y,Component label,Runnable action){drawIconScaled(g,IconGlyph.CLOSE,x,y,8);hit(x-2,y-3,12,14,label,action);}
+    private void renderModelMoreMenu(GuiGraphicsExtractor g,int mx,int my){
+        if(!modelMenuOpen)return;
+        int w=150,x=this.width-this.layout.left-w-10,y=this.layout.top+60;
+        roundedSurface(g,x,y,w,70,4,0xF0242424,0x33FFFFFF);
+        renderTextButton(g,mx,my,x+4,y+4,w-8,18,Component.translatable("gui.sparkle_morpher.model_panel.toggle_favorite"),()->{modelMenuOpen=false;toggleSelectedStar();});
+        renderTextButton(g,mx,my,x+4,y+26,w-8,18,Component.translatable("gui.sparkle_morpher.ui.cloud_account"),()->{modelMenuOpen=false;openCloudAccount();});
+        renderTextButton(g,mx,my,x+4,y+48,w-8,18,Component.translatable("gui.sparkle_morpher.model_panel.delete"),()->{modelMenuOpen=false;if(STATE.modelSource==ModelPanelState.ModelSource.LOCAL)deleteSelectedModels();});
+    }
+    private int settingRowHeight(){return SettingsViewport.rowHeight(width);}
+    private void renderAppearanceSettings(GuiGraphicsExtractor g,int mx,int my,SettingsPanelLayout.Columns columns){
+        int x=columns.detailX(),y=columns.top(),w=columns.detailWidth(),bottom=y+columns.height()-8;
+        boolean compact=this.width<560;int summaryH=compact?30:this.width<800?38:46;
+        roundedSurface(g,x,y,w,summaryH,4,0x0AFFFFFF,0x22FFFFFF);
+        drawText(g,Component.translatable("gui.sparkle_morpher.ui.frosted"),x+9,y+7);
+        if(!compact)drawMuted(g,Component.translatable("gui.sparkle_morpher.ui.neutral_red"),x+9,y+summaryH-13);
+        String selected=appearance.font.equals("minecraft:default")?"Minecraft 原生":SystemFontCatalog.family(appearance.font).orElse(appearance.font);
+        String[] keys={"font","game_scale","blur","opacity"};
+        String[] values={selected,"跟随游戏",appearance.blur==0?"关闭":Integer.toString(appearance.blur),(100-appearance.opacity)+"%"};
+        int rowY=y+summaryH+8,rh=Math.min(compact?26:30,Math.max(26,(bottom-rowY-20)/4));
+        int buttonW=Math.min(compact?110:this.width<800?130:180,w/2),bx=x+w-buttonW-8,bh=uiButtonHeight();
+        for(int i=0;i<keys.length;i++){
+            int yy=rowY+i*rh,index=i,cy=yy+(rh-bh)/2;
+            drawText(g,Component.translatable("gui.sparkle_morpher.ui."+keys[i]),x+9,UiElementLayout.centeredY(yy,rh,font.lineHeight));
+            if(index==1){roundedSurface(g,bx,cy,buttonW,bh,4,0x0CFFFFFF,0x22FFFFFF);drawCentered(g,Component.literal(values[i]),bx+buttonW/2,UiElementLayout.centeredY(cy,bh,font.lineHeight),MUTED);}
+            else if(index==0)renderTextButton(g,mx,my,bx,cy,buttonW,bh,Component.literal(trim(values[i],buttonW-12)),()->{fontMenuOpen=!fontMenuOpen;fontPage=0;});
+            else {
+                int arrow=bh,gap=3;renderTextButton(g,mx,my,bx,cy,arrow,bh,Component.literal("−"),()->changeAppearance(index,-1));
+                drawCentered(g,Component.literal(values[i]),bx+buttonW/2,UiElementLayout.centeredY(cy,bh,font.lineHeight),TEXT);
+                renderTextButton(g,mx,my,bx+buttonW-arrow,cy,arrow,bh,Component.literal("+"),()->changeAppearance(index,1));
+            }
+        }
+        if(rowY+4*rh+font.lineHeight<=bottom)drawText(g,Component.translatable("gui.sparkle_morpher.ui.font_preview"),x+9,rowY+4*rh+4);
+        if(fontMenuOpen){
+            var choices=new ArrayList<SystemFontCatalog.Entry>();choices.add(new SystemFontCatalog.Entry("minecraft:default","Minecraft 原生"));
+            Minecraft.getInstance().getResourceManager().listResources("font",id->id.getPath().endsWith(".json")).keySet().stream()
+                    .filter(id->!id.getNamespace().equals("minecraft")||id.getPath().equals("font/uniform.json"))
+                    .map(id->id.getNamespace()+":"+id.getPath().substring(5,id.getPath().length()-5)).sorted()
+                    .forEach(id->choices.add(new SystemFontCatalog.Entry(id,id)));
+            choices.addAll(SystemFontCatalog.entries());
+            int menuW=Math.min(w-8,compact?190:260),menuX=x+w-menuW-4,menuY=rowY+rh+2;
+            int visible=Math.max(1,Math.min(8,(bottom-menuY-26)/21)),pages=Math.max(1,(choices.size()+visible-1)/visible);
+            fontPage=clamp(fontPage,0,pages-1);int menuH=visible*21+26;
+            roundedSurface(g,menuX,menuY,menuW,menuH,4,0xFF242424,0x55FFFFFF);
+            hit(menuX,menuY,menuW,menuH,Component.empty(),()->{});
+            for(int i=0;i<visible&&fontPage*visible+i<choices.size();i++){
+                var choice=choices.get(fontPage*visible+i);
+                renderRowButton(g,mx,my,menuX+3,menuY+3+i*21,menuW-6,19,Component.literal(trim(choice.family(),menuW-16)),appearance.font.equals(choice.id()),()->{appearance.font=choice.id();appearance.save();fontMenuOpen=false;});
+            }
+            int py=menuY+menuH-22;renderTextButton(g,mx,my,menuX+4,py,22,18,Component.literal("‹"),()->fontPage=Math.max(0,fontPage-1));
+            drawCentered(g,Component.literal((fontPage+1)+" / "+pages),menuX+menuW/2,py+5,MUTED);
+            renderTextButton(g,mx,my,menuX+menuW-26,py,22,18,Component.literal("›"),()->fontPage=Math.min(pages-1,fontPage+1));
+        }
+    }
+    private void changeAppearance(int index,int delta){
+        if(index==2)appearance.blur=clamp(appearance.blur+delta*2,0,16);
+        if(index==3)appearance.opacity=clamp(appearance.opacity-delta*5,0,100);
+        appearance.save();
+    }
+
+    private void renderScopesReference(GuiGraphicsExtractor g,int mx,int my,float pt){
+        int x=layout.contentLeft,w=layout.contentWidth,bh=uiButtonHeight(),rh=settingRowHeight()+8,toolbarY=layout.top+42;
+        if(scopeCreateForm){
+            int yy=toolbarY;EditBox[] fields={cloudScopeIdBox,cloudScopeNameBox,cloudWorldEpochBox};String[] keys={"scope_id","scope_name","world_epoch"};
+            for(int i=0;i<fields.length;i++){drawText(g,cloudText(keys[i]),x+8,yy);renderReferenceField(g,mx,my,pt,fields[i],x+8,yy+15,Math.min(530,w-16),bh);yy+=bh+30;}
+            renderTextButton(g,mx,my,x+w-192,yy,76,bh,Component.translatable("gui.cancel"),()->scopeCreateForm=false);
+            renderPrimaryButton(g,mx,my,x+w-108,yy,100,bh,cloudText("create_scope"),()->{createCloudScope();scopeCreateForm=false;});return;
+        }
+        if(cloudScopeIdBox!=null)cloudScopeIdBox.visible=false;if(cloudScopeNameBox!=null)cloudScopeNameBox.visible=false;if(cloudWorldEpochBox!=null)cloudWorldEpochBox.visible=false;
+        toolbarButton(g,mx,my,x+w-2*bh-12,toolbarY,IconGlyph.REFRESH,cloudText("refresh_scopes"),false,this::refreshCloudScopes);
+        toolbarButton(g,mx,my,x+w-bh-8,toolbarY,IconGlyph.PLUS,cloudText("create_scope"),false,()->scopeCreateForm=true);
+        int header=toolbarY+bh+10;fill(g,x,header,w,22,0x0CFFFFFF);drawMuted(g,cloudText("scope_name"),x+8,header+7);drawMuted(g,cloudText("scope_id"),x+w/3,header+7);drawMuted(g,Component.literal("访问权限"),x+w*2/3,header+7);
+        var scopes=CloudManagementScreen.management().snapshot().scopes();var selected=CloudManagementScreen.management().snapshot().selectedScope();int yy=header+26;
+        for(var scope:scopes){
+            boolean chosen=selected!=null&&selected.scopeId().equals(scope.scopeId());
+            roundedSurface(g,x+4,yy,w-8,rh-4,4,chosen?0x16FFFFFF:0x06FFFFFF,chosen?0x55DC4F5D:0x10FFFFFF);
+            int ty=UiElementLayout.centeredY(yy,rh-4,font.lineHeight);drawText(g,Component.literal(trim(scope.name(),w/3-18)),x+10,ty);drawMuted(g,Component.literal(trim(scope.scopeId(),w/3-10)),x+w/3,ty);drawMuted(g,Component.literal("Cloud"),x+w*2/3,ty);
+            hit(x+4,yy,w-8,rh-4,Component.literal(scope.name()),()->selectCloudScope(scope.scopeId()));yy+=rh;
+        }
+        yy+=8;String[] labels={"当前范围","角色与认领","模型与权限"};Runnable[] actions={this::refreshCloudScopes,()->openCloudIdentityPage(CloudAccountPage.CLAIM),()->InputUtil.setScreen(new CloudTargetManagementScreen(this,CloudManagementScreen.management()))};
+        for(int i=0;i<3;i++){drawText(g,Component.literal(labels[i]),x+8,UiElementLayout.centeredY(yy,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-158,yy+4,150,bh,cloudText(i==0?"refresh_scopes":i==1?"identity_panel.title":"targets_acl"),actions[i]);yy+=rh;}
+        renderTextButton(g,mx,my,x+w-192,yy+8,76,bh,Component.translatable("gui.cancel"),this::backFromCloud);
+        renderPrimaryButton(g,mx,my,x+w-108,yy+8,100,bh,cloudText("join_selected"),()->{if(selected!=null){cloudScopeIdBox.setValue(selected.scopeId());joinCloudScope();}});
+    }
+    private void renderIdentityReference(GuiGraphicsExtractor g,int mx,int my,float pt){
+        ensureCloudIdentityFlow();int x=this.layout.contentLeft,w=this.layout.contentWidth;
+        String title=cloudAccountPage==CloudAccountPage.CLAIM?"identity_panel.claim_title":cloudAccountPage==CloudAccountPage.APPROVAL?"identity_panel.admin_title":"identity_panel.title";
+        pageHeader(g,mx,my,cloudText(title),cloudText("account_intro"),this::backFromCloud);
+        var flow=cloudIdentityFlow;
+        if(flow==null){drawText(g,cloudText("identity_panel.login_required"),x+16,90);renderPrimaryButton(g,mx,my,x+16,130,140,22,cloudText("login"),()->openCloudLoginForm(false));return;}
+        cloudPanelStatus=cloudText("identity_panel."+(flow.busy()?"working":flow.message()));
+        if(cloudAccountPage==CloudAccountPage.IDENTITY){
+            renderReferenceTab(g,mx,my,x,70,92,22,cloudText("identity_panel.identities"),!identityProvidersTab,()->identityProvidersTab=false);
+            renderReferenceTab(g,mx,my,x+98,70,92,22,Component.literal("世界角色"),identityProvidersTab,()->identityProvidersTab=true);
+            toolbarButton(g,mx,my,x+w-22,70,IconGlyph.REFRESH,cloudText("identity_panel.refresh"),false,flow::refresh);
+            fill(g,x,108,w,24,0x0CFFFFFF);drawMuted(g,Component.literal("身份"),x+10,116);drawMuted(g,Component.literal("认证提供方"),x+w/2,116);drawMuted(g,Component.literal("状态"),x+w*4/5,116);
+            int yy=132;
+            for(var identity:flow.catalog().identities()){
+                boolean chosen=identity.equals(flow.selectedIdentity());
+                if(chosen){fill(g,x,yy,w,40,0x16FFFFFF);fill(g,x,yy+8,2,24,RED);}drawText(g,Component.literal(trim(identity.displayName(),w/2-20)),x+10,yy+16);drawMuted(g,Component.literal(identity.identityRef().kind().name()),x+w/2,yy+16);drawMuted(g,cloudText("identity_panel."+("VERIFIED".equals(identity.verificationStatus())?"verified_short":"offline_short")),x+w*4/5,yy+16);
+                hit(x,yy,w,40,Component.literal(identity.displayName()),()->flow.selectIdentity(identity.identityId()));fill(g,x,yy+43,w,1,0x16FFFFFF);yy+=44;
+            }
+            int ry=yy+8;
+            drawText(g,cloudText("identity_panel.verify"),x+10,ry+12);identityAction(g,mx,my,x+w-150,ry+7,150,"verify",!flow.busy(),flow::verify);
+            drawText(g,cloudText("identity_panel.use_world"),x+10,ry+60);identityAction(g,mx,my,x+w-150,ry+55,150,"use_world",!flow.busy(),()->openCloudIdentityPage(CloudAccountPage.CLAIM));
+            if(!flow.catalog().providers().isEmpty()){
+                var provider=flow.catalog().providers().stream().filter(p->p.providerId().equals(flow.providerId())).findFirst().orElse(flow.catalog().providers().getFirst());
+                int providerW=Math.max(80,Math.min(300,w-170));
+                renderTextButton(g,mx,my,x+10,ry+103,providerW,uiButtonHeight(),Component.literal(provider.displayName()),flow::nextProvider);
+                networkAction(g,mx,my,x+providerW+18,ry+103,Math.min(140,w-providerW-28),Component.literal("绑定当前游戏身份"),!cloudFormBusy&&!flow.busy(),()->bindCloudIdentity(provider.providerId()));
+            }
             return;
         }
-        int previewH = Math.min(98, Math.max(0, h - (yy - y) - 98));
-        if (previewH >= 40) {
-            renderSelectedModelPreview(g, assembly, modelId, x + 8, yy, w - 16, previewH, mouseX, mouseY, partialTick); yy += previewH + 6;
+        if(cloudAccountPage==CloudAccountPage.CLAIM){
+            var panels=accountPanelLayout();renderCloudIdentityList(g,mx,my,panels);
+            int dx=panels.detailX()+8,dw=panels.detailWidth()-16;
+            drawTitle(g,cloudText("identity_panel.claim_help"),dx,82);renderCloudIdentityTargets(g,mx,my,dx,122,dw);
+            int buttons=246;identityAction(g,mx,my,dx,buttons,Math.min(160,dw/2-4),"register",flow.canRegister(),flow::register);identityAction(g,mx,my,dx+Math.min(168,dw/2+4),buttons,Math.min(180,dw/2-4),"request",flow.canRequest(),flow::request);
+            drawText(g,cloudText("identity_panel.code_help"),dx,306);renderReferenceField(g,mx,my,pt,cloudIdentityCodeBox,dx,330,dw,24);
+            identityAction(g,mx,my,dx+dw-110,382,110,"redeem",flow.canRedeem(),flow::redeem);return;
         }
-        Metadata metadata = assembly.getPresentationCapabilities().metadataAvailable()
-                ? assembly.getModelData().getExtraInfo() : null;
-        if (metadata != null) {
-            String authorText = metadata.getAuthors() != null && !metadata.getAuthors().isEmpty() ? authors(metadata) : "";
-            String tips = metadata.getTips() == null ? "" : metadata.getTips();
-            String info = authorText + (authorText.isBlank() || tips.isBlank() ? "" : "\n") + tips;
-            if (!info.isBlank()) {
-                drawMuted(g, Component.literal(trim(info.replace('\n', ' '), w - 16)), x + 8, yy);
-                hit(x + 8, yy, w - 16, 12, Component.literal(info), () -> {}); yy += 14;
-            }
+        renderReferenceTab(g,mx,my,x,70,92,22,Component.literal("待审批"),!identityProvidersTab,()->identityProvidersTab=false);
+        renderReferenceTab(g,mx,my,x+98,70,92,22,Component.literal("邀请码"),identityProvidersTab,()->identityProvidersTab=true);
+        if(!flow.canManage()){identityLine(g,"permission_denied",x+16,120,w-32);return;}
+        fill(g,x,108,w,24,0x0CFFFFFF);drawMuted(g,Component.literal("申请人"),x+10,116);drawMuted(g,Component.literal("世界角色"),x+w/3,116);drawMuted(g,Component.literal("状态"),x+w*2/3,116);
+        int yy=132;for(var binding:flow.pending()){
+            var current=binding;String name=binding.identityDisplayName()==null?binding.entityUuid():binding.identityDisplayName();
+            drawText(g,Component.literal(trim(name,w/3-18)),x+10,yy+15);drawText(g,Component.literal(trim(flow.targetName(binding.targetId()),w/3-18)),x+w/3,yy+15);drawMuted(g,Component.literal(binding.status()),x+w*2/3,yy+15);
+            hit(x,yy,w-180,38,Component.literal(name),()->flow.selectBinding(current.bindingId()));
+            identityAction(g,mx,my,x+w-166,yy+7,76,"approve",!flow.busy(),()->{flow.selectBinding(current.bindingId());flow.approve(true);});identityAction(g,mx,my,x+w-84,yy+7,76,"reject",!flow.busy(),()->{flow.selectBinding(current.bindingId());flow.approve(false);});yy+=44;
         }
-        renderCloudTextures(g, mouseX, mouseY, assembly, modelId, x + 8, yy, w - 16, Math.max(36, y + h - 8 - yy));
-    }
-
-    private void renderCloudTextures(GuiGraphicsExtractor g, int mouseX, int mouseY, ModelAssembly assembly, String modelId, int x, int y, int w, int h) {
-        List<String> textures = assembly.getTextureNames();
-        boolean textureSelectionAvailable = assembly.getPresentationCapabilities().textureSelectionAvailable();
-        if (textureSelectionAvailable) {
-            renderTextButton(g, mouseX, mouseY, x, y - 2, Math.max(36, w - 70), 16,
-                    Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures"), () -> openCloudTexturePicker(assembly, modelId));
-        } else {
-            drawSection(g, Component.translatable("gui.sparkle_morpher.model_panel.textures"), x, y + 1);
-        }
-        if (textures.isEmpty()) return;
-        int rows = Math.max(1, (h - (textureSelectionAvailable ? 14 : 0)) / 16);
-        CloudModelPage page = CloudModelPage.cards(textures.size(), rows, cloudTexturePage);
-        int pages = page.maxScroll() + 1;
-        cloudTexturePage = page.scroll();
-        int start = page.start();
-        for (int i = start; i < page.end(); i++) {
-            String texture = textures.get(i);
-            if (textureSelectionAvailable) {
-                renderRowButton(g, mouseX, mouseY, x, y + 12 + (i - start) * 16, w, 14,
-                        Component.literal(trim(texture, w - 10)), texture.equals(selectedTextureOrDefault(assembly)), () -> {
-                            focusCloudAssetByModelId(modelId);
-                            STATE.selectedTextureId = texture; applySelectedTexture();
-                        });
-            } else {
-                drawMuted(g, Component.literal(trim(texture, w - 10)), x + 2, y + 14 + (i - start) * 16);
-            }
-        }
-        if (pages > 1) {
-            renderTextButton(g, mouseX, mouseY, x + w - 66, y - 2, 18, 16, Component.literal("‹"), () -> cloudTexturePage = Math.max(0, cloudTexturePage - 1));
-            drawMuted(g, Component.literal((cloudTexturePage + 1) + "/" + pages), x + w - 43, y + 3);
-            renderTextButton(g, mouseX, mouseY, x + w - 18, y - 2, 18, 16, Component.literal("›"), () -> cloudTexturePage = Math.min(pages - 1, cloudTexturePage + 1));
+        if(flow.claimPolicy()){
+            drawTitle(g,cloudText("identity_panel.issue"),x+10,yy+22);renderCloudIdentityTargets(g,mx,my,x+10,yy+54,Math.min(300,w/3));
+            renderTextButton(g,mx,my,x+w/3+20,yy+54,Math.min(240,w/3),22,Component.literal(flow.selectedPlayer()==null?cloudText("identity_panel.no_players").getString():flow.selectedPlayer().name()),flow::nextPlayer);
+            identityAction(g,mx,my,x+w-180,yy+54,170,"issue",flow.canIssue(),flow::issue);
+            if(flow.issued()!=null){String code=flow.issued().code();drawText(g,Component.literal(flow.issuedExpired()?cloudText("identity_panel.code_expired").getString():code),x+10,yy+164);identityAction(g,mx,my,x+w-180,yy+148,80,"copy",!flow.issuedExpired(),()->{minecraft.keyboardHandler.setClipboard(code);flow.copied();});identityAction(g,mx,my,x+w-90,yy+148,80,"revoke",!flow.busy(),flow::revoke);}
         }
     }
 
-    private void focusCloudAssetByModelId(String modelId) {
-        STATE.selectedModelId = modelId;
+    private void renderResourceDetailsReference(GuiGraphicsExtractor g,int mx,int my){
+        if(!settingsDrawingBody){var selected=selectedResource();Component heading=Component.literal(selected==null?"资源详情":selected.name());Runnable back=()->resourceRoute=ResourceRoute.CATALOG;pageHeader(g,mx,my,heading,Component.empty(),back);renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+40,layout.contentWidth,height-layout.top-12,offset->renderResourceDetailsReference(g,mx,my+offset));return;}
+
+        var entry=selectedResource();int x=this.layout.contentLeft,w=this.layout.contentWidth;pageHeader(g,mx,my,Component.literal(entry==null?"资源详情":entry.name()),Component.literal(this.controller.selectedSite()),()->resourceRoute=ResourceRoute.CATALOG);if(entry==null)return;
+        int px=x,py=this.layout.top+62,pw=Math.min(220,w/3),ph=Math.min(324,this.height-py-100);roundedSurface(g,px,py,pw,ph,4,0x08FFFFFF,0x20FFFFFF);
+        var cover=this.controller.resourcePreview(entry);if(cover==null||!drawCoverImage(g,cover,px+4,py+4,pw-8,ph-8))drawIconScaled(g,IconGlyph.MODEL,px+pw/2-16,py+ph/2-16,32);
+        int dx=x+pw+18,dw=w-pw-18;drawTitle(g,Component.literal(entry.name()),dx,py+8);drawMuted(g,Component.literal(trim(entry.author()+" · "+this.controller.formatBytes(entry.size()),dw)),dx,py+38);drawText(g,Component.literal("资源说明"),dx,py+70);int yy=py+100;for(var line:wrap(entry.description(),dw,30)){drawMuted(g,Component.literal(line),dx,yy);yy+=14;}
+        int ty=Math.max(yy+24,py+130);fill(g,dx,ty,dw,24,0x0CFFFFFF);drawMuted(g,Component.literal("文件"),dx+10,ty+8);drawMuted(g,Component.literal("大小"),dx+dw-110,ty+8);drawText(g,Component.literal(trim(entry.fileName(),dw-130)),dx+10,ty+42);drawMuted(g,Component.literal(this.controller.formatBytes(entry.size())),dx+dw-110,ty+42);drawMuted(g,Component.literal(trim(entry.tags(),dw)),dx,ty+100);
+        int by=Math.max(this.height-this.layout.top-34,ty+126);renderTextButton(g,mx,my,x+w-184,by,76,22,Component.translatable("gui.cancel"),()->resourceRoute=ResourceRoute.CATALOG);renderPrimaryButton(g,mx,my,x+w-100,by,100,22,Component.literal("加入下载队列"),()->{enqueueResource(entry);resourceRoute=ResourceRoute.QUEUE;});
+    }
+    private void renderDownloadQueueReference(GuiGraphicsExtractor g,int mx,int my){
+        int x=this.layout.contentLeft,w=this.layout.contentWidth;var tasks=this.controller.downloadTasks();pageHeader(g,mx,my,Component.literal("下载队列"),Component.literal(tasks.size()+" 个任务"),()->resourceRoute=ResourceRoute.CATALOG);
+        renderTextButton(g,mx,my,x+w-110,this.layout.top+62,110,22,Component.literal("清除已完成"),this.controller::clearFinishedDownloads);
+        int hy=this.layout.top+100;fill(g,x,hy,w,24,0x0CFFFFFF);String[] labels={"资源","状态 / 进度","大小","操作"};double[] cols={0,.25,.61,.86};for(int i=0;i<4;i++)drawMuted(g,Component.literal(labels[i]),x+10+(int)(w*cols[i]),hy+8);
+        int rows=Math.max(1,(this.height-hy-90)/50),start=clamp(STATE.resourceScroll,0,Math.max(0,tasks.size()-rows));STATE.resourceScroll=start;
+        for(int i=start;i<Math.min(tasks.size(),start+rows);i++){var task=tasks.get(i);int yy=hy+24+(i-start)*50;boolean failed=task.state()==com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskState.FAILED;drawText(g,Component.literal(trim(task.name(),w/4-18)),x+10,yy+17);drawMuted(g,Component.literal(trim(task.message().getString(),w/3)),x+(int)(w*.25),yy+17);drawMuted(g,Component.literal(this.controller.formatBytes(task.byteLength())),x+(int)(w*.61),yy+17);fill(g,x+8,yy+42,(int)((w*.59-16)*task.progress()),2,failed?RED:0xFFBDBDBD);fill(g,x,yy+49,w,1,0x14FFFFFF);
+            renderTextButton(g,mx,my,x+(int)(w*.86),yy+10,Math.max(60,w-(int)(w*.86)-8),22,Component.literal(failed?"重试":task.state()==com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskState.DONE?"打开":"取消"),()->{if(failed)this.controller.retryDownload(task);else if(task.state()==com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskState.DONE)openModelFolder();else this.controller.cancelCurrentDownload();});
+            if(failed)hit(x,yy,(int)(w*.82),42,task.message(),()->{resourceFailure=task;resourceRoute=ResourceRoute.ERROR;});
+        }
+        renderTextButton(g,mx,my,x,this.height-this.layout.top-34,120,22,Component.literal("查看失败详情"),()->{resourceFailure=tasks.stream().filter(t->t.state()==com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskState.FAILED).findFirst().orElse(null);if(resourceFailure!=null)resourceRoute=ResourceRoute.ERROR;});
+    }
+    private void renderDownloadErrorReference(GuiGraphicsExtractor g,int mx,int my){
+        if(!settingsDrawingBody){Component heading=Component.literal("下载失败详情");Runnable back=()->resourceRoute=ResourceRoute.QUEUE;pageHeader(g,mx,my,heading,Component.empty(),back);renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+40,layout.contentWidth,height-layout.top-12,offset->renderDownloadErrorReference(g,mx,my+offset));return;}
+
+        int x=this.layout.contentLeft,w=this.layout.contentWidth;pageHeader(g,mx,my,Component.literal("下载失败详情"),Component.literal(resourceFailure==null?"":resourceFailure.name()),()->resourceRoute=ResourceRoute.QUEUE);if(resourceFailure==null)return;
+        int fw=Math.min(530,w-32),fx=x+16;drawText(g,Component.literal("失败原因"),fx,70);roundedSurface(g,fx,87,fw,24,3,0x0CFFFFFF,0x20FFFFFF);drawText(g,Component.literal(trim(resourceFailure.message().getString(),fw-12)),fx+6,94);drawMuted(g,Component.literal("保留来源与任务信息，便于定位"),fx,132);drawText(g,Component.literal("来源"),fx,163);roundedSurface(g,fx,185,fw,24,3,0x0CFFFFFF,0x20FFFFFF);drawText(g,Component.literal(trim(resourceFailure.sourceUrl(),fw-12)),fx+6,192);
+        int by=this.height-this.layout.top-34;renderTextButton(g,mx,my,x+w-184,by,76,22,Component.translatable("gui.cancel"),()->resourceRoute=ResourceRoute.QUEUE);renderPrimaryButton(g,mx,my,x+w-100,by,100,22,Component.literal("重试"),()->{this.controller.retryDownload(resourceFailure);resourceRoute=ResourceRoute.QUEUE;});
+    }
+    private void renderSourceEditReference(GuiGraphicsExtractor g,int mx,int my,float pt){
+        if(!settingsDrawingBody){Component heading=Component.literal("添加 / 编辑资源来源");Runnable back=()->{sourceEditMode=false;init();};pageHeader(g,mx,my,heading,Component.empty(),back);renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+40,layout.contentWidth,height-layout.top-12,offset->renderSourceEditReference(g,mx,my+offset,pt));return;}
+
+        int x=this.layout.contentLeft,w=this.layout.contentWidth,fx=x+16,fw=Math.min(530,w-32);pageHeader(g,mx,my,Component.literal("添加 / 编辑资源来源"),Component.literal("资源站 / 来源管理"),()->{sourceEditMode=false;init();});
+        drawText(g,Component.literal("名称"),fx,70);renderReferenceField(g,mx,my,pt,sourceNameBox,fx,87,fw,24);drawMuted(g,Component.literal("目录中显示的名称"),fx,132);drawText(g,Component.literal("来源类型"),fx,146);String url=siteEditBox==null?"":siteEditBox.getValue();renderTextButton(g,mx,my,fx,163,fw,24,Component.literal(url.contains("github.com")?"GitHub":"Index JSON"),()->setStatus(Component.literal("来源类型由地址自动识别")));drawText(g,Component.literal("地址"),fx,222);renderReferenceField(g,mx,my,pt,siteEditBox,fx,239,fw,24);drawMuted(g,Component.literal("填写完整可访问的资源目录地址"),fx,284);
+        int by=Math.max(this.height-this.layout.top-34,318);renderTextButton(g,mx,my,x+w-184,by,76,22,Component.translatable("gui.cancel"),()->{sourceEditMode=false;init();});renderPrimaryButton(g,mx,my,x+w-100,by,100,22,Component.literal("保存来源"),()->{STATE.siteEditText=siteEditBox.getValue();saveSite();ResourceSourceLabels.put(STATE.siteEditText,sourceNameDraft);sourceEditMode=false;init();});
     }
 
-    private void renderCloudCompactDetail(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h, float partialTick) {
-        fill(g, x, y, w, h, GLASS_DARK); border(g, x, y, w, h, 0x33FFFFFF);
-        renderIconButton(g, mouseX, mouseY, x + 1, y, STATE.compactPreviewExpanded ? IconGlyph.MINUS : IconGlyph.PLUS,
-                Component.translatable("gui.sparkle_morpher.model_panel.details"), () -> STATE.compactPreviewExpanded = !STATE.compactPreviewExpanded);
-        CloudAssetSummary entry = focusedCloudAsset();
-        if (entry == null) { drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.select_model"), x + 22, y + 5); return; }
-        String modelId = this.controller.cloudModelId(entry);
-        ModelAssembly assembly = this.controller.assemblyOrNull(modelId);
-        String label = cloudEntryName(entry) + " · " + (assembly == null || !assembly.getPresentationCapabilities().textureLabelsAvailable()
-                ? cloudEntryDetail(entry) : selectedTextureOrDefault(assembly));
-        drawText(g, Component.literal(trim(label, w - 48)), x + 22, y + 5);
-        boolean canSelectTexture = assembly != null && assembly.getPresentationCapabilities().textureSelectionAvailable();
-        renderIconButton(g, mouseX, mouseY, x + w - 19, y, canSelectTexture ? IconGlyph.TEXTURE : IconGlyph.INFO,
-                    canSelectTexture ? Component.translatable("gui.sparkle_morpher.model_panel.cloud.open_textures") : cloudEntryTooltip(entry), () -> {
-                        if (!canSelectTexture) STATE.compactPreviewExpanded = true;
-                        else openCloudTexturePicker(assembly, modelId);
-                    });
-        if (!STATE.compactPreviewExpanded || h < 54) return;
-        if (assembly == null) {
-            renderTextButton(g, mouseX, mouseY, x + 4, y + 24, w - 8, 18,
-                    Component.translatable("gui.sparkle_morpher.model_panel.cloud.download_use"), () -> clickCloudAsset(entry)); return;
+
+    private void renderDeveloperReference(GuiGraphicsExtractor g,int mx,int my,SettingsPanelLayout.Columns c){
+        int x=c.detailX(),w=c.detailWidth(),y=c.top();var group=ModelPanelState.SettingGroup.DEVELOPER;
+        renderSettingRow(g,mx,my,x,y,w,bool(group,"gui.sparkle_morpher.model_panel.setting.show_model_id_first",GeneralConfig.SHOW_MODEL_ID_FIRST));
+        drawText(g,Component.literal("面板状态"),x+8,y+settingRowHeight()+5);drawMuted(g,Component.literal("高级操作单独确认"),x+8,y+settingRowHeight()+17);
+        int bx=x+w-160,by=y+settingRowHeight()+2;renderTextButton(g,mx,my,bx,by,150,22,Component.literal("导出 / 重置…"),()->developerStateMenu=!developerStateMenu);
+        SettingRow[] rows={bool(group,"gui.sparkle_morpher.model_panel.setting.resource_monitor_log",GeneralConfig.RESOURCE_STATION_MONITOR_LOG),bool(group,"gui.sparkle_morpher.model_panel.setting.animation_debug_log",GeneralConfig.ANIMATION_DEBUG_LOG),bool(group,"gui.sparkle_morpher.model_panel.setting.model_memory_profiler",GeneralConfig.MODEL_MEMORY_PROFILER),bool(group,"gui.sparkle_morpher.model_panel.setting.animation_frame_profiler",GeneralConfig.ANIMATION_FRAME_PROFILER)};
+        for(int i=0;i<rows.length;i++)renderSettingRow(g,mx,my,x,y+64+i*settingRowHeight(),w,rows[i]);
+        renderTextButton(g,mx,my,x+w-160,height-layout.top-34,150,22,Component.literal("更多开发选项 ›"),()->{developerAdvanced=true;STATE.settingsScroll=0;});
+        if(developerStateMenu){
+            int count=ConfigPolicies.developerStateWriteback()?3:2,py=by+26;roundedSurface(g,bx,py,150,count*26+8,3,0xFC292929,0x33FFFFFF);
+            renderTextButton(g,mx,my,bx+4,py+4,142,22,Component.literal("导出到剪贴板"),()->{developerStateMenu=false;dumpPanelState();});
+            renderTextButton(g,mx,my,bx+4,py+30,142,22,Component.literal("重置面板状态…"),()->{developerStateMenu=false;confirmationTitle=Component.literal("重置面板状态？");confirmationBody=Component.literal("清除已保存的面板选择、筛选与滚动位置。");confirmationAction=Component.literal("重置");pendingConfirmation=this::resetPanelState;});
+            if(count==3)renderTextButton(g,mx,my,bx+4,py+56,142,22,Component.literal("从剪贴板导入…"),()->{developerStateMenu=false;confirmationTitle=Component.literal("导入面板状态？");confirmationBody=Component.literal("使用剪贴板中的面板设置覆盖当前状态。");confirmationAction=Component.literal("导入");pendingConfirmation=this::applyStateFromClipboard;});
         }
-        int ph = h - 24; int previewW = Math.min(w / 3, Math.max(56, ph));
-        renderSelectedModelPreview(g, assembly, modelId, x + 3, y + 21, previewW, ph, mouseX, mouseY, partialTick);
-        renderCloudTextures(g, mouseX, mouseY, assembly, modelId, x + previewW + 8, y + 22, w - previewW - 12, ph - 2);
     }
 
-        private int cloudPathOffset() { return compactCloudActionsInSearchRow() ? 44 : (this.layout.contentHeight < 185 ? 66 : 86); }
-        private CloudModelViewport cloudModelViewport() {
-            int gridY = this.layout.contentTop + 8 + cloudPathOffset() + 20;
-            int room = this.layout.footerTop - 6 - 28 - 4 - gridY;
-            return CloudModelViewport.measure(room, compactModelLayout() && hasSelectedModel(), STATE.compactPreviewExpanded);
-        }
-        private void openCloudTexturePicker(ModelAssembly assembly, String modelId) {
-            if (!this.controller.cloudAvailable() || !assembly.getPresentationCapabilities().textureSelectionAvailable()) return;
-            var expected = CloudClientRuntime.state(this.controller.cloudInstanceId());
-            CloudAssetSummary focused = focusedCloudAsset();
-            String name = focused != null && this.controller.cloudModelId(focused).equals(modelId) ? cloudEntryName(focused) : displayName(modelId, assembly);
-            InputUtil.setScreen(new CloudTextureSelectionScreen(this, name, new ArrayList<>(assembly.getTextureNames()),
-                    selectedTextureOrDefault(assembly), texture -> {
-                        if (CloudClientRuntime.state(this.controller.cloudInstanceId()) != expected) return;
-                        STATE.selectedModelId = modelId; STATE.selectedTextureId = texture;
-                        applySelectedTexture();
-                    }));
+    private void renderConfirmation(GuiGraphicsExtractor g,int mx,int my){
+        if(pendingConfirmation==null)return;this.hits.clear();fill(g,0,0,width,height,0x99000000);int w=Math.min(432,width-32),h=202,x=(width-w)/2,y=(height-h)/2-19;roundedSurface(g,x,y,w,h,5,0xFC292929,0x44FFFFFF);drawTitle(g,confirmationTitle,x+20,y+22);int yy=y+58;for(String line:confirmationBody.getString().split("\n")){drawMuted(g,Component.literal(trim(line,w-40)),x+20,yy);yy+=16;}
+        renderTextButton(g,mx,my,x+w-214,y+164,88,22,Component.translatable("gui.cancel"),()->pendingConfirmation=null);renderPrimaryButton(g,mx,my,x+w-116,y+164,100,22,confirmationAction,()->{var action=pendingConfirmation;pendingConfirmation=null;action.run();});
+    }
+
+    private void renderPerformanceReference(GuiGraphicsExtractor g,int mx,int my){
+        var c=settingsColumns();int x=c.detailX(),w=c.detailWidth(),y=c.top(),rh=settingRowHeight(),bh=uiButtonHeight();
+        var mode=rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE).segmented();int controlW=Math.min(280,w*2/3),half=(controlW-4)/2,cx=x+w-controlW-8;
+        drawText(g,Component.literal("渲染模式"),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
+        renderSegmentedOption(g,cx,y+4,half,bh,mode.left(),mode.leftSelected(),mode.leftAction());renderSegmentedOption(g,cx+half+4,y+4,half,bh,mode.right(),!mode.leftSelected(),mode.rightAction());
+        y+=rh;for(var line:wrap("GPU 与兼容模式互斥；无法使用 GPU 时退回兼容模式。",w-16,2)){drawMuted(g,Component.literal(line),x+8,y+3);y+=font.lineHeight+2;}y+=5;
+        renderSettingRow(g,mx,my,x,y,w,javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));y+=rh;
+        String[] labels={"模型缓存","Cloud 处理与上传"};Runnable[] actions={()->selectSettingsPage("cache"),()->openCloudSettings(CloudAccountPage.PERFORMANCE)};
+        for(int i=0;i<2;i++){drawText(g,Component.literal(labels[i]),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-108,y+4,100,bh,Component.literal("配置 ›"),actions[i]);y+=rh;}
+        renderTextButton(g,mx,my,x+8,y+4,Math.min(150,w-16),bh,Component.literal(performanceAdvanced?"收起高级选项":"高级渲染选项 ›"),()->performanceAdvanced=!performanceAdvanced);y+=rh;
+        if(performanceAdvanced)for(var row:settingsRows()){if(row.segmented()!=null||row.labelKey().contains("java_vector"))continue;renderSettingRow(g,mx,my,x,y,w,row);y+=rh;}
+    }
+
+    private void renderPeerConnectionReference(GuiGraphicsExtractor g,int mx,int my,float pt){
+        boolean probe=peerSettingsSection==PeerSettingsSection.PROBE,ready=minecraft.player!=null&&minecraft.level!=null&&!com.micaftic.morpher.client.PrivacyMode.isActive(),running=com.micaftic.morpher.client.peer.ClientPeerRuntime.running();String invite=com.micaftic.morpher.client.peer.ClientPeerRuntime.invitation();int x=layout.contentLeft,w=layout.contentWidth;
+        pageHeader(g,mx,my,Component.literal(probe?"访客加入 / 探测":"高级：局域网手动连接"),Component.literal("P2P / 高级连接"),()->selectPeerSection(PeerSettingsSection.ROOM));
+        if(probe){drawText(g,settingsText("peer.invitation_help"),x,70);renderReferenceField(g,mx,my,pt,peerInvitationBox,x,87,w,24);peerInvitationBox.visible=true;drawText(g,settingsText("peer.local_route"),x,150);renderReferenceField(g,mx,my,pt,peerLocalRouteBox,x,167,w,24);peerLocalRouteBox.visible=true;networkAction(g,mx,my,x,240,130,settingsText("peer.probe"),!peerInvitationDraft.isBlank(),()->com.micaftic.morpher.client.peer.ClientPeerRuntime.probeInvitation(peerInvitationDraft.trim(),peerLocalRouteDraft));networkAction(g,mx,my,x+138,240,100,settingsText("peer.join"),ready&&!peerInvitationDraft.isBlank(),this::joinPeerInvitation);networkAction(g,mx,my,x+246,240,160,settingsText("peer.clipboard_probe"),true,()->{peerInvitationDraft=minecraft.keyboardHandler.getClipboard();peerInvitationBox.setValue(peerInvitationDraft);com.micaftic.morpher.client.peer.ClientPeerRuntime.probeInvitation(peerInvitationDraft.trim(),peerLocalRouteDraft);});networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.probeStatusComponent(),x,300,w);networkLine(g,settingsText("peer.probe_boundary"),x,332,w);}
+        else{drawText(g,settingsText("peer.endpoint"),x,70);renderReferenceField(g,mx,my,pt,peerEndpointBox,x,87,w,24);peerEndpointBox.visible=true;networkAction(g,mx,my,x,148,160,settingsText("peer.next_adapter"),true,()->{peerEndpointDraft=com.micaftic.morpher.client.peer.ClientPeerRuntime.nextSuggestedEndpoint(peerEndpointDraft);peerEndpointBox.setValue(peerEndpointDraft);});networkAction(g,mx,my,x+168,148,110,settingsText("peer.host"),ready&&!running,()->com.micaftic.morpher.client.peer.ClientPeerRuntime.host(peerEndpointDraft.trim()));networkAction(g,mx,my,x+286,148,110,settingsText("peer.copy"),invite!=null,()->minecraft.keyboardHandler.setClipboard(invite));drawText(g,settingsText("peer.invitation_help"),x,200);renderReferenceField(g,mx,my,pt,peerInvitationBox,x,221,w,24);peerInvitationBox.visible=true;networkAction(g,mx,my,x,285,110,settingsText("peer.join"),ready&&!peerInvitationDraft.isBlank(),this::joinPeerInvitation);networkAction(g,mx,my,x+118,285,180,settingsText("peer.clipboard_join"),ready,()->{peerInvitationDraft=minecraft.keyboardHandler.getClipboard();peerInvitationBox.setValue(peerInvitationDraft);joinPeerInvitation();});networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),x,340,w);}
+    }
+
+    private void renderEmptyState(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,Component title,Component detail,Component actionLabel,Runnable action){
+        int pw=Math.min(w-24,360),ph=Math.min(h-20,200),px=x+(w-pw)/2,py=y+(h-ph)/2;roundedSurface(g,px,py,pw,ph,4,0x0AFFFFFF,0x22FFFFFF);drawTitle(g,Component.literal(trim(title.getString(),pw-24)),px+12,py+18);int yy=py+52;for(var line:wrap(detail.getString(),pw-24,4)){drawMuted(g,Component.literal(line),px+12,yy);yy+=15;}renderPrimaryButton(g,mx,my,px+12,py+ph-34,pw-24,22,actionLabel,action);
+    }
+
+    private void renderReferenceField(GuiGraphicsExtractor g,int mx,int my,float pt,EditBox field,int x,int y,int w,int h){
+        settingsExtent(y+h);roundedSurface(g,x,y,w,h,3,0x0DFFFFFF,0x24FFFFFF);
+        if(field!=null){
+            int offset=settingsDrawingBody?settingsDrawingOffset:0;
+            field.visible=true;field.active=true;field.setX(x+6);field.setY(y+(h-12)/2-offset);field.setWidth(Math.max(1,w-12));field.setHeight(12);field.setBordered(false);
+            if(settingsDrawingBody)settingsViewportFields.add(field);
+            g.pose().pushMatrix();g.pose().translate(0,offset);field.extractWidgetRenderState(g,mx,my-offset,pt);g.pose().popMatrix();
         }
     }
+    private void renderPrimaryButton(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,Component label,Runnable action){
+        roundedFill(g,x,y,w,h,UiElementLayout.BUTTON_RADIUS,inside(mx,my,x,y,w,h)?0xFFEE6370:RED);drawCentered(g,Component.literal(trim(label.getString(),w-8)),x+w/2,UiElementLayout.centeredY(y,h,font.lineHeight),TEXT);hit(x,y,w,h,label,action);
+    }
+    private void renderAccountReference(GuiGraphicsExtractor g,int mx,int my,float pt){
+        int x=layout.contentLeft,w=layout.contentWidth,bh=uiButtonHeight(),gap=8,y=layout.top+42;
+        pageHeader(g,mx,my,cloudText("title"),Component.empty(),this::backFromCloud);
+        var registry=CloudManagementScreen.management().registry();var selected=registry.selected();
+        String id=selected.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse("");
+        boolean connected=CloudClientRuntime.state(id)!=null;
+        int manageW=Math.min(124,w/3),switchW=w-manageW-gap;
+        renderTextButton(g,mx,my,x,y,switchW,bh,cloudText("switch_instance").copy().append(": ").append(selected.map(CloudManagementScreen::displayName).orElse("Cloud")),()->sourceTabMenu=!sourceTabMenu);
+        renderTextButton(g,mx,my,x+switchW+gap,y,manageW,bh,cloudText("instance_management"),()->setCloudAccountPage(CloudAccountPage.INSTANCES));
+        int menuY=y+bh+4;y+=bh+10;
+        roundedSurface(g,x,y,w,42,4,0x10FFFFFF,0x20FFFFFF);
+        drawText(g,Component.literal(trim(connected?CloudManagementScreen.management().accountId(id):cloudText("disconnected").getString(),w-20)),x+10,y+8);
+        drawMuted(g,Component.literal(trim(selected.map(CloudManagementScreen::displayName).orElse("Cloud")+" · "+cloudText(connected?"connected":"disconnected").getString(),w-20)),x+10,y+25);y+=50;
+        int half=(w-gap)/2;
+        renderPrimaryButton(g,mx,my,x,y,half,bh,Component.literal(cloudFormBusy?"处理中…":"一键登录 + 绑定"),()->{
+            if(cloudFormBusy)return;
+            try{if(connected)bindCloudIdentity(null);else runCloudAccount(CloudManagementScreen.connectOfficialAccount(),"quick_success");}
+            catch(RuntimeException failure){cloudPanelStatus=Component.literal(CloudManagementScreen.errorText(failure));}
+        });
+        int manualW=(w-half-gap*2)/2;
+        renderTextButton(g,mx,my,x+half+gap,y,manualW,bh,Component.literal("手动登录"),()->openCloudLoginForm(false));
+        renderTextButton(g,mx,my,x+half+gap*2+manualW,y,w-half-manualW-gap*2,bh,Component.literal("注册"),()->openCloudLoginForm(true));y+=bh+12;
+        int rh=settingRowHeight(),controlW=Math.min(144,w/2);
+        drawText(g,Component.literal("正版 / 第三方身份"),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
+        networkAction(g,mx,my,x+w-controlW,y+(rh-bh)/2,controlW,Component.literal("绑定当前游戏身份"),connected&&!cloudFormBusy,()->bindCloudIdentity(null));y+=rh;
+        String[] labels={"identity_panel.title","scopes","identity_panel.admin_title","targets_acl","performance"};
+        Runnable[] actions={()->openCloudIdentityPage(CloudAccountPage.IDENTITY),()->{setCloudAccountPage(CloudAccountPage.SCOPES);refreshCloudScopes();},()->openCloudIdentityPage(CloudAccountPage.APPROVAL),()->InputUtil.setScreen(new CloudTargetManagementScreen(this,CloudManagementScreen.management())),()->setCloudAccountPage(CloudAccountPage.PERFORMANCE)};
+        for(int i=0;i<labels.length;i++){drawText(g,Component.literal(trim(cloudText(labels[i]).getString(),w-controlW-20)),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-controlW,y+(rh-bh)/2,controlW,bh,Component.literal(i==0?"身份与认证提供方 ›":"配置 ›"),connected?actions[i]:()->openCloudLoginForm(false));y+=rh;}
+        networkAction(g,mx,my,x+8,y+6,Math.min(144,w-16),cloudText("logout"),connected&&!cloudFormBusy,()->{CloudManagementScreen.management().logout();resetCloudPage();init();});
+        if(sourceTabMenu){int menuW=switchW,yy=menuY;roundedSurface(g,x,yy,menuW,registry.profiles().size()*24+4,3,0xFF292929,0x44FFFFFF);for(var profile:registry.profiles()){var p=profile;renderTextButton(g,mx,my,x+2,yy+2,menuW-4,22,Component.literal(CloudManagementScreen.displayName(profile)),()->{sourceTabMenu=false;selectCloudInstance(p);init();});yy+=24;}}
+    }
+
+    private void bindCloudIdentity(String providerId){
+        if(cloudFormBusy)return;
+        var context=CloudManagementScreen.accountContext();long generation=cloudFormGeneration;
+        cloudFormBusy=true;cloudPanelStatus=cloudText("working");
+        try{
+            var request=providerId==null?CloudManagementScreen.bindCurrentGameAccount():CloudManagementScreen.bindProvider(providerId);
+            request.whenComplete((result,failure)->Minecraft.getInstance().execute(()->{
+                try{context.check();}catch(java.util.concurrent.CancellationException stale){return;}
+                if(generation!=cloudFormGeneration)return;
+                cloudFormBusy=false;
+                cloudPanelStatus=failure==null?Component.literal("当前游戏身份已绑定"):Component.literal(CloudManagementScreen.errorText(failure));
+                if(failure==null&&cloudIdentityFlow!=null)cloudIdentityFlow.refresh();
+                init();
+            }));
+        }catch(RuntimeException failure){cloudFormBusy=false;cloudPanelStatus=Component.literal(CloudManagementScreen.errorText(failure));}
+    }
+    private void renderInstancesReference(GuiGraphicsExtractor g,int mx,int my,float pt){
+        var a=FinalUiLayout.scene("instances",this.width,this.height);int x=this.layout.contentLeft;
+        pageHeader(g,mx,my,cloudText("instances"),Component.empty(),this::backFromCloud);var sr=a.control(0);renderReferenceField(g,mx,my,pt,instanceSearchBox,sr.x(),sr.y(),sr.w(),sr.h());
+        var registry=CloudManagementScreen.management().registry();var profiles=registry.profiles().stream().filter(p->(CloudManagementScreen.displayName(p)+" "+p.instance().origin()).toLowerCase(Locale.ROOT).contains(instanceSearchDraft.toLowerCase(Locale.ROOT))).toList();
+        var inspected=registry.find(inspectedInstanceId).orElseGet(()->registry.selected().orElse(null));
+        IconGlyph[] icons={IconGlyph.PLUS,IconGlyph.REFRESH,IconGlyph.EDIT,IconGlyph.DELETE,IconGlyph.CHECK,IconGlyph.SITES,IconGlyph.USER,IconGlyph.GLOBE};
+        Runnable[] actions={this::openCloudInstanceForm,()->{if(inspected!=null)selectCloudInstance(inspected);init();},()->{if(inspected!=null){openCloudInstanceForm();editingCloudInstance=true;cloudAddressDraft=inspected.instance().origin().toString();cloudNameDraft=CloudManagementScreen.displayName(inspected);init();}},()->{if(inspected!=null&&!CloudInstanceRegistry.isBuiltinOfficial(inspected)){selectCloudInstance(inspected);removeCloudInstance();}},()->{if(inspected!=null){selectCloudInstance(inspected);init();}},()->{if(inspected!=null){STATE.closedCloudTabs.remove(inspected.instanceId());switchCloudInstance(inspected);STATE.activeTab=ModelPanelState.Tab.MODEL;init();}},()->{if(inspected!=null){selectCloudInstance(inspected);setCloudAccountPage(CloudAccountPage.ACCOUNT);}},()->{if(inspected!=null){selectCloudInstance(inspected);setCloudAccountPage(CloudAccountPage.SCOPES);refreshCloudScopes();}}};
+        String[] keys={"add_instance","refresh_scopes","instance_management","remove_instance","selected","instances","account","scopes"};
+        for(int i=0;i<8;i++){var b=a.control(i+1);toolbarButton(g,mx,my,b.x(),b.y(),icons[i],cloudText(keys[i]),false,actions[i]);}
+        var lr=a.area("listRect");int rowH=this.width<560?43:66,visible=Math.max(1,(this.height-lr.y()-45)/(rowH+6));cloudAccountScroll=clamp(cloudAccountScroll,0,Math.max(0,profiles.size()-visible));
+        for(int i=cloudAccountScroll;i<Math.min(profiles.size(),cloudAccountScroll+visible);i++){var profile=profiles.get(i);int yy=lr.y()+(i-cloudAccountScroll)*(rowH+6);boolean chosen=profile.equals(inspected),active=registry.selected().map(p->p.instanceId().equals(profile.instanceId())).orElse(false);roundedSurface(g,lr.x(),yy,lr.w(),rowH,4,chosen?0x18FFFFFF:0x08FFFFFF,chosen?0x88DC4F5D:0x16FFFFFF);drawText(g,Component.literal((active?"◉ ":"○ ")+trim(CloudManagementScreen.displayName(profile),lr.w()-24)),lr.x()+8,yy+9);drawMuted(g,Component.literal(trim(CloudManagementScreen.management().accountId(profile.instanceId())+" · "+cloudText(CloudClientRuntime.state(profile.instanceId())!=null?"connected":"disconnected").getString(),lr.w()-24)),lr.x()+14,yy+rowH-17);hit(lr.x(),yy,lr.w(),rowH,Component.literal(profile.instance().origin().toString()),()->inspectedInstanceId=profile.instanceId());}
+        if(inspected!=null){var dr=a.area("detailRect");roundedSurface(g,dr.x(),dr.y(),dr.w(),dr.h(),4,0x0CFFFFFF,0x20FFFFFF);int dx=dr.x()+12,yy=dr.y()+14;drawTitle(g,Component.literal(CloudManagementScreen.displayName(inspected)),dx,yy);drawMuted(g,Component.literal(trim(inspected.instance().origin().toString(),dr.w()-24)),dx,yy+30);String[] values={inspected.instanceId(),registry.selected().map(CloudManagementScreen::displayName).orElse(""),cloudText(CloudClientRuntime.state(inspected.instanceId())==null?"disconnected":"connected").getString(),STATE.closedCloudTabs.contains(inspected.instanceId())?"关闭":"打开"};String[] labels={"实例 ID","当前选择","登录状态","模型标签"};for(int i=0;i<4;i++){drawMuted(g,Component.literal(labels[i]),dx,yy+(this.width<560?52:64)+i*(this.width<560?22:36));drawText(g,Component.literal(trim(values[i],dr.w()/2)),dx+dr.w()/3,yy+(this.width<560?52:64)+i*(this.width<560?22:36));}}
+    }
+    private void renderCloudPerformanceReference(GuiGraphicsExtractor g,int mx,int my){
+        pageHeader(g,mx,my,settingsText("cloud.performance"),cloudText("account_intro"),this::backFromCloud);
+        int x=this.layout.contentLeft,w=this.layout.contentWidth,y=this.layout.top+58;
+        drawText(g,settingsText("cloud.performance.preset"),x+10,y+12);
+        var presets=com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.values();var current=com.micaftic.morpher.cloud.client.CloudClientPerformance.preset();
+        renderTextButton(g,mx,my,x+w-160,y+7,150,22,settingsText("cloud.performance.preset."+current.name().toLowerCase(Locale.ROOT)),()->com.micaftic.morpher.cloud.client.CloudClientPerformance.select(presets[(current.ordinal()+1)%presets.length]));
+        renderSettingRow(g,mx,my,x,y+47,w,cloudConcurrencyRow(false));renderSettingRow(g,mx,my,x,y+94,w,cloudConcurrencyRow(true));
+        networkLine(g,settingsText("cloud.performance.custom_help"),x+10,y+170,w-20);
+    }
+
+    private void renderReferenceTab(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,Component label,boolean selected,Runnable action){
+        roundedSurface(g,x,y,w,h,3,selected?0x1CFFFFFF:0x0CFFFFFF,0x18FFFFFF);
+        if(selected)fill(g,x+10,y+h-1,w-20,1,RED);
+        drawCentered(g,Component.literal(trim(label.getString(),w-12)),x+w/2,UiElementLayout.centeredY(y,h,font.lineHeight),TEXT);hit(x,y,w,h,label,action);
+    }
+    private void referenceButton(GuiGraphicsExtractor g,int mx,int my,FinalUiLayout.Rect r,Component label,Runnable action){renderTextButton(g,mx,my,r.x(),r.y(),r.w(),r.h(),label,action);}
+    private void pageHeader(GuiGraphicsExtractor g,int mx,int my,Component title,Component subtitle,Runnable back){
+        if(settingsDrawingBody)return;
+        int x=this.layout.contentLeft,y=this.layout.top+6,right=x+this.layout.contentWidth,buttonH=uiButtonHeight();
+        if(back!=null){toolbarButton(g,mx,my,x,y,IconGlyph.BACK,Component.translatable("gui.back"),false,back);x+=buttonH+8;}
+        var text=UiElementLayout.header(y,buttonH,font.lineHeight,!subtitle.getString().isBlank());
+        int available=Math.max(1,right-x-(back==null?buttonH+10:6));drawTitle(g,Component.literal(trim(title.getString(),(int)(available/1.25f))),x,text.titleY());
+        if(!subtitle.getString().isBlank())drawMuted(g,Component.literal(trim(subtitle.getString(),available)),x,text.subtitleY());
+        if(back==null)toolbarButton(g,mx,my,right-buttonH,y,IconGlyph.CLOSE,Component.translatable("gui.sparkle_morpher.model_panel.close"),false,this::onClose);
+
+    }
+    private Component appearanceText(Component text){
+        if(appearance.font.equals("minecraft:default"))return text;
+        String[] id=appearance.font.split(":",2);
+        return text.copy().withStyle(style->style.withFont(new net.minecraft.network.chat.FontDescription.Resource(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(id[0],id[1]))));
+    }
+    private boolean handleUiKey(int key,int modifiers){
+        if(key==258&&!hits.isEmpty()){setFocused(null);keyboardHit=Math.floorMod(keyboardHit+((modifiers&1)!=0?-1:1),hits.size());return true;}
+        if((key==257||key==335||key==32)&&keyboardHit>=0&&keyboardHit<hits.size()){hits.get(keyboardHit).action().run();return true;}
+        return false;
+    }
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent event){
+        if(handleUiKey(event.key(),event.modifiers()))return true;
+        return super.keyPressed(event);
+    }
+}
