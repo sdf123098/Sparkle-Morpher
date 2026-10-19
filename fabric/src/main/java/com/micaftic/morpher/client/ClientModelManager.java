@@ -102,6 +102,8 @@ public class ClientModelManager {
     private static final AtomicInteger MODEL_PARSE_THREAD_IDS = new AtomicInteger(1);
     private static final Semaphore MODEL_PARSE_SLOTS = new Semaphore(MODEL_PARSE_THREAD_COUNT + MODEL_PARSE_QUEUE_CAPACITY, true);
     private static final Semaphore MODEL_PARSE_MEMORY = new Semaphore(MODEL_PARSE_MEMORY_BUDGET_MIB, true);
+    private static final com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission MODEL_DECODE_ADMISSION =
+            new com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission();
     static final AtomicInteger MODEL_TASK_GENERATION = new AtomicInteger(0);
     private static final ThreadPoolExecutor modelTaskDispatcher = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
             new LinkedBlockingQueue<>(256), r -> {
@@ -140,7 +142,10 @@ public class ClientModelManager {
                 modelPhraseExecutor.execute(() -> {
                     try {
                         if (generation == MODEL_TASK_GENERATION.get()) {
-                            task.run();
+                            MODEL_DECODE_ADMISSION.run(() -> {
+                                if (generation == MODEL_TASK_GENERATION.get()) task.run();
+                                else settleDiscard.run();
+                            });
                         } else {
                             settleDiscard.run();
                         }
@@ -179,6 +184,8 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
     private static final KeyedRequestLeaseRegistry<String> localImportRequests = new KeyedRequestLeaseRegistry<>();
     private static final ConcurrentHashMap<String, LocalModelCatalog.Entry> lazyModelSources = new ConcurrentHashMap<>();
+    private static final com.micaftic.morpher.core.model.lifecycle.ModelReloadBackoff<String> MODEL_RELOAD_BACKOFF =
+            new com.micaftic.morpher.core.model.lifecycle.ModelReloadBackoff<>();
 
     // ---- 模型处理失败日志去重 ----
     // 同一模型短时间反复失败（如损坏模型被反复重载）时只打印首条完整堆栈，
@@ -396,10 +403,11 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
     private static void scheduleCachedModelReload(String modelId) {
         String modelKey = LocalModelCatalog.canonicalKey(modelId);
         if (modelKey == null) return;
+        LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
+        if (source == null || !MODEL_RELOAD_BACKOFF.allows(modelKey, source, System.nanoTime() / 1_000_000L)) return;
         KeyedRequestLeaseRegistry.Lease<String> requestLease = RESIDENCY.cpuReloads().begin(modelKey);
         if (requestLease == null) return;
-        LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
-        if (source == null) {
+        if (lazyModelSources.get(modelKey) != source) {
             RESIDENCY.cpuReloads().complete(requestLease);
             return;
         }
@@ -408,7 +416,7 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
             if (peerSource == null) { RESIDENCY.cpuReloads().complete(requestLease); return; }
             loadPeerModel(peerSource.peerIdentity(), peerSource.verifiedAsset(),
                     () -> RESIDENCY.cpuReloads().isCurrent(requestLease) && MODEL_LIBRARY.source(modelKey) == peerSource,
-                    ignored -> RESIDENCY.cpuReloads().complete(requestLease));
+                    ignored -> finishCachedModelReload(requestLease, source));
             return;
         }
         submitModelTask(() -> {
@@ -427,16 +435,29 @@ static final java.security.SecureRandom SECURE_RANDOM = new java.security.Secure
                 YesSteveModel.LOGGER.error("[SM] Failed to reload resident model: {}", modelKey, e);
             } finally {
                 // Keep this request in flight until its publication is accepted or discarded.
-                finishCachedModelReload(requestLease);
+                finishCachedModelReload(requestLease, source);
             }
-        }, () -> finishCachedModelReload(requestLease));
+        }, () -> finishCachedModelReload(requestLease, source));
     }
 
-    private static void finishCachedModelReload(KeyedRequestLeaseRegistry.Lease<String> requestLease) {
+    private static void finishCachedModelReload(KeyedRequestLeaseRegistry.Lease<String> requestLease,
+                                                LocalModelCatalog.Entry source) {
         Runnable settle = () -> {
             try {
                 flushPendingModels();
             } finally {
+                // Parsing can consume an exception internally. Judge the accepted publication,
+                // and never let an obsolete completion penalize a replacement request/source.
+                if (RESIDENCY.cpuReloads().isCurrent(requestLease)
+                        && lazyModelSources.get(requestLease.key()) == source) {
+                    ModelAssembly assembly = RESIDENCY.assemblies().get(requestLease.key());
+                    if (assembly != null && !(assembly instanceof LazyModelAssembly)
+                            && assembly.getPresentationCapabilities().runtimeResident()) {
+                        MODEL_RELOAD_BACKOFF.clear(requestLease.key());
+                    } else {
+                        MODEL_RELOAD_BACKOFF.failed(requestLease.key(), source, System.nanoTime() / 1_000_000L);
+                    }
+                }
                 RESIDENCY.cpuReloads().complete(requestLease);
             }
         };
@@ -528,6 +549,10 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     public static void rememberSelectedModel(String modelId, String textureId) {
+        if (!Objects.equals(LocalModelCatalog.canonicalKey(modelId),
+                LocalModelCatalog.canonicalKey(MODEL_SELECTION.selectedModelId()))) {
+            MODEL_RELOAD_BACKOFF.clear(LocalModelCatalog.canonicalKey(modelId));
+        }
         // R6：选择变化推进 revision——作废所有在途异步模型结果（竞态防护）
         MODEL_RESOLVER.request();
         // R7.3：双轨选择状态（selected / localOnly）集中到 ModelSelectionState
@@ -706,7 +731,119 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     }
 
     public static void importLocalModel(String modelId, String fileName, byte[] data, @Nullable Consumer<Component> callback) {
-        importModel(modelId, fileName, data, callback, LOCAL_IMPORT_STORE, false);
+        importModelIntoStore(modelId, fileName, data, LOCAL_IMPORT_STORE, () -> true, callback);
+    }
+
+    /** Cache-only preview load: callers retain the screen/runtime lease; no player selection is changed. */
+    public static void loadCloudPreview(String modelId, String fileName, byte[] data, Path cacheRoot,
+            java.util.function.BooleanSupplier current, Consumer<Component> callback) {
+        if (!com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId))
+            throw new IllegalArgumentException("Preview requires a Cloud runtime identity");
+        importModelIntoStore(modelId, fileName, data, new LocalModelImportStore(cacheRoot.resolve("previews")), current, callback, true);
+    }
+
+    private static void importModelIntoStore(String modelId, String fileName, byte[] data,
+            LocalModelImportStore store, java.util.function.BooleanSupplier current, @Nullable Consumer<Component> callback) {
+        importModelIntoStore(modelId, fileName, data, store, current, callback, false);
+    }
+
+    private static void importModelIntoStore(String modelId, String fileName, byte[] data,
+            LocalModelImportStore store, java.util.function.BooleanSupplier current,
+            @Nullable Consumer<Component> callback, boolean preview) {
+        final String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        com.micaftic.morpher.core.model.lifecycle.LocalImportCompletion completion =
+                new com.micaftic.morpher.core.model.lifecycle.LocalImportCompletion(callback,
+                (Executor) Minecraft.getInstance(),
+                failure -> YesSteveModel.LOGGER.error("[SM] Local import completion callback failed for {}", modelKey, failure));
+        final KeyedRequestLeaseRegistry.Lease<String> importLease;
+        final int importGeneration;
+        synchronized (MODEL_RUNTIME_STOP_LOCK) {
+            if(store==LOCAL_IMPORT_STORE) LOCAL_MODEL_SCAN_REVISION.invalidate();
+            if (modelKey == null) {
+                importLease = null;
+            } else {
+                RESIDENCY.cpuReloads().invalidate(modelKey);
+                localImportRequests.invalidate(modelKey);
+                importLease = localImportRequests.begin(modelKey);
+            }
+            importGeneration = MODEL_TASK_GENERATION.get();
+        }
+        byte[] importData = data;
+        submitImportTask(com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId), () -> {
+            Component error = null;
+            try {
+                if (!current.getAsBoolean()) throw new IOException("Preview request superseded");
+                if (preview && !com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission.previewFits(importData.length)) {
+                    throw new IOException("Not enough free heap for this model preview; select the model to load it directly");
+                }
+                ModelMemoryProfiler.logBytes("local-import-read", modelKey, importData);
+                try (LocalModelImportStore.PreparedImport prepared = store.prepare(modelKey, fileName, importData)) {
+                    if (prepared == null) throw new IOException("Failed to prepare local import");
+                    ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> outcome;
+                    outcome = com.micaftic.morpher.core.importing.ImportCoordinator.importPrepared(
+                            prepared,
+                            () -> com.micaftic.morpher.core.importing.ImportCoordinator.parsePickedBytes(
+                                    fileName, importData, () -> parseImportModel(fileName, importData)),
+                            rawModel -> {
+                                ModelMemoryProfiler.log("local-import-parsed", modelKey);
+                                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
+                                ModelMemoryProfiler.log("local-import-mapped", modelKey);
+                                return ModelAssemblyFactory.buildAssembly(parsedBundle, false, false);
+                            },
+                            gltfResult -> buildGltfAssembly(gltfResult.model(), modelKey),
+                            candidate -> {
+                                synchronized (MODEL_RUNTIME_STOP_LOCK) {
+                                    return com.micaftic.morpher.core.importing.ImportCoordinator.commitBuiltCandidate(
+                                            candidate,
+                                            () -> current.getAsBoolean() && importGeneration == MODEL_TASK_GENERATION.get()
+                                                    && (importLease == null || localImportRequests.isCurrent(importLease)),
+                                            prepared::commit,
+                                            (assembly, committed) -> publishImportedAssembly(
+                                                    modelKey, assembly, committed.persistedPath(), com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId)),
+                                            assembly -> releaseModelAssembly(modelKey, assembly));
+                                }
+                            });
+                    if (outcome.state() == ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT) {
+                        error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
+                                "Import superseded by a newer request");
+                    } else if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
+                        throw outcome.failure();
+                    } else {
+                        LocalModelImportStore.CommitResult commit = outcome.committedSource();
+                        if (!commit.cleanupPending().isEmpty()) {
+                            YesSteveModel.LOGGER.warn("[SM] Import committed with {} stale sibling file(s) awaiting cleanup: {}",
+                                    commit.cleanupPending().size(), commit.cleanupPending());
+                        }
+                        if (outcome.state() == ImportCommitFlow.State.SOURCE_COMMITTED_PENDING_PUBLICATION) {
+                            YesSteveModel.LOGGER.error("[SM] Import source committed but runtime publication failed; scheduling catalog recovery",
+                                    outcome.failure());
+                            try {
+                                reloadLocalModels(null);
+                            } catch (RuntimeException recoveryFailure) {
+                                YesSteveModel.LOGGER.error("[SM] Failed to schedule recovery for committed import {}", modelKey, recoveryFailure);
+                            }
+                        }
+                    }
+                }
+                ((Executor) Minecraft.getInstance()).execute(ClientModelManager::flushPendingModels);
+                if (error == null) YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
+            } catch (OutOfMemoryError exhausted) {
+                // Complete the request even if a model expands beyond its source-size
+                // estimate, so optional preview queues never retain a failed worker forever.
+                YesSteveModel.LOGGER.error("[SM] Model import exhausted available heap: {}", modelKey);
+                error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", "Not enough free heap to decode this model");
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelKey, e);
+                error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            } finally {
+                if (importLease != null) localImportRequests.complete(importLease);
+            }
+            completion.complete(error);
+        }, () -> {
+            if (importLease != null) localImportRequests.complete(importLease);
+            completion.complete(Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
+                    "Import task was cancelled before execution"));
+        });
     }
 
     /** Persists an imported Cloud revision outside the user's custom-model directory. */
@@ -955,6 +1092,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
     private static void reloadLocalModels(@Nullable Consumer<Component> callback,
                                           boolean restoreSelection,
                                           boolean loadAllModels) {
+        MODEL_RELOAD_BACKOFF.clearAll();
         long scanRevision = LOCAL_MODEL_SCAN_REVISION.begin();
         submitModelTask(() -> {
             Component error = null;
@@ -1199,7 +1337,8 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
         catch (IOException provenanceFailure) { YesSteveModel.LOGGER.warn("[SM][Peer] Source provenance unavailable; sharing disabled for this source"); }
         long fingerprint = LocalModelCatalog.fingerprint(persisted);
         LocalModelCatalog.Entry sourceEntry = new LocalModelCatalog.Entry(
-                persisted, null, false, false, fingerprint, null, null);
+                persisted, null, false, false, fingerprint, null, null,
+                com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId)?ModelSourceType.CLOUD:ModelSourceType.LOCAL);
         if (!cloudImport) localOnlyModelIds.add(modelId);
         touchModel(modelId);
         ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
@@ -1747,6 +1886,7 @@ public static Optional<Path> getLocalModelSourcePath(String modelId) {
             MODEL_TASK_GENERATION.incrementAndGet();
             LOCAL_MODEL_SCAN_REVISION.invalidate();
             RESIDENCY.cpuReloads().clearAll();
+            MODEL_RELOAD_BACKOFF.clearAll();
             localImportRequests.clearAll();
             RESIDENCY.gpuTrim().clearAll();
 

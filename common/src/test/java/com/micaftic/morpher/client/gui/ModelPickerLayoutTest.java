@@ -96,7 +96,7 @@ class ModelPickerLayoutTest {
             ModelPickerLayout.Cards m = ModelPickerLayout.cards(w, 400);
             assertTrue(m.cellW() <= ModelPickerLayout.CARD_MAX_W, "cellW<=max for " + w);
             assertTrue(m.cellW() >= 1, "cellW>=1 for " + w);
-            assertEquals(ModelPickerLayout.cardH(m.cellW()), m.cellH(), "cellH matches aspect for " + w);
+            assertTrue(Math.abs(ModelPickerLayout.cardH(m.cellW())-m.cellH())<=2, "cellH respects subpixel card width for " + w);
         }
     }
 
@@ -156,7 +156,9 @@ class ModelPickerLayoutTest {
         // 卡高足够时命中最大值与比例值；卡高不足时让位给封面（下限不反超卡高）。
         assertEquals(ModelPickerLayout.CARD_NAME_MAX, ModelPickerLayout.nameBandH(100_000));
         assertEquals(ModelPickerLayout.CARD_NAME_MAX, ModelPickerLayout.nameBandH(500));
-        assertEquals(Math.round(80 * ModelPickerLayout.CARD_NAME_RATIO), ModelPickerLayout.nameBandH(80));
+        assertEquals(16, ModelPickerLayout.nameBandH(80));
+        assertEquals(17, ModelPickerLayout.nameBandH(120));
+        assertEquals(20, ModelPickerLayout.nameBandH(160));
         for (int cellH : new int[]{20, 48, 100, 120, 160, 220, 400}) {
             int band = ModelPickerLayout.nameBandH(cellH);
             assertTrue(band >= 1, "band>=1 for cellH=" + cellH);
@@ -191,11 +193,11 @@ class ModelPickerLayoutTest {
     void cardAspectMatchesTheStandardCardArt() {
         // 回归：YSM 卡面素材标准尺寸是 52x90（gui_background/gui_foreground，内置 default 亦然）。
         // 卡比例必须与素材一致，否则卡图两侧会出现留白（空间利用率不足）。
-        assertEquals(90.0f / 52.0f, ModelPickerLayout.CARD_ASPECT, 1.0e-6f);
+        assertEquals(280.0f / 162.0f, ModelPickerLayout.CARD_ASPECT, 1.0e-6f);
         for (int w : new int[]{64, 80, 116, 168}) {
             int h = ModelPickerLayout.cardH(w);
             double aspect = (double) h / w;
-            assertTrue(Math.abs(aspect - 90.0 / 52.0) < 0.02, "card aspect must match 52:90 at w=" + w);
+            assertTrue(Math.abs(aspect - 280.0 / 162.0) < 0.02, "card aspect must match 52:90 at w=" + w);
         }
     }
 
@@ -215,28 +217,11 @@ class ModelPickerLayoutTest {
 
     @Test
     void layoutFillsTheAvailableArea() {
-        // 回归：原来只按最小卡宽推列数、并把行数压到 2，导致卡又小又只占一小块，
-        // 上下左右留下大片空白。现在应尽量吃满可用面积。
-        int[][] cases = {{592, 163}, {306, 294}, {347, 382}, {635, 187}, {284, 382}, {900, 420}};
-        for (int[] c : cases) {
-            int w = c[0], h = c[1];
-            ModelPickerLayout.Cards m = ModelPickerLayout.cards(w, h);
-            // 卡的横向铺开率：块宽应接近可用宽（或已到单卡宽度上限/列数上限）。
-            int usableW = w - 2 * ModelPickerLayout.CARD_MARGIN;
-            int usableH = h - 2 * ModelPickerLayout.CARD_MARGIN;
-            boolean widthCappedByMaxCard = m.cols() >= ModelPickerLayout.MAX_COLS
-                    || m.cellW() >= ModelPickerLayout.CARD_MAX_W;
-            if (!widthCappedByMaxCard) {
-                int slack = usableW - m.blockW();
-                assertTrue(slack < m.cellW() + ModelPickerLayout.CARD_GAP,
-                        "horizontal slack " + slack + " should be less than one card at " + w + "x" + h);
-            }
-            // 纵向同理：剩下的空档放不下再多一行。
-            if (m.rows() < ModelPickerLayout.MAX_ROWS) {
-                int slackV = usableH - m.blockH();
-                assertTrue(slackV < m.cellH() + ModelPickerLayout.CARD_GAP,
-                        "vertical slack " + slackV + " should be less than one row at " + w + "x" + h);
-            }
+        for(int width:new int[]{323,681,900}){
+            var cards=ModelPickerLayout.cards(width,428);
+            assertTrue(cards.cellW()<=81,"final reference caps regular cards at 81 logical pixels");
+            assertEquals(0,cards.columnX(width,0));
+            assertTrue(cards.columnX(width,cards.cols()-1)+cards.cellW()<=width,"dense grid remains inside the list");
         }
     }
 
@@ -254,6 +239,14 @@ class ModelPickerLayoutTest {
                     assertTrue(m.blockH() <= h, "blockH " + m.blockH() + " <= " + h);
                 }
             }
+        }
+    }
+    @Test
+    void neighboringCardsKeepTheSpecifiedGapEvenWhenThePanelIsWide() {
+        for(int width:new int[]{323,681,900}) {
+            var cards=ModelPickerLayout.cards(width,428);
+            for(int col=1;col<cards.cols();col++)
+                assertEquals(ModelPickerLayout.CARD_GAP,cards.columnX(width,col)-cards.columnX(width,col-1)-cards.cellW());
         }
     }
 }

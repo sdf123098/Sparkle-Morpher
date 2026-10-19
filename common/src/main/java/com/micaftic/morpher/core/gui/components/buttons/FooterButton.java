@@ -22,18 +22,12 @@ public class FooterButton extends AbstractWidget {
     }
 
     @Override
-    protected void extractWidgetRenderState(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
-        RoulettePanelStyle.iconButton(extractor, mouseX, mouseY, getX(), getY(), glyph, active);
-        if (active && isHovered()) {
-            int tw = Math.min(180, net.minecraft.client.Minecraft.getInstance().font.width(getMessage()) + 10);
-            int tx = Math.min(mouseX + 10, net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth() - tw - 4);
-            int ty = Math.min(mouseY + 10, net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight() - 18);
-            RoulettePanelStyle.fill(extractor, tx, ty, tw, 16, 0xEE101010);
-            RoulettePanelStyle.border(extractor, tx, ty, tw, 16, 0x88FFFFFF);
-            extractor.text(net.minecraft.client.Minecraft.getInstance().font,
-                    Component.literal(RoulettePanelStyle.trim(net.minecraft.client.Minecraft.getInstance().font, getMessage().getString(), tw - 8)),
-                    tx + 5, ty + 5, 0xFFFFFFFF, false);
-        }
+    protected void extractWidgetRenderState(GuiGraphicsExtractor g,int mouseX,int mouseY,float partialTick){
+        boolean hover=active&&isHovered();RoulettePanelStyle.roundedSurface(g,getX(),getY(),width,height,4,!active?0x44282828:hover?0x88505050:0x66303030,hover?RoulettePanelStyle.RED:0x33FFFFFF);
+        var font=net.minecraft.client.Minecraft.getInstance().font;
+        if(width>32){var text=Component.literal(RoulettePanelStyle.trim(font,getMessage().getString(),width-12));g.text(font,text,getX()+(width-font.width(text))/2,com.micaftic.morpher.core.gui.UiElementLayout.centeredY(getY(),height,font.lineHeight),active?RoulettePanelStyle.TEXT:RoulettePanelStyle.MUTED,false);}
+        else{int size=Math.min(14,Math.min(width,height)-6);RoulettePanelStyle.drawIconScaled(g,glyph,getX()+(width-size)/2,getY()+(height-size)/2,size);}
+        if(hover)g.setComponentTooltipForNextFrame(font,java.util.List.of(getMessage()),mouseX,mouseY);
     }
 
     @Override
