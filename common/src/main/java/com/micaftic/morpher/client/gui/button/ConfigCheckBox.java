@@ -15,7 +15,6 @@ import java.util.function.Consumer;
 
 public class ConfigCheckBox extends AbstractButton implements ISpecialWidget {
 
-    private static final Identifier location = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/roulette.png");
 
     private final Consumer<Boolean> consumer2;
 
@@ -33,13 +32,11 @@ public class ConfigCheckBox extends AbstractButton implements ISpecialWidget {
     }
 
     @Override
-    protected void extractContents(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) {
-        GuiGraphicsExtractor guiGraphics = extractor;
-        int uOffset = isStateTriggered ? 128 : 0;
-        int vOffset = isHovered() ? 12 : 0;
-        int boxSize = 12;
-        guiGraphics.blit(location, getX(), getY(), getX() + boxSize, getY() + boxSize, uOffset / 256.0f, (uOffset + boxSize) / 256.0f, vOffset / 24.0f, (vOffset + boxSize) / 24.0f);
-        guiGraphics.text(Minecraft.getInstance().font, this.component2, getX() + boxSize + 2, getY() + 2, -1, false);
+    public void extractContents(GuiGraphicsExtractor guiGraphics,int mouseX,int mouseY,float partialTick){
+        com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedSurface(guiGraphics,getX(),getY(),12,12,3,
+                isStateTriggered?0x55E05252:0x0CFFFFFF,isStateTriggered?0xFFE05252:0x33FFFFFF);
+        if(isStateTriggered)guiGraphics.blit(com.micaftic.morpher.core.gui.RoulettePanelStyle.MODEL_PANEL_ICONS,getX()+1,getY()+1,getX()+11,getY()+11,0.0f,0.125f,0.125f,0.25f);
+        guiGraphics.text(Minecraft.getInstance().font,this.component2,getX()+16,getY()+2,0xFFF0F0F0,false);
     }
 
     @Override

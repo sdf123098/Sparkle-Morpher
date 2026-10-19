@@ -42,7 +42,7 @@ public class BoneAnimationQueue {
             if(!reportedInvalidPose) {
                 reportedInvalidPose=true;
                 com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM-PHYSICS] Invalid animation source held at last valid pose: entity={} animation={} bone={} channel={}",
-                        evaluator.entity().geoInstance().entity.getId(),sourceAnimation,topLevelSnapshot.boneId,channel);
+                        com.micaftic.morpher.client.animation.molang.EntityLogIdentity.describe(()->evaluator.entity().geoInstance().entity.getId()),sourceAnimation,topLevelSnapshot.boneId,channel);
             }
         }
         return value;

@@ -17,6 +17,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -44,6 +45,8 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
     private UploadTab activeTab = UploadTab.CLOUD_MODELS;
     private long nextPickedFileId;
     private EditBox search;
+    private boolean showingFailures;
+    private final Map<String,Long> sourceSizes=new java.util.concurrent.ConcurrentHashMap<>();
     private PanelButton primary, failureDetails;
     private int scroll;
     private Component status = Component.empty();
@@ -69,20 +72,21 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         failures.keySet().retainAll(knownIds);
         sources.keySet().forEach(id -> states.putIfAbsent(id, "waiting"));
         scroll = 0;
+        var snapshot=Map.copyOf(sources);java.util.concurrent.CompletableFuture.runAsync(()->snapshot.forEach((id,path)->{try{if(Files.isRegularFile(path))sourceSizes.put(id,Files.size(path));}catch(IOException ignored){}}),com.micaftic.morpher.util.SmExecutors.pool(com.micaftic.morpher.util.SmExecutors.Pool.MODEL_IO));
     }
 
-    private int panelW() { return Math.max(1, Math.min(720, width - (width < 400 ? 16 : 28))); }
-    private int panelH() { return Math.max(1, Math.min(390, height - (height < 300 ? 16 : 28))); }
-    private int panelX() { return (width - panelW()) / 2; }
-    private int panelY() { return (height - panelH()) / 2; }
+    private int panelW() { return Math.max(1,width-panelX()-RoulettePanelStyle.applicationMargin(width)-4); }
+    private int panelH() { return Math.max(1,height-2*RoulettePanelStyle.applicationMargin(width)); }
+    private int panelX() { return RoulettePanelStyle.applicationContentLeft(width); }
+    private int panelY() { return RoulettePanelStyle.applicationMargin(width); }
     private boolean compact() { return panelH() < 300; }
-    private int tabY() { return panelY() + (compact() ? 20 : 24); }
-    private int targetY() { return tabY() + (compact() ? 20 : 24); }
-    private int searchY() { return targetY() + (compact() ? 20 : 24); }
-    private int listShellY() { return searchY() + (compact() ? 20 : 26); }
-    private int listY() { return listShellY() + 18; }
-    private int listH() { return Math.max(0, panelY() + panelH() - (compact() ? 40 : 54) - listY()); }
-    private int rowH() { return compact() ? 18 : 28; }
+    private int tabY(){return compact()?42:44;}
+    private int targetY(){return tabY();}
+    private int searchY(){return tabY();}
+    private int listShellY(){return compact()?74:104;}
+    private int listY(){return compact()?93:128;}
+    private int listH(){return Math.max(0,height-panelY()-38-listY());}
+    private int rowH(){return compact()?19:30;}
     private int rows() { return Math.max(0, listH() / rowH()); }
     private Component fit(Component text, int width) {
         return font.width(text) <= width ? text : Component.literal(font.plainSubstrByWidth(text.getString(),
@@ -104,7 +108,7 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         return button;
     }
     private PanelButton iconControl(int x, int y, int u, int v, Component tooltip, Button.OnPress action) {
-        PanelButton button = addRenderableWidget(new PanelButton(x, y, 18, 18, u, v, tooltip, action));
+        PanelButton button = addRenderableWidget(new PanelButton(x, y, compact()?18:22, compact()?18:22, u, v, tooltip, action));
         controls.add(button);
         return button;
     }
@@ -115,64 +119,26 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
     }
 
     @Override
-    protected void init() {
-        String query = search == null ? "" : search.getValue();
-        clearWidgets();
-        settings.clear();
-        controls.clear();
-        if (!listening) { ModelUploadSession.addListener(this); listening = true; }
-        int x = panelX() + 10, y = panelY(), w = Math.max(1, panelW() - 20);
-        iconSetting(x, tabY(), 0, 0, label("tab.cloud_models"), button -> setTab(UploadTab.CLOUD_MODELS))
-                .setSelected(activeTab == UploadTab.CLOUD_MODELS);
-        iconSetting(x + 26, tabY(), 64, 48, label("tab.local_files"), button -> setTab(UploadTab.LOCAL_FILES))
-                .setSelected(activeTab == UploadTab.LOCAL_FILES);
-        boolean localTab = activeTab == UploadTab.LOCAL_FILES;
-        int targetW = Math.max(1, w - 52);
-        setting(x, targetY(), targetW, 18, fit(targetLabel(), targetW - 12), button -> cycleTarget())
-                .setTooltipLines(List.of(targetLabel()));
-        iconSetting(x + w - 44, targetY(), publicVisibility ? 0 : 80, 48, visibilityLabel(), button -> {
-            publicVisibility = !publicVisibility;
-            states.replaceAll((id, state) -> "waiting");
-            failures.clear();
-            status = Component.empty();
-            init();
-        });
-        iconSetting(x + w - 18, targetY(), 96, 48, label("login"), button -> openAccount());
-        int searchW = Math.max(1, w - (localTab ? 26 : 52));
-        search = new EditBox(font, x + 5, searchY() + 5, Math.max(1, searchW - 10), 10, label("search"));
-        search.setBordered(false);
-        search.setTextColor(TEXT);
-        search.setTextColorUneditable(MUTED);
-        search.setMaxLength(128);
-        search.setHint(label("search"));
-        search.setValue(query);
-        search.setResponder(value -> scroll = 0);
-        addRenderableWidget(search);
-        if (localTab) {
-            iconSetting(x + w - 18, searchY(), 0, 32, label("choose_files"), button -> openFilePicker());
-        } else {
-            iconSetting(x + w - 44, searchY(), 48, 16,
-                    Component.translatable("gui.sparkle_morpher.upload_custom_folder.refresh"), button -> refresh());
-            iconSetting(x + w - 18, searchY(), 64, 0,
-                    Component.translatable("gui.sparkle_morpher.upload_custom_folder.open_folder"), button -> openFolder());
+    protected void init(){
+        String query=search==null?"":search.getValue();clearWidgets();settings.clear();controls.clear();if(!listening){ModelUploadSession.addListener(this);listening=true;}
+        var scene=FinalUiLayout.scene("upload",width,height);var c=scene.control(0);
+        iconControl(c.x(),c.y(),64,16,Component.translatable("gui.back"),b->{if(showingFailures){showingFailures=false;init();}else onClose();});
+        c=scene.control(1);iconSetting(c.x(),c.y(),0,0,label("tab.cloud_models"),b->{showingFailures=false;setTab(UploadTab.CLOUD_MODELS);}).setSelected(activeTab==UploadTab.CLOUD_MODELS);
+        c=scene.control(2);iconSetting(c.x(),c.y(),64,48,label("choose_files"),b->{showingFailures=false;if(activeTab==UploadTab.LOCAL_FILES)openFilePicker();else setTab(UploadTab.LOCAL_FILES);}).setSelected(activeTab==UploadTab.LOCAL_FILES);
+        c=scene.control(3);setting(c.x(),c.y(),c.w(),c.h(),fit(targetLabel(),c.w()-12),b->cycleTarget());
+        c=scene.control(4);iconSetting(c.x(),c.y(),publicVisibility?96:80,publicVisibility?64:48,visibilityLabel(),b->{publicVisibility=!publicVisibility;states.replaceAll((id,state)->"waiting");failures.clear();status=Component.empty();init();});
+        c=scene.control(5);iconSetting(c.x(),c.y(),0,64,label("login"),b->openAccount());
+        var sr=scene.control(6);search=new EditBox(font,sr.x()+6,sr.y()+(sr.h()-12)/2,sr.w()-12,12,label("search"));search.setBordered(false);search.setTextColor(TEXT);search.setMaxLength(128);search.setHint(label("search"));search.setValue(query);search.setResponder(v->scroll=0);addRenderableWidget(search);
+        c=scene.control(7);iconSetting(c.x(),c.y(),48,16,Component.translatable("gui.sparkle_morpher.upload_custom_folder.refresh"),b->refresh());
+        c=scene.control(8);iconSetting(c.x(),c.y(),64,0,Component.translatable("gui.sparkle_morpher.upload_custom_folder.open_folder"),b->{if(activeTab==UploadTab.LOCAL_FILES)openFilePicker();else openFolder();});
+        c=scene.control(9);iconSetting(c.x(),c.y(),112,48,label("select_all"),b->{selected.addAll(filtered());updateButtons();});
+        if(!compact()){
+            c=scene.control(10);iconSetting(c.x(),c.y(),48,32,label("clear_selection"),b->clearSelection());
+            c=scene.control(11);failureDetails=iconControl(c.x(),c.y(),96,48,label("failure_details"),b->openFailure(null));
         }
-        for (int row = 0; row < rows(); row++) {
-            int rowIndex = row;
-            addRenderableWidget(new RowHitboxButton(x + 3, listY() + row * rowH(), 19, rowH(), button -> selectRow(rowIndex, false)));
-            addRenderableWidget(new RowHitboxButton(x + 22, listY() + row * rowH(), Math.max(1, w - 25), rowH(), button -> selectRow(rowIndex, true)));
-        }
-        int bottom = y + panelH() - 28;
-        int toolbarX = width / 2 - ((localTab ? 6 : 5) * 26 - 8) / 2;
-        iconSetting(toolbarX, bottom, 112, 48, label("select_all"), button -> { selected.addAll(filtered()); updateButtons(); });
-        iconSetting(toolbarX + 26, bottom, 48, 32, label("clear_selection"), button -> clearSelection());
-        int actionX = toolbarX + 52;
-        if (localTab) {
-            iconSetting(actionX, bottom, 112, 32, label("remove_short"), button -> removeSelectedFiles());
-            actionX += 26;
-        }
-        failureDetails = iconControl(actionX, bottom, 96, 48, label("failure_details"), button -> openFailure(null));
-        primary = iconControl(actionX + 26, bottom, 64, 16, label("start"), button -> { if (uploading) cancel(); else begin(); });
-        iconControl(actionX + 52, bottom, 80, 32, Component.translatable("gui.back"), button -> onClose());
+        c=scene.control(compact()?10:12);primary=iconControl(c.x(),c.y(),64,64,label("start"),b->{if(uploading)cancel();else begin();});
+        for(int row=0;row<rows();row++){int index=row;addRenderableWidget(new RowHitboxButton(panelX(),listY()+row*rowH(),24,rowH(),b->selectRow(index,false)));addRenderableWidget(new RowHitboxButton(panelX()+24,listY()+row*rowH(),panelW()-24,rowH(),b->selectRow(index,true)));}
+        if(showingFailures)iconControl(panelX()+panelW()-22,height-panelY()-34,48,16,label("start"),b->{selected.addAll(failures.keySet());showingFailures=false;begin();});
         updateButtons();
     }
 
@@ -220,10 +186,9 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         updateButtons();
     }
 
-    private List<String> filtered() {
-        String query = search == null ? "" : search.getValue().trim().toLowerCase(Locale.ROOT);
-        Collection<String> items = activeTab == UploadTab.LOCAL_FILES ? localFiles.keySet() : sources.keySet();
-        return items.stream().filter(id -> query.isEmpty() || rowName(id).toLowerCase(Locale.ROOT).contains(query)).toList();
+    private List<String> filtered(){
+        String query=search==null?"":search.getValue().trim().toLowerCase(Locale.ROOT);Collection<String> items=showingFailures?failures.keySet():activeTab==UploadTab.LOCAL_FILES?localFiles.keySet():sources.keySet();
+        return items.stream().filter(id->query.isEmpty()||rowName(id).toLowerCase(Locale.ROOT).contains(query)).toList();
     }
     private String rowName(String id) {
         PickedUpload file = localFiles.get(id);
@@ -236,7 +201,7 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         if (primary != null) {
             primary.setMessage(label(uploading ? "cancel" : "start"));
             primary.setTooltipLines(List.of(label(uploading ? "cancel" : "start")));
-            primary.setIcon(64, uploading ? 32 : 16);
+            primary.setIcon(64, uploading ? 32 : 64);
             primary.active = uploading || (!refreshing && filtered().stream().anyMatch(id -> selected.contains(id) && !"complete".equals(states.get(id))));
         }
     }
@@ -384,11 +349,7 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         }
     }
     private void fail(Component reason) { states.put(activeId, "failed"); failures.put(activeId, reason); startNext(); }
-    private void openFailure(String selectedId) {
-        var details = failures.keySet().stream()
-                .map(id -> new CloudUploadFailureScreen.Failure(id, rowName(id), failures.get(id))).toList();
-        if (!uploading && !details.isEmpty()) InputUtil.setScreen(new CloudUploadFailureScreen(this, details, selectedId));
-    }
+    private void openFailure(String selectedId){if(!uploading&&!failures.isEmpty()){showingFailures=true;scroll=0;init();}}
     private void cancel() {
         if (!uploading) return;
         uploading = false;
@@ -414,84 +375,36 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
     }
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-        int x = panelX(), y = panelY(), w = panelW(), h = panelH();
-        g.fill(0, 0, width, height, RoulettePanelStyle.BG);
-        RoulettePanelStyle.glassPanel(g, x, y, w, h);
-        RoulettePanelStyle.fill(g, x, y, w, 18, RoulettePanelStyle.PANEL_ACTIVE);
-        RoulettePanelStyle.drawCentered(g, font, fit(title, w - 20), width / 2, y + 5, TEXT);
-        String account = CloudManagementScreen.management().accountId(instanceId);
-        Component accountText = Component.translatable("gui.sparkle_morpher.cloud_upload.account", account.isBlank() ? "—" : account);
-        Component shown = fit(accountText, Math.max(1, w - 82));
-        g.text(font, shown, x + w - 10 - font.width(shown), tabY() + 5, MUTED, false);
-        if (RoulettePanelStyle.inside(mouseX, mouseY, x + 66, tabY(), w - 76, 18))
-            g.setComponentTooltipForNextFrame(font, List.of(accountText), mouseX, mouseY);
-        int innerX = x + 10, innerW = Math.max(1, w - 20);
-        int searchW = Math.max(1, innerW - (activeTab == UploadTab.LOCAL_FILES ? 26 : 52));
-        RoulettePanelStyle.fill(g, innerX, searchY(), searchW, 18, 0x66303030);
-        RoulettePanelStyle.border(g, innerX, searchY(), searchW, 18,
-                search.isFocused() ? RoulettePanelStyle.BORDER : 0x33FFFFFF);
-        List<String> visible = filtered();
-        long selectedVisible = visible.stream().filter(selected::contains).count();
-        RoulettePanelStyle.secondaryGlassPanel(g, innerX, listShellY(), innerW, listH() + 18);
-        RoulettePanelStyle.fill(g, innerX, listShellY(), innerW, 16, RoulettePanelStyle.PANEL_ACTIVE);
-        Component listTitle = label(activeTab == UploadTab.LOCAL_FILES ? "tab.local_files" : "tab.cloud_models");
-        int titleWidth = Math.min(font.width(listTitle), innerW / 3);
-        g.text(font, fit(listTitle, titleWidth), innerX + 5, listShellY() + 5, TEXT, false);
-        Component count = Component.translatable("gui.sparkle_morpher.cloud_upload.selection", selectedVisible, visible.size());
-        Component shownCount = fit(count, Math.max(1, innerW - titleWidth - 24));
-        g.text(font, shownCount, innerX + innerW - 5 - font.width(shownCount), listShellY() + 5, MUTED, false);
-        scroll = Math.max(0, Math.min(scroll, Math.max(0, visible.size() - rows())));
-        g.enableScissor(innerX + 1, listY(), innerX + innerW - 1, listY() + listH());
-        if (visible.isEmpty()) g.text(font, fit(label("no_results"), innerW - 14), innerX + 7, listY() + 6, MUTED, false);
-        List<Component> rowTooltip = null;
-        for (int i = 0; i < rows() && scroll + i < visible.size(); i++) {
-            String id = visible.get(scroll + i);
-            int rowY = listY() + i * rowH();
-            boolean checked = selected.contains(id);
-            boolean hovered = RoulettePanelStyle.inside(mouseX, mouseY, innerX + 3, rowY, innerW - 6, rowH());
-            RoulettePanelStyle.fill(g, innerX + 3, rowY + 1, innerW - 6, rowH() - 2,
-                    hovered ? RoulettePanelStyle.PANEL_HOVER : checked ? RoulettePanelStyle.PANEL_ACTIVE : 0x55303030);
-            if (checked) RoulettePanelStyle.drawIcon(g, RoulettePanelStyle.Glyph.CHECK, innerX + 5, rowY + (rowH() - 16) / 2);
-            else RoulettePanelStyle.border(g, innerX + 8, rowY + (rowH() - 9) / 2, 9, 9, MUTED);
-            int textWidth = Math.max(1, innerW - 112);
-            g.text(font, fit(Component.literal(rowName(id)), textWidth), innerX + 25, rowY + 5, TEXT, false);
-            PickedUpload picked = localFiles.get(id);
-            Path source = sources.get(id);
-            String file = picked == null ? (source == null ? rowName(id) : source.getFileName().toString()) : picked.fileName();
-            if (rowH() >= 28) g.text(font, fit(Component.literal(picked == null ? file : formatBytes(picked.size())), textWidth), innerX + 25, rowY + 17, MUTED, false);
-            String state = states.getOrDefault(id, "waiting");
-            Component stateText = label("state." + state);
-            if (id.equals(activeId) && activeSession != null && !activeSession.isTerminal())
-                stateText = Component.literal(Math.round(activeSession.getProgress() * 100) + "%");
-            g.text(font, fit(stateText, 72), innerX + innerW - 80, rowY + (rowH() - 8) / 2,
-                    state.equals("failed") ? ERROR : state.equals("complete") ? TEXT : MUTED, false);
-            if (hovered) {
-                List<Component> tooltip = new ArrayList<>(List.of(Component.literal(rowName(id)), Component.literal(file)));
-                if (failures.containsKey(id)) tooltip.add(failures.get(id));
-                if (failures.containsKey(id)) tooltip.add(label("inspect_failure"));
-                rowTooltip = tooltip;
+    public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float pt){
+        int x=panelX(),y=panelY(),w=panelW();RoulettePanelStyle.applicationRail(g,width,height,0);
+        g.text(font,title,x,y+10,TEXT,false);String account=CloudManagementScreen.management().accountId(instanceId);g.text(font,fit(Component.literal(targetLabel().getString()+" · "+(account.isBlank()?"尚未登录":account)),w-180),x+Math.min(170,w/3),y+12,MUTED,false);
+        var sr=FinalUiLayout.scene("upload",width,height).control(6);RoulettePanelStyle.roundedSurface(g,sr.x(),sr.y(),sr.w(),sr.h(),3,0x0CFFFFFF,0x22FFFFFF);
+        g.text(font,fit(Component.literal(showingFailures?"失败详情":activeTab==UploadTab.LOCAL_FILES?"来源：选择的本机文件":"来源：模型文件夹现有模型"),w-12),x+6,compact()?65:80,MUTED,false);
+        RoulettePanelStyle.fill(g,x,listShellY(),w,listY()-listShellY(),0x0CFFFFFF);String[] labels=showingFailures?new String[]{"模型","失败原因","源文件"}:new String[]{"选择","模型 / 文件","大小","状态"};double[] cols=showingFailures?new double[]{0,.32,.7}:new double[]{0,.06,.62,.82};
+        for(int i=0;i<labels.length;i++)g.text(font,Component.literal(labels[i]),x+6+(int)(w*cols[i]),listShellY()+7,MUTED,false);
+        List<String> items=filtered();scroll=Math.max(0,Math.min(scroll,Math.max(0,items.size()-rows())));g.enableScissor(x,listY(),x+w,listY()+listH());List<Component> tooltip=null;
+        for(int i=0;i<rows()&&scroll+i<items.size();i++){
+            String id=items.get(scroll+i);int yy=listY()+i*rowH();boolean checked=selected.contains(id),hover=RoulettePanelStyle.inside(mx,my,x,yy,w,rowH());
+            if(hover||checked)RoulettePanelStyle.fill(g,x,yy,w,rowH()-1,hover?0x18FFFFFF:0x0CFFFFFF);RoulettePanelStyle.fill(g,x,yy+rowH()-1,w,1,0x12FFFFFF);
+            if(showingFailures){g.text(font,fit(Component.literal(rowName(id)),(int)(w*.3)),x+6,yy+8,TEXT,false);g.text(font,fit(failures.getOrDefault(id,Component.empty()),(int)(w*.36)),x+(int)(w*.32),yy+8,ERROR,false);Path source=sources.get(id);g.text(font,fit(Component.literal(source==null?rowName(id):source.toString()),(int)(w*.28)),x+(int)(w*.7),yy+8,MUTED,false);}
+            else{
+                if(checked)RoulettePanelStyle.drawIconScaled(g,RoulettePanelStyle.Glyph.CHECK,x+6,yy+(rowH()-10)/2,10);else RoulettePanelStyle.border(g,x+7,yy+(rowH()-7)/2,7,7,MUTED);
+                g.text(font,fit(Component.literal(rowName(id)),(int)(w*.54)),x+(int)(w*.06),yy+(rowH()-9)/2,TEXT,false);PickedUpload picked=localFiles.get(id);long bytes=picked==null?sourceSizes.getOrDefault(id,0L):picked.size();g.text(font,Component.literal(bytes>0?formatBytes(bytes):"—"),x+(int)(w*.62),yy+(rowH()-9)/2,MUTED,false);
+                String state=states.getOrDefault(id,"waiting");Component st=id.equals(activeId)&&activeSession!=null&&!activeSession.isTerminal()?Component.literal(Math.round(activeSession.getProgress()*100)+"%"):label("state."+state);g.text(font,fit(st,(int)(w*.17)),x+(int)(w*.82),yy+(rowH()-9)/2,state.equals("failed")?ERROR:MUTED,false);
+                if(id.equals(activeId)&&activeSession!=null)RoulettePanelStyle.fill(g,x+6,yy+rowH()-2,(int)((w-12)*activeSession.getProgress()),2,ERROR);
             }
+            if(hover){tooltip=new ArrayList<>();tooltip.add(Component.literal(rowName(id)));if(failures.containsKey(id))tooltip.add(failures.get(id));}
         }
-        if (rows() > 0 && visible.size() > rows()) {
-            int thumbH = Math.max(8, listH() * rows() / visible.size());
-            int thumbY = listY() + (listH() - thumbH) * scroll / Math.max(1, visible.size() - rows());
-            g.fill(innerX + innerW - 3, thumbY, innerX + innerW - 2, thumbY + thumbH, RoulettePanelStyle.BORDER);
-        }
-        g.disableScissor();
-        int footerY = listY() + listH() + 2;
-        if (uploading && activeSession != null) g.fill(innerX, footerY,
-                innerX + (int) (innerW * activeSession.getProgress()), footerY + 1, ACCENT);
-        g.text(font, fit(status, innerW - 10), innerX + 5, footerY + 1, failures.isEmpty() ? MUTED : ERROR, false);
-        if (!status.getString().isBlank() && RoulettePanelStyle.inside(mouseX, mouseY, innerX, footerY, innerW, 14))
-            g.setComponentTooltipForNextFrame(font, List.of(status), mouseX, mouseY);
-        super.extractRenderState(g, mouseX, mouseY, partialTick);
-        controls.forEach(button -> button.renderTooltip(g, this, mouseX, mouseY));
-        if (rowTooltip != null) g.setComponentTooltipForNextFrame(font, rowTooltip, mouseX, mouseY);
+        if(items.isEmpty())g.text(font,fit(label("no_results"),w-16),x+8,listY()+12,MUTED,false);g.disableScissor();
+        long bytes=selected.stream().mapToLong(id->localFiles.containsKey(id)?localFiles.get(id).size():sourceSizes.getOrDefault(id,0L)).sum();g.text(font,fit(Component.literal("已选 "+selected.size()+" 个 · "+formatBytes(bytes)+"   "+status.getString()),w-36),x,height-panelY()-16,MUTED,false);
+        super.extractRenderState(g,mx,my,pt);controls.forEach(b->b.renderTooltip(g,this,mx,my));if(tooltip!=null)g.setComponentTooltipForNextFrame(font,tooltip,mx,my);
     }
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean flag) {
-        return super.mouseClicked(event, flag);
+    public boolean mouseClicked(MouseButtonEvent e,boolean flag){if(com.micaftic.morpher.core.api.client.InputCodeAdapter.legacyMouseButtonFromSdlButton(e.button())==0&&RoulettePanelStyle.applicationRailClick(e.x(),e.y(),width,height,this::navigateFromRail))return true;return super.mouseClicked(e,flag);}
+    @Override
+    public boolean keyPressed(KeyEvent event){
+        if(event.key()==261&&activeTab==UploadTab.LOCAL_FILES&&!uploading&&(search==null||!search.isFocused())){removeSelectedFiles();return true;}
+        return super.keyPressed(event);
     }
     @Override
     public boolean mouseScrolled(double mx, double my, double scrollX, double scrollY) {
@@ -528,9 +441,7 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         return ModelIdUtil.normalizeImportModelId(stem);
     }
 
-    private static String formatBytes(long bytes) {
-        return bytes < 1024 ? bytes + " B" : String.format(Locale.ROOT, "%.1f KB", bytes / 1024.0);
-    }
+    private static String formatBytes(long bytes){return bytes<1024?bytes+" B":bytes<1048576?String.format(Locale.ROOT,"%.1f KB",bytes/1024.0):String.format(Locale.ROOT,"%.1f MB",bytes/1048576.0);}
 
     private enum UploadTab { CLOUD_MODELS, LOCAL_FILES }
 
@@ -551,14 +462,14 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         @Override
         protected void extractContents(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
             boolean hover = active && isHoveredOrFocused();
-            RoulettePanelStyle.fill(g, getX(), getY(), getWidth(), getHeight(), !active ? 0x44282828
+            RoulettePanelStyle.roundedFill(g, getX(), getY(), getWidth(), getHeight(), 4, !active ? 0x44282828
                     : hover ? RoulettePanelStyle.PANEL_HOVER : selected ? RoulettePanelStyle.PANEL_ACTIVE : 0x66303030);
-            RoulettePanelStyle.border(g, getX(), getY(), getWidth(), getHeight(), !active ? 0x22888888
+            RoulettePanelStyle.roundedBorder(g, getX(), getY(), getWidth(), getHeight(), 4, !active ? 0x22888888
                     : hover ? RoulettePanelStyle.RED : selected ? RoulettePanelStyle.RED_SOFT : 0x33FFFFFF);
             if (iconU >= 0) {
-                int iconX = getX() + (getWidth() - 16) / 2, iconY = getY() + (getHeight() - 16) / 2;
-                g.blit(RoulettePanelStyle.MODEL_PANEL_ICONS, iconX, iconY, iconX + 16, iconY + 16,
-                        iconU / 128.0f, (iconU + 16) / 128.0f, iconV / 64.0f, (iconV + 16) / 64.0f);
+                int iconSize=getHeight()<=18?10:12;int iconX = getX() + (getWidth() - iconSize) / 2, iconY = getY() + (getHeight() - iconSize) / 2;
+                g.blit(RoulettePanelStyle.MODEL_PANEL_ICONS, iconX, iconY, iconX + iconSize, iconY + iconSize,
+                        iconU / 128.0f, (iconU + 16) / 128.0f, iconV / 128.0f, (iconV + 16) / 128.0f);
             } else if (iconU == -2 || iconU == -3) {
                 int direction = iconU == -2 ? -1 : 1;
                 int centerX = getX() + getWidth() / 2, centerY = getY() + getHeight() / 2;
@@ -570,7 +481,7 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
             } else {
                 var font = Minecraft.getInstance().font;
                 Component text = Component.literal(RoulettePanelStyle.trim(font, getMessage().getString(), Math.max(1, getWidth() - 10)));
-                RoulettePanelStyle.drawCentered(g, font, text, getX() + getWidth() / 2, getY() + (getHeight() - 8) / 2,
+                RoulettePanelStyle.drawCentered(g, font, text, getX() + getWidth() / 2, com.micaftic.morpher.core.gui.UiElementLayout.centeredY(getY(),getHeight(),font.lineHeight),
                         active ? RoulettePanelStyle.TEXT : RoulettePanelStyle.MUTED);
             }
         }
@@ -581,5 +492,14 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
             super(x, y, width, height, Component.empty(), onPress, DEFAULT_NARRATION);
         }
         @Override protected void extractContents(GuiGraphicsExtractor extractor, int mouseX, int mouseY, float partialTick) { }
+    }
+    private void navigateFromRail(int page){
+        switch(page){
+            case 0 -> InputUtil.setScreen(new ModernPlayerModelScreen(ModelPanelState.Tab.MODEL));
+            case 1 -> InputUtil.setScreen(ModernPlayerModelScreen.resourceStation());
+            case 2 -> FakePlayerManagerScreen.open();
+            case 3 -> InputUtil.setScreen(new ModernPlayerModelScreen(ModelPanelState.Tab.SETTINGS));
+            default -> onClose();
+        }
     }
 }

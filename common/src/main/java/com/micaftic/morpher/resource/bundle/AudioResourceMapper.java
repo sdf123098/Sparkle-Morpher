@@ -2,10 +2,10 @@ package com.micaftic.morpher.resource.bundle;
 
 import com.micaftic.morpher.audio.AudioCodec;
 import com.micaftic.morpher.audio.AudioTrackData;
-import org.gagravarr.ogg.OggFile;
-import org.gagravarr.ogg.OggPacketReader;
-import org.gagravarr.opus.OpusFile;
-import org.gagravarr.vorbis.VorbisFile;
+import com.micaftic.morpher.internal.vendor.gagravarr.ogg.OggFile;
+import com.micaftic.morpher.internal.vendor.gagravarr.ogg.OggPacketReader;
+import com.micaftic.morpher.internal.vendor.gagravarr.opus.OpusFile;
+import com.micaftic.morpher.internal.vendor.gagravarr.vorbis.VorbisFile;
 
 import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;

@@ -28,7 +28,9 @@
     "client.WingsLayerMixin",
     "client.WorldRendererMixin",
     "client.OptionsKeyMappingMixin",
-    "client.GpuDeviceAccessor"
+    "client.GpuDeviceAccessor",
+    "client.SystemFontManagerMixin",
+    "client.PictureInPictureRendererMixin"
   ],
   "mixins": [
     "AbstractArrowEntityMixin",
