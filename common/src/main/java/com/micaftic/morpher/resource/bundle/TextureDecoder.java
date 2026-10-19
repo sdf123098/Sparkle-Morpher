@@ -5,9 +5,13 @@ import rip.ysm.imagestream.avif.AvifDecoder;
 import rip.ysm.imagestream.webp.WebpDecoder;
 
 import javax.imageio.ImageIO;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Base64;
 
 /**
@@ -32,9 +36,13 @@ public final class TextureDecoder {
 
         try {
             if (imageFormat == -1) {
-                if (width > 0 && height > 0 && data.length >= width * height * 4) {
+                long pixelCount = (long) width * height;
+                if (width > 0 && height > 0 && pixelCount <= data.length / 4L) {
+                    requireTextureMemory(width, height, 1);
                     BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-                    int[] pixels = new int[width * height];
+                    // TYPE_INT_ARGB owns a contiguous raster. Write it directly instead of
+                    // allocating another full-sized pixel array and copying via setRGB.
+                    int[] pixels = ((DataBufferInt) img.getRaster().getDataBuffer()).getData();
                     for (int i = 0; i < pixels.length; i++) {
                         int r = data[i * 4] & 0xFF;
                         int g = data[i * 4 + 1] & 0xFF;
@@ -42,7 +50,6 @@ public final class TextureDecoder {
                         int a = data[i * 4 + 3] & 0xFF;
                         pixels[i] = (a << 24) | (r << 16) | (g << 8) | b;
                     }
-                    img.setRGB(0, 0, width, height, pixels, 0, width);
                     return img;
                 } else throw new RuntimeException("Invalid RGBA texture");
             } else {
@@ -50,17 +57,42 @@ public final class TextureDecoder {
                     case 1:
                     case 2:
                     case 3:
-                        return ImageIO.read(new ByteArrayInputStream(data));
+                        return readImageWithMemoryGuard(data);
                     case 4:
+                        if (width > 0 && height > 0) requireTextureMemory(width, height, 3);
                         return new WebpDecoder().read(data);
                     case 5:
+                        if (width > 0 && height > 0) requireTextureMemory(width, height, 3);
                         return new AvifDecoder().read(data);
                 }
             }
+        } catch (UncheckedIOException memoryLimit) {
+            throw memoryLimit;
         } catch (Exception e) {
             e.printStackTrace();
         }
         return null;
+    }
+
+    private static BufferedImage readImageWithMemoryGuard(byte[] data) throws IOException {
+        try (var input = new MemoryCacheImageInputStream(new ByteArrayInputStream(data))) {
+            var readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) return null;
+            var reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                // Trust the image header rather than potentially stale model metadata.
+                requireTextureMemory(reader.getWidth(0), reader.getHeight(0), 2);
+                return reader.read(0);
+            } finally { reader.dispose(); }
+        }
+    }
+
+    private static void requireTextureMemory(int width, int height, int rasterCopies) {
+        if (!com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission.textureFits(width, height, rasterCopies)) {
+            throw new UncheckedIOException(new IOException("Not enough free heap to decode texture "
+                    + width + "x" + height + "; model import cancelled before allocating pixels"));
+        }
     }
 
     public static boolean isPng(byte[] data) {
@@ -78,6 +110,8 @@ public final class TextureDecoder {
 
     public static byte[] encodeToPng(BufferedImage img, byte[] fallbackData) {
         if (img != null) {
+            // PNG compression also allocates scanlines and a growing output buffer.
+            requireTextureMemory(img.getWidth(), img.getHeight(), 3);
             try {
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 if (ImageIO.write(img, "png", baos)) {

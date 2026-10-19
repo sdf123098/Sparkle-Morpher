@@ -19,6 +19,7 @@ public final class CloudAssetClient {
 
     private final CloudHttpClient http;
     private final CloudCatalogPageCache pages = new CloudCatalogPageCache();
+    private volatile boolean publicBrowseRequiresSearch;
     public void clearPageCache() { pages.clear(); }
 
     public CloudAssetClient(CloudHttpClient http) {
@@ -31,13 +32,66 @@ public final class CloudAssetClient {
 
     public CompletableFuture<CloudAssetPage> listPage(String scope, String query, String cursor, int limit) {
         int boundedLimit = Math.max(1, Math.min(80, limit));
+        String key = pagePath(scope, query, cursor, boundedLimit);
+        boolean publicBrowse = "public".equalsIgnoreCase(scope) && (query == null || query.isBlank());
+        return pages.get(key, () -> {
+            if (publicBrowse && publicBrowseRequiresSearch) return publicFromAccessible(cursor, boundedLimit);
+            return http.getJson(key).thenApply(this::parsePage).exceptionallyCompose(failure -> {
+                Throwable cause = failure;
+                while (cause instanceof java.util.concurrent.CompletionException && cause.getCause() != null)
+                    cause = cause.getCause();
+                if (publicBrowse && cause instanceof CloudHttpException error && error.statusCode() == 400
+                        && error.errorCode() == com.micaftic.morpher.core.api.network.state.CloudErrorCode.SEARCH_REQUIRED) {
+                    publicBrowseRequiresSearch = true;
+                    return publicFromAccessible(cursor, boundedLimit);
+                }
+                return CompletableFuture.failedFuture(failure);
+            });
+        });
+    }
+
+    private static String pagePath(String scope, String query, String cursor, int limit) {
         StringBuilder path = new StringBuilder("/v1/assets?scope=")
                 .append(encode(scope == null || scope.isBlank() ? "accessible" : scope))
-                .append("&limit=").append(boundedLimit);
+                .append("&limit=").append(limit);
         if (query != null && !query.isBlank()) path.append("&q=").append(encode(query.trim()));
         if (cursor != null && !cursor.isBlank()) path.append("&after=").append(encode(cursor));
-        String key = path.toString();
-        return pages.get(key, () -> http.getJson(key).thenApply(this::parsePage));
+        return path.toString();
+    }
+
+    /** Older v1 servers require a public search, but accessible includes every PUBLIC asset. */
+    private CompletableFuture<CloudAssetPage> publicFromAccessible(String cursor, int limit) {
+        return collectPublic(cursor, limit, new ArrayList<>(), new java.util.HashSet<>());
+    }
+
+    private CompletableFuture<CloudAssetPage> collectPublic(String cursor, int limit,
+            List<CloudAssetSummary> entries, java.util.Set<String> seen) {
+        return http.getJson(pagePath("accessible", "", cursor, limit - entries.size()))
+                .thenApply(this::parsePage).thenCompose(page -> {
+                    for (CloudAssetSummary entry : page.entries()) if (entry.isPublic()) entries.add(entry);
+                    if (!page.hasMore()) return CompletableFuture.completedFuture(new CloudAssetPage(entries, null, false));
+                    requireAdvancingCursor(cursor, page.nextCursor(), seen);
+                    if (entries.size() < limit) return collectPublic(page.nextCursor(), limit, entries, seen);
+                    // A private-only tail must not advertise another empty public page. Probe metadata
+                    // without consuming its cursor; the next user page still starts at this boundary.
+                    return hasPublicAfter(page.nextCursor(), new java.util.HashSet<>()).thenApply(more ->
+                            new CloudAssetPage(entries, more ? page.nextCursor() : null, more));
+                });
+    }
+
+    private CompletableFuture<Boolean> hasPublicAfter(String cursor, java.util.Set<String> seen) {
+        return http.getJson(pagePath("accessible", "", cursor, 80)).thenApply(this::parsePage).thenCompose(page -> {
+            if (page.entries().stream().anyMatch(CloudAssetSummary::isPublic)) return CompletableFuture.completedFuture(true);
+            if (!page.hasMore()) return CompletableFuture.completedFuture(false);
+            requireAdvancingCursor(cursor, page.nextCursor(), seen);
+            return hasPublicAfter(page.nextCursor(), seen);
+        });
+    }
+
+    private static void requireAdvancingCursor(String cursor, String next, java.util.Set<String> seen) {
+        if (next == null || next.isBlank() || next.equals(cursor) || !seen.add(next))
+            throw new CloudHttpException(200, com.micaftic.morpher.core.api.network.state.CloudErrorCode.MALFORMED_MESSAGE,
+                    "Cloud asset catalog returned a repeated or missing cursor");
     }
 
     /** Changes owner-controlled visibility without sending model bytes or creating a revision. */

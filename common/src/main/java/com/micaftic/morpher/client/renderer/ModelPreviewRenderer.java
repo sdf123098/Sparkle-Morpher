@@ -373,6 +373,17 @@ public final class ModelPreviewRenderer {
     }
 
     private static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(float x, float y, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, PreviewMouseRotation mouseRotation) {
+        renderLivingEntityPreview(x, y, scale, partialTick, animatable, renderer, disablePreviewRotation,
+                hideEquipment, previewYaw, mouseRotation, Minecraft.getInstance().renderBuffers().bufferSource());
+    }
+
+    /** An offscreen preview must submit all geometry through its own target-local buffer source. */
+    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(float x, float y, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, MultiBufferSource.BufferSource bufferSource) {
+        renderLivingEntityPreview(x, y, scale, partialTick, animatable, renderer, disablePreviewRotation,
+                hideEquipment, previewYaw, NO_MOUSE_ROTATION, bufferSource);
+    }
+
+    private static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(float x, float y, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, PreviewMouseRotation mouseRotation, MultiBufferSource.BufferSource bufferSource) {
         ItemStack[] savedEquipment;
         setPreviewMode(true);
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -439,8 +450,6 @@ public final class ModelPreviewRenderer {
         rotationX.conjugate();
         entityRenderDispatcher.overrideCameraOrientation(rotationX);
         entityRenderDispatcher.setRenderShadow(false);
-        MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
-
         try {
             RenderSystem.runAsFancy(() -> {
                 renderer.renderEntity(animatable, 0.0f, partialTick, poseStack, bufferSource, 15728880);

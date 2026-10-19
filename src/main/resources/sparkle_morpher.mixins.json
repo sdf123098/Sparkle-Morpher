@@ -22,7 +22,8 @@
     "client.ScreenAccessor",
     "client.ScreenBlurMixin",
     "client.ThrowableItemProjectileAccessor",
-    "client.WorldRendererMixin"
+    "client.WorldRendererMixin",
+    "client.SystemFontManagerMixin"
   ],
   "mixins": [
     "AbstractArrowEntityMixin",

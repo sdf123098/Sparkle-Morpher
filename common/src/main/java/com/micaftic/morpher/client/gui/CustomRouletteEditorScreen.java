@@ -23,11 +23,14 @@ import java.util.Map;
 import java.util.Set;
 
 public class CustomRouletteEditorScreen extends Screen {
-    private static final int ENTRY_H = 16;
-    private static final int PANEL_GAP = 10;
+
+    private static final int ENTRY_H = 31;
+    private static final int PANEL_GAP = 18;
     private static final int TOOL_GAP = 8;
 
     private final String modelId;
+    private Screen returnScreen;
+    private net.minecraft.client.gui.components.EditBox search;
     private final ModelAssembly modelAssembly;
     private final List<CustomRouletteEntry> availableAnimations;
     private final List<CustomRouletteEntry> pendingRootEntries;
@@ -41,6 +44,7 @@ public class CustomRouletteEditorScreen extends Screen {
     private int hoveredRightIndex = -1;
     private int hoveredRightKind;
     private int hoveredRightExtra = -1;
+
     private int panelLeft;
     private int panelTop;
     private int panelRight;
@@ -84,97 +88,56 @@ public class CustomRouletteEditorScreen extends Screen {
         }
     }
 
+    public CustomRouletteEditorScreen(String modelId,ModelAssembly modelAssembly,Screen parent){this(modelId,modelAssembly);this.returnScreen=parent;}
+    @Override public void onClose(){com.micaftic.morpher.util.InputUtil.setScreen(returnScreen);}
     private List<CustomRouletteEntry> buildAvailableAnimations() {
         List<CustomRouletteEntry> list = new ArrayList<>();
         ModelProperties props = modelAssembly.getModelData().getModelProperties();
+
         OrderedStringMap<String, String> rootAnims = props.getExtraAnimation();
         for (int i = 0; i < rootAnims.size(); i++) {
             String key = rootAnims.getKeyAt(i);
-            if (!key.startsWith("#")) list.add(new CustomRouletteEntry(key, "", i, rootAnims.getValueAt(i)));
+            if (!key.startsWith("#")) {
+                list.add(new CustomRouletteEntry(key, "", i, rootAnims.getValueAt(i)));
+            }
         }
+
         Map<String, OrderedStringMap<String, String>> classify = props.getExtraAnimationClassify();
         for (Map.Entry<String, OrderedStringMap<String, String>> entry : classify.entrySet()) {
             String category = entry.getKey();
             OrderedStringMap<String, String> subAnims = entry.getValue();
             for (int i = 0; i < subAnims.size(); i++) {
                 String key = subAnims.getKeyAt(i);
-                if (!key.startsWith("#")) list.add(new CustomRouletteEntry(key, category, i, subAnims.getValueAt(i)));
+                if (!key.startsWith("#")) {
+                    list.add(new CustomRouletteEntry(key, category, i, subAnims.getValueAt(i)));
+                }
             }
         }
+
         return list;
     }
 
     @Override
-    protected void init() {
-        clearWidgets();
-        layout();
-    }
+    protected void init(){String query=search==null?"":search.getValue();clearWidgets();layout();search=new net.minecraft.client.gui.components.EditBox(font,leftX+6,panelTop+114,listW-12,12,Component.literal("搜索动画"));search.setBordered(false);search.setValue(query);search.setHint(Component.literal("搜索动画…"));search.setResponder(v->leftScroll=0);addRenderableWidget(search);}
 
-    private void layout() {
-        int w = Math.min(this.width - 28, 720);
-        int h = Math.min(this.height - 28, 390);
-        panelLeft = (this.width - w) / 2;
-        panelTop = (this.height - h) / 2;
-        panelRight = panelLeft + w;
-        panelBottom = panelTop + h;
-        int innerLeft = panelLeft + 10;
-        int innerRight = panelRight - 10;
-        listTop = panelTop + 48;
-        listBottom = panelBottom - 42;
-        listW = Math.max(90, (innerRight - innerLeft - PANEL_GAP) / 2);
-        leftX = innerLeft;
-        rightX = innerLeft + listW + PANEL_GAP;
-    }
+    private void layout(){var c=com.micaftic.morpher.core.gui.IndependentPanelChrome.of(width,height);panelLeft=c.left();panelTop=c.top();panelRight=c.right();panelBottom=c.bottom();leftX=c.contentLeft();listW=Math.max(1,(c.contentRight()-leftX-PANEL_GAP)/2);rightX=leftX+listW+PANEL_GAP;listTop=panelTop+141;listBottom=panelBottom-16;}
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        hits.clear();
-        layout();
-        g.fill(0, 0, this.width, this.height, RoulettePanelStyle.BG);
-        RoulettePanelStyle.glassPanel(g, panelLeft, panelTop, panelRight - panelLeft, panelBottom - panelTop);
-        g.fill(panelLeft, panelTop, panelRight, panelTop + 18, RoulettePanelStyle.PANEL_ACTIVE);
-        RoulettePanelStyle.drawCentered(g, this.font, this.title, this.width / 2, panelTop + 5, RoulettePanelStyle.TEXT);
-
-        String target = selectedGroupIndex >= 0 && selectedGroupIndex < pendingGroups.size()
-                ? pendingGroups.get(selectedGroupIndex).name
-                : Component.translatable("gui.sparkle_morpher.roulette.editor.root_label").getString();
-        RoulettePanelStyle.drawCentered(g, this.font,
-                Component.literal(RoulettePanelStyle.trim(this.font, "[ " + target + " ]", panelRight - panelLeft - 24)),
-                this.width / 2, panelTop + 28, 0xFFFFC857);
-
-        renderListShell(g, leftX, listTop, listW, listBottom - listTop, Component.translatable("gui.sparkle_morpher.roulette.editor.available"));
-        renderListShell(g, rightX, listTop, listW, listBottom - listTop, Component.translatable("gui.sparkle_morpher.roulette.editor.custom_layout"));
-        renderLeftList(g, mouseX, mouseY, leftX, listTop + 18, listW, listBottom - listTop - 18);
-        renderRightList(g, mouseX, mouseY, rightX, listTop + 18, listW, listBottom - listTop - 18);
-        renderToolbar(g, mouseX, mouseY);
-        renderTooltip(g, mouseX, mouseY);
-        super.render(g, mouseX, mouseY, partialTick);
+    public void render(GuiGraphics g,int mx,int my,float pt){
+        hits.clear();layout();RoulettePanelStyle.glassPanel(g,panelLeft,panelTop,panelRight-panelLeft,panelBottom-panelTop);com.micaftic.morpher.core.gui.IndependentPanelChrome.text(g,font,Component.literal(title.getString()+" · "+modelAssembly.getDisplayName(modelId)),leftX,panelTop+15,1.4f,RoulettePanelStyle.TEXT);renderToolbar(g,mx,my);
+        g.drawString(font,Component.translatable("gui.sparkle_morpher.roulette.editor.available"),leftX,panelTop+80,RoulettePanelStyle.TEXT,false);g.drawString(font,Component.translatable("gui.sparkle_morpher.roulette.editor.custom_layout"),rightX,panelTop+80,RoulettePanelStyle.TEXT,false);
+        RoulettePanelStyle.roundedSurface(g,leftX,panelTop+108,listW,22,3,0x0CFFFFFF,0x22FFFFFF);RoulettePanelStyle.roundedSurface(g,rightX,panelTop+108,listW,22,3,0x0CFFFFFF,0x22FFFFFF);
+        String group=selectedGroupIndex<0?"根目录":pendingGroups.get(selectedGroupIndex).name;g.drawString(font,Component.literal("分组："+group+" ▾"),rightX+6,panelTop+115,RoulettePanelStyle.TEXT,false);hits.add(new Hit(rightX,panelTop+108,listW,22,Component.literal("切换分组"),()->{selectedGroupIndex++;if(selectedGroupIndex>=pendingGroups.size())selectedGroupIndex=-1;}));
+        renderListShell(g,leftX,listTop,listW,listBottom-listTop,Component.literal("动画"));renderListShell(g,rightX,listTop,listW,listBottom-listTop,Component.literal("分组 / 动画"));renderLeftList(g,mx,my,leftX,listTop+24,listW,listBottom-listTop-24);renderRightList(g,mx,my,rightX,listTop+24,listW,listBottom-listTop-24);
+        super.render(g,mx,my,pt);renderTooltip(g,mx,my);
     }
 
-    private void renderListShell(GuiGraphics g, int x, int y, int w, int h, Component title) {
-        RoulettePanelStyle.secondaryGlassPanel(g, x, y, w, h);
-        g.fill(x, y, x + w, y + 16, RoulettePanelStyle.PANEL_ACTIVE);
-        g.drawString(this.font, Component.literal(RoulettePanelStyle.trim(this.font, title.getString(), w - 10)), x + 5, y + 5, RoulettePanelStyle.TEXT, false);
-    }
+    private void renderListShell(GuiGraphics g,int x,int y,int w,int h,Component title){RoulettePanelStyle.fill(g,x,y,w,24,0x0CFFFFFF);g.drawString(font,title,x+10,y+8,RoulettePanelStyle.MUTED,false);}
 
-    private void renderLeftList(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h) {
-        hoveredLeftIndex = -1;
-        Set<String> added = addedKeys();
-        leftScroll = Mth.clamp(leftScroll, 0, maxLeftScroll(h));
-        g.enableScissor(x, y, x + w, y + h);
-        for (int i = 0; i < availableAnimations.size(); i++) {
-            int rowY = y + i * ENTRY_H - leftScroll;
-            if (rowY < y - ENTRY_H || rowY >= y + h) continue;
-            CustomRouletteEntry entry = availableAnimations.get(i);
-            boolean hover = RoulettePanelStyle.inside(mouseX, mouseY, x, rowY, w, ENTRY_H);
-            if (hover) hoveredLeftIndex = i;
-            boolean alreadyAdded = added.contains(keyOf(entry));
-            RoulettePanelStyle.fill(g, x + 3, rowY + 1, w - 6, ENTRY_H - 2, hover ? RoulettePanelStyle.PANEL_HOVER : alreadyAdded ? 0x44282828 : 0x55303030);
-            g.drawString(this.font, Component.literal(RoulettePanelStyle.trim(this.font, listLabel(entry), w - 14)),
-                    x + 7, rowY + 5, alreadyAdded ? RoulettePanelStyle.MUTED : RoulettePanelStyle.TEXT, false);
-        }
-        g.disableScissor();
-        renderScrollbar(g, x + w - 3, y, h, leftScroll, maxLeftScroll(h), availableAnimations.size() * ENTRY_H);
+    private void renderLeftList(GuiGraphics g,int mx,int my,int x,int y,int w,int h){
+        hoveredLeftIndex=-1;Set<String> added=addedKeys();leftScroll=Mth.clamp(leftScroll,0,maxLeftScroll(h));String query=search==null?"":search.getValue().strip().toLowerCase(java.util.Locale.ROOT);int logical=0;g.enableScissor(x,y,x+w,y+h);
+        for(int i=0;i<availableAnimations.size();i++){var entry=availableAnimations.get(i);String label=listLabel(entry);if(!query.isBlank()&&!label.toLowerCase(java.util.Locale.ROOT).contains(query))continue;int yy=y+logical++*ENTRY_H-leftScroll;if(yy<y-ENTRY_H||yy>=y+h)continue;boolean hover=RoulettePanelStyle.inside(mx,my,x,yy,w,ENTRY_H),already=added.contains(keyOf(entry));if(hover)hoveredLeftIndex=i;if(hover||already)RoulettePanelStyle.fill(g,x,yy,w,ENTRY_H-1,hover?0x18FFFFFF:0x08FFFFFF);RoulettePanelStyle.fill(g,x,yy+ENTRY_H-1,w,1,0x14FFFFFF);g.drawString(font,Component.literal(RoulettePanelStyle.trim(font,label,w-20)),x+10,yy+11,already?RoulettePanelStyle.MUTED:RoulettePanelStyle.TEXT,false);}
+        g.disableScissor();renderScrollbar(g,x+w-3,y,h,leftScroll,maxLeftScroll(h),logical*ENTRY_H);
     }
 
     private void renderRightList(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h) {
@@ -182,8 +145,10 @@ public class CustomRouletteEditorScreen extends Screen {
         hoveredRightKind = 0;
         hoveredRightExtra = -1;
         rightScroll = Mth.clamp(rightScroll, 0, maxRightScroll(h));
+
         g.enableScissor(x, y, x + w, y + h);
-        int logical = renderRootSection(g, mouseX, mouseY, x, y, w, h, 0);
+        int logical = 0;
+        logical = renderRootSection(g, mouseX, mouseY, x, y, w, h, logical);
         for (int groupIndex = 0; groupIndex < pendingGroups.size(); groupIndex++) {
             logical = renderGroupSection(g, mouseX, mouseY, x, y, w, h, logical, groupIndex);
         }
@@ -199,11 +164,13 @@ public class CustomRouletteEditorScreen extends Screen {
                 hoveredRightKind = 4;
                 hoveredRightIndex = -1;
             }
-            RoulettePanelStyle.fill(g, x + 3, rowY + 1, w - 6, ENTRY_H - 2,
-                    selectedGroupIndex < 0 ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x55303030);
-            g.drawString(this.font, Component.literal("[Root]"), x + 7, rowY + 5, selectedGroupIndex < 0 ? 0xFFFFFFFF : 0xFFFFC857, false);
+            int bg = selectedGroupIndex < 0 ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x55303030;
+            RoulettePanelStyle.fill(g, x + 3, rowY + 1, w - 6, ENTRY_H - 2, bg);
+            g.drawString(this.font, Component.literal("根目录"), x + 7, rowY + 11,
+                    selectedGroupIndex < 0 ? 0xFFFFFFFF : RoulettePanelStyle.MUTED, false);
         }
         logical++;
+
         for (int i = 0; i < pendingRootEntries.size(); i++) {
             rowY = y + logical * ENTRY_H - rightScroll;
             if (rowY >= y - ENTRY_H && rowY < y + h) {
@@ -212,9 +179,10 @@ public class CustomRouletteEditorScreen extends Screen {
                     hoveredRightKind = 1;
                     hoveredRightIndex = i;
                 }
-                RoulettePanelStyle.fill(g, x + 9, rowY + 1, w - 12, ENTRY_H - 2, hover ? RoulettePanelStyle.RED_SOFT : 0x44303030);
+                RoulettePanelStyle.fill(g, x + 9, rowY + 1, w - 12, ENTRY_H - 2,
+                        hover ? RoulettePanelStyle.RED_SOFT : 0x44303030);
                 g.drawString(this.font, Component.literal(RoulettePanelStyle.trim(this.font, listLabel(pendingRootEntries.get(i)), w - 24)),
-                        x + 14, rowY + 5, hover ? 0xFFFFD8D8 : RoulettePanelStyle.TEXT, false);
+                        x + 14, rowY + 11, hover ? 0xFFFFD8D8 : RoulettePanelStyle.TEXT, false);
             }
             logical++;
         }
@@ -230,12 +198,14 @@ public class CustomRouletteEditorScreen extends Screen {
                 hoveredRightKind = 2;
                 hoveredRightIndex = groupIndex;
             }
-            RoulettePanelStyle.fill(g, x + 3, rowY + 1, w - 6, ENTRY_H - 2,
-                    groupIndex == selectedGroupIndex ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x55303030);
-            g.drawString(this.font, Component.literal(RoulettePanelStyle.trim(this.font, "[#" + group.name + "]", w - 14)),
-                    x + 7, rowY + 5, groupIndex == selectedGroupIndex ? 0xFFFFFFFF : 0xFFFFC857, false);
+            int bg = groupIndex == selectedGroupIndex ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x55303030;
+            RoulettePanelStyle.fill(g, x + 3, rowY + 1, w - 6, ENTRY_H - 2, bg);
+            String label = "[#" + group.name + "]";
+            g.drawString(this.font, Component.literal(RoulettePanelStyle.trim(this.font, label, w - 14)),
+                    x + 7, rowY + 11, groupIndex == selectedGroupIndex ? 0xFFFFFFFF : RoulettePanelStyle.MUTED, false);
         }
         logical++;
+
         for (int i = 0; i < group.animations.size(); i++) {
             rowY = y + logical * ENTRY_H - rightScroll;
             if (rowY >= y - ENTRY_H && rowY < y + h) {
@@ -245,53 +215,50 @@ public class CustomRouletteEditorScreen extends Screen {
                     hoveredRightIndex = i;
                     hoveredRightExtra = groupIndex;
                 }
-                RoulettePanelStyle.fill(g, x + 9, rowY + 1, w - 12, ENTRY_H - 2, hover ? RoulettePanelStyle.RED_SOFT : 0x44303030);
+                RoulettePanelStyle.fill(g, x + 9, rowY + 1, w - 12, ENTRY_H - 2,
+                        hover ? RoulettePanelStyle.RED_SOFT : 0x44303030);
                 g.drawString(this.font, Component.literal(RoulettePanelStyle.trim(this.font, listLabel(group.animations.get(i)), w - 24)),
-                        x + 14, rowY + 5, hover ? 0xFFFFD8D8 : RoulettePanelStyle.TEXT, false);
+                        x + 14, rowY + 11, hover ? 0xFFFFD8D8 : RoulettePanelStyle.TEXT, false);
             }
             logical++;
         }
         return logical;
     }
 
-    private void renderToolbar(GuiGraphics g, int mouseX, int mouseY) {
-        int buttons = 5;
-        int totalW = buttons * RoulettePanelStyle.ICON + (buttons - 1) * TOOL_GAP;
-        int x = this.width / 2 - totalW / 2;
-        int y = panelBottom - 28;
-        renderIconButton(g, mouseX, mouseY, x, y, RoulettePanelStyle.Glyph.CREATE, Component.translatable("gui.sparkle_morpher.roulette.editor.new_group"), this::createNewGroup, true);
-        x += RoulettePanelStyle.ICON + TOOL_GAP;
-        renderIconButton(g, mouseX, mouseY, x, y, RoulettePanelStyle.Glyph.DELETE, Component.translatable("gui.sparkle_morpher.roulette.editor.delete_group"), this::deleteSelectedGroup, selectedGroupIndex >= 0 && selectedGroupIndex < pendingGroups.size());
-        x += RoulettePanelStyle.ICON + TOOL_GAP;
-        renderIconButton(g, mouseX, mouseY, x, y, RoulettePanelStyle.Glyph.SAVE, Component.translatable("gui.sparkle_morpher.roulette.editor.save"), this::saveLayout, true);
-        x += RoulettePanelStyle.ICON + TOOL_GAP;
-        renderIconButton(g, mouseX, mouseY, x, y, RoulettePanelStyle.Glyph.RELOAD, Component.translatable("gui.sparkle_morpher.roulette.editor.revert"), this::revertLayout, true);
-        x += RoulettePanelStyle.ICON + TOOL_GAP;
-        renderIconButton(g, mouseX, mouseY, x, y, RoulettePanelStyle.Glyph.CLOSE, Component.translatable("gui.back"), this::onClose, true);
-    }
+    private void renderToolbar(GuiGraphics g,int mx,int my){int x=leftX,y=panelTop+42;RoulettePanelStyle.Glyph[] icons={RoulettePanelStyle.Glyph.UP,RoulettePanelStyle.Glyph.PLUS,RoulettePanelStyle.Glyph.DELETE,RoulettePanelStyle.Glyph.RELOAD,RoulettePanelStyle.Glyph.SAVE,RoulettePanelStyle.Glyph.SETTINGS};String[] labels={"返回动作轮盘","新建分组","删除分组","撤销布局修改","保存轮盘布局","轮盘设置"};Runnable[] actions={this::onClose,this::createNewGroup,this::deleteSelectedGroup,this::revertLayout,this::saveLayout,this::openSettings};for(int i=0;i<6;i++){int xx=x+i*26+(i>=4?8:0);com.micaftic.morpher.core.gui.IndependentPanelChrome.icon(g,mx,my,xx,y,icons[i]);if(i!=2||selectedGroupIndex>=0)hits.add(new Hit(xx,y,22,22,Component.literal(labels[i]),actions[i]));}}
 
-    private void renderIconButton(GuiGraphics g, int mouseX, int mouseY, int x, int y, RoulettePanelStyle.Glyph glyph, Component tooltip, Runnable action, boolean active) {
+    private void renderIconButton(GuiGraphics g, int mouseX, int mouseY, int x, int y,
+                                  RoulettePanelStyle.Glyph glyph, Component tooltip, Runnable action, boolean active) {
         RoulettePanelStyle.iconButton(g, mouseX, mouseY, x, y, glyph, active);
-        if (active) hits.add(new Hit(x, y, RoulettePanelStyle.ICON, RoulettePanelStyle.ICON, tooltip, action));
+        if (active) {
+            hits.add(new Hit(x, y, RoulettePanelStyle.ICON, RoulettePanelStyle.ICON, tooltip, action));
+        }
     }
 
     private void renderTooltip(GuiGraphics g, int mouseX, int mouseY) {
         for (Hit hit : hits) {
-            if (!RoulettePanelStyle.inside(mouseX, mouseY, hit.x, hit.y, hit.w, hit.h)) continue;
+            if (!RoulettePanelStyle.inside(mouseX, mouseY, hit.x, hit.y, hit.w, hit.h)) {
+                continue;
+            }
             String text = hit.tooltip.getString();
-            if (text.isBlank()) return;
+            if (text.isBlank()) {
+                return;
+            }
             int tw = Math.min(220, this.font.width(text) + 10);
             int tx = Math.min(mouseX + 10, this.width - tw - 4);
             int ty = Math.min(mouseY + 10, this.height - 18);
             RoulettePanelStyle.fill(g, tx, ty, tw, 16, 0xEE101010);
             RoulettePanelStyle.border(g, tx, ty, tw, 16, 0x88FFFFFF);
-            g.drawString(this.font, Component.literal(RoulettePanelStyle.trim(this.font, text, tw - 8)), tx + 5, ty + 5, 0xFFFFFFFF, false);
+            g.drawString(this.font, Component.literal(RoulettePanelStyle.trim(this.font, text, tw - 8)),
+                    tx + 5, ty + 5, 0xFFFFFFFF, false);
             return;
         }
     }
 
     private void renderScrollbar(GuiGraphics g, int x, int y, int h, int scroll, int maxScroll, int contentH) {
-        if (maxScroll <= 0) return;
+        if (maxScroll <= 0) {
+            return;
+        }
         int thumbH = Math.max(16, h * h / Math.max(1, contentH));
         int thumbY = y + (h - thumbH) * scroll / Math.max(1, maxScroll);
         RoulettePanelStyle.fill(g, x, thumbY, 1, thumbH, 0xB8FFFFFF);
@@ -299,8 +266,14 @@ public class CustomRouletteEditorScreen extends Screen {
 
     private Set<String> addedKeys() {
         Set<String> added = new HashSet<>();
-        for (CustomRouletteEntry entry : pendingRootEntries) added.add(keyOf(entry));
-        for (MutableGroup group : pendingGroups) for (CustomRouletteEntry entry : group.animations) added.add(keyOf(entry));
+        for (CustomRouletteEntry entry : pendingRootEntries) {
+            added.add(keyOf(entry));
+        }
+        for (MutableGroup group : pendingGroups) {
+            for (CustomRouletteEntry entry : group.animations) {
+                added.add(keyOf(entry));
+            }
+        }
         return added;
     }
 
@@ -310,7 +283,10 @@ public class CustomRouletteEditorScreen extends Screen {
 
     private String listLabel(CustomRouletteEntry entry) {
         String label = localizedLabel(entry);
-        return StringUtils.isNotBlank(entry.category()) ? "[" + entry.category() + "] " + label : label;
+        if (StringUtils.isNotBlank(entry.category())) {
+            return "[" + entry.category() + "] " + label;
+        }
+        return label;
     }
 
     private String localizedLabel(CustomRouletteEntry entry) {
@@ -320,13 +296,13 @@ public class CustomRouletteEditorScreen extends Screen {
         return ModelMetadataPresenter.getLocalizedModelString(modelAssembly, path, entry.displayLabel());
     }
 
-    private int maxLeftScroll(int h) {
-        return Math.max(0, availableAnimations.size() * ENTRY_H - h);
-    }
+    private int maxLeftScroll(int h){String q=search==null?"":search.getValue().strip().toLowerCase(java.util.Locale.ROOT);long count=availableAnimations.stream().filter(e->q.isBlank()||listLabel(e).toLowerCase(java.util.Locale.ROOT).contains(q)).count();return Math.max(0,(int)count*ENTRY_H-h);}
 
     private int rightContentHeight() {
         int rows = 1 + pendingRootEntries.size();
-        for (MutableGroup group : pendingGroups) rows += 1 + group.animations.size();
+        for (MutableGroup group : pendingGroups) {
+            rows += 1 + group.animations.size();
+        }
         return rows * ENTRY_H;
     }
 
@@ -334,35 +310,31 @@ public class CustomRouletteEditorScreen extends Screen {
         return Math.max(0, rightContentHeight() - h);
     }
 
+    private void openSettings(){if(returnScreen instanceof com.micaftic.morpher.core.gui.UnifiedRouletteScreen wheel){com.micaftic.morpher.util.InputUtil.setScreen(wheel.settingsScreen());return;}var player=net.minecraft.client.Minecraft.getInstance().player;if(player!=null)com.micaftic.morpher.capability.PlayerCapability.get(player).ifPresent(cap->com.micaftic.morpher.util.InputUtil.setScreen(new com.micaftic.morpher.core.gui.RouletteSettingsScreen(this,modelId,modelAssembly,cap)));}
     private void saveLayout() {
         List<CustomRouletteGroup> groups = new ArrayList<>();
-        for (MutableGroup group : pendingGroups) groups.add(new CustomRouletteGroup(group.name, new ArrayList<>(group.animations)));
-        CustomRouletteStore.save(new CustomRouletteLayout(modelId, new ArrayList<>(pendingRootEntries), groups));
+        for (MutableGroup group : pendingGroups) {
+            groups.add(new CustomRouletteGroup(group.name, new ArrayList<>(group.animations)));
+        }
+        CustomRouletteLayout layout = new CustomRouletteLayout(modelId, new ArrayList<>(pendingRootEntries), groups);
+        CustomRouletteStore.save(layout);
         try {
             GeneralConfig.ROULETTE_CONTENT_MODE.set(GeneralConfig.RouletteContentMode.CUSTOM);
+            GeneralConfig.ROULETTE_CONTENT_MODE.save();
         } catch (Exception ignored) {
         }
         LocalPlayer player = minecraft != null ? minecraft.player : null;
-        if (player != null) player.sendSystemMessage(Component.translatable("message.sparkle_morpher.roulette.editor.saved"));
+        if (player != null) {
+            player.sendSystemMessage(Component.translatable("message.sparkle_morpher.roulette.editor.saved"));
+        }
         onClose();
     }
 
-    private void revertLayout() {
-        CustomRouletteStore.delete(modelId);
-        pendingRootEntries.clear();
-        pendingGroups.clear();
-        selectedGroupIndex = -1;
-        try {
-            GeneralConfig.ROULETTE_CONTENT_MODE.set(GeneralConfig.RouletteContentMode.ORIGINAL);
-        } catch (Exception ignored) {
-        }
-        LocalPlayer player = minecraft != null ? minecraft.player : null;
-        if (player != null) player.sendSystemMessage(Component.translatable("message.sparkle_morpher.roulette.editor.reverted"));
-        onClose();
-    }
+    private void revertLayout(){pendingRootEntries.clear();pendingGroups.clear();var saved=CustomRouletteStore.load(modelId);if(saved!=null){pendingRootEntries.addAll(saved.rootEntries());for(var group:saved.groups()){var mutable=new MutableGroup(group.name());mutable.animations.addAll(group.animations());pendingGroups.add(mutable);}}selectedGroupIndex=-1;leftScroll=rightScroll=0;}
 
     private void createNewGroup() {
-        pendingGroups.add(new MutableGroup("Group" + (pendingGroups.size() + 1)));
+        String groupName = "Group" + (pendingGroups.size() + 1);
+        pendingGroups.add(new MutableGroup(groupName));
         selectedGroupIndex = pendingGroups.size() - 1;
     }
 
@@ -374,21 +346,31 @@ public class CustomRouletteEditorScreen extends Screen {
     }
 
     private void addSelectedAnimation() {
-        if (hoveredLeftIndex < 0 || hoveredLeftIndex >= availableAnimations.size()) return;
+        if (hoveredLeftIndex < 0 || hoveredLeftIndex >= availableAnimations.size()) {
+            return;
+        }
         CustomRouletteEntry entry = availableAnimations.get(hoveredLeftIndex);
-        if (addedKeys().contains(keyOf(entry))) return;
-        if (selectedGroupIndex < 0) pendingRootEntries.add(entry);
-        else if (selectedGroupIndex < pendingGroups.size()) pendingGroups.get(selectedGroupIndex).animations.add(entry);
+        if (addedKeys().contains(keyOf(entry))) {
+            return;
+        }
+        if (selectedGroupIndex < 0) {
+            pendingRootEntries.add(entry);
+        } else if (selectedGroupIndex < pendingGroups.size()) {
+            pendingGroups.get(selectedGroupIndex).animations.add(entry);
+        }
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(double mouseX,double mouseY,int button) {
+
+
         for (Hit hit : hits) {
             if (RoulettePanelStyle.inside(mouseX, mouseY, hit.x, hit.y, hit.w, hit.h)) {
                 hit.action.run();
                 return true;
             }
         }
+
         if (hoveredLeftIndex >= 0) {
             addSelectedAnimation();
             return true;
@@ -410,13 +392,14 @@ public class CustomRouletteEditorScreen extends Screen {
             pendingGroups.get(hoveredRightExtra).animations.remove(hoveredRightIndex);
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+
+        return super.mouseClicked(mouseX,mouseY,button);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        int bodyTop = listTop + 18;
-        int bodyH = listBottom - listTop - 18;
+        int bodyTop = listTop + 24;
+        int bodyH = listBottom - listTop - 24;
         if (RoulettePanelStyle.inside(mouseX, mouseY, leftX, bodyTop, listW, bodyH)) {
             leftScroll = Mth.clamp(leftScroll - (int) (scrollY * ENTRY_H), 0, maxLeftScroll(bodyH));
             return true;
@@ -429,12 +412,12 @@ public class CustomRouletteEditorScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) {
+    public boolean keyPressed(int key,int scanCode,int modifiers) {
+        if (key == 256) {
             onClose();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(key,scanCode,modifiers);
     }
 
     @Override

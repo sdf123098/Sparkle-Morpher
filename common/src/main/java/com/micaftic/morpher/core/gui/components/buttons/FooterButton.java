@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.gui.components.buttons;
 
 import com.micaftic.morpher.core.gui.RoulettePanelStyle;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
@@ -22,22 +21,16 @@ public class FooterButton extends AbstractWidget {
     }
 
     @Override
-    protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        RoulettePanelStyle.iconButton(g, mouseX, mouseY, getX(), getY(), glyph, active);
-        if (active && isHovered()) {
-            int tw = Math.min(180, Minecraft.getInstance().font.width(getMessage()) + 10);
-            int tx = Math.min(mouseX + 10, Minecraft.getInstance().getWindow().getGuiScaledWidth() - tw - 4);
-            int ty = Math.min(mouseY + 10, Minecraft.getInstance().getWindow().getGuiScaledHeight() - 18);
-            RoulettePanelStyle.fill(g, tx, ty, tw, 16, 0xEE101010);
-            RoulettePanelStyle.border(g, tx, ty, tw, 16, 0x88FFFFFF);
-            g.drawString(Minecraft.getInstance().font,
-                    Component.literal(RoulettePanelStyle.trim(Minecraft.getInstance().font, getMessage().getString(), tw - 8)),
-                    tx + 5, ty + 5, 0xFFFFFFFF, false);
-        }
+    protected void renderWidget(GuiGraphics g,int mouseX,int mouseY,float partialTick){
+        boolean hover=active&&isHovered();RoulettePanelStyle.roundedSurface(g,getX(),getY(),width,height,4,!active?0x44282828:hover?0x88505050:0x66303030,hover?RoulettePanelStyle.RED:0x33FFFFFF);
+        var font=net.minecraft.client.Minecraft.getInstance().font;
+        if(width>32){var text=Component.literal(RoulettePanelStyle.trim(font,getMessage().getString(),width-12));g.drawString(font,text,getX()+(width-font.width(text))/2,com.micaftic.morpher.core.gui.UiElementLayout.centeredY(getY(),height,font.lineHeight),active?RoulettePanelStyle.TEXT:RoulettePanelStyle.MUTED,false);}
+        else{int size=Math.min(14,Math.min(width,height)-6);RoulettePanelStyle.drawIconScaled(g,glyph,getX()+(width-size)/2,getY()+(height-size)/2,size);}
+        if(hover)g.renderComponentTooltip(font,java.util.List.of(getMessage()),mouseX,mouseY);
     }
 
     @Override
-    public void onClick(double mouseX, double mouseY) {
+    public void onClick(double mouseX,double mouseY) {
         if (active) onPress.run();
     }
 

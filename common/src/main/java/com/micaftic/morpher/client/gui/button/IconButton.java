@@ -8,7 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 
 public class IconButton extends FlatColorButton {
 
-    private static final ResourceLocation ICON_TEXTURE = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/model_panel_icons.png");
+    private static final ResourceLocation ICON_TEXTURE = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "texture/ui/lucide.png");
 
     private final int iconU;
 
@@ -21,8 +21,13 @@ public class IconButton extends FlatColorButton {
     }
 
     @Override
-    public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
-        guiGraphics.blit(ICON_TEXTURE, getX() + ((this.width - 16) / 2), getY() + ((this.height - 16) / 2), 16, 16, this.iconU, this.iconV, 16, 16, 128, 64);
+    protected void renderWidget(GuiGraphics extractor, int mouseX, int mouseY, float partialTick) {
+        super.renderWidget(extractor, mouseX, mouseY, partialTick);
+        GuiGraphics guiGraphics = extractor;
+        int iconOffsetX = (this.width - 16) / 2;
+        int iconOffsetY = (this.height - 16) / 2;
+        int x = getX() + iconOffsetX;
+        int y = getY() + iconOffsetY;
+        com.micaftic.morpher.client.gui.LegacyGuiBlit.blit(guiGraphics,ICON_TEXTURE,x,y,x + 16,y + 16,this.iconU / 128.0f,(this.iconU + 16) / 128.0f,this.iconV / 128.0f,(this.iconV + 16) / 128.0f);
     }
 }

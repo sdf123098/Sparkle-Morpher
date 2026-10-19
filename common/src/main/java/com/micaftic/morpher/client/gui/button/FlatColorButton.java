@@ -34,23 +34,17 @@ public class FlatColorButton extends Button {
     public void renderTooltip(GuiGraphics guiGraphics, Screen screen, int mouseX, int mouseY) {
         if (this.isHovered && this.tooltip != null) {
             guiGraphics.renderComponentTooltip(Minecraft.getInstance().font, this.tooltip, mouseX, mouseY);
+/*             GuiGraphics.renderComponentTooltip(Minecraft.getInstance().font, this.tooltip, mouseX, mouseY);
+ */
         }
     }
 
-    public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        Font font = Minecraft.getInstance().font;
-        if (this.selected) {
-            guiGraphics.fillGradient(getX(), getY(), getX() + this.width, getY() + this.height, -14774017, -14774017);
-        } else {
-            guiGraphics.fillGradient(getX(), getY(), getX() + this.width, getY() + this.height, -12369342, -12369342);
-        }
-        if (isHoveredOrFocused()) {
-            guiGraphics.fillGradient(getX(), getY() + 1, getX() + 1, (getY() + this.height) - 1, -790560, -790560);
-            guiGraphics.fillGradient(getX(), getY(), getX() + this.width, getY() + 1, -790560, -790560);
-            guiGraphics.fillGradient((getX() + this.width) - 1, getY() + 1, getX() + this.width, (getY() + this.height) - 1, -790560, -790560);
-            guiGraphics.fillGradient(getX(), (getY() + this.height) - 1, getX() + this.width, getY() + this.height, -790560, -790560);
-        }
-        renderScrollingString(guiGraphics, font, 2, 15986656);
+    @Override
+    protected void renderWidget(GuiGraphics g,int mouseX,int mouseY,float partialTick){
+        var font=Minecraft.getInstance().font;boolean hover=isHoveredOrFocused();
+        com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedSurface(g,getX(),getY(),width,height,4,!active?0x44282828:selected?0x443F3F3F:hover?0x88505050:0x66303030,selected?0xFFE05252:hover?0x66FFFFFF:0x33FFFFFF);
+        Component text=Component.literal(com.micaftic.morpher.core.gui.RoulettePanelStyle.trim(font,getMessage().getString(),Math.max(1,width-10)));
+        g.drawString(font,text,getX()+(width-font.width(text))/2,com.micaftic.morpher.core.gui.UiElementLayout.centeredY(getY(),height,font.lineHeight),active?0xFFF0F0F0:0xFF9A9A9A,false);
     }
 
     public void setSelected(boolean selected) {
