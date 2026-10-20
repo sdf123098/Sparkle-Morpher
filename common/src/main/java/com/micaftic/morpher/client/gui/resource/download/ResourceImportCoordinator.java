@@ -36,7 +36,7 @@ public final class ResourceImportCoordinator {
                 DownloadQueue.finishTask(task, DownloadQueue.TaskState.CANCELLED, Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
                 return;
             }
-                DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.error", DownloadQueue.rootMessage(error)));
+                DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, Component.translatable("gui.sparkle_morpher.model_panel.download_failed", DownloadQueue.rootMessage(error)));
             return;
         }
         String modelId = stripKnownImportExtension(ModelRepoClient.safeModelId(task.entry));
