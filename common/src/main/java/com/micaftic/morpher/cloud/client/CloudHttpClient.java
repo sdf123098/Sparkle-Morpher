@@ -147,13 +147,23 @@ public final class CloudHttpClient {
 
     /** Bounded metadata transport for negotiated entity capabilities. */
     CompletableFuture<String> visualJson(String method, String path, String jsonBody, int maxResponseBytes) {
+        return visualJson(method,path,jsonBody,maxResponseBytes,null);
+    }
+
+    /** The additional credential is allowed only on the offline publication session endpoints. */
+    CompletableFuture<String> visualJson(String method, String path, String jsonBody, int maxResponseBytes, String offlineSessionToken) {
         if (!java.util.Set.of("POST", "PUT", "DELETE").contains(method)
                 || maxResponseBytes < 1 || maxResponseBytes > 16 * 1024 * 1024) {
             throw new IllegalArgumentException("Invalid visual request budget");
         }
-        HttpRequest request = requestBuilder(path).timeout(REQUEST_TIMEOUT)
+        HttpRequest.Builder builder = requestBuilder(path).timeout(REQUEST_TIMEOUT)
                 .header("Accept", "application/json").header("Content-Type", "application/json")
-                .method(method, HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8)).build();
+                .method(method, HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8));
+        if(offlineSessionToken!=null){
+            if(!path.matches("/v1/offline-player-sessions/cos_[0-9a-f]{32}(/appearance)?")||!offlineSessionToken.matches("[A-Za-z0-9_-]{43}"))throw new IllegalArgumentException("Invalid offline session header scope");
+            builder.header("X-SPM-Offline-Session",offlineSessionToken);
+        }
+        HttpRequest request=builder.build();
         return sendAsync(request, info -> new BoundedJsonSubscriber(maxResponseBytes)).thenCompose(response -> {
             if (response.statusCode() < 200 || response.statusCode() >= 300) return CompletableFuture.failedFuture(httpFailure(response));
             try {

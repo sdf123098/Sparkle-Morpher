@@ -55,6 +55,28 @@ public final class CloudPlayerPresenceClient {
         });
     }
 
+    public CompletableFuture<Map<UUID,CloudPlayerDiscoveryEntry>> queryDetailed(Collection<UUID> ids,boolean includeOffline){
+        if(ids.size()>64)throw new IllegalArgumentException("Cloud player batches are limited to 64 UUIDs");
+        Set<UUID> requested=Set.copyOf(ids);JsonObject body=new JsonObject();JsonArray uuids=new JsonArray();
+        requested.forEach(id->uuids.add(id.toString()));body.add("entity_uuids",uuids);body.addProperty("include_offline",includeOffline);
+        return http.visualJson("POST","/v1/players/appearances/query",body.toString(),16*1024*1024).thenApply(response->{
+            var result=parseDetailed(response);
+            if(!requested.equals(result.keySet()))throw new IllegalArgumentException("Cloud discovery UUID set mismatch");return result;
+        });
+    }
+
+    Map<UUID,CloudPlayerDiscoveryEntry> parseDetailed(String body){
+        Map<UUID,CloudPlayerSelection> selections=parse(body);Map<UUID,CloudPlayerDiscoveryEntry> result=new HashMap<>();
+        for(var element:JsonParser.parseString(body).getAsJsonObject().getAsJsonArray("entries")){
+            JsonObject row=element.getAsJsonObject();UUID id=UUID.fromString(row.get("entity_uuid").getAsString());
+            String publisher=optional(row,"publisher_id"),kind=optional(row,"identity_kind"),status=optional(row,"discovery_status");
+            if(publisher==null&&selections.get(id)!=null)publisher="legacy:"+id;
+            result.put(id,new CloudPlayerDiscoveryEntry(id,row.has("revision")?row.get("revision").getAsLong():0,selections.get(id),publisher,kind,status==null?(selections.get(id)==null?CloudPlayerDiscoveryEntry.Status.NONE:CloudPlayerDiscoveryEntry.Status.ACTIVE):CloudPlayerDiscoveryEntry.Status.valueOf(status)));
+        }
+        return Collections.unmodifiableMap(result);
+    }
+    private static String optional(JsonObject row,String name){return row.has(name)&&!row.get(name).isJsonNull()?row.get(name).getAsString():null;}
+
     Map<UUID, CloudPlayerSelection> parse(String body) {
         Map<UUID, CloudPlayerSelection> result = new HashMap<>();
         String instance = http.instance().instanceId();
