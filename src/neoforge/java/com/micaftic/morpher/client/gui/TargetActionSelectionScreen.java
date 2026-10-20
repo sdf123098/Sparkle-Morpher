@@ -259,9 +259,6 @@ public final class TargetActionSelectionScreen extends Screen {
 
     private void fail(String message) {
         failure = message;
-        if (Minecraft.getInstance().player != null) {
-            Minecraft.getInstance().player.sendSystemMessage(Component.literal("SPM: " + message));
-        }
     }
 
     private record TargetRow(UUID uuid, String label, boolean fakePlayer, String type, String model) {
