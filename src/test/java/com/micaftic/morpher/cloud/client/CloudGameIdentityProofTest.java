@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CloudGameIdentityProofTest {
     private final CloudInstanceConfig official = CloudInstanceConfig.v1("official",
-            URI.create("https://micaftic.top"));
+            URI.create("https://api.micaftic.top"));
     private final UUID uuid = UUID.randomUUID();
 
     private CloudIdentityClient.CloudIdentityChallenge challenge(String origin, String purpose, UUID profile) {
