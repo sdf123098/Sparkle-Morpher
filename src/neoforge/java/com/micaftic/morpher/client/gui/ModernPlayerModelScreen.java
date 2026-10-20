@@ -220,7 +220,7 @@ public class ModernPlayerModelScreen extends Screen {
     private String cloudAccountDraft = "";
     private String cloudAddressDraft = "";
     private String cloudNameDraft = "";
-    private enum CloudAccountPage { ACCOUNT, INSTANCES, SCOPES, IDENTITY, CLAIM, APPROVAL, PERFORMANCE }
+    private enum CloudAccountPage { ACCOUNT, INSTANCES, SCOPES, IDENTITY, CLAIM, APPROVAL, PERFORMANCE, OFFLINE }
     private CloudAccountPage cloudAccountPage = CloudAccountPage.ACCOUNT;
     private int cloudAccountScroll;
     private int cloudDetailScroll;
@@ -2065,13 +2065,14 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderCloudAccountPanel(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float partialTick){
         Component heading=switch(cloudAccountPage){
-            case ACCOUNT->cloudText("title");case INSTANCES->cloudText("instances");case SCOPES->cloudText("scopes");case PERFORMANCE->settingsText("cloud.performance");
+            case OFFLINE->cloudText("offline.title");case ACCOUNT->cloudText("title");case INSTANCES->cloudText("instances");case SCOPES->cloudText("scopes");case PERFORMANCE->settingsText("cloud.performance");
             case IDENTITY->cloudText("identity_panel.title");case CLAIM->cloudText("identity_panel.claim_title");case APPROVAL->cloudText("identity_panel.admin_title");
         };
         pageHeader(g,mx,my,heading,Component.empty(),()->{if(scopeCreateForm){scopeCreateForm=false;init();}else backFromCloud();});
         renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+34,layout.contentWidth,height-layout.top-24,offset->{
             int mouseY=my+offset;
             switch(cloudAccountPage){
+                case OFFLINE->renderOfflineReference(g,mx,mouseY,partialTick);
                 case ACCOUNT->renderAccountReference(g,mx,mouseY,partialTick);case INSTANCES->renderInstancesReference(g,mx,mouseY,partialTick);
                 case PERFORMANCE->renderCloudPerformanceReference(g,mx,mouseY);case SCOPES->renderScopesReference(g,mx,mouseY,partialTick);
                 case IDENTITY,CLAIM,APPROVAL->renderIdentityReference(g,mx,mouseY,partialTick);
@@ -2094,7 +2095,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private int cloudIdentityContentHeight() {
         return switch (cloudAccountPage) {
-            case PERFORMANCE -> cloudPerformancePresetHeight() + 152; case IDENTITY -> 300; case CLAIM -> 390; case APPROVAL -> 440;
+            case OFFLINE -> 360; case PERFORMANCE -> cloudPerformancePresetHeight() + 152; case IDENTITY -> 300; case CLAIM -> 390; case APPROVAL -> 440;
             case SCOPES -> 268; case INSTANCES -> 232; default -> 180;
         };
     }
@@ -4319,11 +4320,22 @@ public class ModernPlayerModelScreen extends Screen {
         int rh=settingRowHeight(),controlW=Math.min(144,w/2);
         drawText(g,Component.literal("正版 / 第三方身份"),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
         networkAction(g,mx,my,x+w-controlW,y+(rh-bh)/2,controlW,Component.literal("绑定当前游戏身份"),connected&&!cloudFormBusy,()->bindCloudIdentity(null));y+=rh;
-        String[] labels={"identity_panel.title","scopes","identity_panel.admin_title","targets_acl","performance"};
-        Runnable[] actions={()->openCloudIdentityPage(CloudAccountPage.IDENTITY),()->{setCloudAccountPage(CloudAccountPage.SCOPES);refreshCloudScopes();},()->openCloudIdentityPage(CloudAccountPage.APPROVAL),()->InputUtil.setScreen(new CloudTargetManagementScreen(this,CloudManagementScreen.management())),()->setCloudAccountPage(CloudAccountPage.PERFORMANCE)};
+        String[] labels={"identity_panel.title","scopes","identity_panel.admin_title","targets_acl","performance","offline.title"};
+        Runnable[] actions={()->openCloudIdentityPage(CloudAccountPage.IDENTITY),()->{setCloudAccountPage(CloudAccountPage.SCOPES);refreshCloudScopes();},()->openCloudIdentityPage(CloudAccountPage.APPROVAL),()->InputUtil.setScreen(new CloudTargetManagementScreen(this,CloudManagementScreen.management())),()->setCloudAccountPage(CloudAccountPage.PERFORMANCE),this::openOfflineIdentityPage};
         for(int i=0;i<labels.length;i++){drawText(g,Component.literal(trim(cloudText(labels[i]).getString(),w-controlW-20)),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-controlW,y+(rh-bh)/2,controlW,bh,Component.literal(i==0?"身份与认证提供方 ›":"配置 ›"),connected?actions[i]:()->openCloudLoginForm(false));y+=rh;}
         networkAction(g,mx,my,x+8,y+6,Math.min(144,w-16),cloudText("logout"),connected&&!cloudFormBusy,()->{CloudManagementScreen.management().logout();resetCloudPage();init();});
         if(sourceTabMenu){int menuW=switchW,yy=menuY;roundedSurface(g,x,yy,menuW,registry.profiles().size()*24+4,3,0xFF292929,0x44FFFFFF);for(var profile:registry.profiles()){var p=profile;renderTextButton(g,mx,my,x+2,yy+2,menuW-4,22,Component.literal(CloudManagementScreen.displayName(profile)),()->{sourceTabMenu=false;selectCloudInstance(p);init();});yy+=24;}}
+    }
+
+    private void openOfflineIdentityPage(){setCloudAccountPage(CloudAccountPage.OFFLINE);}
+    private void renderOfflineReference(GuiGraphicsExtractor g,int mx,int my,float pt){
+        int x=layout.contentLeft+8,w=Math.max(24,layout.contentWidth-16),y=layout.top+48,bh=uiButtonHeight();
+        drawText(g,cloudText("offline.help"),x,y);y+=28;
+        var runtime=CloudClientRuntime.state();
+        drawMuted(g,Component.literal(trim(runtime==null?"Cloud":CloudManagementScreen.management().accountId(runtime.instance().instanceId()),w)),x,y);y+=28;
+        drawMuted(g,Component.literal(trim(com.micaftic.morpher.cloud.client.CloudPlayerModelSync.status(),w)),x,y);y+=28;
+        networkAction(g,mx,my,x,y,Math.min(180,w),cloudText("offline.retry"),runtime!=null&&!cloudFormBusy,()->com.micaftic.morpher.cloud.client.CloudPlayerModelSync.refreshOfflineIdentity());
+        settingsExtent(y+bh+24);
     }
 
     private void bindCloudIdentity(String providerId){
