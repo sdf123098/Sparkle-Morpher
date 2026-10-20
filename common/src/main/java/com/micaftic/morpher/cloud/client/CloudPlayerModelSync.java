@@ -33,6 +33,13 @@ public final class CloudPlayerModelSync {
     private static boolean polling, publishing, identifying, hasPublished, hasAttempted;
     private static CompletableFuture<Long> pendingPublication;
     private static String identityId;
+    private static final CloudOfflinePublicationCoordinator OFFLINE = new CloudOfflinePublicationCoordinator();
+    private static CloudOfflineCredentialStore.Credential offlineCredential;
+    private static CloudOfflineCredentialStore.Scope offlineCredentialScope;
+    private static boolean onlineVerificationFailed;
+    private static final CloudPlayerDiscoveryEntry.Sources PUBLISHERS = new CloudPlayerDiscoveryEntry.Sources();
+    private static volatile CompletableFuture<CloudOfflineIdentityClient.Session> pendingOfflineActivation;
+    private static CompletableFuture<Void> offlineRetirement=CompletableFuture.completedFuture(null);
     private static long ownRevision = -1;
     private static CloudPlayerSelection lastPublished;
     private static CloudPlayerSelection lastAttempted;
@@ -43,7 +50,7 @@ public final class CloudPlayerModelSync {
     private static long nextIdentityRefresh;
     private static long identityAttempt;
     private static boolean identityRefreshRequested;
-    private record Identification(CloudIdentityClient.CloudIdentity identity, JsonObject nameProof) {}
+    private record Identification(CloudIdentityClient.CloudIdentity identity, JsonObject nameProof, CloudOfflineCredentialStore.Scope scope, CloudOfflineCredentialStore.Credential credential) {}
     private static String status = "Cloud 联机：等待进入世界";
     /** Firing adapters copy these values at input time; the backend still verifies the native owner identity. */
     public static String verifiedOwnIdentity() {
@@ -74,7 +81,7 @@ public final class CloudPlayerModelSync {
     public static boolean ownsAppearance(UUID playerId) { return (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive()) && !com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(playerId) && STATE.ownsAppearance(playerId); }
 
     private static void clearRemote(Player player) {
-        READY.remove(player.getUUID());
+        READY.remove(player.getUUID()); PUBLISHERS.remove(player.getUUID());
         DISPLAY.remove(player.getUUID());
         PlayerCapability.get(player).ifPresent(cap -> cap.getPositionTracker().clearDisplayState());
         CloudPlayerMotionSync.remove(player.getUUID());
@@ -84,6 +91,7 @@ public final class CloudPlayerModelSync {
     }
 
     private static void reset(Minecraft client, CloudClientRuntime.RuntimeState runtime) {
+        retireOffline(); OFFLINE.reset(); offlineCredential=null; offlineCredentialScope=null; onlineVerificationFailed=false; PUBLISHERS.clear();
         // Retire an old publication using its acknowledged revision. CAS prevents it clearing a newer session.
         if (sessionRuntime != null && identityId != null && publicationUuid != null) {
             var oldApi = new CloudPlayerPresenceClient(sessionRuntime.http());
@@ -130,6 +138,7 @@ public final class CloudPlayerModelSync {
             polling = publishing = identifying = false; nextPoll = nextPublish = 0;
         }
         if (client.player == null || client.level == null) return;
+        if(publicationUuid!=null&&!publicationUuid.equals(client.player.getUUID()))reset(client,runtime);
         DISPLAY.retain(client.level.players().stream().map(Player::getUUID).toList());
         if (runtime == null) {
             for (Player player : client.level.players()) if (player != client.player) clearRemote(player);
@@ -140,7 +149,7 @@ public final class CloudPlayerModelSync {
             for (Player player : client.level.players()) if (player != client.player && STATE.ownsAppearance(player.getUUID())) clearRemote(player);
             publish(runtime, null, now); return;
         }
-        if (!identifying && (identityRefreshRequested || identityId == null && now >= nextPublish || ownNameProof != null && now >= nextIdentityRefresh)) identify(runtime, now);
+        if (!identifying && (identityRefreshRequested || identityId == null && OFFLINE.state()!=CloudOfflinePublicationCoordinator.State.ACTIVE && OFFLINE.state()!=CloudOfflinePublicationCoordinator.State.STOPPED && now >= nextPublish || ownNameProof != null && now >= nextIdentityRefresh)) identify(runtime, now);
         String scope = runtime.scopeLifecycle().activeScopeId(), epoch = runtime.scopeLifecycle().activeWorldEpoch();
         if (!Objects.equals(scope, displayScope) || !Objects.equals(epoch, displayEpoch)) {
             DISPLAY.clear(); lastPublishedDisplay = null; nextDisplayPublish = 0; nextPublish = 0;
@@ -148,12 +157,21 @@ public final class CloudPlayerModelSync {
             for (Player peer : client.level.players()) if (peer != client.player)
                 PlayerCapability.get(peer).ifPresent(cap -> cap.getPositionTracker().clearDisplayState());
         }
+        if(!identifying&&identityId==null&&!onlineVerificationFailed&&offlineCredential!=null&&runtime.instanceInfo()!=null
+                &&CloudPlayerPublicationIdentity.choose(false,false,runtime.instanceInfo().supports(CloudOfflineIdentityClient.CAPABILITY),offlineCredential.enabled(),true)==CloudPlayerPublicationIdentity.Kind.CLOUD_OFFLINE){
+            var player=client.player;
+            var credential=offlineCredential;var credentialScope=offlineCredentialScope;var uuid=player.getUUID();var name=MinecraftSessionServiceJoiner.currentProfile().name();
+            OFFLINE.begin(now,()->{var operation=offlineRetirement.thenCompose(ignored->new CloudOfflineIdentityClient(runtime.http()).requestAndActivate(credentialScope,credential,uuid,name));pendingOfflineActivation=operation;return operation;});
+            if(OFFLINE.error()==com.micaftic.morpher.core.api.network.state.CloudErrorCode.OFFLINE_AUTHORIZATION_PENDING)status="Cloud 离线同步：申请已提交，等待管理员批准";
+            else if(OFFLINE.error()==com.micaftic.morpher.core.api.network.state.CloudErrorCode.OFFLINE_AUTHORIZATION_DENIED)status="Cloud 离线同步：账号授权已撤销";
+            else if(OFFLINE.state()==CloudOfflinePublicationCoordinator.State.STOPPED)status="Cloud 离线同步："+OFFLINE.error();
+        }
         CloudPlayerSelection selection = localSelection(runtime);
         boolean displayChanged = selection != null && now >= nextDisplayPublish
                 && !Objects.equals(lastPublishedDisplay, localDisplay(runtime));
         boolean motionChanged = selection != null && motionSupported(runtime)
                 && !Objects.equals(lastPublishedMotion, CloudPlayerMotionSync.snapshot(selection.runtimeModelId())) && now >= nextMotionPublish;
-        if (identityId != null && (!hasPublished || !Objects.equals(lastPublished, selection) || motionChanged || displayChanged || now >= nextPublish)) publish(runtime, selection, now);
+        if ((identityId != null || OFFLINE.session()!=null) && (!hasPublished || !Objects.equals(lastPublished, selection) || motionChanged || displayChanged || now >= nextPublish)) publish(runtime, selection, now);
         List<Player> peers = client.level.players().stream().filter(player -> player != client.player).map(player -> (Player) player).toList();
         if (!polling && now >= nextPoll && !peers.isEmpty()) poll(runtime, peers, now);
         // Transient Cloud outages keep a verified appearance briefly; then revert to vanilla.
@@ -178,31 +196,50 @@ public final class CloudPlayerModelSync {
         runtime.identities().listIdentities().thenCompose(identities -> {
             var matches = identities.stream().filter(identity -> identity.verificationStatus().equals("VERIFIED")
                     && identity.identityRef().profileUuid().equals(profile.profileId())).toList();
-            if (matches.isEmpty()) return CompletableFuture.<Identification>completedFuture(null);
+            if (matches.isEmpty()) {
+                var scope=com.micaftic.morpher.client.gui.CloudManagementScreen.offlineScope(runtime);
+                if(runtime.instanceInfo()==null||!runtime.instanceInfo().supports(CloudOfflineIdentityClient.CAPABILITY))return CompletableFuture.completedFuture(new Identification(null,null,scope,null));
+                return com.micaftic.morpher.client.gui.CloudManagementScreen.ensureOfflineCredential(runtime)
+                    .thenApply(value->new Identification(null,null,scope,value));
+            }
             if (matches.size() > 1) return CompletableFuture.<Identification>failedFuture(
                     new IllegalStateException("当前 UUID 对应多个已验证身份，请在游戏身份管理确认登录提供方"));
             var identity = matches.get(0);
             if (entityUuid.equals(profile.profileId()))
-                return CompletableFuture.completedFuture(new Identification(identity, null));
+                return CompletableFuture.completedFuture(new Identification(identity, null, null, null));
             // Offline-mode entity UUID is accepted only after the provider proves its canonical profile name.
             String provider = identity.identityRef().providerId() == null ? "official" : identity.identityRef().providerId();
             if (provider.equals("official")) {
-                return CloudOfficialProfileNameProof.fetch(profile.profileId()).thenApply(proof -> new Identification(identity, proof));
+                return CloudOfficialProfileNameProof.fetch(profile.profileId()).thenApply(proof -> new Identification(identity, proof, null, null));
             }
             return runtime.identities().createChallenge(provider, profile.name(), profile.profileId().toString())
                     .thenCompose(challenge -> runtime.identities().joinAndComplete(challenge,
                             (CloudIdentityClient.SessionJoiner) value -> new MinecraftSessionServiceJoiner().join(value)))
-                    .thenApply(verified -> new Identification(verified, null));
+                    .thenApply(verified -> new Identification(verified, null, null, null));
         }).whenComplete((identity, error) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, runtime) || attempt != identityAttempt) return; identifying = false;
-            if (error == null && identity == null) {
-                identityId = null; ownNameProof = null;
-                status = "Cloud 账号已登录：请在账号管理点击“绑定当前游戏身份”后使用联机同步";
+            if (error == null && (identity == null || identity.identity()==null)) {
+                identityId = null; ownNameProof = null; onlineVerificationFailed=false;
+                offlineCredential=identity==null?null:identity.credential();offlineCredentialScope=identity==null?null:identity.scope();
+                status = offlineCredential==null ? "Cloud 离线同步：此实例已关闭授权或尚不支持离线同步"
+                    :runtime.instanceInfo()==null||!runtime.instanceInfo().supports(CloudOfflineIdentityClient.CAPABILITY)?"Cloud 离线同步：此实例尚未启用实验性离线身份":"Cloud 离线同步：正在激活当前角色";
             }
-            else if (error == null) { identityId = identity.identity().identityId(); ownNameProof = identity.nameProof(); nextIdentityRefresh = System.currentTimeMillis() + 120000; nextPublish = 0; status = "Cloud 联机：游戏身份已验证"; }
-            else { nextIdentityRefresh = System.currentTimeMillis() + 10000; status = "Cloud 联机身份验证失败：" + message(error); YesSteveModel.LOGGER.warn("[SM][CloudPlayer] identity: {}", message(error)); }
+            else if (error == null) { retireOffline(); OFFLINE.reset(); onlineVerificationFailed=false; identityId = identity.identity().identityId(); ownNameProof = identity.nameProof(); nextIdentityRefresh = System.currentTimeMillis() + 120000; nextPublish = 0; status = "Cloud 联机：游戏身份已验证"; }
+            else { onlineVerificationFailed=true; retireOffline(); OFFLINE.reset(); nextIdentityRefresh = System.currentTimeMillis() + 10000; status = "Cloud 联机身份验证失败：" + message(error); YesSteveModel.LOGGER.warn("[SM][CloudPlayer] identity: {}", message(error)); }
         }));
     }
+
+    private static void retireOffline(){
+        var session=OFFLINE.session();var runtime=sessionRuntime;
+        var pending=pendingOfflineActivation;pendingOfflineActivation=null;
+        if(runtime!=null){
+            if(session!=null)offlineRetirement=new CloudOfflineIdentityClient(runtime.http()).withdraw(session).exceptionally(error->null);
+            else if(pending!=null)offlineRetirement=pending.handle((value,error)->error==null?value:null)
+                .thenCompose(value->value==null?CompletableFuture.completedFuture(null):new CloudOfflineIdentityClient(runtime.http()).withdraw(value).exceptionally(error->null));
+        }
+    }
+    /** User save/remove/retry is an explicit new activation attempt. */
+    public static void refreshOfflineIdentity(){Minecraft.getInstance().execute(()->reset(Minecraft.getInstance(),CloudClientRuntime.state()));}
 
     /** Local selection callbacks request immediate publication; tick also notices texture changes. */
     public static void publishCurrentSelection() { nextPublish = 0; }
@@ -233,24 +270,31 @@ public final class CloudPlayerModelSync {
         JsonObject display = selection == null ? null : localDisplay(runtime);
         boolean changed = !Objects.equals(motion, lastPublishedMotion) && now >= nextMotionPublish
                 || !Objects.equals(display, lastPublishedDisplay) && now >= nextDisplayPublish;
-        if (publishing || identityId == null || now < nextPublish && hasAttempted && Objects.equals(selection, lastAttempted) && !changed) return;
+        if (publishing || identityId == null && OFFLINE.session()==null || now < nextPublish && hasAttempted && Objects.equals(selection, lastAttempted) && !changed) return;
         lastAttempted = selection; hasAttempted = true;
         publishing = true; nextPublish = now + 15000; nextMotionPublish = now + 250; nextDisplayPublish = now + 1000; long token = generation;
         var api = new CloudPlayerPresenceClient(runtime.http()); UUID uuid = Minecraft.getInstance().player.getUUID();
         JsonObject nameProof = ownNameProof;
         publicationUuid = uuid;
-        CompletableFuture<Long> revision = ownRevision < 0 ? api.revision(identityId) : CompletableFuture.completedFuture(ownRevision);
-        CompletableFuture<Long> operation = revision.thenCompose(expected -> current(token, runtime)
-                ? api.publish(identityId, uuid, expected, (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) ? null : selection, nameProof,
-                    (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) ? null : motion, (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) ? null : display)
+        var offlineSession=OFFLINE.session();
+        boolean hidden=!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud()||PrivacyMode.isActive();
+        CompletableFuture<Long> operation;
+        if(offlineSession!=null){
+            operation=new CloudOfflineIdentityClient(runtime.http()).publish(offlineSession,hidden?null:selection,hidden?null:motion,hidden?null:display);
+            operation.whenComplete((value,error)->{if(error==null)OFFLINE.acknowledge(offlineSession,value);});
+        }else{
+            CompletableFuture<Long> revision = ownRevision < 0 ? api.revision(identityId) : CompletableFuture.completedFuture(ownRevision);
+            operation = revision.thenCompose(expected -> current(token, runtime)
+                ? api.publish(identityId, uuid, expected, hidden?null:selection, nameProof,hidden?null:motion,hidden?null:display)
                 : CompletableFuture.failedFuture(new CancellationException()));
+        }
         pendingPublication = operation;
         operation.whenComplete((value, error) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, runtime)) return; publishing = false;
             if (pendingPublication == operation) pendingPublication = null;
             if (error == null) { ownRevision = value; lastPublished = selection; lastPublishedMotion = motion; lastPublishedDisplay = display; hasPublished = true;
                 status = motionSupported(runtime) ? "Cloud 联机：已同步模型、贴图与动作" : "Cloud 联机：模型与贴图已同步；此实例需升级后端以同步动作"; }
-            else { ownRevision = -1; nextPublish = System.currentTimeMillis() + 3000; hasPublished = false;
+            else { if(offlineSession!=null)OFFLINE.failed(error,System.currentTimeMillis()); ownRevision = -1; nextPublish = System.currentTimeMillis() + 3000; hasPublished = false;
                 nextMotionPublish = nextPublish;
                 status = "Cloud 联机发布失败：" + message(error); YesSteveModel.LOGGER.warn("[SM][CloudPlayer] publish: {}", message(error)); }
         }));
@@ -258,17 +302,20 @@ public final class CloudPlayerModelSync {
 
     private static void poll(CloudClientRuntime.RuntimeState runtime, List<Player> peers, long now) {
         polling = true; nextPoll = now + (motionSupported(runtime) ? 250 : 1000); long token = generation;
-        var api = new CloudPlayerPresenceClient(runtime.http()); List<CompletableFuture<Map<UUID, CloudPlayerSelection>>> requests = new ArrayList<>();
+        var api = new CloudPlayerPresenceClient(runtime.http()); List<CompletableFuture<Map<UUID, CloudPlayerDiscoveryEntry>>> requests = new ArrayList<>();
         List<UUID> ids = peers.stream().map(Player::getUUID).distinct().toList();
-        for (int i = 0; i < ids.size(); i += 64) requests.add(api.query(ids.subList(i, Math.min(i + 64, ids.size()))));
+        for (int i = 0; i < ids.size(); i += 64) requests.add(api.queryDetailed(ids.subList(i, Math.min(i + 64, ids.size())),runtime.instanceInfo()!=null&&runtime.instanceInfo().supports(CloudOfflineIdentityClient.CAPABILITY)));
         CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, runtime)) return; polling = false;
             if (error != null) { nextPoll = System.currentTimeMillis() + 3000; status = "Cloud 联机查询失败：" + message(error); return; }
             if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive())) return;
-            Map<UUID, CloudPlayerSelection> entries = new HashMap<>(); requests.forEach(request -> entries.putAll(request.join()));
+            Map<UUID, CloudPlayerDiscoveryEntry> entries = new HashMap<>(); requests.forEach(request -> entries.putAll(request.join()));
             lastPollSuccess = System.currentTimeMillis();
             for (Player player : Minecraft.getInstance().level.players()) if (player != Minecraft.getInstance().player && ids.contains(player.getUUID())) {
-                CloudPlayerSelection selection = entries.get(player.getUUID());
+                var entry=entries.get(player.getUUID());
+                String publisher=entry==null?null:entry.publisherId();
+                PUBLISHERS.accept(player.getUUID(),publisher,()->clearRemote(player));
+                CloudPlayerSelection selection = entry==null?null:entry.selection();
                 if (selection == null) clearRemote(player);
                 else {
                     if (!CloudPlayerMotionSync.receive(player, selection)) continue;

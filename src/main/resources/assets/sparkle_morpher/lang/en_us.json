@@ -1358,5 +1358,14 @@
   "gui.sparkle_morpher.cloud.manage.switch_instance": "Switch instance",
   "gui.sparkle_morpher.cloud.manage.check_save": "Check and save",
   "gui.sparkle_morpher.cloud.manage.title": "Cloud instances and account",
-  "gui.sparkle_morpher.cloud.manage.performance": "Cloud processing and upload"
+  "gui.sparkle_morpher.cloud.manage.performance": "Cloud processing and upload",
+  "gui.sparkle_morpher.cloud.manage.offline.title": "Experimental offline identity",
+  "gui.sparkle_morpher.cloud.manage.offline.help": "Cloud login automatically requests offline sync and binds this character. Manual mode requires administrator approval.",
+  "gui.sparkle_morpher.cloud.manage.offline.retry": "Reactivate",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_identity_disabled": "Experimental offline identities are disabled on this instance.",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_key_invalid": "The offline key does not belong to this Cloud account or instance.",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_key_revoked": "The offline key was revoked. Rotate it in the account portal.",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_session_expired": "The offline publication session expired. Reactivate it.",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_binding_stale": "Another connection replaced this binding. Publication stopped; reactivate explicitly.",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_identity_quota": "The Cloud account reached its offline identity limit."
 }
