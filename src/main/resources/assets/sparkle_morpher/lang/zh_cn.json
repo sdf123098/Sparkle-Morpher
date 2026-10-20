@@ -1358,5 +1358,14 @@
   "gui.sparkle_morpher.cloud.manage.switch_instance": "切换实例",
   "gui.sparkle_morpher.cloud.manage.check_save": "检查并保存",
   "gui.sparkle_morpher.cloud.manage.title": "Cloud 实例与账户",
-  "gui.sparkle_morpher.cloud.manage.performance": "Cloud 处理与上传"
+  "gui.sparkle_morpher.cloud.manage.performance": "Cloud 处理与上传",
+  "gui.sparkle_morpher.cloud.manage.offline.title": "实验性离线身份",
+  "gui.sparkle_morpher.cloud.manage.offline.help": "登录 Cloud 后自动申请并绑定当前离线角色；手动模式等待管理员批准。",
+  "gui.sparkle_morpher.cloud.manage.offline.retry": "重新激活",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_identity_disabled": "此实例尚未启用实验性离线身份。",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_key_invalid": "离线 key 不属于当前 Cloud 账号或实例。",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_key_revoked": "离线 key 已撤销，请在账号中心轮换。",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_session_expired": "离线发布会话已过期，请重新激活。",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_binding_stale": "此身份已绑定其他连接；已停止发布，可主动重新激活。",
+  "gui.sparkle_morpher.cloud.manage.offline.error.offline_identity_quota": "账号已达到离线身份数量上限。"
 }

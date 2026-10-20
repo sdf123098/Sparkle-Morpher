@@ -24,6 +24,24 @@ import java.util.concurrent.CompletableFuture;
 
 /** Cloud connection facade used by the model panel account tab. */
 public final class CloudManagementScreen {
+    private static com.micaftic.morpher.cloud.client.CloudOfflineCredentialStore offlineCredentials;
+    private static synchronized com.micaftic.morpher.cloud.client.CloudOfflineCredentialStore offlineCredentials() {
+        if(offlineCredentials==null)offlineCredentials=new com.micaftic.morpher.cloud.client.CloudOfflineCredentialStore(
+            Minecraft.getInstance().gameDirectory.toPath().resolve("config/sparkle_morpher/cloud_offline_credentials.json"));
+        return offlineCredentials;
+    }
+    public static com.micaftic.morpher.cloud.client.CloudOfflineCredentialStore.Scope offlineScope(CloudClientRuntime.RuntimeState runtime) {
+        if(runtime==null)throw new IllegalStateException("Cloud login required");
+        return new com.micaftic.morpher.cloud.client.CloudOfflineCredentialStore.Scope(runtime.instance().instanceId(),runtime.instance().origin(),management().accountId(runtime.instance().instanceId()));
+    }
+    public static CompletableFuture<java.util.Optional<com.micaftic.morpher.cloud.client.CloudOfflineCredentialStore.Credential>> loadOfflineCredential(CloudClientRuntime.RuntimeState runtime) {
+        var scope=offlineScope(runtime);var store=offlineCredentials();
+        return CompletableFuture.supplyAsync(()->{try{return store.load(scope);}catch(IOException failure){throw new java.util.concurrent.CompletionException(failure);}});
+    }
+    public static CompletableFuture<com.micaftic.morpher.cloud.client.CloudOfflineCredentialStore.Credential> ensureOfflineCredential(CloudClientRuntime.RuntimeState runtime) {
+        var scope=offlineScope(runtime);var store=offlineCredentials();
+        return CompletableFuture.supplyAsync(()->{try{return store.loadOrCreate(scope);}catch(IOException failure){throw new java.util.concurrent.CompletionException(failure);}});
+    }
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("SparkleMorpher/Cloud");
     private static final String CLIENT_VERSION = "2.0.0";
     private static CloudManagementController management;
@@ -373,6 +391,7 @@ public final class CloudManagementScreen {
             };
         }
         if (cause instanceof CloudHttpException http) {
+            if(java.util.Set.of(CloudErrorCode.OFFLINE_IDENTITY_DISABLED,CloudErrorCode.OFFLINE_KEY_INVALID,CloudErrorCode.OFFLINE_KEY_REVOKED,CloudErrorCode.OFFLINE_SESSION_EXPIRED,CloudErrorCode.OFFLINE_BINDING_STALE,CloudErrorCode.OFFLINE_IDENTITY_QUOTA).contains(http.errorCode()))return "offline.error."+http.errorCode().name().toLowerCase(java.util.Locale.ROOT);
             if (http.errorCode() == CloudErrorCode.ACCOUNT_EXISTS) return "registration_account_exists";
             if (http.errorCode() == CloudErrorCode.IDENTITY_ALREADY_LINKED) return "identity.already_linked";
             if (http.errorCode() == CloudErrorCode.IDENTITY_PROVIDER_UNAVAILABLE) return "identity.provider_unavailable";
