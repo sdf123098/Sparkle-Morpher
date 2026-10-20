@@ -28,10 +28,10 @@ import java.util.Optional;
  */
 public final class CloudInstanceRegistry {
     private static final CloudInstanceProfile BUILTIN_OFFICIAL = new CloudInstanceProfile(
-            CloudInstanceConfig.v1("official", URI.create("https://micaftic.top")),
+            CloudInstanceConfig.v1("official", URI.create("https://api.micaftic.top")),
             "Official Cloud");
     private static final CloudInstanceConfig PREVIOUS_OFFICIAL = CloudInstanceConfig.v1("official",
-            URI.create("https://micafic.xyz"));
+            URI.create("https://micaftic.top"));
 
     private final Path file;
     private List<CloudInstanceProfile> profiles = List.of();
