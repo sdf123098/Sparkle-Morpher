@@ -66,7 +66,7 @@ public final class FakePlayerManagerScreen extends Screen {
         actionButtons.clear();
         for(int i=0;i<9;i++){int action=i;actionButtons.add(addWidget(new HitButton(layout.actionX(i),layout.toolbarY,layout.toolbarH,layout.toolbarH,Component.literal(actionLabel(i)),()->activateAction(action))));}
         int p=RoulettePanelStyle.applicationMargin(width),side=width<560?28:width<800?30:36,top=p+(width<560?20:width<800?22:26)+17;
-        for(int i=0;i<4;i++){int page=i;addWidget(new HitButton(p,top+i*30,side,24,Component.literal(new String[]{"模型管理","资源站","假人管理","设置"}[i]),()->navigateFromRail(page)));}
+        for(int i=0;i<4;i++){int page=i;addWidget(new HitButton(p,top+i*30,side,24,Component.literal(new String[]{"模型管理","资源站","假人外观管理","设置"}[i]),()->navigateFromRail(page)));}
         addWidget(new HitButton(p,height-p-28,side,23,Component.translatable("gui.back"),this::onClose));
         for(int i=0;i<layout.visibleRows;i++){int row=i;addWidget(new HitButton(layout.x,layout.listY+i*layout.rowH,layout.w,layout.rowH,Component.literal("选择假人"),()->selectRow(row)));}
         updateActionButtons();
@@ -78,7 +78,7 @@ public final class FakePlayerManagerScreen extends Screen {
         RoulettePanelStyle.roundedSurface(g,layout.x,layout.toolbarY,layout.searchW,layout.toolbarH,3,0x0BFFFFFF,search.isFocused()?0xCCE05252:0x26FFFFFF);
         search.extractWidgetRenderState(g,mouseX,mouseY,partialTick);
         Glyph[] actions={Glyph.RESOURCE,Glyph.EYE,Glyph.MODEL,Glyph.GLOBE,Glyph.FILTER,Glyph.RELOAD,Glyph.MODEL,Glyph.UNPLUG,Glyph.MORE};
-        String[] labels={"全部假人","在线假人","已设置模型","有维度信息","排序："+(modelSort?"模型":"名称"),"刷新假人","为所选假人选择模型","解除外观绑定","假人更多操作"};
+        String[] labels={"全部假人","在线假人","已配置模型","按维度筛选","假人排序","刷新假人","为所选假人选择模型","解除外观绑定","假人更多操作"};
         boolean selection=selectedEntry()!=null;
         for(int i=0;i<actions.length;i++){
             int ax=layout.actionX(i),size=layout.toolbarH;
@@ -150,7 +150,7 @@ public final class FakePlayerManagerScreen extends Screen {
         }
         return super.mouseClicked(event,flag);
     }
-    private String actionLabel(int i){return new String[]{"全部假人","在线假人","已设置模型","有维度信息","切换排序","刷新假人","为所选假人选择模型","解除外观绑定","假人更多操作"}[i];}
+    private String actionLabel(int i){return new String[]{"全部假人","在线假人","已配置模型","按维度筛选","假人排序","刷新假人","为所选假人选择模型","解除外观绑定","假人更多操作"}[i];}
     private void updateActionButtons(){boolean selected=selectedEntry()!=null;for(int i=0;i<actionButtons.size();i++)actionButtons.get(i).active=i!=6&&i!=7||selected;}
     private void selectRow(int row){var rows=rows();clampOffset(rows.size());int index=offset+row;if(index<rows.size()){var entry=rows.get(index);selectedUuid=entry.uuid();selectedName=displayName(entry);search.setFocused(false);updateActionButtons();}}
     private void activateAction(int action){

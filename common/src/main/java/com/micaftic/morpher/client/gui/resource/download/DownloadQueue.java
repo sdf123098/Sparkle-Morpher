@@ -168,7 +168,7 @@ public final class DownloadQueue {
         }
         DownloadTask task = new DownloadTask(entry, config);
         QUEUE.add(task);
-        DownloadPresenter.status = Component.translatable("gui.sparkle_morpher.resource_station.queued", entry.name());
+        DownloadPresenter.status = Component.translatable("gui.sparkle_morpher.model_panel.download_queued", entry.name());
         DownloadPresenter.statusColor = ChatFormatting.YELLOW;
         return true;
     }
