@@ -781,7 +781,7 @@ public class ModernPlayerModelScreen extends Screen {
         com.micaftic.morpher.core.gui.RoulettePanelStyle.applicationLogo(g,p+(side-logoSize)/2,p+6,logoSize);
         int y=p+logoSize+17,x=p+3,w=side-6;
         if(!this.stateKeyValue.startsWith("fake:"))renderVerticalTab(g,mx,my,ModelPanelState.Tab.MODEL,x,y,w,24,IconGlyph.MODEL,Component.translatable("gui.sparkle_morpher.model_panel.model"));
-        if(this.stateKeyValue.startsWith("fake:")){drawIconScaled(g,IconGlyph.MODEL,p+(side-12)/2,y+6,12);hit(x,y,w,24,Component.literal("模型管理"),()->InputUtil.setScreen(new ModernPlayerModelScreen()));}
+        if(this.stateKeyValue.startsWith("fake:")){drawIconScaled(g,IconGlyph.MODEL,p+(side-12)/2,y+6,12);hit(x,y,w,24,Component.translatable("gui.sparkle_morpher.model_panel.model"),()->InputUtil.setScreen(new ModernPlayerModelScreen()));}
         renderVerticalTab(g,mx,my,ModelPanelState.Tab.RESOURCE,x,y+30,w,24,IconGlyph.RESOURCE,Component.translatable("gui.sparkle_morpher.resource_station.title"));
         if(this.stateKeyValue.startsWith("fake:")){roundedFill(g,x,y+60,w,24,3,0x18FFFFFF);fill(g,p,y+65,2,14,RED);}
         drawIconScaled(g,IconGlyph.USER,p+(side-12)/2,y+66,12);
@@ -1216,9 +1216,7 @@ public class ModernPlayerModelScreen extends Screen {
             drawCardLoading(g, cx, cy, cw, coverH);
         } else {
             int size = Math.max(1, Math.min(30, Math.min(cw - 12, coverH - 20)));
-            drawIconScaled(g, IconGlyph.MODEL, cx + (cw - size) / 2, cy + Math.max(2, (coverH - size) / 2 - 4), size);
-            if (coverH >= 50) drawCentered(g, Component.literal(trim(Component.translatable("gui.sparkle_morpher.model_panel.cloud.download_use").getString(), cw - 8)),
-                    cx + cw / 2, cy + coverH - 14, MUTED);
+            drawIconScaled(g, IconGlyph.MODEL, cx + (cw - size) / 2, cy + Math.max(2, (coverH - size) / 2), size);
         }
         if(!artwork.hasFramedNameArea())fillCardBand(g,cx,cy,cw,ch,cy+coverH,CARD_NAME_BG);
         drawCardName(g, new ModelEntry(modelId, cloudEntryName(entry), cloudEntryDetail(entry), false, false),
@@ -1285,7 +1283,6 @@ public class ModernPlayerModelScreen extends Screen {
                 if (!STATE.selectedModelId.equals(cloudModelId)) return;
                 if (error != null && !error.getString().isBlank()) { setStatus(error, ChatFormatting.RED); return; }
                 this.pendingModelApplyId = cloudModelId;
-                setStatus(Component.translatable("gui.sparkle_morpher.cloud.imported", summary.name()), ChatFormatting.GREEN);
             });
             return;
         }
@@ -1777,7 +1774,7 @@ public class ModernPlayerModelScreen extends Screen {
         var entries=filteredResources();int columns=this.width<560?6:9,rows=2,capacity=columns*rows,pages=Math.max(1,(entries.size()+capacity-1)/capacity);STATE.resourceScroll=clamp(STATE.resourceScroll,0,pages-1);
         int start=STATE.resourceScroll*capacity,end=Math.min(entries.size(),start+capacity),cw=(w-(columns-1)*6)/columns,ch=Math.min((int)Math.round(cw*280d/162),(this.height-(y+105)-54)/2);
         this.controller.requestResourcePreviews(entries.subList(Math.min(start,entries.size()),end));
-        if(STATE.resourceLoading)drawMuted(g,Component.translatable("gui.sparkle_morpher.resource_station.loading"),x,y+140);
+        if(STATE.resourceLoading)drawMuted(g,Component.translatable("gui.sparkle_morpher.model_panel.resource_loading"),x,y+140);
         else if(entries.isEmpty()){drawTitle(g,Component.translatable("gui.sparkle_morpher.resource_station.no_results"),x+16,y+140);renderTextButton(g,mx,my,x+16,y+180,140,22,Component.literal("来源管理"),this::openSitesPanel);}
         for(int i=start;i<end;i++){
             var entry=entries.get(i);int n=i-start,cx=x+(n%columns)*(cw+6),cy=y+105+(n/columns)*(ch+6),nh=Math.max(30,ch/5);boolean selected=this.controller.isResourceSelected(entry);
@@ -2790,13 +2787,13 @@ public class ModernPlayerModelScreen extends Screen {
         }
         STATE.selectedModelId = entry.modelId();
         if (entry.locked()) {
-            setStatus(Component.translatable("message.sparkle_morpher.model.need_auth"), ChatFormatting.YELLOW);
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.model_locked"), ChatFormatting.YELLOW);
             return;
         }
         ModelAssembly assembly = this.controller.assemblyOrNull(entry.modelId());
         if (assembly == null) {
             this.pendingModelApplyId = entry.modelId();
-            setStatus(Component.translatable("gui.sparkle_morpher.sync_hint.loading"), ChatFormatting.YELLOW);
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.loading_model"), ChatFormatting.YELLOW);
             return;
         }
         this.pendingModelApplyId = null;
@@ -2908,13 +2905,13 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void enqueueResource(ModelRepoEntry entry) {
         if (this.controller.enqueueResource(entry)) {
-            setStatus(Component.translatable("gui.sparkle_morpher.resource_station.queued", entry.name()), ChatFormatting.YELLOW);
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.download_queued", entry.name()), ChatFormatting.YELLOW);
         }
     }
 
     private void enqueueSelectedResources() {
         int added = this.controller.enqueueSelectedResources();
-        setStatus(Component.translatable("gui.sparkle_morpher.resource_station.queue_added", added), added > 0 ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
+        setStatus(Component.translatable("gui.sparkle_morpher.model_panel.download_queued_count", added), added > 0 ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
     }
 
     private void openSitesPanel() {
@@ -2944,7 +2941,7 @@ public class ModernPlayerModelScreen extends Screen {
         String url = STATE.siteEditText.trim();
         String selected = this.controller.removeSite(url);
         if (selected == null) {
-            setStatus(Component.translatable("gui.sparkle_morpher.resource_station.cannot_delete"), ChatFormatting.RED);
+            setStatus(Component.translatable("gui.sparkle_morpher.model_panel.source_required"), ChatFormatting.RED);
             return;
         }
         STATE.siteEditText = selected;

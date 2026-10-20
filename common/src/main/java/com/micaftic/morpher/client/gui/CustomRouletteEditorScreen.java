@@ -13,7 +13,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import org.apache.commons.lang3.StringUtils;
@@ -324,10 +323,6 @@ public class CustomRouletteEditorScreen extends Screen {
             GeneralConfig.ROULETTE_CONTENT_MODE.set(GeneralConfig.RouletteContentMode.CUSTOM);
             GeneralConfig.ROULETTE_CONTENT_MODE.save();
         } catch (Exception ignored) {
-        }
-        LocalPlayer player = minecraft != null ? minecraft.player : null;
-        if (player != null) {
-            player.sendSystemMessage(Component.translatable("message.sparkle_morpher.roulette.editor.saved"));
         }
         onClose();
     }
