@@ -6,7 +6,6 @@ import com.micaftic.morpher.core.api.PlatformAPI;
 import com.micaftic.morpher.core.architectury.event.EventResult;
 import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
 import com.micaftic.morpher.util.InputUtil;
-import net.minecraft.client.Minecraft;
 
 /** Shift+Y entry point for the independent fake-player manager GUI. */
 public final class FakePlayerModelKey {
@@ -38,7 +37,6 @@ public final class FakePlayerModelKey {
             screen.getMethod("open").invoke(null);
         } catch (ReflectiveOperationException exception) {
             YesSteveModel.LOGGER.warn("[SM] Failed to open fake-player manager GUI", exception);
-            Minecraft.getInstance().player.sendSystemMessage(net.minecraft.network.chat.Component.literal("SPM: 假人管理 GUI 当前不可用。"));
         }
         return true;
     }
