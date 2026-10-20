@@ -211,7 +211,7 @@ public final class ModernPlayerModelScreenController {
         this.state.selectedResourceUrl = "";
         this.resourceEntries.clear();
         if (this.state.activeTab == ModelPanelState.Tab.RESOURCE) {
-            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.resource_station.loading"), ChatFormatting.YELLOW);
+            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.model_panel.resource_loading"), ChatFormatting.YELLOW);
         }
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -227,7 +227,7 @@ public final class ModernPlayerModelScreenController {
                     this.state.resourceLoading = false;
                     if (error != null) {
                         if (this.state.activeTab == ModelPanelState.Tab.RESOURCE) {
-                            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.resource_station.error", rootMessage(error)), ChatFormatting.RED);
+                            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.model_panel.resource_load_failed", rootMessage(error)), ChatFormatting.RED);
                         }
                     } else {
                         this.resourceEntries.clear();
@@ -235,7 +235,7 @@ public final class ModernPlayerModelScreenController {
                         this.resourceEntries.sort(Comparator.comparing(e -> e.name().toLowerCase(Locale.ROOT)));
                         this.state.resourceLoaded = true;
                         if (this.state.activeTab == ModelPanelState.Tab.RESOURCE) {
-                            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.resource_station.loaded", result.size()), manual ? ChatFormatting.GREEN : ChatFormatting.GRAY);
+                            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.model_panel.resource_loaded", result.size()), manual ? ChatFormatting.GREEN : ChatFormatting.GRAY);
                             this.host.requestRerender();
                         }
                     }
