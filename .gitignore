@@ -15,3 +15,8 @@ local-maven/
 # 运行时日志（游戏/测试产生，勿入库）
 logs/
 common/logs/
+
+# 构建产物：dist 发布/验证 jar（2026-10-20 补，防 git add -A 误收）
+dist/
+# Python 缓存
+__pycache__/
