@@ -14,6 +14,8 @@ import com.micaftic.morpher.geckolib3.core.manager.AnimationData;
 import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
 import com.micaftic.morpher.client.animation.molang.PhysicsManager;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.client.renderer.hud.HudAnimationGate;
+import com.micaftic.morpher.client.renderer.hud.HudPoseCache;
 import com.micaftic.morpher.core.api.entity.EntityDataBridge;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
@@ -129,6 +131,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
     }
 
     public void reset() {
+        HudPoseCache.invalidate();
         this.currentModel = null;
         this.animationMap = null;
         this.animationProcessor.reset();
@@ -168,6 +171,19 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
 
     public float getSeekTime() {
         return this.seekTime;
+    }
+
+    public int getLastAnimationEvaluationFrameId() {
+        return this.lastAnimationEvaluationFrameId;
+    }
+
+    public float getLastAnimationEvaluationSeekTime() {
+        return this.lastAnimationEvaluationSeekTime;
+    }
+
+    @Nullable
+    public AnimatedGeoModel getLastAnimationEvaluationModel() {
+        return this.lastAnimationEvaluationModel;
     }
 
     public <T extends AnimatableEntity<TEntity>> void addAnimationController(IAnimationController controller) {
@@ -389,58 +405,69 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
             this.isTickTriggered |= this.rateLimiter.request(this.seekTime / 20.0f);
             boolean z2 = (this.isTickTriggered && !this.hasUpdatedThisTick) || this.wasAnimationActiveLastTick || z;
             boolean z3 = (!z || (this.seekTime == 0.0f && !this.hasUpdatedThisTick)) && this.isTickTriggered && !this.hasUpdatedThisTick;
-            resetHeadTracking(this.wasEvaluatedLastFrame);
-            AnimationFrameProfiler.Scope profilerScope = null;
-            if (z2) {
-                if (z3) {
-                    this.hasUpdatedThisTick = true;
-                }
-                int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
-                int boneCount = getEvaluationContext().getBoneCount();
-                int controllerCount = this.manager.getAnimationControllers().size();
-                boolean previewMode = ModelPreviewRenderer.isPreview();
-                boolean extraPlayerMode = com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
-                boolean canReuseEvaluation = (!previewMode || extraPlayerMode)
-                        && this.lastAnimationEvaluationFrameId == renderFrameId
-                        && Float.compare(this.lastAnimationEvaluationSeekTime, this.seekTime) == 0
-                        && this.lastAnimationEvaluationActive == z
-                        && this.lastAnimationEvaluationModel == this.currentModel
-                        && this.lastAnimationEvaluationBoneCount == boneCount
-                        && this.lastAnimationEvaluationControllerCount == controllerCount
-                        && this.lastAnimationEvaluationPreviewMode == previewMode
-                        && this.lastAnimationEvaluationExtraPlayerMode == extraPlayerMode
-                        && Float.compare(this.lastAnimationEvaluationHeadPitch, event.getModelData().headPitch) == 0
-                        && Float.compare(this.lastAnimationEvaluationNetHeadYaw, event.getModelData().netHeadYaw) == 0;
-                if (canReuseEvaluation) {
-                    AnimationFrameProfiler.logReusedEvaluation(this, event, this.seekTime);
+            HudAnimationGate.Decision hudDecision = HudAnimationGate.decide(this, event);
+            if (hudDecision == HudAnimationGate.Decision.REUSE_WORLD_POSE && HudPoseCache.applyTo(this)) {
+                applyHudHeadTracking(event, HudPoseCache.headBaseX(), HudPoseCache.headBaseY());
+                this.wasEvaluatedLastFrame = false;
+            } else {
+                resetHeadTracking(this.wasEvaluatedLastFrame);
+                if (hudDecision == HudAnimationGate.Decision.HOLD_SAMPLED_POSE) {
+                    applyHeadTracking(event, false);
+                    this.wasEvaluatedLastFrame = false;
                 } else {
-                    if (this.lastAnimationEvaluationFrameId == renderFrameId) {
-                        AnimationFrameProfiler.logReuseMiss(this, event, getReuseMissReason(z, boneCount, controllerCount), this.seekTime, this.lastAnimationEvaluationSeekTime, z, this.lastAnimationEvaluationActive, boneCount, this.lastAnimationEvaluationBoneCount, controllerCount, this.lastAnimationEvaluationControllerCount);
+                    AnimationFrameProfiler.Scope profilerScope = null;
+                    if (z2) {
+                        if (z3) {
+                            this.hasUpdatedThisTick = true;
+                        }
+                        int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
+                        int boneCount = getEvaluationContext().getBoneCount();
+                        int controllerCount = this.manager.getAnimationControllers().size();
+                        boolean previewMode = ModelPreviewRenderer.isPreview();
+                        boolean extraPlayerMode = com.micaftic.morpher.client.render.RenderContext.isGuiPreview();
+                        boolean canReuseEvaluation = (!previewMode || extraPlayerMode)
+                                && this.lastAnimationEvaluationFrameId == renderFrameId
+                                && Float.compare(this.lastAnimationEvaluationSeekTime, this.seekTime) == 0
+                                && this.lastAnimationEvaluationActive == z
+                                && this.lastAnimationEvaluationModel == this.currentModel
+                                && this.lastAnimationEvaluationBoneCount == boneCount
+                                && this.lastAnimationEvaluationControllerCount == controllerCount
+                                && this.lastAnimationEvaluationPreviewMode == previewMode
+                                && this.lastAnimationEvaluationExtraPlayerMode == extraPlayerMode
+                                && Float.compare(this.lastAnimationEvaluationHeadPitch, event.getModelData().headPitch) == 0
+                                && Float.compare(this.lastAnimationEvaluationNetHeadYaw, event.getModelData().netHeadYaw) == 0;
+                        if (canReuseEvaluation) {
+                            AnimationFrameProfiler.logReusedEvaluation(this, event, this.seekTime);
+                        } else {
+                            if (this.lastAnimationEvaluationFrameId == renderFrameId) {
+                                AnimationFrameProfiler.logReuseMiss(this, event, getReuseMissReason(z, boneCount, controllerCount), this.seekTime, this.lastAnimationEvaluationSeekTime, z, this.lastAnimationEvaluationActive, boneCount, this.lastAnimationEvaluationBoneCount, controllerCount, this.lastAnimationEvaluationControllerCount);
+                            }
+                            profilerScope = AnimationFrameProfiler.beginEvaluation(this, event, currentTick, this.seekTime, z, z3, boneCount, controllerCount);
+                            try {
+                                getPhysicsManager().update(this.seekTime);
+                                setupAnim(this.seekTime, z3);
+                                getEvaluationContext().tickAnimation(event, ctx, z, shouldRenderOverlay());
+                                afterSetupAnim(this.seekTime, z3);
+                                this.wasAnimationActiveLastTick = z;
+                                this.lastAnimationEvaluationFrameId = renderFrameId;
+                                this.lastAnimationEvaluationSeekTime = this.seekTime;
+                                this.lastAnimationEvaluationActive = z;
+                                this.lastAnimationEvaluationModel = this.currentModel;
+                                this.lastAnimationEvaluationBoneCount = boneCount;
+                                this.lastAnimationEvaluationControllerCount = controllerCount;
+                                this.lastAnimationEvaluationPreviewMode = previewMode;
+                                this.lastAnimationEvaluationExtraPlayerMode = extraPlayerMode;
+                                this.lastAnimationEvaluationHeadPitch = event.getModelData().headPitch;
+                                this.lastAnimationEvaluationNetHeadYaw = event.getModelData().netHeadYaw;
+                            } finally {
+                                AnimationFrameProfiler.endEvaluation(profilerScope);
+                            }
+                        }
                     }
-                    profilerScope = AnimationFrameProfiler.beginEvaluation(this, event, currentTick, this.seekTime, z, z3, boneCount, controllerCount);
-                    try {
-                        getPhysicsManager().update(this.seekTime);
-                        setupAnim(this.seekTime, z3);
-                        getEvaluationContext().tickAnimation(event, ctx, z, shouldRenderOverlay());
-                        afterSetupAnim(this.seekTime, z3);
-                        this.wasAnimationActiveLastTick = z;
-                        this.lastAnimationEvaluationFrameId = renderFrameId;
-                        this.lastAnimationEvaluationSeekTime = this.seekTime;
-                        this.lastAnimationEvaluationActive = z;
-                        this.lastAnimationEvaluationModel = this.currentModel;
-                        this.lastAnimationEvaluationBoneCount = boneCount;
-                        this.lastAnimationEvaluationControllerCount = controllerCount;
-                        this.lastAnimationEvaluationPreviewMode = previewMode;
-                        this.lastAnimationEvaluationExtraPlayerMode = extraPlayerMode;
-                        this.lastAnimationEvaluationHeadPitch = event.getModelData().headPitch;
-                        this.lastAnimationEvaluationNetHeadYaw = event.getModelData().netHeadYaw;
-                    } finally {
-                        AnimationFrameProfiler.endEvaluation(profilerScope);
-                    }
+                    applyHeadTracking(event, z2);
+                    this.wasEvaluatedLastFrame = z2;
                 }
             }
-            applyHeadTracking(event, z2);
-            this.wasEvaluatedLastFrame = z2;
         }
     }
 
@@ -468,6 +495,9 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
     }
 
     public void applyHeadTracking(AnimationEvent<? extends AnimatableEntity<TEntity>> event, boolean z) {
+    }
+
+    public void applyHudHeadTracking(AnimationEvent<? extends AnimatableEntity<TEntity>> event, float baseRotationX, float baseRotationY) {
     }
 
     public void resetHeadTracking(boolean z) {

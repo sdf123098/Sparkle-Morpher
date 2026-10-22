@@ -26,8 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       <ul>
  *         <li>26.x：{@code core.gpu}（Raw GL 渲染）+ {@code client.event}
  *             （{@code ClientSetupEvent} 启动时 GL/Vulkan 能力探测）；</li>
- *         <li>26.1.2 额外：{@code client.renderer.modernhud}（现代 HUD 的 FBO
- *             回读诊断，玩家确认后移除，届时收紧）；</li>
  *         <li>1.21.1：{@code core.gpu} + {@code client.renderer} + {@code client.event}。</li>
  *       </ul></li>
  *   <li><b>平台 API 边界</b>（仅多模块 fabric common 启用；NeoForge 单体分支整个
@@ -62,7 +60,7 @@ class ArchitectureBoundaryTest {
     private static final boolean CHECK_PLATFORM_API = false;
 
     /** GL 渲染/探测边界包（RULE-GFX-2，按分支实际分布）。 */
-    private static final String[] GL_BOUNDARY_PACKAGES = { "com/micaftic/morpher/core/gpu", "com/micaftic/morpher/client/event", "com/micaftic/morpher/client/renderer/modernhud" };
+    private static final String[] GL_BOUNDARY_PACKAGES = { "com/micaftic/morpher/core/gpu", "com/micaftic/morpher/client/event" };
 
     /** 平台适配边界包（仅 CHECK_PLATFORM_API=true 时生效）。 */
     private static final String[] PLATFORM_ADAPTER_PACKAGES = {  };

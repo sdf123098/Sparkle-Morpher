@@ -63,6 +63,8 @@ public class GeneralConfig {
 
     public static ModConfigSpec.BooleanValue ANIMATION_DEBUG_LOG;
 
+    public static ModConfigSpec.BooleanValue FIRST_PERSON_RENDER_DIAGNOSTICS;
+
     public static ModConfigSpec.BooleanValue DEVELOPER_STATE_WRITEBACK;
 
     public static ModConfigSpec.BooleanValue ANIMATION_ROULETTE_DEBUG_LOG;
@@ -240,6 +242,8 @@ public class GeneralConfig {
         ANIMATION_FRAME_PROFILER = builder.define("AnimationFrameProfiler", false);
         builder.comment("Print one [SM-ANIM] line for each animation evaluation when AnimationFrameProfiler is enabled.");
         ANIMATION_DEBUG_LOG = builder.define("AnimationDebugLog", false);
+        builder.comment("Print [FP-COMPAT] first-person arm render decisions (FP-COMPAT-PUNCHY-001). Logs on state change plus a 5s heartbeat. Client-side only.");
+        FIRST_PERSON_RENDER_DIAGNOSTICS = builder.define("FirstPersonRenderDiagnostics", false);
         builder.comment("Allow panel-state writeback in the developer group. Default off; enabling it lets a model author reproduce a captured panel state. Client-side only.");
         DEVELOPER_STATE_WRITEBACK = builder.define("DeveloperStateWriteback", false);
         builder.comment("Print [SM-ROULETTE] diagnostics for animation roulette clicks, server resolution, and client playback resolution. Default off.");

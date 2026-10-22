@@ -4,7 +4,7 @@ package com.micaftic.morpher.client.render;
  * 玩家帧级渲染输入快照（路线图 §17 PlayerFrameSnapshot 雏形）。
  *
  * <p>承载单次渲染期间的瞬时输入（行走动画速度/位置、身体朝向、相对头 yaw、头 pitch），
- * 供 {@code AnimatableEntity} 组装 {@code AnimationEvent}、{@code ModernHudPoseStore} 发布
+ * 供 {@code AnimatableEntity} 组装 {@code AnimationEvent}、经典 HUD 姿态缓存发布
  * 姿态使用。它是纯数据，不含任何 gameplay / network / molang 副作用。</p>
  *
  * <p>长期实体状态仍归 {@code PlayerCapability}；本类型用于把「单次 render 临时状态」
