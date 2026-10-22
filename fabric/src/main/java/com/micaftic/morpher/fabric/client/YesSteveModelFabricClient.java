@@ -32,7 +32,7 @@ public final class YesSteveModelFabricClient implements ClientModInitializer {
         HudOverlay loadingOverlay = new ExtraPlayerOverlay();
         HudElementRegistry.attachElementAfter(VanillaHudElements.BOSS_BAR, com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(YesSteveModel.MOD_ID, "hud_overlays"), (guiGraphics, tickDelta) -> {
             Minecraft mc = Minecraft.getInstance();
-            float delta = tickDelta.getGameTimeDeltaTicks();
+            float delta = tickDelta.getGameTimeDeltaPartialTick(false);
             int w = mc.getWindow().getGuiScaledWidth();
             int h = mc.getWindow().getGuiScaledHeight();
             Font font = mc.font;

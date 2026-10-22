@@ -11,7 +11,7 @@ import com.micaftic.morpher.client.renderer.layer.CustomPlayerArmorLayer;
 import com.micaftic.morpher.client.renderer.layer.CustomPlayerElytraLayer;
 import com.micaftic.morpher.client.renderer.layer.CustomPlayerItemInHandLayer;
 import com.micaftic.morpher.client.renderer.layer.CustomPlayerParrotLayer;
-import com.micaftic.morpher.client.renderer.modernhud.ModernHudPoseStore;
+import com.micaftic.morpher.client.renderer.hud.HudPoseCache;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -91,9 +91,7 @@ public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, Cust
         SubmitRenderContext.set(collector);
         try {
             renderEntityWithTexture(capability, renderTexture.location, entityYaw, partialTick, poseStack, bufferSource, packedLight);
-            // 现代 HUD 阶段 1：世界帧动画评估完成点发布共享姿态快照
-            // （仅本地玩家 + WORLD 上下文，由 store 内部判定；发布不触发二次评估）
-            ModernHudPoseStore.publishFromWorld(capability, partialTick, renderTexture.location);
+            HudPoseCache.publish(capability, partialTick);
         } finally {
             SubmitRenderContext.set(null);
             this.currentTexture = null;
