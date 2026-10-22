@@ -79,7 +79,9 @@ public final class AnimationMapper {
                 }
             else blendWeight = null;
 
-            Animation anim = new Animation(ra.name, ra.length * 20.0f, loopMode, blendWeight, null, null, null, boneAnims.toArray(new BoneAnimation[0]), soundEffects.toArray(new EventKeyFrame[0]), new ParticleEventKeyFrame[0], timelineEvents.toArray(new EventKeyFrame[0]));
+            // blendWeight 必须落在 Animation 的 blendWeight 形参上：运行时按该字段决定动画权重，
+            // 传进 unKnowData1 会让 YSM 作者化的 blend_weight 静默失效（恒按 1.0 播放）。
+            Animation anim = new Animation(ra.name, ra.length * 20.0f, loopMode, null, null, blendWeight, null, boneAnims.toArray(new BoneAnimation[0]), soundEffects.toArray(new EventKeyFrame[0]), new ParticleEventKeyFrame[0], timelineEvents.toArray(new EventKeyFrame[0]));
             anim.programExpressions = List.copyOf(parsed);
             anim.declaredPeriodSeconds = ra.length;
             result.put(ra.name, anim);

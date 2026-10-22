@@ -3219,10 +3219,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(actionRow(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.classic_hud_layout", () -> InputUtil.setScreen(new HudLayoutScreen(this,
                 Component.translatable("gui.sparkle_morpher.classic_hud_layout.title"),
                 ExtraPlayerRenderConfig.CLASSIC_HUD_LAYOUT, HudLayoutScreen.classicPreview()))));
-        rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.modern_hud_rendering", ExtraPlayerRenderConfig.ENABLE_MODERN_HUD_RENDER));
-        rows.add(actionRow(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.modern_hud_layout", () -> InputUtil.setScreen(new HudLayoutScreen(this,
-                Component.translatable("gui.sparkle_morpher.modern_hud_layout.title"),
-                ExtraPlayerRenderConfig.MODERN_HUD_LAYOUT, HudLayoutScreen.modernPreview()))));
+        rows.add(classicHudAnimationFpsRow(ModelPanelState.SettingGroup.RENDERING));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_projectile_model", GeneralConfig.DISABLE_PROJECTILE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_vehicle_model", GeneralConfig.DISABLE_VEHICLE_MODEL));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));
@@ -3361,6 +3358,44 @@ public class ModernPlayerModelScreen extends Screen {
                 custom && value > 0 ? () -> com.micaftic.morpher.cloud.client.CloudClientPerformance.adjust(upload, -1) : null,
                 custom && value < 64 ? () -> com.micaftic.morpher.cloud.client.CloudClientPerformance.adjust(upload, 1) : null,
                 null, null);
+    }
+
+    private static final int[] CLASSIC_HUD_FPS_PRESETS = { 0, 30, 60, 90, 120, 144, 165, 240, 480 };
+
+    private SettingRow classicHudAnimationFpsRow(ModelPanelState.SettingGroup group) {
+        int current = safeInt(ExtraPlayerRenderConfig.CLASSIC_HUD_ANIMATION_SAMPLE_FPS, 60);
+        String value = current <= 0
+                ? Component.translatable("gui.sparkle_morpher.settings.cloud.performance.unlimited").getString()
+                : current + " FPS";
+        return new SettingRow(group, "gui.sparkle_morpher.model_panel.setting.classic_hud_animation_fps", null, value, null,
+                () -> adjustClassicHudAnimationFps(current, -1),
+                () -> adjustClassicHudAnimationFps(current, 1), null, null);
+    }
+
+    private static void adjustClassicHudAnimationFps(int current, int direction) {
+        int index = -1;
+        for (int i = 0; i < CLASSIC_HUD_FPS_PRESETS.length; i++) {
+            if (CLASSIC_HUD_FPS_PRESETS[i] == current) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) {
+            int nearest = 0;
+            int best = Integer.MAX_VALUE;
+            for (int i = 0; i < CLASSIC_HUD_FPS_PRESETS.length; i++) {
+                int distance = Math.abs(CLASSIC_HUD_FPS_PRESETS[i] - current);
+                if (distance < best) {
+                    best = distance;
+                    nearest = i;
+                }
+            }
+            index = nearest;
+        } else {
+            index = clamp(index + direction, 0, CLASSIC_HUD_FPS_PRESETS.length - 1);
+        }
+        ExtraPlayerRenderConfig.CLASSIC_HUD_ANIMATION_SAMPLE_FPS.set(CLASSIC_HUD_FPS_PRESETS[index]);
+        ExtraPlayerRenderConfig.CLASSIC_HUD_ANIMATION_SAMPLE_FPS.save();
     }
 
     private SettingRow intRow(ModelPanelState.SettingGroup group, String labelKey, ModConfigSpec.IntValue value, int min, int max, int step, String suffix) {

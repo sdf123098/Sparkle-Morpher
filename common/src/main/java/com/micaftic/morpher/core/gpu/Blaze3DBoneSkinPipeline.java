@@ -20,7 +20,7 @@ public final class Blaze3DBoneSkinPipeline {
     static final Identifier SHADER = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "core/blaze3d_bone_skin");
     static final Identifier TRANSLUCENT_SHADER = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId(
             "sparkle_morpher", "core/blaze3d_bone_skin_translucent");
-    /** 现代 HUD（client.renderer.modernhud 包）复用。 */
+    /** 供 GPU 骨骼蒙皮渲染路径复用。 */
     public static final RenderPipeline PIPELINE = buildPipeline(
             com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/blaze3d_bone_skin"),
                     SHADER, ColorTargetState.DEFAULT);
