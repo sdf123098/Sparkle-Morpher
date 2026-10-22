@@ -73,10 +73,31 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
             if (wasAnimEvaluated) {
                 this.armorBoneOffset.set(bone.getRotationX(), bone.getRotationY());
             }
-            EntityModelData data = event.getModelData();
-            bone.setRotationX(this.armorBoneOffset.x + ((float) Math.toRadians(data.headPitch)));
-            bone.setRotationY(this.armorBoneOffset.y + ((float) Math.toRadians(data.netHeadYaw)));
+            applyHeadTracking(event, this.armorBoneOffset.x, this.armorBoneOffset.y);
         }
+    }
+
+    @Override
+    public void applyHudHeadTracking(AnimationEvent<? extends AnimatableEntity<T>> event, float baseRotationX, float baseRotationY) {
+        applyHeadTracking(event, baseRotationX, baseRotationY);
+    }
+
+    private void applyHeadTracking(AnimationEvent<?> event, float baseRotationX, float baseRotationY) {
+        AnimatedGeoModel model = getCurrentModel();
+        if (model != null && !model.headBones().isEmpty()) {
+            IBone bone = model.headBones().get(model.headBones().size() - 1);
+            EntityModelData data = event.getModelData();
+            bone.setRotationX(baseRotationX + ((float) Math.toRadians(data.headPitch)));
+            bone.setRotationY(baseRotationY + ((float) Math.toRadians(data.netHeadYaw)));
+        }
+    }
+
+    public float getHeadBaseRotationX() {
+        return this.armorBoneOffset.x;
+    }
+
+    public float getHeadBaseRotationY() {
+        return this.armorBoneOffset.y;
     }
 
     @Override

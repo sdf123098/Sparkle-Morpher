@@ -3,7 +3,6 @@ package com.micaftic.morpher.client.renderer;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.config.HudLayoutConfig;
 import com.micaftic.morpher.client.gui.HudLayoutScreen;
-import com.micaftic.morpher.client.renderer.modernhud.ModernHudRenderer;
 import com.micaftic.morpher.client.renderer.preview.PaperDollActivity;
 import com.micaftic.morpher.client.renderer.preview.PaperDollLayout;
 import com.micaftic.morpher.client.renderer.preview.PaperDollVisibilityPolicy;
@@ -19,10 +18,6 @@ public class ExtraPlayerOverlay implements HudOverlay {
         Minecraft minecraft;
         LocalPlayer localPlayer;
         if ((localPlayer = (minecraft = Minecraft.getInstance()).player) == null || minecraft.screen instanceof HudLayoutScreen) {
-            return;
-        }
-        if (ExtraPlayerRenderConfig.ENABLE_MODERN_HUD_RENDER.get()
-                && ModernHudRenderer.render(guiGraphics, localPlayer, partialTick, screenWidth, screenHeight)) {
             return;
         }
         if (ExtraPlayerRenderConfig.DISABLE_PLAYER_RENDER.get()) return;

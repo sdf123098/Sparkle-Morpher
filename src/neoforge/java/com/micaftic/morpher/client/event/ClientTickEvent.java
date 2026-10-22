@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.ObjectPool;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.diagnostics.FirstPersonRenderDiagnostics;
 import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
 import com.micaftic.morpher.client.gui.resource.download.DownloadQueue;
 import com.micaftic.morpher.client.input.InputStateKey;
@@ -67,6 +68,7 @@ public final class ClientTickEvent {
             PlayerCapability.get(localPlayer).ifPresent(cap -> cap.tickAnimations());
             com.micaftic.morpher.cloud.client.CloudPlayerMotionSync.tickOwner();
         }
+        FirstPersonRenderDiagnostics.tick(client);
         ClientModelManager.restorePersistedModelSelectionOnVanillaServer();
     }
 

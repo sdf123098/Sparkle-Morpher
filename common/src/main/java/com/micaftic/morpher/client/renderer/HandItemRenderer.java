@@ -2,6 +2,8 @@ package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.diagnostics.FirstPersonRenderDiagnostics;
+import com.micaftic.morpher.client.diagnostics.FirstPersonRenderDiagnostics.Outcome;
 import com.micaftic.morpher.client.entity.PlayerGeoEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.gltf.GltfMaterialResolver;
@@ -33,10 +35,15 @@ public class HandItemRenderer {
 
     private PlayerGeoEntity geoModel = null;
 
-    public void renderHandItem(LocalPlayer localPlayer, ModelAssembly modelAssembly, PlayerCapability capability, HumanoidArm arm, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, float partialTick) {
+    /**
+     * 渲染第一人称自定义手模型。
+     *
+     * @return true = 已成功提交自定义手几何（调用方应取消原版手渲染）；false = 未渲染
+     *         （模型未就绪/事件拦截等），调用方应回退原版手，避免"取消原版手但什么都没画"的空白。
+     */
+    public boolean renderHandItem(LocalPlayer localPlayer, ModelAssembly modelAssembly, PlayerCapability capability, HumanoidArm arm, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, float partialTick) {
         if (modelAssembly.isGltf()) {
-            renderGltfHand(localPlayer, modelAssembly, arm, poseStack, bufferSource, packedLight, partialTick);
-            return;
+            return renderGltfHand(localPlayer, modelAssembly, capability.getModelId(), arm, poseStack, bufferSource, packedLight, partialTick);
         }
         AnimatedGeoModel model;
         if (this.geoModel == null || this.geoModel.getEntity() != localPlayer) {
@@ -44,12 +51,14 @@ public class HandItemRenderer {
         }
         this.geoModel.tickModel();
         if (this.geoModel.processAnimation(partialTick) == null || (model = this.geoModel.getCurrentModel()) == null) {
-            return;
+            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_ANIMATION_NOT_READY, capability.getModelId(), "geckolib", null);
+            return false;
         }
         ClientModelManager.markModelUsed(this.geoModel.getModelId());
         SpecialPlayerRenderEvent event = new SpecialPlayerRenderEvent(localPlayer, capability, capability.getModelId());
         if (SpecialPlayerRenderEvent.post(event)) {
-            return;
+            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_VETOED_BY_EVENT, capability.getModelId(), "geckolib", null);
+            return false;
         }
         ResourceLocation resourceLocation = event.getTextureLocation() == null ? capability.getTextureLocation() : event.getTextureLocation();
         int textureIndex = event.getTextureLocation() == null ? capability.getTextureIndex() : 0;
@@ -64,17 +73,24 @@ public class HandItemRenderer {
         poseStack.scale(-1.0f, -1.0f, 1.0f);
         ModelRendererBridge.renderMesh(buffer, poseStack.last(), model.getGeoModel(), model.getMatrixData(), model.getAbsPivotData(), textureIndex, renderPartMask, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f, resourceLocation);
         poseStack.popPose();
+        return true;
     }
 
-    private void renderGltfHand(LocalPlayer localPlayer, ModelAssembly assembly, HumanoidArm arm,
-                                PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
-                                float partialTick) {
+    private boolean renderGltfHand(LocalPlayer localPlayer, ModelAssembly assembly, String modelId, HumanoidArm arm,
+                                   PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
+                                   float partialTick) {
         GltfModel model = assembly.getGltfModel();
-        if (model == null || model.scenes().isEmpty() || model.defaultScene() < 0) return;
+        if (model == null || model.scenes().isEmpty() || model.defaultScene() < 0) {
+            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_GLTF_INVALID, modelId, "gltf", null);
+            return false;
+        }
         String armToken = arm == HumanoidArm.LEFT ? "leftarm" : "rightarm";
         boolean hasArmNode = model.nodes().stream().anyMatch(node -> node.name() != null
                 && node.name().toLowerCase(Locale.ROOT).contains(armToken) && node.meshIndex() >= 0);
-        if (!hasArmNode) return;
+        if (!hasArmNode) {
+            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_GLTF_NO_ARM_NODE, modelId, "gltf", false);
+            return false;
+        }
         GltfSceneEvaluator evaluator = new GltfSceneEvaluator(model);
         float clock = GltfAnimationClock.fromMinecraftTicks(localPlayer.tickCount, partialTick);
         GltfAnimationController controller = new GltfAnimationController(model);
@@ -101,5 +117,6 @@ public class HandItemRenderer {
         } finally {
             poseStack.popPose();
         }
+        return true;
     }
 }

@@ -26,7 +26,7 @@ public final class HudLayoutConfig {
 
     /**
      * 用统一键名前缀定义一组布局键。空前缀保持旧键名（PlayerPosX/...）不变，
-     * 用于经典 HUD 以兼容既有配置文件；现代 HUD 用 "Modern" 前缀得到独立键名。
+     * 用于经典 HUD 以兼容既有配置文件。
      */
     public static HudLayoutConfig define(ModConfigSpec.Builder builder, String keyPrefix,
                                          int defaultX, int defaultY, double defaultScale, double defaultYaw) {

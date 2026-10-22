@@ -47,6 +47,10 @@ public class GeneralConfig {
 
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue ANIMATION_DEBUG_LOG;
 
+    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue FIRST_PERSON_RENDER_DIAGNOSTICS;
+
+    public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue FIRST_PERSON_PUNCHY_ARM_BRIDGE;
+
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue DEVELOPER_STATE_WRITEBACK;
 
     public static net.neoforged.neoforge.common.ModConfigSpec.BooleanValue ANIMATION_ROULETTE_DEBUG_LOG;
@@ -190,6 +194,10 @@ public class GeneralConfig {
         ANIMATION_FRAME_PROFILER = builder.define("AnimationFrameProfiler", false);
         builder.comment("Verbose per-evaluation [SM-ANIM] debug log. Very noisy, default off.");
         ANIMATION_DEBUG_LOG = builder.define("AnimationDebugLog", false);
+        builder.comment("Print [FP-COMPAT] first-person arm render decisions (FP-COMPAT-PUNCHY-001). Logs on state change plus a 5s heartbeat. Client-side only.");
+        FIRST_PERSON_RENDER_DIAGNOSTICS = builder.define("FirstPersonRenderDiagnostics", false);
+        builder.comment("Render Sparkle Morpher's custom first-person arm inside Punchy!'s animated arm pass (Punchy 2.8g only). Default off; any failure or unsupported Punchy version leaves Punchy's own arm untouched. Client-side only.");
+        FIRST_PERSON_PUNCHY_ARM_BRIDGE = builder.define("FirstPersonPunchyArmBridge", false);
         builder.comment("Allow panel-state writeback in the developer group. Default off; enabling it lets a model author reproduce a captured panel state. Client-side only.");
         DEVELOPER_STATE_WRITEBACK = builder.define("DeveloperStateWriteback", false);
         builder.comment("Print [SM-ROULETTE] diagnostics for animation roulette clicks, server resolution, and client playback resolution. Default off.");
