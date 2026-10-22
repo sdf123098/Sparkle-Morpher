@@ -22,6 +22,11 @@ public final class ConfigPolicies {
         return bool(GeneralConfig.DEVELOPER_STATE_WRITEBACK, false);
     }
 
+    /** [FP-COMPAT] first-person arm diagnostics; default false keeps release builds silent. */
+    public static boolean firstPersonRenderDiagnostics() {
+        return bool(GeneralConfig.FIRST_PERSON_RENDER_DIAGNOSTICS, false);
+    }
+
     /**
      * Model picker presentation default. The model screen seeds its per-session style from this
      * once and afterwards remembers the user's in-screen override.

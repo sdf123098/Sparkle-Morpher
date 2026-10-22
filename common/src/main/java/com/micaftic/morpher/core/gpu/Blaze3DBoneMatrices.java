@@ -24,7 +24,7 @@ public final class Blaze3DBoneMatrices {
     private Blaze3DBoneMatrices() {
     }
 
-    /** 供现代 HUD（client.renderer.modernhud 包）复用：CPU 计算骨骼矩阵到 144B/bone 布局。 */
+    /** CPU 计算骨骼矩阵到 144B/bone 布局，供 GPU 蒙皮路径复用。 */
     public static boolean write(
             GeoModel model,
             Matrix4f rootPose,
