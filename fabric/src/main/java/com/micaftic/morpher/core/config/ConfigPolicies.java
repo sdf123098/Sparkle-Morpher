@@ -98,6 +98,11 @@ public final class ConfigPolicies {
     private static double decimal(ModConfigSpec.DoubleValue value, double fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
     private static <T> T value(ModConfigSpec.ConfigValue<T> value, T fallback) { try { T result = value == null ? null : value.get(); return result == null ? fallback : result; } catch (Exception ignored) { return fallback; } }
 
+    /** [FP-COMPAT] first-person arm diagnostics; default false keeps release builds silent. */
+    public static boolean firstPersonRenderDiagnostics() {
+        return bool(GeneralConfig.FIRST_PERSON_RENDER_DIAGNOSTICS, false);
+    }
+
     public record Snapshot(RenderPolicy render, MemoryPolicy memory, DiagnosticsPolicy diagnostics, PrivacyPolicy privacy) { }
     public record RenderPolicy(boolean disableSelfModel, boolean disableOtherModel, boolean disableSelfHands, boolean disableProjectileModel, boolean disableVehicleModel, boolean disableExternalFirstPersonAnimation, boolean useCompatibilityRenderer, boolean useGpuRenderer, boolean disableModelGlowInShaderpack, boolean animationDistanceLod) { }
     public record MemoryPolicy(int audioCacheMaxBytes, int maxCachedGpuModels, boolean lazyModelLoading, int maxResidentCpuModels, int unusedModelTtlSeconds) { }

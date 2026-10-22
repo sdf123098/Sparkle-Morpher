@@ -1,7 +1,6 @@
 package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
-import com.micaftic.morpher.client.renderer.modernhud.ModernHudRenderer;
 import com.micaftic.morpher.config.HudLayoutConfig;
 import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
@@ -18,11 +17,10 @@ import net.minecraft.util.Mth;
 
 /**
  * 通用 HUD 布局画布编辑器（26.x，GuiGraphicsExtractor 版）：拖拽移动、右下角蓝色把手/滚轮
- * 无级缩放、右键拖动旋转、Alt+R 重置。经典 HUD 与现代 HUD 各持有一份 {@link HudLayoutConfig}，
- * 本屏通过 {@link HudPreview} 回调预览对应渲染器，并把编辑结果写回自己的配置，互不干扰。
+ * 无级缩放、右键拖动旋转、Alt+R 重置。本屏通过 {@link HudPreview} 回调预览渲染器，
+ * 并把编辑结果写回经典 HUD 的 {@link HudLayoutConfig}。
  *
- * <p>画布只有 2×scale 的方形 guide（经典 HUD framing），实际绘制以预览渲染器输出为准
- * （现代 HUD 按模型真实 AABB 自定尺寸）。
+ * <p>画布只有 2×scale 的方形 guide（经典 HUD framing），实际绘制以预览渲染器输出为准。
  */
 public final class HudLayoutScreen extends Screen {
     private static final float MIN_SCALE = 8.0f;
@@ -75,11 +73,6 @@ public final class HudLayoutScreen extends Screen {
             ModelPreviewRenderer.renderPlayerOverlay(graphics, player, x, y, scale, yaw, -500, partialTick, false);
             return true;
         };
-    }
-
-    /** 现代 HUD 预览：经现代 HUD 独立管线（FBO + 合成）绘制。 */
-    public static HudPreview modernPreview() {
-        return ModernHudRenderer::renderAt;
     }
 
     @Override
