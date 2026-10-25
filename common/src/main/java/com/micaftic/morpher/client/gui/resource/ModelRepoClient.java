@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.gui.resource;
 
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.client.gui.resource.station.RepositoryPreviews;
 import com.micaftic.morpher.util.ModelIdUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -9,6 +10,7 @@ import com.google.gson.JsonParser;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.concurrent.CancellationException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -21,6 +23,8 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -69,30 +73,16 @@ public final class ModelRepoClient {
     }
 
     public static byte[] download(ModelRepoEntry entry, ResourceStationConfig.State config) throws IOException {
-        IOException last = null;
-        List<String> candidates = rankCandidates(downloadCandidates(entry, config), config);
-        monitor(config, "Download start name={} fileName={} size={} candidates={} githubFile={}", entry.name(), entry.fileName(), entry.size(), candidates.size(), entry.isGithubFile());
-        for (int i = 0; i < candidates.size(); i++) {
-            String url = candidates.get(i);
-            try {
-                byte[] data = read(url, config.timeoutMs(), config.maxDownloadBytes(), config, "download");
-                monitor(config, "Download complete name={} url={} bytes={}", entry.name(), url, data.length);
-                return data;
-            } catch (IOException | RuntimeException e) {
-                last = asIOException(e);
-                YesSteveModel.LOGGER.warn("[SM] Resource download candidate failed: {}", url, e);
-                monitor(config, "Download candidate failed name={} url={} error={}", entry.name(), url, e.toString());
-            }
-        }
-        monitor(config, "Download failed name={} candidates={} last={}", entry.name(), candidates.size(), last == null ? "none" : last.toString());
-        throw last == null ? new IOException("No download URL") : last;
+        return download(entry, config, null);
     }
 
     public static byte[] download(ModelRepoEntry entry, ResourceStationConfig.State config, ProgressListener listener) throws IOException {
+        checkCancelled(listener);
         IOException last = null;
-        List<String> candidates = rankCandidates(downloadCandidates(entry, config), config);
+        List<String> candidates = rankCandidates(downloadCandidates(entry, config), config, listener);
         monitor(config, "Download start name={} fileName={} size={} candidates={} githubFile={}", entry.name(), entry.fileName(), entry.size(), candidates.size(), entry.isGithubFile());
         for (int i = 0; i < candidates.size(); i++) {
+            checkCancelled(listener);
             String url = candidates.get(i);
             if (listener != null) {
                 listener.onCandidate(url, i + 1, candidates.size());
@@ -101,7 +91,10 @@ public final class ModelRepoClient {
                 byte[] data = read(url, config.timeoutMs(), config.maxDownloadBytes(), listener, config, "download", entry.size());
                 monitor(config, "Download complete name={} url={} bytes={}", entry.name(), url, data.length);
                 return data;
+            } catch (CancellationException e) {
+                throw e;
             } catch (IOException | RuntimeException e) {
+                checkCancelled(listener);
                 last = asIOException(e);
                 YesSteveModel.LOGGER.warn("[SM] Resource download candidate failed: {}", url, e);
                 monitor(config, "Download candidate failed name={} url={} error={}", entry.name(), url, e.toString());
@@ -112,13 +105,67 @@ public final class ModelRepoClient {
     }
 
     public static byte[] downloadPreview(ModelRepoEntry entry, ResourceStationConfig.State config) throws IOException {
+        return downloadPreview(entry, config, null);
+    }
+
+    public static byte[] downloadPreview(ModelRepoEntry entry, ResourceStationConfig.State config, ProgressListener listener) throws IOException {
+        checkCancelled(listener);
         if (entry.previewUrl() == null || entry.previewUrl().isBlank()) {
             throw new IOException("No preview URL");
         }
         monitor(config, "Preview download start name={} url={}", entry.name(), entry.previewUrl());
-        byte[] data = read(entry.previewUrl(), config.timeoutMs(), 2 * 1024 * 1024, config, "preview");
+        byte[] data = readPreviewCandidates(urlCandidates(entry.previewUrl(), config),
+                config, 2 * 1024 * 1024, listener);
         monitor(config, "Preview download complete name={} bytes={}", entry.name(), data.length);
         return data;
+    }
+
+    /** Only requested for the opened detail page, with a smaller transfer limit than model import. */
+    public static byte[] downloadEmbeddedPreview(ModelRepoEntry entry, ResourceStationConfig.State config) throws Exception {
+        return downloadEmbeddedPreview(entry, config, null);
+    }
+
+    public static byte[] downloadEmbeddedPreview(ModelRepoEntry entry, ResourceStationConfig.State config, ProgressListener listener) throws Exception {
+        checkCancelled(listener);
+        int limit = Math.min(config.maxDownloadBytes(),
+                com.micaftic.morpher.client.gui.resource.station.EmbeddedModelPreview.MAX_MODEL_BYTES);
+        if (entry.size() > limit) return null;
+        var bounded = new ResourceStationConfig.State(config.urls(), config.selectedUrl(), config.timeoutMs(),
+                limit, config.mainlandChinaMode(), config.githubAccelerators());
+        byte[] source = readPreviewCandidates(downloadCandidates(entry, bounded), bounded, limit, listener);
+        checkCancelled(listener);
+        byte[] preview = com.micaftic.morpher.client.gui.resource.station.EmbeddedModelPreview.extract(source, entry.fileName());
+        checkCancelled(listener);
+        return preview;
+    }
+
+    /** In-memory 3D card source, bounded independently of local model downloads. */
+    public static byte[] downloadPreviewModel(ModelRepoEntry entry, ResourceStationConfig.State config, ProgressListener listener) throws IOException {
+        checkCancelled(listener);
+        int limit = Math.min(config.maxDownloadBytes(),
+                com.micaftic.morpher.client.gui.resource.station.EmbeddedModelPreview.MAX_MODEL_BYTES);
+        if (entry.size() > limit) throw new IOException("Model exceeds the 3D preview transfer limit");
+        return readPreviewCandidates(downloadCandidates(entry, config), config, limit, listener);
+    }
+
+    private static byte[] readPreviewCandidates(List<String> candidates, ResourceStationConfig.State config, int limit) throws IOException {
+        return readPreviewCandidates(candidates, config, limit, null);
+    }
+
+    private static byte[] readPreviewCandidates(List<String> candidates, ResourceStationConfig.State config, int limit, ProgressListener listener) throws IOException {
+        IOException last = null;
+        for (int i = 0; i < candidates.size(); i++) {
+            checkCancelled(listener);
+            String url = candidates.get(i);
+            if (listener != null) listener.onCandidate(url, i + 1, candidates.size());
+            try { return read(url, config.timeoutMs(), limit, listener, config, "preview"); }
+            catch (CancellationException cancelled) { throw cancelled; }
+            catch (IOException | RuntimeException failure) {
+                checkCancelled(listener);
+                last = asIOException(failure);
+            }
+        }
+        throw last == null ? new IOException("No preview URL") : last;
     }
 
     public static String safeModelId(ModelRepoEntry entry) {
@@ -280,6 +327,8 @@ public final class ModelRepoClient {
         JsonArray tree = root.has("tree") && root.get("tree").isJsonArray() ? root.getAsJsonArray("tree") : new JsonArray();
         monitor(config, "GitHub tree loaded owner={} repo={} branch={} path={} treeItems={}", owner, repo, branch, path, tree.size());
         String prefix = path == null || path.isBlank() ? "" : path.replace('\\', '/').replaceAll("^/+", "").replaceAll("/+$", "") + "/";
+        int first = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         for (JsonElement element : tree) {
             JsonObject object = element.getAsJsonObject();
             String type = firstString(object, "type");
@@ -288,6 +337,10 @@ public final class ModelRepoClient {
                 continue;
             }
             String name = fileNameOnly(childPath);
+            if (RepositoryPreviews.isImage(name)) {
+                images.put(childPath, previewRawUrl(owner, repo, branch, childPath));
+                continue;
+            }
             if (!isImportFile(name)) {
                 continue;
             }
@@ -299,12 +352,15 @@ public final class ModelRepoClient {
             YesSteveModel.LOGGER.warn("[SM] GitHub tree response was truncated for {}/{}", owner, repo);
             monitor(config, "GitHub tree truncated owner={} repo={} branch={}", owner, repo, branch);
         }
+        RepositoryPreviews.attach(entries, first, images);
     }
 
     private static void listGithubArchive(String owner, String repo, String branch, String path, ResourceStationConfig.State config, List<ModelRepoEntry> entries) throws IOException {
         String archiveUrl = "https://codeload.github.com/" + encPath(owner) + "/" + encPath(repo) + "/zip/refs/heads/" + encPath(branch);
         byte[] bytes = read(archiveUrl, config.timeoutMs(), config.maxDownloadBytes(), config, "github-archive");
         String prefix = path == null || path.isBlank() ? "" : path.replace('\\', '/').replaceAll("^/+", "").replaceAll("/+$", "") + "/";
+        int first = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         try (ZipInputStream zip = new ZipInputStream(new java.io.ByteArrayInputStream(bytes))) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
@@ -316,6 +372,10 @@ public final class ModelRepoClient {
                     continue;
                 }
                 String name = fileNameOnly(childPath);
+                if (RepositoryPreviews.isImage(name)) {
+                    images.put(childPath, previewRawUrl(owner, repo, branch, childPath));
+                    continue;
+                }
                 if (!isImportFile(name)) {
                     continue;
                 }
@@ -325,6 +385,7 @@ public final class ModelRepoClient {
         }
         monitor(config, "GitHub archive fallback complete owner={} repo={} branch={} path={} entries={}",
                 owner, repo, branch, path, entries.size());
+        RepositoryPreviews.attach(entries, first, images);
     }
 
     private static void listJsDelivrDirectory(String owner, String repo, String branch, String path, ResourceStationConfig.State config,
@@ -341,6 +402,7 @@ public final class ModelRepoClient {
         String pageUrl = "https://cdn.jsdelivr.net/gh/" + encPath(owner) + "/" + encPath(repo) + "@" + encPath(branch) + "/" + encPath(basePath);
         String html = new String(read(pageUrl, config.timeoutMs(), 2 * 1024 * 1024, config, "jsdelivr-list"), StandardCharsets.UTF_8);
         int before = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         Matcher matcher = HREF_PATTERN.matcher(html);
         while (matcher.find()) {
             String href = matcher.group(1);
@@ -362,6 +424,10 @@ public final class ModelRepoClient {
                 continue;
             }
             String name = fileNameOnly(childPath);
+            if (RepositoryPreviews.isImage(name)) {
+                images.put(childPath, "https://cdn.jsdelivr.net/gh/" + encPath(owner) + "/" + encPath(repo) + "@" + encPath(branch) + "/" + encPath(childPath));
+                continue;
+            }
             if (!isImportFile(name)) {
                 continue;
             }
@@ -370,6 +436,7 @@ public final class ModelRepoClient {
         }
         monitor(config, "jsDelivr directory listed owner={} repo={} branch={} path={} entriesAdded={} visited={}",
                 owner, repo, branch, normalizedPath, entries.size() - before, visited.size());
+        RepositoryPreviews.attach(entries, before, images);
     }
 
     private static void listJsDelivrFlat(String owner, String repo, String branch, String path, ResourceStationConfig.State config,
@@ -381,6 +448,7 @@ public final class ModelRepoClient {
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
         JsonArray files = root.has("files") && root.get("files").isJsonArray() ? root.getAsJsonArray("files") : new JsonArray();
         int before = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         for (JsonElement element : files) {
             if (!element.isJsonObject()) {
                 continue;
@@ -395,6 +463,10 @@ public final class ModelRepoClient {
                 continue;
             }
             String name = fileNameOnly(childPath);
+            if (RepositoryPreviews.isImage(name)) {
+                images.put(childPath, "https://cdn.jsdelivr.net/gh/" + encPath(owner) + "/" + encPath(repo) + "@" + encPath(branch) + "/" + encPath(childPath));
+                continue;
+            }
             if (!isImportFile(name)) {
                 continue;
             }
@@ -404,6 +476,7 @@ public final class ModelRepoClient {
         }
         monitor(config, "jsDelivr flat listed owner={} repo={} branch={} path={} files={} entriesAdded={}",
                 owner, repo, branch, normalizedPath, files.size(), entries.size() - before);
+        RepositoryPreviews.attach(entries, before, images);
     }
 
     private static void walkGithub(String owner, String repo, String branch, String path, ResourceStationConfig.State config, List<ModelRepoEntry> entries) throws Exception {
@@ -414,12 +487,16 @@ public final class ModelRepoClient {
         api += "?ref=" + enc(branch);
         JsonElement root = readGithubJson(api, config, 4 * 1024 * 1024);
         JsonArray array = root.isJsonArray() ? root.getAsJsonArray() : new JsonArray();
+        int first = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         for (JsonElement element : array) {
             JsonObject object = element.getAsJsonObject();
             String type = firstString(object, "type");
             String name = firstString(object, "name");
             String childPath = firstString(object, "path");
-            if ("dir".equals(type)) {
+            if ("file".equals(type) && name != null && RepositoryPreviews.isImage(name)) {
+                images.put(childPath == null ? name : childPath, previewRawUrl(owner, repo, branch, childPath == null ? name : childPath));
+            } else if ("dir".equals(type)) {
                 walkGithub(owner, repo, branch, childPath == null ? "" : childPath, config, entries);
             } else if ("file".equals(type) && isImportFile(name)) {
                 String url = firstString(object, "download_url");
@@ -427,6 +504,7 @@ public final class ModelRepoClient {
                 entries.add(new ModelRepoEntry(name, url, name, size, "GitHub: " + owner + "/" + repo, owner, repo, branch, childPath == null ? name : childPath));
             }
         }
+        RepositoryPreviews.attach(entries, first, images);
     }
 
     private static String resolveDefaultBranch(String owner, String repo, ResourceStationConfig.State config) {
@@ -502,11 +580,18 @@ public final class ModelRepoClient {
     }
 
     private static byte[] read(String url, int timeoutMs, int maxBytes, ProgressListener listener, ResourceStationConfig.State config, String operation, long expectedBytes) throws IOException {
+        return com.micaftic.morpher.client.gui.resource.station.InterruptibleResourceRequest.call(listener,
+                () -> readDirect(url, timeoutMs, maxBytes, listener, config, operation, expectedBytes));
+    }
+
+    private static byte[] readDirect(String url, int timeoutMs, int maxBytes, ProgressListener listener, ResourceStationConfig.State config, String operation, long expectedBytes) throws IOException {
+        checkCancelled(listener);
         long start = System.nanoTime();
         boolean bypassCache = shouldBypassCache(operation);
         String requestUrl = bypassCache ? withCacheBuster(url) : url;
         HttpURLConnection connection = (HttpURLConnection) URI.create(requestUrl).toURL().openConnection();
         try {
+            checkCancelled(listener);
             connection.setConnectTimeout(timeoutMs);
             connection.setReadTimeout(timeoutMs);
             connection.setUseCaches(false);
@@ -579,6 +664,9 @@ public final class ModelRepoClient {
                 monitor(config, "HTTP complete op={} url={} bytes={} elapsedMs={}", operation, url, data.length, elapsedMs(start));
                 return data;
             }
+        } catch (IOException error) {
+            checkCancelled(listener);
+            throw error;
         } finally {
             connection.disconnect();
         }
@@ -595,9 +683,7 @@ public final class ModelRepoClient {
     }
 
     private static void checkCancelled(ProgressListener listener) {
-        if (listener != null && listener.isCancelled()) {
-            throw new java.util.concurrent.CancellationException();
-        }
+        com.micaftic.morpher.client.gui.resource.station.InterruptibleResourceRequest.checkCancelled(listener);
     }
 
     private static List<String> githubCandidates(String url, ResourceStationConfig.State config) {
@@ -656,13 +742,19 @@ public final class ModelRepoClient {
     }
 
     private static List<String> rankCandidates(List<String> candidates, ResourceStationConfig.State config) {
+        return rankCandidates(candidates, config, null);
+    }
+
+    private static List<String> rankCandidates(List<String> candidates, ResourceStationConfig.State config, ModelRepoClient.ProgressListener listener) {
+        checkCancelled(listener);
         if (candidates.size() < 2) {
             return candidates;
         }
         List<CandidateProbe> probes = new ArrayList<>();
         for (int i = 0; i < candidates.size(); i++) {
+            checkCancelled(listener);
             String url = candidates.get(i);
-            CandidateProbe probe = i < MAX_PROBED_CANDIDATES ? probeCandidate(url, config, i) : CandidateProbe.untested(url, i);
+            CandidateProbe probe = i < MAX_PROBED_CANDIDATES ? probeCandidate(url, config, i, listener) : CandidateProbe.untested(url, i);
             probes.add(probe);
         }
         probes.sort(Comparator
@@ -675,10 +767,25 @@ public final class ModelRepoClient {
     }
 
     private static CandidateProbe probeCandidate(String url, ResourceStationConfig.State config, int index) {
+        return probeCandidate(url, config, index, null);
+    }
+
+    private static CandidateProbe probeCandidate(String url, ResourceStationConfig.State config, int index, ModelRepoClient.ProgressListener listener) {
+        try {
+            return com.micaftic.morpher.client.gui.resource.station.InterruptibleResourceRequest.call(listener, () -> probeCandidateDirect(url, config, index, listener));
+        } catch (IOException error) {
+            checkCancelled(listener);
+            return new CandidateProbe(url, index, false, Long.MAX_VALUE);
+        }
+    }
+
+    private static CandidateProbe probeCandidateDirect(String url, ResourceStationConfig.State config, int index, ModelRepoClient.ProgressListener listener) {
+        checkCancelled(listener);
         long started = System.nanoTime();
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+            checkCancelled(listener);
             int timeout = Math.min(Math.max(1000, config.timeoutMs()), PROBE_TIMEOUT_MS);
             connection.setConnectTimeout(timeout);
             connection.setReadTimeout(timeout);
@@ -698,6 +805,7 @@ public final class ModelRepoClient {
                 byte[] buffer = new byte[8192];
                 int read;
                 while (total < PROBE_BYTES && (read = in.read(buffer, 0, Math.min(buffer.length, PROBE_BYTES - total))) >= 0) {
+                    checkCancelled(listener);
                     if (read == 0) {
                         continue;
                     }
@@ -707,7 +815,10 @@ public final class ModelRepoClient {
             long elapsed = Math.max(1, elapsedMs(started));
             monitor(config, "Probe candidate ok url={} bytes={} elapsedMs={} speed={}", url, total, elapsed, formatSpeed(bytesPerSecond(total, started, System.nanoTime())));
             return new CandidateProbe(url, index, true, elapsed);
+        } catch (CancellationException cancelled) {
+            throw cancelled;
         } catch (IOException | RuntimeException e) {
+            checkCancelled(listener);
             monitor(config, "Probe candidate failed url={} error={}", url, e.toString());
             return new CandidateProbe(url, index, false, Long.MAX_VALUE);
         } finally {
@@ -764,7 +875,7 @@ public final class ModelRepoClient {
     }
 
     private static void monitor(ResourceStationConfig.State config, String message, Object... args) {
-        if (ResourceStationConfig.monitorLogEnabled()) {
+        if (com.micaftic.morpher.core.config.ConfigPolicies.diagnostics().resourceStationMonitorLog()) {
             YesSteveModel.LOGGER.info("[SM-RESOURCE] " + message, args);
         }
     }
@@ -977,6 +1088,7 @@ public final class ModelRepoClient {
 
     public interface ProgressListener {
         void onProgress(int downloaded, int total);
+        default Runnable onCancel(Runnable action) { return () -> {}; }
 
         default boolean isCancelled() {
             return false;
@@ -988,5 +1100,11 @@ public final class ModelRepoClient {
 
         default void onCandidate(String url, int index, int total) {
         }
+    }
+
+    private static String previewRawUrl(String owner, String repo, String branch, String path) {
+        return "https://raw.githubusercontent.com/" + encPath(owner) + "/"
+                + encPath(repo) + "/" + encPath(branch)
+                + "/" + encPath(path);
     }
 }

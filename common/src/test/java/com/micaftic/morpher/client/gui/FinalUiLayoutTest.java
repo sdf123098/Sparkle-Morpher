@@ -9,13 +9,15 @@ class FinalUiLayoutTest {
   var cards=ModelPickerLayout.cards(761,428);assertEquals(9,cards.cols());assertEquals(3,cards.rows());
   assertEquals(81,cards.cellW());assertEquals(140,cards.cellH());assertEquals(428,cards.blockH());
  }
- @Test void fullHdGuiFourKeepsFinalRailGridAndPreview(){
+ @Test void narrowWindowsGiveReadableCardsTheWholeContentWidth(){
   var shell=ModelPanelLayout.create(480,270);assertTrue(shell.verticalTabs);
   assertEquals(6,shell.left);assertEquals(28,shell.railWidth);assertEquals(42,shell.contentLeft);
   assertEquals(428,shell.contentWidth);
-  var cards=ModelPickerLayout.cards(323,178);assertEquals(6,cards.cols());assertEquals(2,cards.rows());
-  assertTrue(cards.columnX(323,5)+cards.cellW()<=323);
-  assertTrue(shell.contentWidth-323-4>=100,"100px preview stays visible at GUI 4");
+  int listWidth=ModelPickerLayout.listWidth(shell.contentWidth,178);
+  assertEquals(shell.contentWidth,listWidth);
+  var cards=ModelPickerLayout.cards(listWidth,178);
+  assertTrue(cards.cellW()>=ModelPickerLayout.CARD_MIN_W);
+  assertTrue(cards.blockW()<=listWidth&&cards.blockH()<=178);
  }
  @Test void regularWindowsKeepNineColumnsAndRoomForTheAlignedPreview(){
   for(int height:new int[]{496,504,540}){
@@ -29,8 +31,11 @@ class FinalUiLayoutTest {
    assertTrue(cards.blockH()<=gridH,"preview bottom aligns within the viewport");
   }
  }
- @Test void smallerLayoutsKeepTheirExistingColumnCounts(){
-  assertEquals(7,ModelPickerLayout.cards(ModelPickerLayout.listWidth(581,252),252).cols());
-  assertEquals(6,ModelPickerLayout.cards(ModelPickerLayout.listWidth(428,178),178).cols());
+ @Test void smallerLayoutsReduceColumnsBeforeShrinkingReadableCards(){
+  for(int[] size:new int[][]{{581,252},{428,178},{323,178}}){
+   var cards=ModelPickerLayout.cards(ModelPickerLayout.listWidth(size[0],size[1]),size[1]);
+   assertTrue(cards.cellW()>=ModelPickerLayout.CARD_MIN_W);
+   assertTrue(cards.blockH()<=size[1]);
+  }
  }
 }

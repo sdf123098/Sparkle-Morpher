@@ -339,7 +339,7 @@ public class ModelSettingsScreen extends OptionScreen {
             int iy = b.y + 1 + row * DD_ITEM_H;
             boolean hover = RoulettePanelStyle.inside(mouseX, mouseY, b.x + 1, iy, listW - 2, DD_ITEM_H);
             boolean selected = i == current;
-            RoulettePanelStyle.fill(g, b.x + 1, iy, listW - 2, DD_ITEM_H, selected ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x00000000);
+            RoulettePanelStyle.roundedFill(g, b.x + 2, iy + 1, listW - 4, DD_ITEM_H - 2, 4, selected ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x00000000);
             g.text(this.font, Component.literal(RoulettePanelStyle.trim(this.font, item.labelAt(i), listW - 10)), b.x + 5, iy + 4, selected ? 0xFFFFFFFF : RoulettePanelStyle.TEXT, false);
         }
         if (scrollable) {

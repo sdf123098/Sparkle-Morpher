@@ -48,9 +48,12 @@ public final class CloudEntityPresenceClient {
         return http.postJson(path(worldKey) + "/appearances/query", body.toString()).thenApply(this::parse);
     }
     public CompletableFuture<HttpResponse<byte[]>> download(String worldKey, Entry entry) {
+        return download(worldKey, entry, CloudClientRuntime.MAX_DISPLAY_ASSET_BYTES);
+    }
+    public CompletableFuture<HttpResponse<byte[]>> download(String worldKey, Entry entry, long maximumBytes) {
         var ref = Objects.requireNonNull(entry.selection()).ref();
-        return http.getBytes(path(worldKey) + "/entities/" + entry.entityId() + "/asset?asset_revision="
-                + ref.revision() + "&raw_sha256=" + ref.rawSha256(), null, null);
+        return http.getBoundedBytes(path(worldKey) + "/entities/" + entry.entityId() + "/asset?asset_revision="
+                + ref.revision() + "&raw_sha256=" + ref.rawSha256(), maximumBytes);
     }
     Map<UUID, Entry> parse(String body) {
         Map<UUID, Entry> result = new HashMap<>();
