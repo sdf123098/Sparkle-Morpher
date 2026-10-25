@@ -500,7 +500,7 @@ public class ModernPlayerModelScreen extends Screen {
             int panelW = secondaryPanelW();
             this.siteEditBox = new EditBox(this.font, panelX + 22, panelY + 237, Math.min(530,panelW-32)-12, 12, Component.translatable("gui.sparkle_morpher.model_panel.url"));
             this.siteEditBox.setBordered(false);
-            this.sourceNameBox=new EditBox(this.font,panelX+22,panelY+85,Math.min(530,panelW-32)-12,12,Component.literal("名称"));sourceNameBox.setBordered(false);sourceNameBox.setValue(sourceNameDraft);sourceNameBox.setResponder(v->sourceNameDraft=v);addWidget(sourceNameBox);
+            this.sourceNameBox=new EditBox(this.font,panelX+22,panelY+85,Math.min(530,panelW-32)-12,12,Component.literal(resourceString("source_edit.name")));sourceNameBox.setBordered(false);sourceNameBox.setValue(sourceNameDraft);sourceNameBox.setResponder(v->sourceNameDraft=v);addWidget(sourceNameBox);
             this.siteEditBox.setMaxLength(2048);
             this.siteEditBox.setValue(STATE.siteEditText.isBlank() ? this.controller.selectedSite() : STATE.siteEditText);
             this.siteEditBox.setTextColor(TEXT);
@@ -568,6 +568,16 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
 
+    private Component auditText(String key, Object... args) {
+        return Component.translatable("gui.sparkle_morpher.audit." + key, args);
+    }
+    private String auditString(String key) { return auditText(key).getString(); }
+
+    private Component resourceText(String key, Object... args) {
+        return Component.translatable("gui.sparkle_morpher.resource_station." + key, args);
+    }
+    private String resourceString(String key, Object... args) { return resourceText(key, args).getString(); }
+
     private Component cloudText(String key) {
         return Component.translatable("gui.sparkle_morpher.cloud.manage." + key);
     }
@@ -606,7 +616,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderCloudForm(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float partialTick){
         boolean login=STATE.secondaryPanel==ModelPanelState.SecondaryPanel.CLOUD_LOGIN;
-        pageHeader(g,mx,my,editingCloudInstance&&!login?Component.literal("实例设置"):cloudText(login?(registerCloudAccount?"register_short":"login"):"add_instance"),Component.empty(),this::backFromCloud);
+        pageHeader(g,mx,my,editingCloudInstance&&!login?Component.literal(auditString("hardcoded_001")):cloudText(login?(registerCloudAccount?"register_short":"login"):"add_instance"),Component.empty(),this::backFromCloud);
         renderSettingsViewport(g,mx,my,x,y+36,w,height-layout.top-uiButtonHeight()-28,offset->renderResponsiveCloudFormBody(g,mx,my+offset,x,w,partialTick,login));
         int bh=uiButtonHeight(),fx=x+8;
         int by=this.height-this.layout.top-bh-10;
@@ -627,7 +637,7 @@ public class ModernPlayerModelScreen extends Screen {
         }
         if(editingCloudInstance&&!login){
             var profile=CloudManagementScreen.management().registry().find(inspectedInstanceId);
-            String[] labels={"发现的实例 ID","连接状态","世界与访问范围"};String[] values={profile.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse(""),profile.map(p->CloudClientRuntime.state(p.instanceId())==null?"未登录":"已登录").orElse("未登录"),"打开 ›"};
+            String[] labels={auditString("hardcoded_002"),auditString("hardcoded_003"),auditString("hardcoded_004")};String[] values={profile.map(CloudInstanceRegistry.CloudInstanceProfile::instanceId).orElse(""),profile.map(p->CloudClientRuntime.state(p.instanceId())==null?auditString("hardcoded_005"):auditString("hardcoded_006")).orElse(auditString("hardcoded_005")),auditString("hardcoded_007")};
             int stride=width<560?26:width<800?34:47,valueW=Math.min(150,fw/2);
             for(int i=0;i<3;i++){int yy=afterFields+i*stride;
                 drawText(g,Component.literal(labels[i]),fx,UiElementLayout.centeredY(yy,bh,font.lineHeight));
@@ -985,8 +995,8 @@ public class ModernPlayerModelScreen extends Screen {
         }
         renderIconButton(g,mx,my,xx+2,y+1,IconGlyph.PLUS,Component.translatable("gui.sparkle_morpher.ui.open_tab"),()->sourceTabMenu=!sourceTabMenu);
         if(stateKeyValue.startsWith("fake:")&&x+w-xx>190){
-            String target=com.micaftic.morpher.fakeplayer.FakePlayerListCache.entries().stream().filter(e->stateKeyValue.equals("fake:"+e.uuid())).map(com.micaftic.morpher.fakeplayer.FakePlayerListEntry::displayName).findFirst().orElse("目标假人");
-            drawMuted(g,Component.literal(trim("为"+target+"选择外观",x+w-xx-36)),xx+36,y+8);
+            String target=com.micaftic.morpher.fakeplayer.FakePlayerListCache.entries().stream().filter(e->stateKeyValue.equals("fake:"+e.uuid())).map(com.micaftic.morpher.fakeplayer.FakePlayerListEntry::displayName).findFirst().orElse(auditString("hardcoded_008"));
+            drawMuted(g,Component.literal(trim(auditText("fake_appearance",target).getString(),x+w-xx-36)),xx+36,y+8);
         }
     }
 
@@ -1146,7 +1156,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderCloudGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
         List<CloudAssetSummary> visible = cloudVisibleEntries();
         if (!this.controller.cloudAvailable()) {
-            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.cloud.disconnected"),Component.literal("当前实例尚未连接；已保存的模型信息不会删除。"),cloudText("login"),this::openCloudAccount);
+            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.cloud.disconnected"),Component.literal(auditString("hardcoded_011")),cloudText("login"),this::openCloudAccount);
             return;
         }
         if (STATE.cloudLoading && visible.isEmpty()) {
@@ -1158,7 +1168,7 @@ public class ModernPlayerModelScreen extends Screen {
             return;
         }
         if (visible.isEmpty()) {
-            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.cloud.no_models"),Component.literal(cloudPageError.isBlank()?"保留搜索条件，可清除筛选后重试。":cloudPageError),Component.literal(cloudPageError.isBlank()?"清除筛选":"重试"),()->{if(cloudPageError.isBlank()){STATE.cloudSearchText="";switchCloudView(ModelPanelState.CloudView.ALL);init();}resetCloudPage();});
+            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.cloud.no_models"),cloudPageError.isBlank()?auditText("hardcoded_012"):Component.literal(cloudPageError),cloudPageError.isBlank()?auditText("hardcoded_013"):Component.literal(resourceString("queue.action.retry")),()->{if(cloudPageError.isBlank()){STATE.cloudSearchText="";switchCloudView(ModelPanelState.CloudView.ALL);init();}resetCloudPage();});
             return;
         }
         CloudModelPage page = cloudGridPage(w, h);
@@ -1272,7 +1282,7 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderCloudPageControls(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h){
         List<CloudAssetSummary> visible=cloudVisibleEntries();CloudModelPage page=cloudGridPage(w,h);int index=STATE.cloudPages.index()+1;
-        drawPagination(g,mx,my,x,y,w,index+" / "+(STATE.cloudHasMore?"…":index),Math.max(0,page.end()-page.start())+" / "+visible.size()+(STATE.cloudHasMore?"+":"")+" 个模型",!STATE.cloudLoading&&(page.scroll()>0||STATE.cloudPages.hasPrevious()),!STATE.cloudLoading&&(page.hasNext()||STATE.cloudHasMore),()->{if(page.scroll()>0)STATE.cloudScroll=page.previous();else if(STATE.cloudPages.hasPrevious())requestCloudBatch(STATE.cloudPages.previous());},()->advanceCloudPage(w,h));
+        drawPagination(g,mx,my,x,y,w,index+" / "+(STATE.cloudHasMore?"…":index),auditText("cloud_models_count",Math.max(0,page.end()-page.start()),visible.size()).getString()+(STATE.cloudHasMore?"+":""),!STATE.cloudLoading&&(page.scroll()>0||STATE.cloudPages.hasPrevious()),!STATE.cloudLoading&&(page.hasNext()||STATE.cloudHasMore),()->{if(page.scroll()>0)STATE.cloudScroll=page.previous();else if(STATE.cloudPages.hasPrevious())requestCloudBatch(STATE.cloudPages.previous());},()->advanceCloudPage(w,h));
     }
 
     private void changeCloudVisibility(CloudAssetSummary entry) {
@@ -1346,7 +1356,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderModelGrid(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y, int w, int h) {
         List<ModelEntry> entries = collectModelEntries();
         if (entries.isEmpty()) {
-            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.model_panel.no_models"),Component.translatable("gui.sparkle_morpher.model_panel.drop_files_hint"),Component.literal("清除筛选 / 导入模型"),()->{STATE.modelSearchText="";STATE.modelFilter=ModelPanelState.ModelFilter.ALL;if(collectModelEntries().isEmpty())openImportPanel();else init();});
+            renderEmptyState(g,mouseX,mouseY,x,y,w,h,Component.translatable("gui.sparkle_morpher.model_panel.no_models"),Component.translatable("gui.sparkle_morpher.model_panel.drop_files_hint"),Component.literal(auditString("hardcoded_015")),()->{STATE.modelSearchText="";STATE.modelFilter=ModelPanelState.ModelFilter.ALL;if(collectModelEntries().isEmpty())openImportPanel();else init();});
             return;
         }
         ModelPickerLayout.GridMode mode = gridMode(w, h);
@@ -1723,7 +1733,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderModelBottomActions(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h){
         if(STATE.modelSource!=ModelPanelState.ModelSource.LOCAL){renderCloudPageControls(g,mx,my,x,y,w,h);return;}
         List<ModelEntry> entries=collectModelEntries();var cards=ModelPickerLayout.cards(w,h,entries.size());int pages=cards.totalPages(entries.size()),page=clamp(STATE.modelScroll,0,pages-1);STATE.modelScroll=page;
-        drawPagination(g,mx,my,x,y,w,(page+1)+" / "+pages,Math.min(entries.size(),(page+1)*cards.capacity())+" / "+entries.size()+" 个模型",page>0,page<pages-1,()->STATE.modelScroll=Math.max(0,page-1),()->STATE.modelScroll=Math.min(pages-1,page+1));
+        drawPagination(g,mx,my,x,y,w,(page+1)+" / "+pages,auditText("local_models_count",Math.min(entries.size(),(page+1)*cards.capacity()),entries.size()).getString(),page>0,page<pages-1,()->STATE.modelScroll=Math.max(0,page-1),()->STATE.modelScroll=Math.min(pages-1,page+1));
     }
 
 
@@ -1796,7 +1806,7 @@ public class ModernPlayerModelScreen extends Screen {
         cardRefreshBudget.beginFrame(cardFrameNanos, visible.size());
 
         drawText(g, Component.literal(trim(Component.translatable("gui.sparkle_morpher.resource_station.title").getString()
-                + " · " + (isMainlandResourceMode() ? "大陆" : "全球"), layout.contentWidth)), layout.contentLeft, layout.top + 6);
+                + " · " + (isMainlandResourceMode() ? resourceString("mode.mainland") : resourceString("mode.global")), layout.contentWidth)), layout.contentLeft, layout.top + 6);
         renderResourceCatalogueTools(g, mx, my, page, visible);
         var search = page.search();
         roundedSurface(g, search.x(), search.y(), search.width(), search.height(), 3, 0x0CFFFFFF, 0x22FFFFFF);
@@ -1807,16 +1817,16 @@ public class ModernPlayerModelScreen extends Screen {
         }
         int selectionCount = this.controller.resourceSelectionCount();
         var actions = page.selection();
-        resourceButton(g, mx, my, actions.get(0), IconGlyph.MULTI, Component.literal(STATE.resourceMultiSelectMode ? "多选：开" : "多选：关"),
+        resourceButton(g, mx, my, actions.get(0), IconGlyph.MULTI, resourceText(STATE.resourceMultiSelectMode ? "selection.multi_on" : "selection.multi_off"),
                 true, STATE.resourceMultiSelectMode, this::toggleResourceMultiSelect);
         var counter = actions.get(1);
-        drawMuted(g, Component.literal(trim("已选 " + selectionCount, counter.width())), counter.x(), counter.y() + (counter.height() - font.lineHeight) / 2);
-        resourceButton(g, mx, my, actions.get(2), IconGlyph.CIRCLE_CHECK, Component.literal("选择本页"), !visible.isEmpty(), false, () -> {
+        drawMuted(g, Component.literal(trim(resourceString("selection.count", selectionCount), counter.width())), counter.x(), counter.y() + (counter.height() - font.lineHeight) / 2);
+        resourceButton(g, mx, my, actions.get(2), IconGlyph.CIRCLE_CHECK, Component.literal(resourceString("selection.page")), !visible.isEmpty(), false, () -> {
             if (!STATE.resourceMultiSelectMode) toggleResourceMultiSelect();
             this.controller.selectVisibleResources(visible);
         });
-        resourceButton(g, mx, my, actions.get(3), IconGlyph.CLOSE, Component.literal("清空"), selectionCount > 0, false, this.controller::clearResourceSelection);
-        resourceButton(g, mx, my, actions.get(4), IconGlyph.DOWNLOAD, Component.literal("下载已选"), selectionCount > 0, true, () -> {
+        resourceButton(g, mx, my, actions.get(3), IconGlyph.CLOSE, Component.literal(resourceString("selection.clear")), selectionCount > 0, false, this.controller::clearResourceSelection);
+        resourceButton(g, mx, my, actions.get(4), IconGlyph.DOWNLOAD, Component.literal(resourceString("selection.download")), selectionCount > 0, true, () -> {
             if (this.controller.resourceSelectionCount() > 0 && enqueueSelectedResources() > 0) resourceRoute = ResourceRoute.QUEUE;
         });
         if (STATE.resourceLoading) drawMuted(g, Component.translatable("gui.sparkle_morpher.model_panel.resource_loading"), page.cards().x() + 8, page.cards().y() + 12);
@@ -1828,7 +1838,7 @@ public class ModernPlayerModelScreen extends Screen {
         if (page.details().width() > 0) renderResourceDetails(g, mx, my, page.details(), pt, false);
         var footer = page.pagination();
         drawPagination(g, mx, my, footer.x(), footer.y(), footer.width(), (STATE.resourceScroll + 1) + " / " + pages,
-                (end - start) + " / " + entries.size() + " 个资源 · 已选 " + selectionCount + (status.getString().isBlank() ? "" : " · " + status.getString()),
+                resourceString("footer", end - start, entries.size(), selectionCount) + (status.getString().isBlank() ? "" : " · " + status.getString()),
                 STATE.resourceScroll > 0, STATE.resourceScroll < pages - 1,
                 () -> STATE.resourceScroll = Math.max(0, STATE.resourceScroll - 1),
                 () -> STATE.resourceScroll = Math.min(pages - 1, STATE.resourceScroll + 1));
@@ -1841,19 +1851,19 @@ public class ModernPlayerModelScreen extends Screen {
         for (var tool : page.tools()) {
             var bounds = tool.bounds();
             switch (tool.action()) {
-                case MAINLAND -> resourceButton(g, mx, my, bounds, IconGlyph.MODE, Component.literal("大陆：优先使用加速线路"),
+                case MAINLAND -> resourceButton(g, mx, my, bounds, IconGlyph.MODE, Component.literal(resourceString("route.mainland")),
                         true, mainland, () -> selectResourceNetworkMode(true));
-                case GLOBAL -> resourceButton(g, mx, my, bounds, IconGlyph.GLOBE, Component.literal("全球：使用原生线路"),
+                case GLOBAL -> resourceButton(g, mx, my, bounds, IconGlyph.GLOBE, Component.literal(resourceString("route.global")),
                         true, !mainland, () -> selectResourceNetworkMode(false));
-                case QUEUE -> resourceButton(g, mx, my, bounds, IconGlyph.QUEUE, Component.literal("下载队列"),
+                case QUEUE -> resourceButton(g, mx, my, bounds, IconGlyph.QUEUE, Component.literal(resourceString("queue.title")),
                         true, false, () -> resourceRoute = ResourceRoute.QUEUE);
-                case SOURCES -> resourceButton(g, mx, my, bounds, IconGlyph.SITES, Component.literal("来源管理"),
+                case SOURCES -> resourceButton(g, mx, my, bounds, IconGlyph.SITES, Component.literal(resourceString("tool.sources")),
                         true, false, this::openSitesPanel);
-                case REFRESH -> resourceButton(g, mx, my, bounds, IconGlyph.REFRESH, Component.literal("刷新资源"),
+                case REFRESH -> resourceButton(g, mx, my, bounds, IconGlyph.REFRESH, Component.literal(resourceString("tool.refresh")),
                         !STATE.resourceLoading, false, () -> refreshResources(true));
-                case PREVIEWS -> resourceButton(g, mx, my, bounds, IconGlyph.RELOAD, Component.literal("重试本页 3D 预览"),
+                case PREVIEWS -> resourceButton(g, mx, my, bounds, IconGlyph.RELOAD, Component.literal(resourceString("tool.retry_previews")),
                         !visible.isEmpty() && !STATE.resourceLoading, false, () -> this.controller.previewVisibleResources(visible));
-                case OPTIONS -> resourceButton(g, mx, my, bounds, IconGlyph.SETTINGS, Component.literal("资源与下载配置"),
+                case OPTIONS -> resourceButton(g, mx, my, bounds, IconGlyph.SETTINGS, Component.literal(resourceString("tool.settings")),
                         true, false, () -> selectSettingsPage("resources"));
             }
         }
@@ -1902,14 +1912,14 @@ public class ModernPlayerModelScreen extends Screen {
         else if (STATE.resourceMultiSelectMode || hover)
             roundedSurface(g, x + w - 12, y + 4, 8, 8, 4, 0x33202020, 0xAAFFFFFF);
         if (STATE.resourceMultiSelectMode || hover || selected) {
-            hit(x + w - 18, y + 1, 16, 16, Component.literal(selected ? "取消选择" : "选择下载"), () -> {
+            hit(x + w - 18, y + 1, 16, 16, Component.literal(selected ? resourceString("card.deselect") : resourceString("card.select_download")), () -> {
                 if (!STATE.resourceMultiSelectMode) toggleResourceMultiSelect();
                 this.controller.toggleResourceSelection(entry);
             });
         }
         if (assembly == null && this.controller.resourcePreviewFailed(entry)) {
             drawIconScaled(g, IconGlyph.RELOAD, x + 4, y + 4, 10);
-            hit(x + 1, y + 1, 16, 16, Component.literal("重试 3D 预览"), () -> this.controller.previewVisibleResources(List.of(entry)));
+            hit(x + 1, y + 1, 16, 16, Component.literal(resourceString("card.retry_preview")), () -> this.controller.previewVisibleResources(List.of(entry)));
         }
     }
 
@@ -2036,14 +2046,14 @@ public class ModernPlayerModelScreen extends Screen {
         if(peerLocalRouteBox!=null)peerLocalRouteBox.visible=false;if(peerListenerBox!=null)peerListenerBox.visible=false;if(peerEntranceBox!=null)peerEntranceBox.visible=false;if(peerEndpointBox!=null)peerEndpointBox.visible=false;if(peerInvitationBox!=null)peerInvitationBox.visible=false;
         if(peerSettingsSection==PeerSettingsSection.ROOM){
             drawTitle(g,settingsText("peer.section.room"),x,top+4);networkLine(g,settingsText("peer.automatic_help"),x,top+26,w);
-            com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,top+58,w,24,4,0x0CFFFFFF);drawMuted(g,Component.literal("房间状态"),x+10,top+66);drawMuted(g,Component.literal("当前状态"),x+w/2,top+66);
-            String[] labels={"网络","房间成员","模型接收","同步情况"};Component[] values={com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),ready?settingsText("peer.members",com.micaftic.morpher.client.peer.ClientPeerRuntime.members()):settingsText("peer.world_required"),com.micaftic.morpher.client.peer.ClientPeerRuntime.receiveStatusComponent(),com.micaftic.morpher.client.peer.ClientPeerRuntime.observerStatusComponent()};
+            com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,top+58,w,24,4,0x0CFFFFFF);drawMuted(g,Component.literal(auditString("hardcoded_016")),x+10,top+66);drawMuted(g,Component.literal(auditString("hardcoded_017")),x+w/2,top+66);
+            String[] labels={auditString("hardcoded_018"),auditString("hardcoded_019"),auditString("hardcoded_020"),auditString("hardcoded_021")};Component[] values={com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),ready?settingsText("peer.members",com.micaftic.morpher.client.peer.ClientPeerRuntime.members()):settingsText("peer.world_required"),com.micaftic.morpher.client.peer.ClientPeerRuntime.receiveStatusComponent(),com.micaftic.morpher.client.peer.ClientPeerRuntime.observerStatusComponent()};
             for(int i=0;i<4;i++){int yy=top+82+i*38;drawText(g,Component.literal(labels[i]),x+10,yy+12);drawMuted(g,Component.literal(trim(values[i].getString(),w/2-20)),x+w/2,yy+12);}
             int yy=top+240;networkAction(g,mx,my,x,yy,126,settingsText("peer.retry"),ready,()->{if(running)com.micaftic.morpher.client.peer.ClientPeerRuntime.retrySharing();else com.micaftic.morpher.client.peer.ClientPeerRuntime.enableAutomatic();});networkAction(g,mx,my,x+134,yy,126,settingsText("peer.copy_diagnostics"),true,()->minecraft.keyboardHandler.setClipboard(com.micaftic.morpher.client.peer.ClientPeerRuntime.diagnostics()));networkAction(g,mx,my,x+268,yy,146,settingsText("peer.section.connection"),true,()->selectPeerSection(PeerSettingsSection.CONNECTION));networkAction(g,mx,my,x,yy+42,126,settingsText("peer.leave"),running,com.micaftic.morpher.client.peer.ClientPeerRuntime::leave);return;
         }
         if(peerSettingsSection==PeerSettingsSection.SHARING){
             boolean shared=com.micaftic.morpher.client.peer.ClientPeerRuntime.sharing();renderSettingRow(g,mx,my,x,top,w,new SettingRow(ModelPanelState.SettingGroup.GENERAL,"gui.sparkle_morpher.settings.peer.sharing",shared,"",()->com.micaftic.morpher.client.peer.ClientPeerRuntime.setSharing(!shared),null,null,null,null));networkLine(g,settingsText("peer.sharing_help"),x+10,top+30,w-20);
-            String[] labels={"连接状态","模型接收"};Component[] values={com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),com.micaftic.morpher.client.peer.ClientPeerRuntime.receiveStatusComponent()};for(int i=0;i<2;i++){int yy=top+58+i*47;drawText(g,Component.literal(labels[i]),x+10,yy+12);roundedSurface(g,x+w-160,yy+7,150,22,3,0x0CFFFFFF,0x22FFFFFF);drawCentered(g,Component.literal(trim(values[i].getString(),138)),x+w-85,yy+14,MUTED);}
+            String[] labels={auditString("hardcoded_003"),auditString("hardcoded_020")};Component[] values={com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),com.micaftic.morpher.client.peer.ClientPeerRuntime.receiveStatusComponent()};for(int i=0;i<2;i++){int yy=top+58+i*47;drawText(g,Component.literal(labels[i]),x+10,yy+12);roundedSurface(g,x+w-160,yy+7,150,22,3,0x0CFFFFFF,0x22FFFFFF);drawCentered(g,Component.literal(trim(values[i].getString(),138)),x+w-85,yy+14,MUTED);}
             networkAction(g,mx,my,x,top+184,138,settingsText("peer.retry"),ready&&running,com.micaftic.morpher.client.peer.ClientPeerRuntime::retrySharing);return;
         }
         if(peerSettingsSection==PeerSettingsSection.PUBLIC||peerSettingsSection==PeerSettingsSection.TUNNEL){
@@ -2051,7 +2061,7 @@ public class ModernPlayerModelScreen extends Screen {
             networkLine(g,settingsText("peer.listeners"),x,top+48,w);renderReferenceField(g,mx,my,pt,peerListenerBox,x,top+69,w,24);peerListenerBox.visible=true;
             networkLine(g,settingsText("peer.entrances"),x,top+124,w);renderReferenceField(g,mx,my,pt,peerEntranceBox,x,top+145,w,24);peerEntranceBox.visible=true;
             networkLine(g,settingsText("peer.mapping_help"),x,top+178,w);
-            networkAction(g,mx,my,x,top+208,108,settingsText("peer.host"),ready&&!running,()->com.micaftic.morpher.client.peer.ClientPeerRuntime.hostEntrances(peerListenerDraft,peerEntranceDraft));networkAction(g,mx,my,x+116,top+208,108,settingsText("peer.copy"),invite!=null,()->minecraft.keyboardHandler.setClipboard(invite));networkAction(g,mx,my,x,top+248,180,Component.literal("访客加入 / 探测 ›"),true,()->selectPeerSection(PeerSettingsSection.PROBE));networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),x,top+288,w);return;
+            networkAction(g,mx,my,x,top+208,108,settingsText("peer.host"),ready&&!running,()->com.micaftic.morpher.client.peer.ClientPeerRuntime.hostEntrances(peerListenerDraft,peerEntranceDraft));networkAction(g,mx,my,x+116,top+208,108,settingsText("peer.copy"),invite!=null,()->minecraft.keyboardHandler.setClipboard(invite));networkAction(g,mx,my,x,top+248,180,Component.literal(auditString("hardcoded_022")),true,()->selectPeerSection(PeerSettingsSection.PROBE));networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),x,top+288,w);return;
         }
     }
 
@@ -2082,7 +2092,7 @@ public class ModernPlayerModelScreen extends Screen {
         var columns=settingsColumns();var page=settingsPanel().selectedPage();
         if(page.kind()==SettingsPageRegistry.Kind.CLOUD){renderCloudAccountPanel(g,mx,my,layout.contentLeft,layout.top,layout.contentWidth,layout.height,partialTick);return;}
         if(page.kind()==SettingsPageRegistry.Kind.PEER_LAN&&(peerSettingsSection==PeerSettingsSection.CONNECTION||peerSettingsSection==PeerSettingsSection.PROBE)){
-            pageHeader(g,mx,my,Component.literal(peerSettingsSection==PeerSettingsSection.PROBE?"访客加入 / 探测":"高级：局域网手动连接"),Component.literal("P2P / 高级连接"),()->selectPeerSection(PeerSettingsSection.ROOM));
+            pageHeader(g,mx,my,Component.literal(peerSettingsSection==PeerSettingsSection.PROBE?auditString("hardcoded_023"):auditString("hardcoded_024")),Component.literal(auditString("hardcoded_025")),()->selectPeerSection(PeerSettingsSection.ROOM));
             renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+42,layout.contentWidth,height-layout.top-12,offset->renderPeerConnectionReference(g,mx,my+offset,partialTick));return;
         }
         drawTitle(g,Component.translatable("gui.sparkle_morpher.model_panel.settings"),columns.navigationX(),layout.top+12);
@@ -2167,8 +2177,8 @@ public class ModernPlayerModelScreen extends Screen {
     }
 
     private void renderNetworkSettings(GuiGraphicsExtractor g,int mx,int my,float pt,SettingsPageRegistry.Page page,int x,int top,int w,int bottom){
-        String[] labels={"资源来源","下载队列","本地模型目录"};Runnable[] actions={this::openSitesPanel,()->{STATE.activeTab=ModelPanelState.Tab.RESOURCE;resourceRoute=ResourceRoute.QUEUE;init();},this::openModelFolder};
-        for(int i=0;i<3;i++){int yy=top+i*47;drawText(g,Component.literal(labels[i]),x+10,yy+12);renderTextButton(g,mx,my,x+w-160,yy+7,150,22,Component.literal(i==1?"查看任务 ›":"打开 ›"),actions[i]);}
+        String[] labels={auditString("hardcoded_026"),resourceString("queue.title"),auditString("hardcoded_027")};Runnable[] actions={this::openSitesPanel,()->{STATE.activeTab=ModelPanelState.Tab.RESOURCE;resourceRoute=ResourceRoute.QUEUE;init();},this::openModelFolder};
+        for(int i=0;i<3;i++){int yy=top+i*47;drawText(g,Component.literal(labels[i]),x+10,yy+12);renderTextButton(g,mx,my,x+w-160,yy+7,150,22,Component.literal(i==1?auditString("hardcoded_028"):auditString("hardcoded_007")),actions[i]);}
     }
 
     private void renderSettingRow(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,SettingRow row){
@@ -2182,7 +2192,7 @@ public class ModernPlayerModelScreen extends Screen {
         if(row.booleanValue()!=null){int bx=x+w-34,sy=y+(h-12)/2;boolean enabled=Boolean.TRUE.equals(row.booleanValue());roundedFill(g,bx,sy,26,12,6,enabled?RED:0x66444444);roundedFill(g,bx+(enabled?15:2),sy+1,9,10,4,TEXT);hit(x,y,w,h-1,label,row.action());return;}
         if(row.action()!=null&&row.decrement()==null&&row.increment()==null){renderTextButton(g,mx,my,cx,cy,controlW,bh,Component.literal(trim(row.valueText(),controlW-12)),row.action());return;}
         roundedSurface(g,cx,cy,controlW,bh,4,inside(mx,my,cx,cy,controlW,bh)?0x18FFFFFF:0x0CFFFFFF,0x22FFFFFF);drawCentered(g,Component.literal(row.valueText()),cx+controlW/2,ty,MUTED);
-        if(row.decrement()!=null)hit(cx,cy,controlW/2,bh,label.copy().append(" · 左侧减少"),row.decrement());if(row.increment()!=null)hit(cx+controlW/2,cy,controlW-controlW/2,bh,label.copy().append(" · 右侧增加"),row.increment());
+        if(row.decrement()!=null)hit(cx,cy,controlW/2,bh,label.copy().append(auditString("hardcoded_029")),row.decrement());if(row.increment()!=null)hit(cx+controlW/2,cy,controlW-controlW/2,bh,label.copy().append(auditString("hardcoded_030")),row.increment());
     }
 
     private void renderSegmentedOption(GuiGraphicsExtractor g,int x,int y,int w,int h,Component label,boolean selected,Runnable action){
@@ -2515,12 +2525,12 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderSitesPanel(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float pt){
         if(sourceEditMode){renderSourceEditReference(g,mx,my,pt);return;}
-        pageHeader(g,mx,my,Component.literal("来源管理"),Component.literal("已配置来源决定资源目录内容"),()->{closeCloudForm();init();});
+        pageHeader(g,mx,my,Component.literal(resourceString("tool.sources")),Component.literal(resourceString("sources.description")),()->{closeCloudForm();init();});
         int pad=8,left=x+pad,right=x+w-pad,inner=right-left,bh=uiButtonHeight(),toolbarY=y+42;
-        resourceButton(g,mx,my,new ResourceStationLayout.Rect(right-bh,toolbarY,bh,bh),IconGlyph.PLUS,Component.literal("添加来源"),true,false,()->{sourceNameDraft="";STATE.siteEditText="";sourceEditMode=true;init();});
+        resourceButton(g,mx,my,new ResourceStationLayout.Rect(right-bh,toolbarY,bh,bh),IconGlyph.PLUS,Component.literal(resourceString("sources.add")),true,false,()->{sourceNameDraft="";STATE.siteEditText="";sourceEditMode=true;init();});
         int hy=toolbarY+bh+12,rowH=width<560?38:width<800?46:58,footer=this.height-this.layout.top-bh-10;
         int addressX=left+inner/4,actionsX=right-2*bh-6;
-        roundedFill(g,left,hy,inner,22,4,0x0CFFFFFF);drawMuted(g,Component.literal("来源名称"),left+8,hy+7);drawMuted(g,Component.literal("地址"),addressX,hy+7);
+        roundedFill(g,left,hy,inner,22,4,0x0CFFFFFF);drawMuted(g,Component.literal(resourceString("sources.name")),left+8,hy+7);drawMuted(g,Component.literal(resourceString("sources.address")),addressX,hy+7);
         var urls=this.controller.siteUrls();int visible=Math.max(1,(footer-hy-34)/rowH);STATE.sitesScroll=clamp(STATE.sitesScroll,0,Math.max(0,urls.size()-visible));
         for(int i=STATE.sitesScroll;i<Math.min(urls.size(),STATE.sitesScroll+visible);i++){
             String url=urls.get(i);int yy=hy+26+(i-STATE.sitesScroll)*rowH;boolean selected=url.equals(this.controller.selectedSite());
@@ -2530,10 +2540,10 @@ public class ModernPlayerModelScreen extends Screen {
             drawMuted(g,Component.literal(trim(url,actionsX-addressX-12)),addressX,ty);
             hit(left,yy,inner,rowH-4,Component.literal(url),()->selectSite(url));
             int ay=yy+(rowH-4-bh)/2;
-            toolbarButton(g,mx,my,actionsX,ay,IconGlyph.EDIT,Component.literal("编辑来源"),false,()->{selectSite(url);sourceNameDraft=ResourceSourceLabels.get(url);sourceEditMode=true;init();});
-            toolbarButton(g,mx,my,right-bh,ay,IconGlyph.DELETE,Component.literal("删除来源"),false,()->{selectSite(url);deleteSite();});
+            toolbarButton(g,mx,my,actionsX,ay,IconGlyph.EDIT,Component.literal(resourceString("sources.edit")),false,()->{selectSite(url);sourceNameDraft=ResourceSourceLabels.get(url);sourceEditMode=true;init();});
+            toolbarButton(g,mx,my,right-bh,ay,IconGlyph.DELETE,Component.literal(resourceString("sources.delete")),false,()->{selectSite(url);deleteSite();});
         }
-        resourceButton(g,mx,my,new ResourceStationLayout.Rect(left,footer,bh,bh),IconGlyph.SETTINGS,Component.literal("资源与下载配置"),true,false,()->{closeCloudForm();selectSettingsPage("resources");});
+        resourceButton(g,mx,my,new ResourceStationLayout.Rect(left,footer,bh,bh),IconGlyph.SETTINGS,Component.literal(resourceString("tool.settings")),true,false,()->{closeCloudForm();selectSettingsPage("resources");});
     }
 
     private void renderCategoryPanel(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h,float pt){
@@ -2541,13 +2551,13 @@ public class ModernPlayerModelScreen extends Screen {
 
         pageHeader(g,mx,my,Component.translatable("gui.sparkle_morpher.model_panel.categories"),Component.translatable("gui.sparkle_morpher.model_panel.name_target"),()->{closeCloudForm();init();});
         renderReferenceField(g,mx,my,pt,categoryEditBox,x,70,Math.min(260,w-40),22);toolbarButton(g,mx,my,x+w-22,70,IconGlyph.PLUS,Component.translatable("gui.sparkle_morpher.model_panel.create"),false,()->setStatus(this.controller.createCategory(categoryEditBox==null?"":categoryEditBox.getValue())));
-        int hy=104;com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,hy,w,24,4,0x0CFFFFFF);drawMuted(g,Component.literal("目录"),x+10,hy+8);drawMuted(g,Component.literal("模型数量"),x+(int)(w*.3),hy+8);drawMuted(g,Component.literal("路径"),x+(int)(w*.51),hy+8);
+        int hy=104;com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,hy,w,24,4,0x0CFFFFFF);drawMuted(g,Component.literal(resourceString("sources.directory")),x+10,hy+8);drawMuted(g,Component.literal(resourceString("sources.model_count")),x+(int)(w*.3),hy+8);drawMuted(g,Component.literal(resourceString("sources.path")),x+(int)(w*.51),hy+8);
         var categories=this.controller.listCategories();
         var ids=this.controller.availableModelIds();
         for(int i=0;i<categories.size();i++){String category=categories.get(i);int yy=hy+24+i*44;boolean selected=category.equals(STATE.categoryEditText);long count=ids.stream().filter(id->id.startsWith(category+"/")).count();
             if(selected){com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x+2,yy+2,w-4,38,4,0x16FFFFFF);com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x+4,yy+10,2,22,1,RED);}drawText(g,Component.literal(trim(category,w/3-20)),x+10,yy+16);drawMuted(g,Component.literal(Long.toString(count)),x+(int)(w*.3),yy+16);drawMuted(g,Component.literal(trim("custom / "+category,w/2-10)),x+(int)(w*.51),yy+16);hit(x,yy,w,42,Component.literal(category),()->{STATE.categoryEditText=category;if(categoryEditBox!=null)categoryEditBox.setValue(category);});
         }
-        int by=Math.max(this.height-this.layout.top-34,hy+32+categories.size()*44);drawMuted(g,Component.literal(trim("移动到："+STATE.categoryEditText,w-220)),x,by+7);renderTextButton(g,mx,my,x+w-184,by,76,22,Component.translatable("gui.cancel"),()->{closeCloudForm();init();});renderPrimaryButton(g,mx,my,x+w-100,by,100,22,Component.translatable("gui.sparkle_morpher.model_panel.move"),()->moveSelectionToCategory(STATE.categoryEditText));
+        int by=Math.max(this.height-this.layout.top-34,hy+32+categories.size()*44);drawMuted(g,Component.literal(trim(auditString("hardcoded_031")+STATE.categoryEditText,w-220)),x,by+7);renderTextButton(g,mx,my,x+w-184,by,76,22,Component.translatable("gui.cancel"),()->{closeCloudForm();init();});renderPrimaryButton(g,mx,my,x+w-100,by,100,22,Component.translatable("gui.sparkle_morpher.model_panel.move"),()->moveSelectionToCategory(STATE.categoryEditText));
     }
 
     private void renderImportPanel(GuiGraphicsExtractor g,int mx,int my,int x,int y,int w,int h){
@@ -2555,16 +2565,16 @@ public class ModernPlayerModelScreen extends Screen {
         renderSettingsViewport(g,mx,my,x,y+42,w,height-layout.top-38,offset->{
             int top=y+48,mouseY=my+offset,heroH=height<300?76:138;
             roundedSurface(g,x,top,w,heroH,4,0x08FFFFFF,0x1CFFFFFF);
-            drawTitle(g,Component.literal("选择模型文件"),x+12,top+10);
+            drawTitle(g,Component.literal(auditString("hardcoded_032")),x+12,top+10);
             renderPrimaryButton(g,mx,mouseY,x+12,top+heroH-30,Math.min(110,w-48),uiButtonHeight(),Component.translatable("gui.sparkle_morpher.import.choose_file"),this::openFilePicker);
             toolbarButton(g,mx,mouseY,x+Math.min(130,w-30),top+heroH-30,IconGlyph.FOLDER,Component.translatable("gui.sparkle_morpher.open_model_folder.open"),false,this::openModelFolder);
             int rowTop=top+heroH+12,rowH=height<300?40:47,buttonW=Math.max(60,Math.min(120,w/3));
-            String[] labels={"本地模型文件夹","本地模型扫描","当前导入任务"};
-            String[] details={com.micaftic.morpher.core.storage.ModelStoragePaths.custom().toString(),"重新扫描文件夹中的模型",this.controller.localImportInProgress()?"正在导入":"当前没有进行中的导入"};
+            String[] labels={auditString("hardcoded_033"),auditString("hardcoded_034"),auditString("hardcoded_035")};
+            String[] details={com.micaftic.morpher.core.storage.ModelStoragePaths.custom().toString(),auditString("hardcoded_036"),this.controller.localImportInProgress()?resourceString("queue.state.importing"):auditString("hardcoded_037")};
             Runnable[] actions={this::openModelFolder,()->this.controller.reloadLocalModels(this::setStatus),this::openFilePicker};
-            for(int i=0;i<3;i++){int yy=rowTop+i*rowH;drawText(g,Component.literal(trim(labels[i],w-buttonW-22)),x+8,yy+3);drawMuted(g,Component.literal(trim(details[i],w-buttonW-22)),x+8,yy+17);renderTextButton(g,mx,mouseY,x+w-buttonW,yy+4,buttonW,uiButtonHeight(),Component.literal(i==0?"打开目录 ›":i==1?"重新扫描":"选择文件…"),actions[i]);}
+            for(int i=0;i<3;i++){int yy=rowTop+i*rowH;drawText(g,Component.literal(trim(labels[i],w-buttonW-22)),x+8,yy+3);drawMuted(g,Component.literal(trim(details[i],w-buttonW-22)),x+8,yy+17);renderTextButton(g,mx,mouseY,x+w-buttonW,yy+4,buttonW,uiButtonHeight(),Component.literal(i==0?auditString("hardcoded_038"):i==1?auditString("hardcoded_039"):auditString("hardcoded_040")),actions[i]);}
         });
-        renderTextButton(g,mx,my,x+w-Math.min(130,w),height-layout.top-uiButtonHeight()-8,Math.min(130,w),uiButtonHeight(),Component.literal("Cloud 上传 ›"),this::openCloudUpload);
+        renderTextButton(g,mx,my,x+w-Math.min(130,w),height-layout.top-uiButtonHeight()-8,Math.min(130,w),uiButtonHeight(),Component.literal(auditString("hardcoded_041")),this::openCloudUpload);
     }
 
     private void renderFooter(GuiGraphicsExtractor g) {
@@ -2578,8 +2588,8 @@ public class ModernPlayerModelScreen extends Screen {
         fill(g, this.layout.left, this.layout.footerTop, this.layout.width, 1, 0x55303030);
         Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatus() : this.status;
         if (this.modelSelectionTarget == null && STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
-            String cloudSync = com.micaftic.morpher.cloud.client.CloudPlayerModelSync.status();
-            if (line.getString().isBlank() || cloudSync.contains("失败")) line = Component.literal(cloudSync);
+            Component cloudSync = com.micaftic.morpher.cloud.client.CloudPlayerModelSync.status();
+            if (line.getString().isBlank() || com.micaftic.morpher.cloud.client.CloudPlayerModelSync.statusFailed()) line = cloudSync;
         }
         ChatFormatting color = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatusColor() : this.statusColor;
         if (this.modelSelectionTarget != null) {
@@ -3022,7 +3032,7 @@ public class ModernPlayerModelScreen extends Screen {
     /** §24.7：转发到 Service（保留本方法名，行为不变）。 */
     private void deleteSelectedModels(){
         List<String> models=List.copyOf(this.selectedModelIds.isEmpty()&&!STATE.selectedModelId.isBlank()?List.of(STATE.selectedModelId):this.selectedModelIds);if(models.isEmpty())return;
-        confirmationAction=Component.translatable("gui.sparkle_morpher.model_panel.delete");confirmationTitle=Component.literal("删除 "+models.size()+" 个本地模型？");confirmationBody=Component.literal("仅删除所选本地模型。此操作无法撤销。\n"+String.join("\n",models.stream().limit(4).toList()));
+        confirmationAction=Component.translatable("gui.sparkle_morpher.model_panel.delete");confirmationTitle=auditText("delete_title",models.size());confirmationBody=auditText("delete_body",String.join("\n",models.stream().limit(4).toList()));
         pendingConfirmation=()->{setStatus(this.controller.deleteModels(models));this.selectedModelIds.clear();STATE.selectedModelId="";STATE.selectedTextureId="";STATE.multiSelectMode=false;this.controller.reloadLocalModels(this::setStatus);};
     }
 
@@ -3169,7 +3179,7 @@ public class ModernPlayerModelScreen extends Screen {
                         java.util.UUID.fromString(this.stateKeyValue.substring(5)));
             } catch (IllegalArgumentException invalidTarget) { rouletteTarget = null; }
             if (rouletteTarget == null) {
-                setStatus(Component.literal("目标假人尚未加载，无法打开动作轮盘。"), ChatFormatting.RED);
+                setStatus(Component.literal(auditString("hardcoded_046")), ChatFormatting.RED);
                 return;
             }
         } else if (this.modelSelectionTarget != null) {
@@ -4184,7 +4194,7 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderResponsiveToolbar(GuiGraphicsExtractor g,int mx,int my){
         var row=responsiveToolbar();
         for(int i=0;i<row.visible();i++){var rect=row.button(i);var tool=responsiveTools.get(i);toolbarButton(g,mx,my,rect.x(),rect.y(),tool.icon(),tool.label(),tool.selected(),tool.action());}
-        if(row.overflow()){var rect=row.button(row.visible());toolbarButton(g,mx,my,rect.x(),rect.y(),IconGlyph.MORE,Component.literal("更多工具"),toolbarOverflowOpen,()->{toolbarOverflowOpen=!toolbarOverflowOpen;toolbarOverflowScroll=0;compactPreviewOpen=false;textureMenuOpen=false;modelMenuOpen=false;setFocused(null);});}
+        if(row.overflow()){var rect=row.button(row.visible());toolbarButton(g,mx,my,rect.x(),rect.y(),IconGlyph.MORE,Component.literal(auditString("hardcoded_047")),toolbarOverflowOpen,()->{toolbarOverflowOpen=!toolbarOverflowOpen;toolbarOverflowScroll=0;compactPreviewOpen=false;textureMenuOpen=false;modelMenuOpen=false;setFocused(null);});}
         else toolbarOverflowOpen=false;
     }
     private void renderResponsiveOverflow(GuiGraphicsExtractor g,int mx,int my){
@@ -4312,9 +4322,9 @@ public class ModernPlayerModelScreen extends Screen {
         roundedSurface(g,x,y,w,summaryH,4,0x0AFFFFFF,0x22FFFFFF);
         drawText(g,Component.translatable("gui.sparkle_morpher.ui.frosted"),x+9,y+7);
         if(!compact)drawMuted(g,Component.translatable("gui.sparkle_morpher.ui.neutral_red"),x+9,y+summaryH-13);
-        String selected=appearance.font.equals("minecraft:default")?"Minecraft 原生":SystemFontCatalog.family(appearance.font).orElse(appearance.font);
+        String selected=appearance.font.equals("minecraft:default")?auditString("hardcoded_048"):SystemFontCatalog.family(appearance.font).orElse(appearance.font);
         String[] keys={"font","game_scale","blur","opacity"};
-        String[] values={selected,"跟随游戏",appearance.blur==0?"关闭":Integer.toString(appearance.blur),(100-appearance.opacity)+"%"};
+        String[] values={selected,auditString("hardcoded_049"),appearance.blur==0?auditString("hardcoded_050"):Integer.toString(appearance.blur),(100-appearance.opacity)+"%"};
         int rowY=y+summaryH+8,rh=Math.min(compact?26:30,Math.max(26,(bottom-rowY-20)/4));
         int buttonW=Math.min(compact?110:this.width<800?130:180,w/2),bx=x+w-buttonW-8,bh=uiButtonHeight();
         for(int i=0;i<keys.length;i++){
@@ -4330,7 +4340,7 @@ public class ModernPlayerModelScreen extends Screen {
         }
         if(rowY+4*rh+font.lineHeight<=bottom)drawText(g,Component.translatable("gui.sparkle_morpher.ui.font_preview"),x+9,rowY+4*rh+4);
         if(fontMenuOpen){
-            var choices=new ArrayList<SystemFontCatalog.Entry>();choices.add(new SystemFontCatalog.Entry("minecraft:default","Minecraft 原生"));
+            var choices=new ArrayList<SystemFontCatalog.Entry>();choices.add(new SystemFontCatalog.Entry("minecraft:default",auditString("hardcoded_048")));
             Minecraft.getInstance().getResourceManager().listResources("font",id->id.getPath().endsWith(".json")).keySet().stream()
                     .filter(id->!id.getNamespace().equals("minecraft")||id.getPath().equals("font/uniform.json"))
                     .map(id->id.getNamespace()+":"+id.getPath().substring(5,id.getPath().length()-5)).sorted()
@@ -4367,7 +4377,7 @@ public class ModernPlayerModelScreen extends Screen {
         if(cloudScopeIdBox!=null)cloudScopeIdBox.visible=false;if(cloudScopeNameBox!=null)cloudScopeNameBox.visible=false;if(cloudWorldEpochBox!=null)cloudWorldEpochBox.visible=false;
         toolbarButton(g,mx,my,x+w-2*bh-12,toolbarY,IconGlyph.REFRESH,cloudText("refresh_scopes"),false,this::refreshCloudScopes);
         toolbarButton(g,mx,my,x+w-bh-8,toolbarY,IconGlyph.PLUS,cloudText("create_scope"),false,()->scopeCreateForm=true);
-        int header=toolbarY+bh+10;fill(g,x,header,w,22,0x0CFFFFFF);drawMuted(g,cloudText("scope_name"),x+8,header+7);drawMuted(g,cloudText("scope_id"),x+w/3,header+7);drawMuted(g,Component.literal("访问权限"),x+w*2/3,header+7);
+        int header=toolbarY+bh+10;fill(g,x,header,w,22,0x0CFFFFFF);drawMuted(g,cloudText("scope_name"),x+8,header+7);drawMuted(g,cloudText("scope_id"),x+w/3,header+7);drawMuted(g,Component.literal(auditString("hardcoded_051")),x+w*2/3,header+7);
         var scopes=CloudManagementScreen.management().snapshot().scopes();var selected=CloudManagementScreen.management().snapshot().selectedScope();int yy=header+26;
         for(var scope:scopes){
             boolean chosen=selected!=null&&selected.scopeId().equals(scope.scopeId());
@@ -4375,7 +4385,7 @@ public class ModernPlayerModelScreen extends Screen {
             int ty=UiElementLayout.centeredY(yy,rh-4,font.lineHeight);drawText(g,Component.literal(trim(scope.name(),w/3-18)),x+10,ty);drawMuted(g,Component.literal(trim(scope.scopeId(),w/3-10)),x+w/3,ty);drawMuted(g,Component.literal("Cloud"),x+w*2/3,ty);
             hit(x+4,yy,w-8,rh-4,Component.literal(scope.name()),()->selectCloudScope(scope.scopeId()));yy+=rh;
         }
-        yy+=8;String[] labels={"当前范围","角色与认领","模型与权限"};Runnable[] actions={this::refreshCloudScopes,()->openCloudIdentityPage(CloudAccountPage.CLAIM),()->InputUtil.setScreen(new CloudTargetManagementScreen(this,CloudManagementScreen.management()))};
+        yy+=8;String[] labels={auditString("hardcoded_052"),auditString("hardcoded_053"),auditString("hardcoded_054")};Runnable[] actions={this::refreshCloudScopes,()->openCloudIdentityPage(CloudAccountPage.CLAIM),()->InputUtil.setScreen(new CloudTargetManagementScreen(this,CloudManagementScreen.management()))};
         for(int i=0;i<3;i++){drawText(g,Component.literal(labels[i]),x+8,UiElementLayout.centeredY(yy,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-158,yy+4,150,bh,cloudText(i==0?"refresh_scopes":i==1?"identity_panel.title":"targets_acl"),actions[i]);yy+=rh;}
         renderTextButton(g,mx,my,x+w-192,yy+8,76,bh,Component.translatable("gui.cancel"),this::backFromCloud);
         renderPrimaryButton(g,mx,my,x+w-108,yy+8,100,bh,cloudText("join_selected"),()->{if(selected!=null){cloudScopeIdBox.setValue(selected.scopeId());joinCloudScope();}});
@@ -4389,9 +4399,9 @@ public class ModernPlayerModelScreen extends Screen {
         cloudPanelStatus=cloudText("identity_panel."+(flow.busy()?"working":flow.message()));
         if(cloudAccountPage==CloudAccountPage.IDENTITY){
             renderReferenceTab(g,mx,my,x,70,92,22,cloudText("identity_panel.identities"),!identityProvidersTab,()->identityProvidersTab=false);
-            renderReferenceTab(g,mx,my,x+98,70,92,22,Component.literal("世界角色"),identityProvidersTab,()->identityProvidersTab=true);
+            renderReferenceTab(g,mx,my,x+98,70,92,22,Component.literal(auditString("hardcoded_055")),identityProvidersTab,()->identityProvidersTab=true);
             toolbarButton(g,mx,my,x+w-22,70,IconGlyph.REFRESH,cloudText("identity_panel.refresh"),false,flow::refresh);
-            com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,108,w,24,4,0x0CFFFFFF);drawMuted(g,Component.literal("身份"),x+10,116);drawMuted(g,Component.literal("认证提供方"),x+w/2,116);drawMuted(g,Component.literal("状态"),x+w*4/5,116);
+            com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,108,w,24,4,0x0CFFFFFF);drawMuted(g,Component.literal(auditString("hardcoded_056")),x+10,116);drawMuted(g,Component.literal(auditString("hardcoded_057")),x+w/2,116);drawMuted(g,Component.literal(auditString("hardcoded_058")),x+w*4/5,116);
             int yy=132;
             for(var identity:flow.catalog().identities()){
                 boolean chosen=identity.equals(flow.selectedIdentity());
@@ -4405,7 +4415,7 @@ public class ModernPlayerModelScreen extends Screen {
                 var provider=flow.catalog().providers().stream().filter(p->p.providerId().equals(flow.providerId())).findFirst().orElse(flow.catalog().providers().getFirst());
                 int providerW=Math.max(80,Math.min(300,w-170));
                 renderTextButton(g,mx,my,x+10,ry+103,providerW,uiButtonHeight(),Component.literal(provider.displayName()),flow::nextProvider);
-                networkAction(g,mx,my,x+providerW+18,ry+103,Math.min(140,w-providerW-28),Component.literal("绑定当前游戏身份"),!cloudFormBusy&&!flow.busy(),()->bindCloudIdentity(provider.providerId()));
+                networkAction(g,mx,my,x+providerW+18,ry+103,Math.min(140,w-providerW-28),Component.literal(auditString("hardcoded_059")),!cloudFormBusy&&!flow.busy(),()->bindCloudIdentity(provider.providerId()));
             }
             return;
         }
@@ -4417,10 +4427,10 @@ public class ModernPlayerModelScreen extends Screen {
             drawText(g,cloudText("identity_panel.code_help"),dx,306);renderReferenceField(g,mx,my,pt,cloudIdentityCodeBox,dx,330,dw,24);
             identityAction(g,mx,my,dx+dw-110,382,110,"redeem",flow.canRedeem(),flow::redeem);return;
         }
-        renderReferenceTab(g,mx,my,x,70,92,22,Component.literal("待审批"),!identityProvidersTab,()->identityProvidersTab=false);
-        renderReferenceTab(g,mx,my,x+98,70,92,22,Component.literal("邀请码"),identityProvidersTab,()->identityProvidersTab=true);
+        renderReferenceTab(g,mx,my,x,70,92,22,Component.literal(auditString("hardcoded_060")),!identityProvidersTab,()->identityProvidersTab=false);
+        renderReferenceTab(g,mx,my,x+98,70,92,22,Component.literal(auditString("hardcoded_061")),identityProvidersTab,()->identityProvidersTab=true);
         if(!flow.canManage()){identityLine(g,"permission_denied",x+16,120,w-32);return;}
-        com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,108,w,24,4,0x0CFFFFFF);drawMuted(g,Component.literal("申请人"),x+10,116);drawMuted(g,Component.literal("世界角色"),x+w/3,116);drawMuted(g,Component.literal("状态"),x+w*2/3,116);
+        com.micaftic.morpher.core.gui.RoulettePanelStyle.roundedFill(g,x,108,w,24,4,0x0CFFFFFF);drawMuted(g,Component.literal(auditString("hardcoded_062")),x+10,116);drawMuted(g,Component.literal(auditString("hardcoded_055")),x+w/3,116);drawMuted(g,Component.literal(auditString("hardcoded_058")),x+w*2/3,116);
         int yy=132;for(var binding:flow.pending()){
             var current=binding;String name=binding.identityDisplayName()==null?binding.entityUuid():binding.identityDisplayName();
             drawText(g,Component.literal(trim(name,w/3-18)),x+10,yy+15);drawText(g,Component.literal(trim(flow.targetName(binding.targetId()),w/3-18)),x+w/3,yy+15);drawMuted(g,Component.literal(binding.status()),x+w*2/3,yy+15);
@@ -4441,7 +4451,7 @@ public class ModernPlayerModelScreen extends Screen {
         var entry = selectedResource();
         drawText(g, Component.translatable("gui.sparkle_morpher.ui.preview"), x + 7, y + 7);
         if (entry == null) {
-            drawMuted(g, Component.literal(trim("选择卡片以预览", w - 14)), x + 7, y + 30);
+            drawMuted(g, Component.literal(trim(resourceString("details.select_hint"), w - 14)), x + 7, y + 30);
             return;
         }
         int py = y + 24, ph = Math.max(12, h - 90), pw = Math.max(1, w - 12);
@@ -4461,11 +4471,11 @@ public class ModernPlayerModelScreen extends Screen {
         drawMuted(g, Component.literal(trim(entry.author() + " · " + this.controller.formatBytes(entry.size()), w - 14)), x + 7, py + ph + 19);
         int by = y + h - 27;
         resourceButton(g, mx, my, new ResourceStationLayout.Rect(x + 6, by, 22, 22), IconGlyph.DOWNLOAD,
-                Component.literal(this.controller.isQueued(entry) ? "已在下载队列" : "下载此模型"), !this.controller.isQueued(entry), true, () -> enqueueResource(entry));
+                Component.literal(this.controller.isQueued(entry) ? resourceString("details.queued") : resourceString("details.download")), !this.controller.isQueued(entry), true, () -> enqueueResource(entry));
         resourceButton(g, mx, my, new ResourceStationLayout.Rect(x + 31, by, 22, 22), IconGlyph.RELOAD,
-                Component.literal("重试 3D 预览"), true, false, () -> this.controller.previewVisibleResources(List.of(entry)));
+                Component.literal(resourceString("card.retry_preview")), true, false, () -> this.controller.previewVisibleResources(List.of(entry)));
         if (!popup) resourceButton(g, mx, my, new ResourceStationLayout.Rect(x + 56, by, 22, 22), IconGlyph.MODEL,
-                Component.literal("弹层预览"), true, false, () -> { compactPreviewOpen = true; setFocused(null); });
+                Component.literal(resourceString("details.popup")), true, false, () -> { compactPreviewOpen = true; setFocused(null); });
     }
 
     private void renderResourcePreviewPopup(GuiGraphicsExtractor g, int mx, int my, float pt) {
@@ -4482,15 +4492,15 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderDownloadQueueReference(GuiGraphicsExtractor g, int mx, int my) {
         var tasks = this.controller.downloadTasks();
         int x = layout.contentLeft, w = layout.contentWidth;
-        pageHeader(g, mx, my, Component.literal("下载队列"), Component.literal(tasks.size() + " 个任务"), () -> resourceRoute = ResourceRoute.CATALOG);
+        pageHeader(g, mx, my, Component.literal(resourceString("queue.title")), Component.literal(resourceString("queue.task_count", tasks.size())), () -> resourceRoute = ResourceRoute.CATALOG);
         var page = ResourceStationLayout.queue(x, layout.top, w, layout.footerTop);
         boolean cancellable = tasks.stream().anyMatch(task -> ResourceStationLayout.taskAction(task.state().name()) == ResourceStationLayout.TaskAction.CANCEL);
-        resourceButton(g, mx, my, page.actions().get(0), IconGlyph.CANCEL, Component.literal("取消全部下载"), cancellable, false, this.controller::cancelAllDownloads);
-        resourceButton(g, mx, my, page.actions().get(1), IconGlyph.CLEAR, Component.literal("清除已完成"), !tasks.isEmpty(), false, this.controller::clearFinishedDownloads);
+        resourceButton(g, mx, my, page.actions().get(0), IconGlyph.CANCEL, Component.literal(resourceString("queue.cancel_all")), cancellable, false, this.controller::cancelAllDownloads);
+        resourceButton(g, mx, my, page.actions().get(1), IconGlyph.CLEAR, Component.literal(resourceString("queue.clear_completed")), !tasks.isEmpty(), false, this.controller::clearFinishedDownloads);
         int rows = Math.max(1, page.rows()), pages = Math.max(1, (tasks.size() + rows - 1) / rows);
         resourceQueueScroll = clamp(resourceQueueScroll, 0, pages - 1);
         int start = resourceQueueScroll * rows, end = Math.min(tasks.size(), start + rows);
-        if (tasks.isEmpty()) drawMuted(g, Component.literal("暂无下载任务，请从资源目录勾选模型"), x + 8, page.list().y() + 12);
+        if (tasks.isEmpty()) drawMuted(g, Component.literal(resourceString("queue.empty")), x + 8, page.list().y() + 12);
         for (int i = start; i < end; i++) {
             var task = tasks.get(i);
             var row = page.row(i - start);
@@ -4501,15 +4511,15 @@ public class ModernPlayerModelScreen extends Screen {
             if (failed) hit(x, yy, w, row.height() - 3, task.message(), () -> { resourceFailure = task; resourceRoute = ResourceRoute.ERROR; });
             String title = task.name() + (task.byteLength() > 0 ? " · " + this.controller.formatBytes(task.byteLength()) : "");
             drawText(g, Component.literal(trim(title, actionX - x - 16)), x + 7, yy + 7);
-            String message = cancelled ? "已取消" : task.message().getString();
+            String message = cancelled ? resourceString("queue.state.cancelled") : task.message().getString();
             if (message.isBlank()) message = switch (task.state()) {
-                case QUEUED -> "等待下载";
-                case DOWNLOADING -> "正在下载";
-                case IMPORTING -> "正在导入";
-                case UPLOADING -> "正在上传";
-                case DONE -> "已完成";
-                case FAILED -> "下载失败";
-                case CANCELLED -> "已取消";
+                case QUEUED -> resourceString("queue.state.queued");
+                case DOWNLOADING -> resourceString("queue.state.downloading");
+                case IMPORTING -> resourceString("queue.state.importing");
+                case UPLOADING -> resourceString("queue.state.uploading");
+                case DONE -> resourceString("queue.state.done");
+                case FAILED -> resourceString("queue.state.failed");
+                case CANCELLED -> resourceString("queue.state.cancelled");
             };
             drawMuted(g, Component.literal(trim(message, actionX - x - 16)), x + 7, yy + 23);
             int progressW = Math.max(1, w - 14);
@@ -4518,7 +4528,7 @@ public class ModernPlayerModelScreen extends Screen {
                     failed ? RED : cancelled ? MUTED : 0xFFBDBDBD);
             if (failed) hit(x, yy, Math.max(1, actionX - x - 4), row.height() - 3, task.message(), () -> { resourceFailure = task; resourceRoute = ResourceRoute.ERROR; });
             var action = ResourceStationLayout.taskAction(task.state().name());
-            String label = switch (action) { case CANCEL -> "取消"; case RETRY -> "重试"; case OPEN -> "打开"; case NONE -> "上传中"; };
+            String label = switch (action) { case CANCEL -> resourceString("queue.action.cancel"); case RETRY -> resourceString("queue.action.retry"); case OPEN -> resourceString("queue.action.open"); case NONE -> resourceString("queue.action.uploading"); };
             resourceButton(g, mx, my, new ResourceStationLayout.Rect(actionX, yy + 9, actionW, 22),
                     switch (action) { case CANCEL -> IconGlyph.CANCEL; case RETRY -> IconGlyph.RELOAD; case OPEN -> IconGlyph.FOLDER; case NONE -> IconGlyph.CLOCK; }, Component.literal(label),
                     action != ResourceStationLayout.TaskAction.NONE, false, () -> {
@@ -4532,39 +4542,39 @@ public class ModernPlayerModelScreen extends Screen {
         }
         var footer = page.pagination();
         drawPagination(g, mx, my, footer.x(), footer.y(), footer.width(), (resourceQueueScroll + 1) + " / " + pages,
-                tasks.size() + " 个任务 · 点击失败行查看详情", resourceQueueScroll > 0, resourceQueueScroll < pages - 1,
+                resourceString("queue.footer", tasks.size()), resourceQueueScroll > 0, resourceQueueScroll < pages - 1,
                 () -> resourceQueueScroll = Math.max(0, resourceQueueScroll - 1),
                 () -> resourceQueueScroll = Math.min(pages - 1, resourceQueueScroll + 1));
     }
     private void renderDownloadErrorReference(GuiGraphicsExtractor g,int mx,int my){
-        if(!settingsDrawingBody){Component heading=Component.literal("下载失败详情");Runnable back=()->resourceRoute=ResourceRoute.QUEUE;pageHeader(g,mx,my,heading,Component.empty(),back);renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+40,layout.contentWidth,height-layout.top-12,offset->renderDownloadErrorReference(g,mx,my+offset));return;}
+        if(!settingsDrawingBody){Component heading=Component.literal(resourceString("error.title"));Runnable back=()->resourceRoute=ResourceRoute.QUEUE;pageHeader(g,mx,my,heading,Component.empty(),back);renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+40,layout.contentWidth,height-layout.top-12,offset->renderDownloadErrorReference(g,mx,my+offset));return;}
 
-        int x=this.layout.contentLeft,w=this.layout.contentWidth;pageHeader(g,mx,my,Component.literal("下载失败详情"),Component.literal(resourceFailure==null?"":resourceFailure.name()),()->resourceRoute=ResourceRoute.QUEUE);if(resourceFailure==null)return;
-        int fw=Math.min(530,w-32),fx=x+16;drawText(g,Component.literal("失败原因"),fx,70);roundedSurface(g,fx,87,fw,24,3,0x0CFFFFFF,0x20FFFFFF);drawText(g,Component.literal(trim(resourceFailure.message().getString(),fw-12)),fx+6,94);drawMuted(g,Component.literal("保留来源与任务信息，便于定位"),fx,132);drawText(g,Component.literal("来源"),fx,163);roundedSurface(g,fx,185,fw,24,3,0x0CFFFFFF,0x20FFFFFF);drawText(g,Component.literal(trim(resourceFailure.sourceUrl(),fw-12)),fx+6,192);
-        int by=this.height-this.layout.top-34;resourceButton(g,mx,my,new ResourceStationLayout.Rect(x+w-52,by,22,22),IconGlyph.BACK,Component.literal("返回下载队列"),true,false,()->resourceRoute=ResourceRoute.QUEUE);resourceButton(g,mx,my,new ResourceStationLayout.Rect(x+w-22,by,22,22),IconGlyph.RELOAD,Component.literal("重试下载"),true,false,()->{this.controller.retryDownload(resourceFailure);resourceRoute=ResourceRoute.QUEUE;});
+        int x=this.layout.contentLeft,w=this.layout.contentWidth;pageHeader(g,mx,my,Component.literal(resourceString("error.title")),Component.literal(resourceFailure==null?"":resourceFailure.name()),()->resourceRoute=ResourceRoute.QUEUE);if(resourceFailure==null)return;
+        int fw=Math.min(530,w-32),fx=x+16;drawText(g,Component.literal(resourceString("error.reason")),fx,70);roundedSurface(g,fx,87,fw,24,3,0x0CFFFFFF,0x20FFFFFF);drawText(g,Component.literal(trim(resourceFailure.message().getString(),fw-12)),fx+6,94);drawMuted(g,Component.literal(resourceString("error.help")),fx,132);drawText(g,Component.literal(resourceString("error.source")),fx,163);roundedSurface(g,fx,185,fw,24,3,0x0CFFFFFF,0x20FFFFFF);drawText(g,Component.literal(trim(resourceFailure.sourceUrl(),fw-12)),fx+6,192);
+        int by=this.height-this.layout.top-34;resourceButton(g,mx,my,new ResourceStationLayout.Rect(x+w-52,by,22,22),IconGlyph.BACK,Component.literal(resourceString("error.back")),true,false,()->resourceRoute=ResourceRoute.QUEUE);resourceButton(g,mx,my,new ResourceStationLayout.Rect(x+w-22,by,22,22),IconGlyph.RELOAD,Component.literal(resourceString("error.retry")),true,false,()->{this.controller.retryDownload(resourceFailure);resourceRoute=ResourceRoute.QUEUE;});
     }
     private void renderSourceEditReference(GuiGraphicsExtractor g,int mx,int my,float pt){
-        if(!settingsDrawingBody){Component heading=Component.literal("添加 / 编辑资源来源");Runnable back=()->{sourceEditMode=false;init();};pageHeader(g,mx,my,heading,Component.empty(),back);renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+40,layout.contentWidth,height-layout.top-12,offset->renderSourceEditReference(g,mx,my+offset,pt));return;}
+        if(!settingsDrawingBody){Component heading=Component.literal(auditString("hardcoded_063"));Runnable back=()->{sourceEditMode=false;init();};pageHeader(g,mx,my,heading,Component.empty(),back);renderSettingsViewport(g,mx,my,layout.contentLeft,layout.top+40,layout.contentWidth,height-layout.top-12,offset->renderSourceEditReference(g,mx,my+offset,pt));return;}
 
-        int x=this.layout.contentLeft,w=this.layout.contentWidth,fx=x+16,fw=Math.min(530,w-32);pageHeader(g,mx,my,Component.literal("添加 / 编辑资源来源"),Component.literal("资源站 / 来源管理"),()->{sourceEditMode=false;init();});
-        drawText(g,Component.literal("名称"),fx,70);renderReferenceField(g,mx,my,pt,sourceNameBox,fx,87,fw,24);drawMuted(g,Component.literal("目录中显示的名称"),fx,132);drawText(g,Component.literal("来源类型"),fx,146);String url=siteEditBox==null?"":siteEditBox.getValue();roundedSurface(g,fx,163,fw,24,3,0x0CFFFFFF,0x22FFFFFF);drawMuted(g,Component.literal((url.contains("github.com")?"GitHub":"Index JSON")+" · 自动识别"),fx+6,171);drawText(g,Component.literal("地址"),fx,222);renderReferenceField(g,mx,my,pt,siteEditBox,fx,239,fw,24);drawMuted(g,Component.literal("填写完整可访问的资源目录地址"),fx,284);
-        int by=Math.max(this.height-this.layout.top-34,318);resourceButton(g,mx,my,new ResourceStationLayout.Rect(x+w-52,by,22,22),IconGlyph.BACK,Component.literal("取消编辑"),true,false,()->{sourceEditMode=false;init();});resourceButton(g,mx,my,new ResourceStationLayout.Rect(x+w-22,by,22,22),IconGlyph.SAVE,Component.literal("保存来源"),true,true,()->{STATE.siteEditText=siteEditBox.getValue();saveSite();ResourceSourceLabels.put(STATE.siteEditText,sourceNameDraft);sourceEditMode=false;init();});
+        int x=this.layout.contentLeft,w=this.layout.contentWidth,fx=x+16,fw=Math.min(530,w-32);pageHeader(g,mx,my,Component.literal(auditString("hardcoded_063")),Component.literal(auditString("hardcoded_064")),()->{sourceEditMode=false;init();});
+        drawText(g,Component.literal(resourceString("source_edit.name")),fx,70);renderReferenceField(g,mx,my,pt,sourceNameBox,fx,87,fw,24);drawMuted(g,Component.literal(resourceString("source_edit.name_hint")),fx,132);drawText(g,Component.literal(resourceString("source_edit.type")),fx,146);String url=siteEditBox==null?"":siteEditBox.getValue();roundedSurface(g,fx,163,fw,24,3,0x0CFFFFFF,0x22FFFFFF);drawMuted(g,Component.literal(resourceString("source_edit.auto_detected", url.contains("github.com") ? "GitHub" : "Index JSON")),fx+6,171);drawText(g,Component.literal(resourceString("sources.address")),fx,222);renderReferenceField(g,mx,my,pt,siteEditBox,fx,239,fw,24);drawMuted(g,Component.literal(resourceString("source_edit.address_hint")),fx,284);
+        int by=Math.max(this.height-this.layout.top-34,318);resourceButton(g,mx,my,new ResourceStationLayout.Rect(x+w-52,by,22,22),IconGlyph.BACK,Component.literal(resourceString("source_edit.cancel")),true,false,()->{sourceEditMode=false;init();});resourceButton(g,mx,my,new ResourceStationLayout.Rect(x+w-22,by,22,22),IconGlyph.SAVE,Component.literal(resourceString("source_edit.save")),true,true,()->{STATE.siteEditText=siteEditBox.getValue();saveSite();ResourceSourceLabels.put(STATE.siteEditText,sourceNameDraft);sourceEditMode=false;init();});
     }
 
 
     private void renderDeveloperReference(GuiGraphicsExtractor g,int mx,int my,SettingsPanelLayout.Columns c){
         int x=c.detailX(),w=c.detailWidth(),y=c.top();var group=ModelPanelState.SettingGroup.DEVELOPER;
         renderSettingRow(g,mx,my,x,y,w,bool(group,"gui.sparkle_morpher.model_panel.setting.show_model_id_first",GeneralConfig.SHOW_MODEL_ID_FIRST));
-        drawText(g,Component.literal("面板状态"),x+8,y+settingRowHeight()+5);drawMuted(g,Component.literal("高级操作单独确认"),x+8,y+settingRowHeight()+17);
-        int bx=x+w-160,by=y+settingRowHeight()+2;renderTextButton(g,mx,my,bx,by,150,22,Component.literal("导出 / 重置…"),()->developerStateMenu=!developerStateMenu);
+        drawText(g,Component.literal(auditString("hardcoded_065")),x+8,y+settingRowHeight()+5);drawMuted(g,Component.literal(auditString("hardcoded_066")),x+8,y+settingRowHeight()+17);
+        int bx=x+w-160,by=y+settingRowHeight()+2;renderTextButton(g,mx,my,bx,by,150,22,Component.literal(auditString("hardcoded_067")),()->developerStateMenu=!developerStateMenu);
         SettingRow[] rows={bool(group,"gui.sparkle_morpher.model_panel.setting.resource_monitor_log",GeneralConfig.RESOURCE_STATION_MONITOR_LOG),bool(group,"gui.sparkle_morpher.model_panel.setting.animation_debug_log",GeneralConfig.ANIMATION_DEBUG_LOG),bool(group,"gui.sparkle_morpher.model_panel.setting.model_memory_profiler",GeneralConfig.MODEL_MEMORY_PROFILER),bool(group,"gui.sparkle_morpher.model_panel.setting.animation_frame_profiler",GeneralConfig.ANIMATION_FRAME_PROFILER)};
         for(int i=0;i<rows.length;i++)renderSettingRow(g,mx,my,x,y+64+i*settingRowHeight(),w,rows[i]);
-        renderTextButton(g,mx,my,x+w-160,height-layout.top-34,150,22,Component.literal("更多开发选项 ›"),()->{developerAdvanced=true;STATE.settingsScroll=0;});
+        renderTextButton(g,mx,my,x+w-160,height-layout.top-34,150,22,Component.literal(auditString("hardcoded_068")),()->{developerAdvanced=true;STATE.settingsScroll=0;});
         if(developerStateMenu){
             int count=ConfigPolicies.developerStateWriteback()?3:2,py=by+26;roundedSurface(g,bx,py,150,count*26+8,3,0xFC292929,0x33FFFFFF);
-            renderTextButton(g,mx,my,bx+4,py+4,142,22,Component.literal("导出到剪贴板"),()->{developerStateMenu=false;dumpPanelState();});
-            renderTextButton(g,mx,my,bx+4,py+30,142,22,Component.literal("重置面板状态…"),()->{developerStateMenu=false;confirmationTitle=Component.literal("重置面板状态？");confirmationBody=Component.literal("清除已保存的面板选择、筛选与滚动位置。");confirmationAction=Component.literal("重置");pendingConfirmation=this::resetPanelState;});
-            if(count==3)renderTextButton(g,mx,my,bx+4,py+56,142,22,Component.literal("从剪贴板导入…"),()->{developerStateMenu=false;confirmationTitle=Component.literal("导入面板状态？");confirmationBody=Component.literal("使用剪贴板中的面板设置覆盖当前状态。");confirmationAction=Component.literal("导入");pendingConfirmation=this::applyStateFromClipboard;});
+            renderTextButton(g,mx,my,bx+4,py+4,142,22,Component.literal(auditString("hardcoded_069")),()->{developerStateMenu=false;dumpPanelState();});
+            renderTextButton(g,mx,my,bx+4,py+30,142,22,Component.literal(auditString("hardcoded_070")),()->{developerStateMenu=false;confirmationTitle=Component.literal(auditString("hardcoded_071"));confirmationBody=Component.literal(auditString("hardcoded_072"));confirmationAction=Component.literal(auditString("hardcoded_073"));pendingConfirmation=this::resetPanelState;});
+            if(count==3)renderTextButton(g,mx,my,bx+4,py+56,142,22,Component.literal(auditString("hardcoded_074")),()->{developerStateMenu=false;confirmationTitle=Component.literal(auditString("hardcoded_075"));confirmationBody=Component.literal(auditString("hardcoded_076"));confirmationAction=Component.literal(auditString("hardcoded_077"));pendingConfirmation=this::applyStateFromClipboard;});
         }
     }
 
@@ -4576,19 +4586,19 @@ public class ModernPlayerModelScreen extends Screen {
     private void renderPerformanceReference(GuiGraphicsExtractor g,int mx,int my){
         var c=settingsColumns();int x=c.detailX(),w=c.detailWidth(),y=c.top(),rh=settingRowHeight(),bh=uiButtonHeight();
         var mode=rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE).segmented();int controlW=Math.min(280,w*2/3),half=(controlW-4)/2,cx=x+w-controlW-8;
-        drawText(g,Component.literal("渲染模式"),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
+        drawText(g,Component.literal(auditString("hardcoded_078")),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
         renderSegmentedOption(g,cx,y+4,half,bh,mode.left(),mode.leftSelected(),mode.leftAction());renderSegmentedOption(g,cx+half+4,y+4,half,bh,mode.right(),!mode.leftSelected(),mode.rightAction());
-        y+=rh;for(var line:wrap("GPU 与兼容模式互斥；无法使用 GPU 时退回兼容模式。",w-16,2)){drawMuted(g,Component.literal(line),x+8,y+3);y+=font.lineHeight+2;}y+=5;
+        y+=rh;for(var line:wrap(auditString("hardcoded_079"),w-16,2)){drawMuted(g,Component.literal(line),x+8,y+3);y+=font.lineHeight+2;}y+=5;
         renderSettingRow(g,mx,my,x,y,w,javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));y+=rh;
-        String[] labels={"模型缓存","Cloud 处理与上传"};Runnable[] actions={()->selectSettingsPage("cache"),()->openCloudSettings(CloudAccountPage.PERFORMANCE)};
-        for(int i=0;i<2;i++){drawText(g,Component.literal(labels[i]),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-108,y+4,100,bh,Component.literal("配置 ›"),actions[i]);y+=rh;}
-        renderTextButton(g,mx,my,x+8,y+4,Math.min(150,w-16),bh,Component.literal(performanceAdvanced?"收起高级选项":"高级渲染选项 ›"),()->performanceAdvanced=!performanceAdvanced);y+=rh;
+        String[] labels={auditString("hardcoded_080"),auditString("hardcoded_081")};Runnable[] actions={()->selectSettingsPage("cache"),()->openCloudSettings(CloudAccountPage.PERFORMANCE)};
+        for(int i=0;i<2;i++){drawText(g,Component.literal(labels[i]),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-108,y+4,100,bh,Component.literal(auditString("hardcoded_082")),actions[i]);y+=rh;}
+        renderTextButton(g,mx,my,x+8,y+4,Math.min(150,w-16),bh,Component.literal(performanceAdvanced?auditString("hardcoded_083"):auditString("hardcoded_084")),()->performanceAdvanced=!performanceAdvanced);y+=rh;
         if(performanceAdvanced)for(var row:settingsRows()){if(row.segmented()!=null||row.labelKey().contains("java_vector"))continue;renderSettingRow(g,mx,my,x,y,w,row);y+=rh;}
     }
 
     private void renderPeerConnectionReference(GuiGraphicsExtractor g,int mx,int my,float pt){
         boolean probe=peerSettingsSection==PeerSettingsSection.PROBE,ready=minecraft.player!=null&&minecraft.level!=null&&!com.micaftic.morpher.client.PrivacyMode.isActive(),running=com.micaftic.morpher.client.peer.ClientPeerRuntime.running();String invite=com.micaftic.morpher.client.peer.ClientPeerRuntime.invitation();int x=layout.contentLeft,w=layout.contentWidth;
-        pageHeader(g,mx,my,Component.literal(probe?"访客加入 / 探测":"高级：局域网手动连接"),Component.literal("P2P / 高级连接"),()->selectPeerSection(PeerSettingsSection.ROOM));
+        pageHeader(g,mx,my,Component.literal(probe?auditString("hardcoded_023"):auditString("hardcoded_024")),Component.literal(auditString("hardcoded_025")),()->selectPeerSection(PeerSettingsSection.ROOM));
         if(probe){drawText(g,settingsText("peer.invitation_help"),x,70);renderReferenceField(g,mx,my,pt,peerInvitationBox,x,87,w,24);peerInvitationBox.visible=true;drawText(g,settingsText("peer.local_route"),x,150);renderReferenceField(g,mx,my,pt,peerLocalRouteBox,x,167,w,24);peerLocalRouteBox.visible=true;networkAction(g,mx,my,x,240,130,settingsText("peer.probe"),!peerInvitationDraft.isBlank(),()->com.micaftic.morpher.client.peer.ClientPeerRuntime.probeInvitation(peerInvitationDraft.trim(),peerLocalRouteDraft));networkAction(g,mx,my,x+138,240,100,settingsText("peer.join"),ready&&!peerInvitationDraft.isBlank(),this::joinPeerInvitation);networkAction(g,mx,my,x+246,240,160,settingsText("peer.clipboard_probe"),true,()->{peerInvitationDraft=minecraft.keyboardHandler.getClipboard();peerInvitationBox.setValue(peerInvitationDraft);com.micaftic.morpher.client.peer.ClientPeerRuntime.probeInvitation(peerInvitationDraft.trim(),peerLocalRouteDraft);});networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.probeStatusComponent(),x,300,w);networkLine(g,settingsText("peer.probe_boundary"),x,332,w);}
         else{drawText(g,settingsText("peer.endpoint"),x,70);renderReferenceField(g,mx,my,pt,peerEndpointBox,x,87,w,24);peerEndpointBox.visible=true;networkAction(g,mx,my,x,148,160,settingsText("peer.next_adapter"),true,()->{peerEndpointDraft=com.micaftic.morpher.client.peer.ClientPeerRuntime.nextSuggestedEndpoint(peerEndpointDraft);peerEndpointBox.setValue(peerEndpointDraft);});networkAction(g,mx,my,x+168,148,110,settingsText("peer.host"),ready&&!running,()->com.micaftic.morpher.client.peer.ClientPeerRuntime.host(peerEndpointDraft.trim()));networkAction(g,mx,my,x+286,148,110,settingsText("peer.copy"),invite!=null,()->minecraft.keyboardHandler.setClipboard(invite));drawText(g,settingsText("peer.invitation_help"),x,200);renderReferenceField(g,mx,my,pt,peerInvitationBox,x,221,w,24);peerInvitationBox.visible=true;networkAction(g,mx,my,x,285,110,settingsText("peer.join"),ready&&!peerInvitationDraft.isBlank(),this::joinPeerInvitation);networkAction(g,mx,my,x+118,285,180,settingsText("peer.clipboard_join"),ready,()->{peerInvitationDraft=minecraft.keyboardHandler.getClipboard();peerInvitationBox.setValue(peerInvitationDraft);joinPeerInvitation();});networkLine(g,com.micaftic.morpher.client.peer.ClientPeerRuntime.statusComponent(),x,340,w);}
     }
@@ -4623,20 +4633,20 @@ public class ModernPlayerModelScreen extends Screen {
         drawText(g,Component.literal(trim(connected?CloudManagementScreen.management().accountId(id):cloudText("disconnected").getString(),w-20)),x+10,y+8);
         drawMuted(g,Component.literal(trim(selected.map(CloudManagementScreen::displayName).orElse("Cloud")+" · "+cloudText(connected?"connected":"disconnected").getString(),w-20)),x+10,y+25);y+=50;
         int half=(w-gap)/2;
-        renderPrimaryButton(g,mx,my,x,y,half,bh,Component.literal(cloudFormBusy?"处理中…":"一键登录 + 绑定"),()->{
+        renderPrimaryButton(g,mx,my,x,y,half,bh,Component.literal(cloudFormBusy?auditString("hardcoded_085"):auditString("hardcoded_086")),()->{
             if(cloudFormBusy)return;
             try{if(connected)bindCloudIdentity(null);else runCloudAccount(CloudManagementScreen.connectOfficialAccount(),"quick_success");}
             catch(RuntimeException failure){cloudPanelStatus=Component.literal(CloudManagementScreen.errorText(failure));}
         });
         int manualW=(w-half-gap*2)/2;
-        renderTextButton(g,mx,my,x+half+gap,y,manualW,bh,Component.literal("手动登录"),()->openCloudLoginForm(false));
-        renderTextButton(g,mx,my,x+half+gap*2+manualW,y,w-half-manualW-gap*2,bh,Component.literal("注册"),()->openCloudLoginForm(true));y+=bh+12;
+        renderTextButton(g,mx,my,x+half+gap,y,manualW,bh,Component.literal(auditString("hardcoded_087")),()->openCloudLoginForm(false));
+        renderTextButton(g,mx,my,x+half+gap*2+manualW,y,w-half-manualW-gap*2,bh,Component.literal(auditString("hardcoded_088")),()->openCloudLoginForm(true));y+=bh+12;
         int rh=settingRowHeight(),controlW=Math.min(144,w/2);
-        drawText(g,Component.literal("正版 / 第三方身份"),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
-        networkAction(g,mx,my,x+w-controlW,y+(rh-bh)/2,controlW,Component.literal("绑定当前游戏身份"),connected&&!cloudFormBusy,()->bindCloudIdentity(null));y+=rh;
+        drawText(g,Component.literal(auditString("hardcoded_089")),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
+        networkAction(g,mx,my,x+w-controlW,y+(rh-bh)/2,controlW,Component.literal(auditString("hardcoded_059")),connected&&!cloudFormBusy,()->bindCloudIdentity(null));y+=rh;
         String[] labels={"identity_panel.title","scopes","identity_panel.admin_title","targets_acl","performance","offline.title"};
         Runnable[] actions={()->openCloudIdentityPage(CloudAccountPage.IDENTITY),()->{setCloudAccountPage(CloudAccountPage.SCOPES);refreshCloudScopes();},()->openCloudIdentityPage(CloudAccountPage.APPROVAL),()->InputUtil.setScreen(new CloudTargetManagementScreen(this,CloudManagementScreen.management())),()->setCloudAccountPage(CloudAccountPage.PERFORMANCE),this::openOfflineIdentityPage};
-        for(int i=0;i<labels.length;i++){drawText(g,Component.literal(trim(cloudText(labels[i]).getString(),w-controlW-20)),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-controlW,y+(rh-bh)/2,controlW,bh,Component.literal(i==0?"身份与认证提供方 ›":"配置 ›"),connected?actions[i]:()->openCloudLoginForm(false));y+=rh;}
+        for(int i=0;i<labels.length;i++){drawText(g,Component.literal(trim(cloudText(labels[i]).getString(),w-controlW-20)),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-controlW,y+(rh-bh)/2,controlW,bh,Component.literal(i==0?auditString("hardcoded_090"):auditString("hardcoded_082")),connected?actions[i]:()->openCloudLoginForm(false));y+=rh;}
         networkAction(g,mx,my,x+8,y+6,Math.min(144,w-16),cloudText("logout"),connected&&!cloudFormBusy,()->{CloudManagementScreen.management().logout();resetCloudPage();init();});
         if(sourceTabMenu){int menuW=switchW,yy=menuY;roundedSurface(g,x,yy,menuW,registry.profiles().size()*24+4,3,0xFF292929,0x44FFFFFF);for(var profile:registry.profiles()){var p=profile;renderTextButton(g,mx,my,x+2,yy+2,menuW-4,22,Component.literal(CloudManagementScreen.displayName(profile)),()->{sourceTabMenu=false;selectCloudInstance(p);init();});yy+=24;}}
     }
@@ -4647,7 +4657,7 @@ public class ModernPlayerModelScreen extends Screen {
         drawText(g,cloudText("offline.help"),x,y);y+=28;
         var runtime=CloudClientRuntime.state();
         drawMuted(g,Component.literal(trim(runtime==null?"Cloud":CloudManagementScreen.management().accountId(runtime.instance().instanceId()),w)),x,y);y+=28;
-        drawMuted(g,Component.literal(trim(com.micaftic.morpher.cloud.client.CloudPlayerModelSync.status(),w)),x,y);y+=28;
+        drawMuted(g,Component.literal(trim(com.micaftic.morpher.cloud.client.CloudPlayerModelSync.status().getString(),w)),x,y);y+=28;
         networkAction(g,mx,my,x,y,Math.min(180,w),cloudText("offline.retry"),runtime!=null&&!cloudFormBusy,()->com.micaftic.morpher.cloud.client.CloudPlayerModelSync.refreshOfflineIdentity());
         settingsExtent(y+bh+24);
     }
@@ -4662,7 +4672,7 @@ public class ModernPlayerModelScreen extends Screen {
                 try{context.check();}catch(java.util.concurrent.CancellationException stale){return;}
                 if(generation!=cloudFormGeneration)return;
                 cloudFormBusy=false;
-                cloudPanelStatus=failure==null?Component.literal("当前游戏身份已绑定"):Component.literal(CloudManagementScreen.errorText(failure));
+                cloudPanelStatus=failure==null?Component.literal(auditString("hardcoded_091")):Component.literal(CloudManagementScreen.errorText(failure));
                 if(failure==null&&cloudIdentityFlow!=null)cloudIdentityFlow.refresh();
                 init();
             }));
@@ -4679,7 +4689,7 @@ public class ModernPlayerModelScreen extends Screen {
         for(int i=0;i<8;i++){var b=a.control(i+1);toolbarButton(g,mx,my,b.x(),b.y(),icons[i],cloudText(keys[i]),false,actions[i]);}
         var lr=a.area("listRect");int rowH=this.width<560?43:66,visible=Math.max(1,(this.height-lr.y()-45)/(rowH+6));cloudAccountScroll=clamp(cloudAccountScroll,0,Math.max(0,profiles.size()-visible));
         for(int i=cloudAccountScroll;i<Math.min(profiles.size(),cloudAccountScroll+visible);i++){var profile=profiles.get(i);int yy=lr.y()+(i-cloudAccountScroll)*(rowH+6);boolean chosen=profile.equals(inspected),active=registry.selected().map(p->p.instanceId().equals(profile.instanceId())).orElse(false);roundedSurface(g,lr.x(),yy,lr.w(),rowH,4,chosen?0x18FFFFFF:0x08FFFFFF,chosen?0x88DC4F5D:0x16FFFFFF);drawText(g,Component.literal((active?"◉ ":"○ ")+trim(CloudManagementScreen.displayName(profile),lr.w()-24)),lr.x()+8,yy+9);drawMuted(g,Component.literal(trim(CloudManagementScreen.management().accountId(profile.instanceId())+" · "+cloudText(CloudClientRuntime.state(profile.instanceId())!=null?"connected":"disconnected").getString(),lr.w()-24)),lr.x()+14,yy+rowH-17);hit(lr.x(),yy,lr.w(),rowH,Component.literal(profile.instance().origin().toString()),()->inspectedInstanceId=profile.instanceId());}
-        if(inspected!=null){var dr=a.area("detailRect");roundedSurface(g,dr.x(),dr.y(),dr.w(),dr.h(),4,0x0CFFFFFF,0x20FFFFFF);int dx=dr.x()+12,yy=dr.y()+14;drawTitle(g,Component.literal(CloudManagementScreen.displayName(inspected)),dx,yy);drawMuted(g,Component.literal(trim(inspected.instance().origin().toString(),dr.w()-24)),dx,yy+30);String[] values={inspected.instanceId(),registry.selected().map(CloudManagementScreen::displayName).orElse(""),cloudText(CloudClientRuntime.state(inspected.instanceId())==null?"disconnected":"connected").getString(),STATE.closedCloudTabs.contains(inspected.instanceId())?"关闭":"打开"};String[] labels={"实例 ID","当前选择","登录状态","模型标签"};for(int i=0;i<4;i++){drawMuted(g,Component.literal(labels[i]),dx,yy+(this.width<560?52:64)+i*(this.width<560?22:36));drawText(g,Component.literal(trim(values[i],dr.w()/2)),dx+dr.w()/3,yy+(this.width<560?52:64)+i*(this.width<560?22:36));}}
+        if(inspected!=null){var dr=a.area("detailRect");roundedSurface(g,dr.x(),dr.y(),dr.w(),dr.h(),4,0x0CFFFFFF,0x20FFFFFF);int dx=dr.x()+12,yy=dr.y()+14;drawTitle(g,Component.literal(CloudManagementScreen.displayName(inspected)),dx,yy);drawMuted(g,Component.literal(trim(inspected.instance().origin().toString(),dr.w()-24)),dx,yy+30);String[] values={inspected.instanceId(),registry.selected().map(CloudManagementScreen::displayName).orElse(""),cloudText(CloudClientRuntime.state(inspected.instanceId())==null?"disconnected":"connected").getString(),STATE.closedCloudTabs.contains(inspected.instanceId())?auditString("hardcoded_050"):resourceString("queue.action.open")};String[] labels={auditString("hardcoded_092"),auditString("hardcoded_093"),auditString("hardcoded_094"),auditString("hardcoded_095")};for(int i=0;i<4;i++){drawMuted(g,Component.literal(labels[i]),dx,yy+(this.width<560?52:64)+i*(this.width<560?22:36));drawText(g,Component.literal(trim(values[i],dr.w()/2)),dx+dr.w()/3,yy+(this.width<560?52:64)+i*(this.width<560?22:36));}}
     }
     private void renderCloudPerformanceReference(GuiGraphicsExtractor g,int mx,int my){
         pageHeader(g,mx,my,settingsText("cloud.performance"),cloudText("account_intro"),this::backFromCloud);
