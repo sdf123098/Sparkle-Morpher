@@ -11,11 +11,11 @@ public record EntityDisplayContext(String instanceId, String originSha256, Strin
         identifier(dimensionId);
         if (generation < 0) throw new IllegalArgumentException("Invalid world generation");
     }
-    static String slug(String value) {
+    public static String slug(String value) {
         if (value == null || !value.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")) throw new IllegalArgumentException("Invalid display identifier");
         return value;
     }
-    static String identifier(String value) {
+    public static String identifier(String value) {
         Objects.requireNonNull(value);
         if (value.length() > 256 || !value.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) throw new IllegalArgumentException("Invalid resource identifier");
         return value;

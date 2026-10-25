@@ -119,7 +119,8 @@ final class ModelPickerLayout {
 
     /** Reserve a ninth regular-size card while keeping at least 120px for details. */
     static int listWidth(int contentWidth,int listHeight){
-        int preferred=Math.max(24,Math.round(contentWidth*.76f)-2);
+        if(!com.micaftic.morpher.core.gui.ResponsiveUiLayout.inlinePreview(contentWidth,listHeight))return Math.max(1,contentWidth);
+        int preferred=Math.max(1,contentWidth-Math.max(128,contentWidth/4)-4);
         if(preferred<560)return preferred;
         int cardWidth=Math.max(1,Math.min(81,(int)Math.floor((listHeight-2*CARD_GAP)/3f/CARD_ASPECT)));
         int nineColumns=9*cardWidth+8*CARD_GAP;
@@ -127,10 +128,10 @@ final class ModelPickerLayout {
     }
 
     static Cards cards(int listW,int listH){
-        boolean compact=listW<360,middle=listW>=360&&listW<560;
-        int preferredCols=compact?6:middle?7:9,maxW=compact?51:middle?65:81;
-        int cols=Math.max(1,Math.min(preferredCols,(listW+CARD_GAP)/(FORCED_MIN_CARD_W+CARD_GAP)));
-        int rows=listH<142?1:compact||middle?2:3;
+        int maxW=81;
+        // Column and row counts follow readable card dimensions, never monitor-resolution presets.
+        int cols=Math.max(1,Math.min(MAX_COLS,(Math.max(1,listW)+CARD_GAP)/(CARD_MIN_W+CARD_GAP)));
+        int rows=Math.max(1,Math.min(MAX_ROWS,(Math.max(1,listH)+CARD_GAP)/(cardH(CARD_MIN_W)+CARD_GAP)));
         int byWidth=Math.max(1,(listW-(cols-1)*CARD_GAP)/cols);
         int byHeight=Math.max(1,(int)Math.floor((listH-(rows-1)*CARD_GAP)/(float)rows/CARD_ASPECT));
         int cellW=Math.max(1,Math.min(maxW,Math.min(byWidth,byHeight))),cellH=Math.max(1,Math.min(Math.max(1,(listH-(rows-1)*CARD_GAP)/rows),Math.round(cellW*CARD_ASPECT)));

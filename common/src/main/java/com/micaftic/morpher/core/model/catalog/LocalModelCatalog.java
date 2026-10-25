@@ -16,12 +16,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -68,6 +72,8 @@ public final class LocalModelCatalog {
      * 对应原 ClientModelManager.LazyModelSource。
      */
     public static final class Entry {
+        /** Null for memory-only Cloud sources; those hold their source bytes instead of a file. */
+        @Nullable
         public final Path path;
         @Nullable
         public final byte[] cacheKey;
@@ -75,6 +81,14 @@ public final class LocalModelCatalog {
         public final boolean auth;
         public final com.micaftic.morpher.core.model.ModelSourceType sourceType;
         public final long fingerprint;
+        /** Original source bytes retained for memory-only sources so CPU trim can rebuild them. */
+        @Nullable
+        public volatile byte[] memoryBytes;
+        @Nullable
+        public final String contentSha256;
+        /** Original file name used for format dispatch when a memory source is reparsed. */
+        @Nullable
+        public final String memoryFormat;
         public volatile ModelMetadata modelInfo;
         @Nullable
         public volatile String displayName;
@@ -88,21 +102,61 @@ public final class LocalModelCatalog {
         public Entry(Path path, @Nullable byte[] cacheKey, boolean remote, boolean auth,
                      long fingerprint, @Nullable ModelMetadata modelInfo, @Nullable String displayName,
                      com.micaftic.morpher.core.model.ModelSourceType sourceType) {
-            this.path = path.toAbsolutePath().normalize();
+            this(Objects.requireNonNull(path, "path"), null, null, null, cacheKey, remote, auth,
+                    fingerprint, modelInfo, displayName, sourceType);
+        }
+
+        private Entry(@Nullable Path path, @Nullable byte[] memoryBytes, @Nullable String contentSha256,
+                      @Nullable String memoryFormat, @Nullable byte[] cacheKey, boolean remote, boolean auth,
+                      long fingerprint, @Nullable ModelMetadata modelInfo, @Nullable String displayName,
+                      com.micaftic.morpher.core.model.ModelSourceType sourceType) {
+            this.path = path == null ? null : path.toAbsolutePath().normalize();
             this.cacheKey = cacheKey == null ? null : cacheKey.clone();
             this.remote = remote;
             this.auth = auth;
-            this.sourceType = java.util.Objects.requireNonNull(sourceType);
+            this.sourceType = Objects.requireNonNull(sourceType);
             this.fingerprint = fingerprint;
+            this.memoryBytes = memoryBytes;
+            this.contentSha256 = contentSha256;
+            this.memoryFormat = memoryFormat;
             this.modelInfo = modelInfo;
             this.displayName = displayName;
         }
 
-        /** 本地来源是否与另一条目指向同一文件版本（auth + fingerprint + path 全等）。 */
+        /**
+         * Creates a source that lives only in memory (Cloud display). Ownership of {@code bytes}
+         * transfers to the runtime; callers must not mutate the array afterwards.
+         */
+        public static Entry memory(byte[] bytes, String contentSha256, String fileName, boolean auth,
+                                   long fingerprint, @Nullable ModelMetadata modelInfo,
+                                   @Nullable String displayName,
+                                   com.micaftic.morpher.core.model.ModelSourceType sourceType) {
+            Objects.requireNonNull(bytes, "bytes");
+            String digest = normalizeSha256(contentSha256);
+            return new Entry(null, bytes, digest, Objects.requireNonNull(fileName, "fileName"),
+                    null, false, auth, fingerprint, modelInfo, displayName, sourceType);
+        }
+
+        public boolean isMemory() {
+            return memoryFormat != null;
+        }
+
+        /** Releases only the retained source reference; outstanding borrowers own their array. */
+        public void discardMemoryBytes() {
+            if (sourceType == com.micaftic.morpher.core.model.ModelSourceType.CLOUD) memoryBytes = null;
+        }
+
+        /** 本地来源是否与另一条目指向同一文件版本（auth + fingerprint + path/摘要全等）。 */
         public boolean sameLocalSource(@Nullable Entry other) {
-            return other != null && sourceType == com.micaftic.morpher.core.model.ModelSourceType.LOCAL
-                    && other.sourceType == sourceType && !remote && !other.remote && auth == other.auth
-                    && fingerprint == other.fingerprint && path.equals(other.path);
+            if (other == null || sourceType != com.micaftic.morpher.core.model.ModelSourceType.LOCAL
+                    || other.sourceType != sourceType || remote || other.remote || auth != other.auth
+                    || fingerprint != other.fingerprint) {
+                return false;
+            }
+            if (isMemory() || other.isMemory()) {
+                return isMemory() == other.isMemory() && Objects.equals(contentSha256, other.contentSha256);
+            }
+            return path != null && path.equals(other.path);
         }
     }
 
@@ -299,6 +353,39 @@ public final class LocalModelCatalog {
     }
 
     // ===================== fingerprint =====================
+
+    /** Content fingerprint for memory-only sources; SHA-256 keeps it independent of any file metadata. */
+    public static long fingerprint(byte[] content) {
+        if (content == null) {
+            return 0L;
+        }
+        try {
+            return fingerprint(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    /** Derives a stable 64-bit fingerprint from a validated SHA-256 hex digest. */
+    public static long fingerprint(@Nullable String contentSha256) {
+        String digest = contentSha256 == null ? null : contentSha256.trim().toLowerCase(Locale.ROOT);
+        if (digest == null || digest.length() < 16) {
+            return 0L;
+        }
+        try {
+            return Long.parseUnsignedLong(digest.substring(0, 16), 16);
+        } catch (NumberFormatException malformed) {
+            return digest.hashCode();
+        }
+    }
+
+    private static String normalizeSha256(@Nullable String value) {
+        String digest = value == null ? null : value.trim().toLowerCase(Locale.ROOT);
+        if (digest == null || !digest.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("contentSha256 must be a SHA-256 hex digest");
+        }
+        return digest;
+    }
 
     /** 本地来源指纹：单文件取 mtime+size；目录递归聚合相对路径/mtime/size。 */
     public static long fingerprint(Path path) throws IOException {

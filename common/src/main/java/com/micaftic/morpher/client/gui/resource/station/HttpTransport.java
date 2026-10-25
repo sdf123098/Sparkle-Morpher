@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.util.Locale;
+import java.util.concurrent.Callable;
 
 /**
  * HTTP transport layer (R1.2.x §24.4 Resource Station split).
@@ -47,11 +48,21 @@ public final class HttpTransport {
     }
 
     public static byte[] read(String url, int timeoutMs, int maxBytes, ModelRepoClient.ProgressListener listener, ResourceStationConfig.State config, String operation, long expectedBytes) throws IOException {
+        return runInterruptibly(listener, () -> readDirect(url, timeoutMs, maxBytes, listener, config, operation, expectedBytes));
+    }
+
+    static <T> T runInterruptibly(ModelRepoClient.ProgressListener listener, Callable<T> operation) throws IOException {
+        return InterruptibleResourceRequest.call(listener, operation);
+    }
+
+    private static byte[] readDirect(String url, int timeoutMs, int maxBytes, ModelRepoClient.ProgressListener listener, ResourceStationConfig.State config, String operation, long expectedBytes) throws IOException {
+        checkCancelled(listener);
         long start = System.nanoTime();
         boolean bypassCache = shouldBypassCache(operation);
         String requestUrl = bypassCache ? withCacheBuster(url) : url;
         HttpURLConnection connection = (HttpURLConnection) URI.create(requestUrl).toURL().openConnection();
         try {
+            checkCancelled(listener);
             connection.setConnectTimeout(timeoutMs);
             connection.setReadTimeout(timeoutMs);
             connection.setUseCaches(false);
@@ -124,6 +135,9 @@ public final class HttpTransport {
                 monitor(config, "HTTP complete op={} url={} bytes={} elapsedMs={}", operation, url, data.length, elapsedMs(start));
                 return data;
             }
+        } catch (IOException error) {
+            checkCancelled(listener);
+            throw error;
         } finally {
             connection.disconnect();
         }
@@ -140,7 +154,7 @@ public final class HttpTransport {
     }
 
     public static void checkCancelled(ModelRepoClient.ProgressListener listener) {
-        if (listener != null && listener.isCancelled()) {
+        if (Thread.currentThread().isInterrupted() || listener != null && listener.isCancelled()) {
             throw new java.util.concurrent.CancellationException();
         }
     }
@@ -190,7 +204,7 @@ public final class HttpTransport {
     }
 
     public static void monitor(ResourceStationConfig.State config, String message, Object... args) {
-        if (ResourceStationConfig.monitorLogEnabled()) {
+        if (com.micaftic.morpher.core.config.ConfigPolicies.diagnostics().resourceStationMonitorLog()) {
             YesSteveModel.LOGGER.info("[SM-RESOURCE] " + message, args);
         }
     }

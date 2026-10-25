@@ -57,6 +57,8 @@ public final class PlayerCapability extends CustomPlayerEntity {
 
     private boolean pendingLocalSettingsRestore;
 
+    private String localSettingsModelId;
+
     private boolean hasRenderState;
 
     private float renderStateWalkAnimationSpeed;
@@ -91,8 +93,30 @@ public final class PlayerCapability extends CustomPlayerEntity {
 
     private RoamingStruct createLocalRoamingStruct(int modelHashId, Int2FloatOpenHashMap variables) {
         RoamingStruct roamingStruct = new RoamingStruct(modelHashId, variables);
+        this.localSettingsModelId = getModelId();
         this.pendingLocalSettingsRestore = true;
         return roamingStruct;
+    }
+
+    private void savePendingLocalSettings() {
+        if (isLocalPlayerModel()) {
+            awaitAsyncResult();
+            if (this.serverVarContainer instanceof RoamingStruct roaming) {
+                LocalModelSettingsStore.savePending(this.localSettingsModelId, roaming);
+            }
+        }
+    }
+
+    @Override
+    public void setCurrentTexture(String textureId) {
+        super.setCurrentTexture(textureId);
+        if (isLocalPlayerModel()) LocalModelSettingsStore.saveTexture(getModelId(), textureId);
+    }
+
+    @Override
+    public void initModelWithTexture(String modelId, String textureId) {
+        super.initModelWithTexture(modelId, textureId);
+        if (isLocalPlayerModel()) LocalModelSettingsStore.saveTexture(modelId, textureId);
     }
 
     public void beginRenderState(AvatarRenderState renderState) {
@@ -134,6 +158,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
 
     @Override
     public void onModelLoaded(ModelAssembly context) {
+        savePendingLocalSettings();
         super.onModelLoaded(context);
         this.currentModelHashId = getModelAssembly().getModelData().getHashId();
     }
@@ -169,14 +194,17 @@ public final class PlayerCapability extends CustomPlayerEntity {
         super.setupAnim(seekTime, isFirstPerson);
         if (this.pendingLocalSettingsRestore && this.serverVarContainer instanceof RoamingStruct roamingStruct) {
             this.pendingLocalSettingsRestore = false;
-            LocalModelSettingsStore.restore(getModelId(), roamingStruct);
+            var restore = LocalModelSettingsStore.restoreExpression(this.localSettingsModelId, roamingStruct);
+            if (restore != null) executeExpression(restore, true, true, null);
         }
     }
 
     @Override
     public void reset() {
+        savePendingLocalSettings();
         this.serverVarContainer = null;
         this.pendingLocalSettingsRestore = false;
+        this.localSettingsModelId = null;
         super.reset();
     }
 
@@ -285,7 +313,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
                 ClientMotionSources.roaming(this, current);
                 if (roamingStruct.hasPendingChanges()) {
                     RoamingSyncBatch syncBatch = roamingStruct.consumePendingBoneData();
-                    LocalModelSettingsStore.save(getModelId(), syncBatch.changedVariables());
+                    LocalModelSettingsStore.save(this.localSettingsModelId, syncBatch.changedVariables());
                     applyMolangDelta(syncBatch.modelHashId(), syncBatch.changedVariables());
                     java.util.Map<String, Float> changes = new java.util.HashMap<>();
                     for (Int2FloatMap.Entry entry : syncBatch.changedVariables().int2FloatEntrySet()) {

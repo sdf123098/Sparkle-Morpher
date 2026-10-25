@@ -73,6 +73,9 @@ public final class FilePickerCoordinator {
     }
 
     public static synchronized Component pickYsmFile() {
+        if (SdlPickerBackend.isPicking()) {
+            return Component.translatable("gui.sparkle_morpher.import.error.picker_open");
+        }
         if (picking) {
             if (canReplaceActivePicker()) {
                 LauncherBridgeBackend.stopLauncherBridgeImport();
@@ -106,6 +109,10 @@ public final class FilePickerCoordinator {
             return null;
         }
 
+        if (SdlPickerBackend.tryStartSystemPicker()) {
+            return null;
+        }
+
         if (TinyFdBackend.tryStartTinyFileDialog()) {
             return null;
         }
@@ -120,6 +127,7 @@ public final class FilePickerCoordinator {
     }
 
     public static synchronized void cancelPicking() {
+        SdlPickerBackend.cancelPicking();
         LauncherBridgeBackend.stopLauncherBridgeImport();
         completed.clear();
         picking = false;

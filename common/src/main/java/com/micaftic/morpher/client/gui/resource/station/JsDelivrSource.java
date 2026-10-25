@@ -12,6 +12,8 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -71,6 +73,7 @@ public final class JsDelivrSource implements RepositorySource {
         String pageUrl = "https://cdn.jsdelivr.net/gh/" + RepositoryEntryParser.encPath(owner) + "/" + RepositoryEntryParser.encPath(repo) + "@" + RepositoryEntryParser.encPath(branch) + "/" + RepositoryEntryParser.encPath(basePath);
         String html = new String(HttpTransport.read(pageUrl, config.timeoutMs(), 2 * 1024 * 1024, config, "jsdelivr-list"), StandardCharsets.UTF_8);
         int before = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         Matcher matcher = RepositoryEntryParser.HREF_PATTERN.matcher(html);
         while (matcher.find()) {
             String href = matcher.group(1);
@@ -92,12 +95,17 @@ public final class JsDelivrSource implements RepositorySource {
                 continue;
             }
             String name = RepositoryEntryParser.fileNameOnly(childPath);
+            if (RepositoryPreviews.isImage(name)) {
+                images.put(childPath, "https://cdn.jsdelivr.net/gh/" + RepositoryEntryParser.encPath(owner) + "/" + RepositoryEntryParser.encPath(repo) + "@" + RepositoryEntryParser.encPath(branch) + "/" + RepositoryEntryParser.encPath(childPath));
+                continue;
+            }
             if (!RepositoryEntryParser.isImportFile(name)) {
                 continue;
             }
             String rawUrl = "https://cdn.jsdelivr.net/gh/" + RepositoryEntryParser.encPath(owner) + "/" + RepositoryEntryParser.encPath(repo) + "@" + RepositoryEntryParser.encPath(branch) + "/" + RepositoryEntryParser.encPath(childPath);
             entries.add(new ModelRepoEntry(name, rawUrl, name, -1L, "jsDelivr: " + owner + "/" + repo, owner, repo, branch, childPath));
         }
+        RepositoryPreviews.attach(entries, before, images);
         HttpTransport.monitor(config, "jsDelivr directory listed owner={} repo={} branch={} path={} entriesAdded={} visited={}",
                 owner, repo, branch, normalizedPath, entries.size() - before, visited.size());
     }
@@ -111,6 +119,7 @@ public final class JsDelivrSource implements RepositorySource {
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
         JsonArray files = root.has("files") && root.get("files").isJsonArray() ? root.getAsJsonArray("files") : new JsonArray();
         int before = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         for (JsonElement element : files) {
             if (!element.isJsonObject()) {
                 continue;
@@ -125,6 +134,10 @@ public final class JsDelivrSource implements RepositorySource {
                 continue;
             }
             String name = RepositoryEntryParser.fileNameOnly(childPath);
+            if (RepositoryPreviews.isImage(name)) {
+                images.put(childPath, "https://cdn.jsdelivr.net/gh/" + RepositoryEntryParser.encPath(owner) + "/" + RepositoryEntryParser.encPath(repo) + "@" + RepositoryEntryParser.encPath(branch) + "/" + RepositoryEntryParser.encPath(childPath));
+                continue;
+            }
             if (!RepositoryEntryParser.isImportFile(name)) {
                 continue;
             }
@@ -132,6 +145,7 @@ public final class JsDelivrSource implements RepositorySource {
             String rawUrl = "https://cdn.jsdelivr.net/gh/" + RepositoryEntryParser.encPath(owner) + "/" + RepositoryEntryParser.encPath(repo) + "@" + RepositoryEntryParser.encPath(branch) + "/" + RepositoryEntryParser.encPath(childPath);
             entries.add(new ModelRepoEntry(name, rawUrl, name, size, "jsDelivr: " + owner + "/" + repo, owner, repo, branch, childPath));
         }
+        RepositoryPreviews.attach(entries, before, images);
         HttpTransport.monitor(config, "jsDelivr flat listed owner={} repo={} branch={} path={} files={} entriesAdded={}",
                 owner, repo, branch, normalizedPath, files.size(), entries.size() - before);
     }

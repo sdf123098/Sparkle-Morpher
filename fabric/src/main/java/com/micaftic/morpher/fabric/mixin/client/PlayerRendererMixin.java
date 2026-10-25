@@ -18,7 +18,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(LivingEntityRenderer.class)
+// Run replacement before default-priority HEAD hooks open pose/context scopes.
+// Icy's Better Horses pushes the rider pose at HEAD and pops it at RETURN;
+// cancelling after that push skips its RETURN cleanup and leaks the world pose.
+@Mixin(value = LivingEntityRenderer.class, priority = 900)
 public abstract class PlayerRendererMixin {
 
     // MC 26.x Fabric: submit() is in LivingEntityRenderer, not overridden in AvatarRenderer.
