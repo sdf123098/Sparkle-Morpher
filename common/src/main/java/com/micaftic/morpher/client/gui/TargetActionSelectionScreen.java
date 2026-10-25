@@ -51,7 +51,7 @@ public final class TargetActionSelectionScreen extends Screen {
     private int lastFingerprint = Integer.MIN_VALUE;
 
     private TargetActionSelectionScreen() {
-        super(Component.literal("选择动作目标"));
+        super(Component.translatable("gui.sparkle_morpher.target_action.title"));
     }
 
     public static void open() {
@@ -63,9 +63,9 @@ public final class TargetActionSelectionScreen extends Screen {
         String query = search == null ? "" : search.getValue();
         clearWidgets();
         IndependentPanelChrome chrome = IndependentPanelChrome.of(width, height);
-        search = new EditBox(font, chrome.contentLeft() + 7, chrome.bodyTop() + 7, Math.min(286, chrome.contentRight() - chrome.contentLeft() - 50), 14, Component.literal("搜索目标"));
+        search = new EditBox(font, chrome.contentLeft() + 7, chrome.bodyTop() + 7, Math.min(286, chrome.contentRight() - chrome.contentLeft() - 50), 14, Component.translatable("gui.sparkle_morpher.target_action.search"));
         search.setBordered(false);
-        search.setHint(Component.literal("搜索目标…"));
+        search.setHint(Component.translatable("gui.sparkle_morpher.target_action.search_hint"));
         search.setValue(query);
         search.setResponder(value -> { page = 0; rebuildTargetWidgets(); });
         addRenderableWidget(search);
@@ -118,14 +118,14 @@ public final class TargetActionSelectionScreen extends Screen {
                     var assembly = cap.getModelAssembly();
                     if (assembly != null && assembly.getPresentationCapabilities().playerActionControlsAvailable() && seen.add(player.getUUID()))
                         targets.add(new TargetRow(player.getUUID(), player.getDisplayName().getString(), true,
-                                fakeIds.contains(player.getUUID()) ? "假人" : "玩家", assembly.getDisplayName(cap.getModelId())));
+                                Component.translatable(fakeIds.contains(player.getUUID()) ? "gui.sparkle_morpher.target_action.fake_player" : "gui.sparkle_morpher.target_action.player").getString(), assembly.getDisplayName(cap.getModelId())));
                 });
             }
             for (LivingEntity maid : level.getEntitiesOfClass(LivingEntity.class, local.getBoundingBox().inflate(64.0), entity -> TouhouMaidCompat.isMaidEntity(entity))) {
                 MaidCapability.get(maid).ifPresent(cap -> {
                     var assembly = cap.getModelAssembly();
                     if (assembly != null && assembly.getPresentationCapabilities().playerActionControlsAvailable() && seen.add(maid.getUUID()))
-                        targets.add(new TargetRow(maid.getUUID(), maid.getDisplayName().getString(), false, "女仆", assembly.getDisplayName(cap.getModelId())));
+                        targets.add(new TargetRow(maid.getUUID(), maid.getDisplayName().getString(), false, Component.translatable("gui.sparkle_morpher.target_action.maid").getString(), assembly.getDisplayName(cap.getModelId())));
                 });
             }
         }
@@ -144,15 +144,15 @@ public final class TargetActionSelectionScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mx, int my, float partialTick) {
         IndependentPanelChrome c = IndependentPanelChrome.of(width, height);
-        c.frame(g, font, title, Component.literal("选择已加载且有模型的玩家、假人或其他目标"), mx, my);
+        c.frame(g, font, title, Component.translatable("gui.sparkle_morpher.target_action.description"), mx, my);
         int x = c.contentLeft(), right = c.contentRight(), w = right - x;
         RoulettePanelStyle.roundedSurface(g, x, c.bodyTop(), Math.min(300, w - 30), 22, 3, 0x0BFFFFFF, 0x24FFFFFF);
         IndependentPanelChrome.icon(g, mx, my, right - 22, c.bodyTop(), RoulettePanelStyle.Glyph.RELOAD);
         RoulettePanelStyle.roundedSurface(g, x, rowTop() - 24, w, 23, 3, 0x0BFFFFFF, 0);
         int typeX = x + Math.round(w * .33f), modelX = x + Math.round(w * .55f);
-        g.drawString(font, "目标", x + 10, rowTop() - 16, 0xFFB1B1B1, false);
-        g.drawString(font, "类型", typeX, rowTop() - 16, 0xFFB1B1B1, false);
-        g.drawString(font, "当前模型", modelX, rowTop() - 16, 0xFFB1B1B1, false);
+        g.drawString(font, Component.translatable("gui.sparkle_morpher.target_action.column.target").getString(), x + 10, rowTop() - 16, 0xFFB1B1B1, false);
+        g.drawString(font, Component.translatable("gui.sparkle_morpher.target_action.column.type").getString(), typeX, rowTop() - 16, 0xFFB1B1B1, false);
+        g.drawString(font, Component.translatable("gui.sparkle_morpher.target_action.column.model").getString(), modelX, rowTop() - 16, 0xFFB1B1B1, false);
         List<TargetRow> rows = visibleTargets();
         for (int i = page * pageSize(), slot = 0; i < rows.size() && slot < pageSize(); i++, slot++) {
             TargetRow row = rows.get(i);
@@ -166,14 +166,14 @@ public final class TargetActionSelectionScreen extends Screen {
             g.drawString(font, RoulettePanelStyle.trim(font, row.model(), right - modelX - 10), modelX, y + rowHeight() / 2 - 4, 0xFFB1B1B1, false);
             RoulettePanelStyle.fill(g, x + 8, y + rowHeight() - 1, w - 16, 1, 0x0FFFFFFF);
         }
-        if (rows.isEmpty()) g.drawString(font, "没有匹配的已加载目标", x + 10, rowTop() + 20, 0xFFB1B1B1, false);
+        if (rows.isEmpty()) g.drawString(font, Component.translatable("gui.sparkle_morpher.target_action.empty").getString(), x + 10, rowTop() + 20, 0xFFB1B1B1, false);
         if (!failure.isBlank()) g.drawString(font, RoulettePanelStyle.trim(font, failure, w - 130), x, c.footerY() + 7, 0xFFDC5159, false);
         if (rows.size() > pageSize()) {
             IndependentPanelChrome.icon(g, mx, my, x, c.footerY() - 30, RoulettePanelStyle.Glyph.CANCEL);
             IndependentPanelChrome.icon(g, mx, my, x + 80, c.footerY() - 30, RoulettePanelStyle.Glyph.APPLY);
             g.drawString(font, (page + 1) + " / " + Math.max(1, (rows.size() + pageSize() - 1) / pageSize()), x + 30, c.footerY() - 23, 0xFFB1B1B1, false);
         }
-        IndependentPanelChrome.button(g, font, mx, my, right - 100, c.footerY(), 100, Component.literal("打开动作轮盘"), true);
+        IndependentPanelChrome.button(g, font, mx, my, right - 100, c.footerY(), 100, Component.translatable("gui.sparkle_morpher.target_action.open_wheel"), true);
         super.render(g, mx, my, partialTick);
     }
 
@@ -214,17 +214,17 @@ public final class TargetActionSelectionScreen extends Screen {
         ClientLevel level = minecraft.level;
         Entity entity = resolve(level, row);
         if (entity == null) {
-            fail("目标尚未加载到客户端，无法打开动作轮盘。");
+            fail(Component.translatable("gui.sparkle_morpher.target_action.error.not_loaded").getString());
             return;
         }
         if (entity instanceof net.minecraft.world.entity.player.Player) {
             PlayerCapability.get(entity).ifPresentOrElse(
                     cap -> openRoulette(cap.getModelId(), cap.getModelAssembly(), cap),
-                    () -> fail("假人的 YSM 模型能力尚未同步。"));
+                    () -> fail(Component.translatable("gui.sparkle_morpher.target_action.error.fake_player_sync").getString()));
         } else {
             MaidCapability.get(entity).ifPresentOrElse(
                     cap -> openRoulette(cap.getModelId(), cap.getModelAssembly(), cap),
-                    () -> fail("女仆的 YSM 模型能力尚未就绪。"));
+                    () -> fail(Component.translatable("gui.sparkle_morpher.target_action.error.maid_not_ready").getString()));
         }
     }
 
@@ -250,7 +250,7 @@ public final class TargetActionSelectionScreen extends Screen {
         if (assembly == null || !assembly.getPresentationCapabilities().playerActionControlsAvailable()
                 || assembly.getModelData() == null
                 || assembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {
-            fail("目标模型没有可用的额外动作。");
+            fail(Component.translatable("gui.sparkle_morpher.target_action.error.no_animations").getString());
             return;
         }
         InputUtil.setScreen(new UnifiedRouletteScreen(modelId, assembly, target));

@@ -237,7 +237,7 @@ public class ModelSettingsScreen extends OptionScreen {
         renderGroupChips(g, mouseX, mouseY);
         renderRows(g, mouseX, mouseY, partialTick);
         renderExtras(g, mouseX, mouseY, partialTick);
-        IndependentPanelChrome.text(g, font, Component.literal("配置即时生效 · 返回模型列表"), contentLeft, chrome.footerY() + 8, .89f, 0xFFB1B1B1);
+        IndependentPanelChrome.text(g, font, Component.translatable("gui.sparkle_morpher.model_settings.footer"), contentLeft, chrome.footerY() + 8, .89f, 0xFFB1B1B1);
         IndependentPanelChrome.button(g, font, mouseX, mouseY, contentRight - 100, chrome.footerY(), 100, Component.translatable("gui.done"), true);
         renderDropdown(g, mouseX, mouseY);
     }
@@ -358,7 +358,7 @@ public class ModelSettingsScreen extends OptionScreen {
             return;
         }
         RoulettePanelStyle.roundedSurface(g, previewLeft, previewTop, previewRight - previewLeft, previewBottom - previewTop, 4, 0x09FFFFFF, 0x1AFFFFFF);
-        IndependentPanelChrome.text(g, font, Component.literal("拖动旋转 · 滚轮缩放"), previewLeft + 14, previewBottom - 37, .89f, 0xFFB1B1B1);
+        IndependentPanelChrome.text(g, font, Component.translatable("gui.sparkle_morpher.model_settings.preview_hint"), previewLeft + 14, previewBottom - 37, .89f, 0xFFB1B1B1);
         renderPreview(g, partialTick);
     }
 

@@ -20,7 +20,7 @@ final class CloudOfficialProfileNameProof {
                 var property = result == null ? null : service.getPackedTextures(result.profile());
                 if (property == null || !property.hasSignature() || property.value().length() > 16384
                         || property.signature().length() > 2048) {
-                    throw new IllegalStateException("无法获取 Mojang 签名的角色资料，请检查角色服务连接后重试");
+                    throw new IllegalStateException("sparkle_morpher:profile_proof_unavailable");
                 }
                 JsonObject proof = new JsonObject();
                 proof.addProperty("value", property.value()); proof.addProperty("signature", property.signature());

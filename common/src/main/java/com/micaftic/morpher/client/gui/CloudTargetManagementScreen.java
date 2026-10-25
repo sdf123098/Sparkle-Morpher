@@ -39,8 +39,8 @@ public final class CloudTargetManagementScreen extends Screen {
         String id=targetId==null?"":targetId.getValue(),kind=targetKind==null?"FAKE_PLAYER":targetKind.getValue(),name=targetName==null?"":targetName.getValue();
         clearWidgets();fields.clear();hits.clear();layout=ModelPanelLayout.create(width,height);
         int x=layout.contentLeft,w=layout.contentWidth,fy=formY();
-        accountId=field(x,fy,(int)(w*.38),24,"Cloud 账号 ID",account);
-        role=field(x+(int)(w*.40),fy,(int)(w*.24),24,"角色：OWNER / EDITOR / VIEWER",chosenRole);
+        accountId=field(x,fy,(int)(w*.38),24,auditString("hardcoded_096"),account);
+        role=field(x+(int)(w*.40),fy,(int)(w*.24),24,auditString("hardcoded_097"),chosenRole);
         int dx=width/2-Math.min(440,w)/2,dw=Math.min(440,w),dy=height<400?32:86;
         targetId=field(dx+14,dy+40,dw-28,24,text("target.id"),id);
         targetKind=field(dx+14,dy+88,dw-28,24,text("target.kind"),kind);
@@ -67,23 +67,23 @@ public final class CloudTargetManagementScreen extends Screen {
         RoulettePanelStyle.applicationRail(g,width,height,3);hits.clear();
         int x=layout.contentLeft,w=layout.contentWidth,right=x+w;
         control(g,mx,my,x,14,22,22,"",Glyph.UP,false,false,this::onClose);
-        draw(g,"目标与权限",x+32,18,RoulettePanelStyle.TEXT,w-100);
+        draw(g,auditString("hardcoded_098"),x+32,18,RoulettePanelStyle.TEXT,w-100);
         var snap=management.snapshot();
         String instance=snap.profile()==null?"Cloud":CloudManagementScreen.displayName(snap.profile());
-        String scope=snap.selectedScope()==null?"未选择范围":snap.selectedScope().name();
-        String target=snap.selectedTarget()==null?"未选择目标":snap.selectedTarget().displayName();
+        String scope=snap.selectedScope()==null?auditString("hardcoded_099"):snap.selectedScope().name();
+        String target=snap.selectedTarget()==null?auditString("hardcoded_100"):snap.selectedTarget().displayName();
         draw(g,instance+" · "+scope+" · "+target,x+32,38,RoulettePanelStyle.MUTED,w-80);
 
         RoulettePanelStyle.fill(g,x,57,w,1,0x26FFFFFF);
         int tabY=70,tabW=Math.min(92,Math.max(60,(w-66)/3));
-        control(g,mx,my,x,tabY,tabW,22,"目标列表",null,!showingAcl,false,()->{showingAcl=false;listPage=0;init();});
-        control(g,mx,my,x+tabW+6,tabY,tabW,22,"目标权限",null,showingAcl&&!scopeAcl,false,()->{scopeAcl=false;refreshTargetAcl();});
-        control(g,mx,my,x+2*(tabW+6),tabY,tabW,22,"范围权限",null,showingAcl&&scopeAcl,false,()->{scopeAcl=true;refreshScopeAcl();});
+        control(g,mx,my,x,tabY,tabW,22,auditString("hardcoded_101"),null,!showingAcl,false,()->{showingAcl=false;listPage=0;init();});
+        control(g,mx,my,x+tabW+6,tabY,tabW,22,auditString("hardcoded_102"),null,showingAcl&&!scopeAcl,false,()->{scopeAcl=false;refreshTargetAcl();});
+        control(g,mx,my,x+2*(tabW+6),tabY,tabW,22,auditString("hardcoded_103"),null,showingAcl&&scopeAcl,false,()->{scopeAcl=true;refreshScopeAcl();});
         control(g,mx,my,right-50,tabY,22,22,"",Glyph.RELOAD,false,false,()->{if(!showingAcl)refreshTargets();else if(scopeAcl)refreshScopeAcl();else refreshTargetAcl();});
         control(g,mx,my,right-22,tabY,22,22,"",Glyph.PLUS,false,false,()->{createOpen=true;init();});
         int header=height<400?99:107,rowH=height<400?27:38,listY=header+25;
         RoulettePanelStyle.roundedFill(g,x,header,w,23,3,0x0DFFFFFF);
-        String[] headers=showingAcl?new String[]{"Cloud 账号 ID","角色"}:new String[]{"显示名称","类型","目标 ID","权限"};
+        String[] headers=showingAcl?new String[]{auditString("hardcoded_096"),auditString("hardcoded_104")}:new String[]{auditString("hardcoded_105"),auditString("hardcoded_106"),auditString("hardcoded_107"),auditString("hardcoded_108")};
         double[] columns=showingAcl?new double[]{0,.55}:new double[]{0,.23,.39,.78};
         for(int col=0;col<headers.length;col++)draw(g,headers[col],x+10+(int)(w*columns[col]),header+8,0xFFB1B1B1,(int)(w*.4));
         int visible=Math.max(1,Math.min(3,(formY()-34-listY)/rowH));
@@ -109,14 +109,14 @@ public final class CloudTargetManagementScreen extends Screen {
             RoulettePanelStyle.fill(g,x+8,ry+rowH-2,w-16,1,0x0DFFFFFF);
             hits.add(new Hit(x,ry,w,rowH-2,choose));
         }
-        if(size==0)draw(g,"暂无记录，点击刷新获取当前范围的数据。",x+10,listY+12,RoulettePanelStyle.MUTED,w-20);
+        if(size==0)draw(g,auditString("hardcoded_109"),x+10,listY+12,RoulettePanelStyle.MUTED,w-20);
         int fy=formY();
-        draw(g,"Cloud 账号 ID",x,fy-17,RoulettePanelStyle.MUTED,(int)(w*.38));
-        draw(g,"角色",x+(int)(w*.40),fy-17,RoulettePanelStyle.MUTED,(int)(w*.24));
-        control(g,mx,my,x+(int)(w*.68),fy,w-(int)(w*.68),24,scopeAcl&&showingAcl?"设置当前范围权限":"设置所选目标权限",null,false,true,()->{if(scopeAcl&&showingAcl)setScopeAcl();else setTargetAcl();});
+        draw(g,auditString("hardcoded_096"),x,fy-17,RoulettePanelStyle.MUTED,(int)(w*.38));
+        draw(g,auditString("hardcoded_104"),x+(int)(w*.40),fy-17,RoulettePanelStyle.MUTED,(int)(w*.24));
+        control(g,mx,my,x+(int)(w*.68),fy,w-(int)(w*.68),24,scopeAcl&&showingAcl?auditString("hardcoded_110"):auditString("hardcoded_111"),null,false,true,()->{if(scopeAcl&&showingAcl)setScopeAcl();else setTargetAcl();});
         int vehicleY=height<400?fy+36:364;
-        control(g,mx,my,x,vehicleY,Math.min(150,w),22,"载具绑定 ›",null,false,false,()->InputUtil.setScreen(new CloudVehicleBindingScreen(this,management)));
-        if(height>=400)draw(g,"范围权限与目标权限分开编辑，当前对象始终显示。",x,410,RoulettePanelStyle.MUTED,w);
+        control(g,mx,my,x,vehicleY,Math.min(150,w),22,auditString("hardcoded_112"),null,false,false,()->InputUtil.setScreen(new CloudVehicleBindingScreen(this,management)));
+        if(height>=400)draw(g,auditString("hardcoded_113"),x,410,RoulettePanelStyle.MUTED,w);
         if(range.pageCount()>1){
             control(g,mx,my,right-96,vehicleY,22,22,"‹",null,false,false,()->{listPage=Math.max(0,listPage-1);});
             draw(g,(listPage+1)+" / "+range.pageCount(),right-68,vehicleY+7,RoulettePanelStyle.MUTED,42);
@@ -130,7 +130,7 @@ public final class CloudTargetManagementScreen extends Screen {
         g.fill(0,0,width,height,0x88000000);hits.clear();
         int dw=Math.min(440,layout.contentWidth),dx=width/2-dw/2,dy=height<400?32:86;
         RoulettePanelStyle.secondaryGlassPanel(g,dx,dy,dw,218);
-        draw(g,"添加目标",dx+14,dy+14,RoulettePanelStyle.TEXT,dw-28);
+        draw(g,auditString("hardcoded_114"),dx+14,dy+14,RoulettePanelStyle.TEXT,dw-28);
         String[] labels={text("target.id"),text("target.kind"),text("target.name")};
         EditBox[] boxes={targetId,targetKind,targetName};
         for(int i=0;i<3;i++){
@@ -139,8 +139,8 @@ public final class CloudTargetManagementScreen extends Screen {
             Field field=fields.stream().filter(f->f.box==box).findFirst().orElseThrow();
             RoulettePanelStyle.roundedSurface(g,field.x,field.y,field.w,field.h,3,0x0BFFFFFF,field.box.isFocused()?0xCCE05252:0x26FFFFFF);field.box.render(g,mx,my,tick);
         }
-        control(g,mx,my,dx+dw-168,dy+184,70,22,"取消",null,false,false,()->{createOpen=false;init();});
-        control(g,mx,my,dx+dw-90,dy+184,76,22,"添加",null,false,true,()->{createOpen=false;createTarget();init();});
+        control(g,mx,my,dx+dw-168,dy+184,70,22,auditString("hardcoded_115"),null,false,false,()->{createOpen=false;init();});
+        control(g,mx,my,dx+dw-90,dy+184,76,22,auditString("hardcoded_116"),null,false,true,()->{createOpen=false;createTarget();init();});
     }
     @Override public boolean mouseClicked(double mouseX,double mouseY,int button){
         if(button!=0)return super.mouseClicked(mouseX,mouseY,button);
@@ -218,6 +218,8 @@ public final class CloudTargetManagementScreen extends Screen {
         this.statusMessage = message;
 
     }
+
+    private static String auditString(String key) { return Component.translatable("gui.sparkle_morpher.audit." + key).getString(); }
 
     private static String text(String key, Object... args) {
         return CloudManagementScreen.text(key, args);
