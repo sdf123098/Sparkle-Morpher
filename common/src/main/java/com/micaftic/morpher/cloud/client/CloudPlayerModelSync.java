@@ -5,11 +5,11 @@ import com.google.gson.JsonObject;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
+import com.micaftic.morpher.client.RuntimeModelLease;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -21,7 +21,7 @@ public final class CloudPlayerModelSync {
     private static String displayScope, displayEpoch;
     private static final CloudPlayerAppearanceState STATE = new CloudPlayerAppearanceState();
     private static final Map<UUID, Attempt> ATTEMPTS = new HashMap<>();
-    private record Ready(CloudPlayerAppearanceState.Snapshot token, Player entity, CloudClientRuntime.RuntimeState runtime, String modelId) {}
+    private record Ready(CloudPlayerAppearanceState.Snapshot token, Player entity, CloudClientRuntime.RuntimeState runtime, String modelId, RuntimeModelLease lease) {}
     private static final Map<UUID, Ready> READY = new HashMap<>();
     private static final Map<String, CompletableFuture<String>> IMPORTS = new HashMap<>();
     private static final Set<String> AUTHORIZED = new HashSet<>();
@@ -64,7 +64,15 @@ public final class CloudPlayerModelSync {
             CloudClientRuntime.RuntimeState runtime, long retryAt, boolean pending, boolean applied) {}
     private CloudPlayerModelSync() {}
     /** Clear only the presentation attempt when source ownership changes; authorization/presence stay intact. */
-    public static void peerOwnershipChanged(UUID uuid) { ATTEMPTS.remove(uuid); }
+    public static void peerOwnershipChanged(UUID uuid) { ATTEMPTS.remove(uuid); releaseReady(uuid); }
+    private static void releaseReady(UUID uuid) {
+        Ready ready = READY.remove(uuid);
+        if (ready != null) ready.lease().close();
+    }
+    private static void releaseAllReady() {
+        READY.values().forEach(ready -> ready.lease().close());
+        READY.clear();
+    }
     public static boolean readyCandidate(UUID uuid) {
         var ready=READY.get(uuid); var client=Minecraft.getInstance();
         return ready!=null && com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive()
@@ -81,7 +89,7 @@ public final class CloudPlayerModelSync {
     public static boolean ownsAppearance(UUID playerId) { return (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive()) && !com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(playerId) && STATE.ownsAppearance(playerId); }
 
     private static void clearRemote(Player player) {
-        READY.remove(player.getUUID()); PUBLISHERS.remove(player.getUUID());
+        releaseReady(player.getUUID()); PUBLISHERS.remove(player.getUUID());
         DISPLAY.remove(player.getUUID());
         PlayerCapability.get(player).ifPresent(cap -> cap.getPositionTracker().clearDisplayState());
         CloudPlayerMotionSync.remove(player.getUUID());
@@ -105,7 +113,7 @@ public final class CloudPlayerModelSync {
             });
         }
         if (client.level != null) for (Player player : client.level.players()) if (player != client.player && STATE.ownsAppearance(player.getUUID())) clearRemote(player);
-        generation++; STATE.clear(); ATTEMPTS.clear(); READY.clear(); IMPORTS.clear(); AUTHORIZED.clear(); authorizationRuntime = null;
+        generation++; STATE.clear(); ATTEMPTS.clear(); releaseAllReady(); IMPORTS.clear(); AUTHORIZED.clear(); authorizationRuntime = null;
         DISPLAY.clear(); lastPublishedDisplay = null; nextDisplayPublish = 0; displayScope = displayEpoch = null;
         CloudPlayerMotionSync.reset(); lastPublishedMotion = null; nextMotionPublish = 0;
         sessionRuntime = runtime; connection = client.getConnection(); level = client.level;
@@ -132,7 +140,7 @@ public final class CloudPlayerModelSync {
         if (runtime != sessionRuntime || client.getConnection() != connection) reset(client, runtime);
         // Dimension/respawn changes invalidate imports but keep the session publication revision.
         if (level != client.level) {
-            generation++; level = client.level; STATE.clear(); ATTEMPTS.clear(); READY.clear(); IMPORTS.clear();
+            generation++; level = client.level; STATE.clear(); ATTEMPTS.clear(); releaseAllReady(); IMPORTS.clear();
             DISPLAY.clear(); lastPublishedDisplay = null; nextDisplayPublish = 0;
             CloudPlayerMotionSync.clearPeers();
             polling = publishing = identifying = false; nextPoll = nextPublish = 0;
@@ -388,7 +396,8 @@ public final class CloudPlayerModelSync {
                 }
                 ATTEMPTS.put(player.getUUID(), new Attempt(token, player, runtime, System.currentTimeMillis() + 5000, false, failure == null));
                 if (failure == null) {
-                    READY.put(player.getUUID(),new Ready(token,player,runtime,modelId));
+                    releaseReady(player.getUUID());
+                    READY.put(player.getUUID(),new Ready(token,player,runtime,modelId,ClientModelManager.acquireRuntimeModelLease(modelId)));
                     com.micaftic.morpher.client.peer.ClientPeerRuntime.yieldToCloud(player.getUUID());
                     cap.initModelWithTexture(modelId, selection.textureId());
                     cap.setForceDisabled(false);
@@ -411,18 +420,16 @@ public final class CloudPlayerModelSync {
         CompletableFuture<String> result = new CompletableFuture<>();
         IMPORTS.put(id, result);
         // Only the authenticated Cloud response supplies asset references; never trust a game-server packet.
-        // The configured Cloud authenticates every exact revision GET; the cache verifies SHA.
-        runtime.assetCache().downloadAndStore(runtime.assets(), selection.ref(), runtime.cacheRoot())
-                .thenApplyAsync(path -> {
-                    try { return Files.readAllBytes(path); }
-                    catch (java.io.IOException failure) { throw new CompletionException(failure); }
-                }).whenComplete((bytes, failure) -> Minecraft.getInstance().execute(() -> {
+        // The configured Cloud authenticates every exact revision GET; the display bytes are SHA-verified in memory.
+        runtime.downloadDisplayAsset(selection.ref(), selection.format())
+                .thenApply(com.micaftic.morpher.cloud.client.CloudAssetClient.MemoryAsset::bytes)
+                .whenComplete((bytes, failure) -> Minecraft.getInstance().execute(() -> {
                     if (CloudClientRuntime.state() != runtime) result.completeExceptionally(new IllegalStateException("Cloud session changed"));
                     else if (failure != null) result.completeExceptionally(failure);
                     else {
                         AUTHORIZED.add(id);
                         if (ClientModelManager.getAvailableModelIds().contains(id)) result.complete(id);
-                        else ClientModelManager.importLocalModel(id, selection.importFileName(), bytes, error -> {
+                        else ClientModelManager.importCloudModelInMemory(id, selection.importFileName(), bytes, error -> {
                             if (error == null) result.complete(id); else result.completeExceptionally(new IllegalStateException(error.getString()));
                         });
                     }

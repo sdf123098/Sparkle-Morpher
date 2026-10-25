@@ -66,6 +66,32 @@ public final class PeerRoomCodec {
         if(!in.readBoolean())return null;long revision=in.readLong();if(!in.readBoolean())return new PeerAppearance(revision,null,null);
         byte[] hash=new byte[32];in.readFully(hash);return new PeerAppearance(revision,new PeerModelIdentity(new PeerContentRoot(HexFormat.of().formatHex(hash)),text(in,64)),text(in,1024));
     }
+    public static void entity(DataOutput out, PeerEntityAppearance entity) throws IOException {
+        session(out,entity.owner());uuid(out,entity.entityId());out.writeLong(entity.revision());out.writeBoolean(entity.removed());
+        if(entity.removed())return;
+        out.writeBoolean(entity.model()!=null);
+        if(entity.model()!=null){out.write(entity.model().contentRoot().bytes());text(out,entity.model().importerProfile(),64);}
+        text(out,entity.texture(),1024);
+    }
+    public static PeerEntityAppearance entity(DataInput in) throws IOException {
+        var owner=session(in);var id=uuid(in);long revision=in.readLong();boolean removed=in.readBoolean();
+        if(removed)return new PeerEntityAppearance(owner,id,revision,null,null,true);
+        PeerModelIdentity model=null;
+        if(in.readBoolean()){byte[] bytes=new byte[32];in.readFully(bytes);model=new PeerModelIdentity(new PeerContentRoot(HexFormat.of().formatHex(bytes)),text(in,64));}
+        return new PeerEntityAppearance(owner,id,revision,model,text(in,1024),false);
+    }
+    public static byte[] entityPage(PeerEntityCatalog.Page page) throws IOException {
+        return encode(out->{out.writeInt(page.next());out.writeByte(page.entries().size());for(var entry:page.entries())entity(out,entry);});
+    }
+    public static PeerEntityCatalog.Page entityPage(byte[] payload) throws IOException {
+        return decode(payload,in->{int next=in.readInt(),size=in.readUnsignedByte();
+            if(next < -1 || next > PeerLimits.CAPACITY_CEILING*PeerEntityCatalog.PER_OWNER || size>PeerEntityCatalog.PAGE_SIZE)throw new IOException("Invalid entity page");
+            var entries=new ArrayList<PeerEntityAppearance>();for(int i=0;i<size;i++)entries.add(entity(in));return new PeerEntityCatalog.Page(next,entries);});
+    }
+    public static byte[] assetRequest(PeerRoomCoordinator.Member owner,boolean have) throws IOException {
+        return encode(out->{uuid(out,owner.session().memberId());out.writeLong(owner.appearance().revision());out.writeBoolean(have);
+            out.writeBoolean(owner.entityId()!=null);if(owner.entityId()!=null)uuid(out,owner.entityId());});
+    }
     public static byte[] snapshot(PeerRoomCoordinator.Snapshot snapshot)throws IOException {
         return encode(out->{uuid(out,snapshot.roomId());uuid(out,snapshot.epoch());out.writeLong(snapshot.rosterRevision());out.writeByte(snapshot.members().size());
             for(var member:snapshot.members()){session(out,member.session());appearance(out,member.appearance());}});

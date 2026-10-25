@@ -22,7 +22,7 @@ public final class MolangOption {
         evaluate(animatable, expr, s -> cache[0] = toFloat(s) > 0.0f);
         return new LiveOption<>(title, description, () -> cache[0], v -> {
             cache[0] = v;
-            execute(animatable, expr + "=" + (v ? "1" : "0"));
+            execute(animatable, expr, expr + "=" + (v ? "1" : "0"));
         });
     }
 
@@ -31,7 +31,7 @@ public final class MolangOption {
         evaluate(animatable, expr, s -> cache[0] = toFloat(s));
         return new LiveOption<>(title, description, () -> cache[0], v -> {
             cache[0] = v;
-            execute(animatable, expr + "=" + v);
+            execute(animatable, expr, expr + "=" + v);
         });
     }
 
@@ -41,7 +41,7 @@ public final class MolangOption {
         return new LiveOption<>(title, description, () -> cache[0], v -> {
             int idx = Math.max(0, Math.min(writeExprs.length - 1, v));
             cache[0] = idx;
-            execute(animatable, writeExprs[idx]);
+            execute(animatable, readExpr, writeExprs[idx]);
         });
     }
 
@@ -60,9 +60,10 @@ public final class MolangOption {
         }
     }
 
-    private static void execute(AnimatableEntity<?> animatable, String expr) {
+    private static void execute(AnimatableEntity<?> animatable, String control, String expr) {
         try {
             ClientMotionSources.beginEdit(animatable);
+            com.micaftic.morpher.cloud.client.CloudEntityMotionSync.rememberSetting(animatable, control, expr);
             animatable.executeExpression(GeckoLibCache.parseSimpleExpression(expr), true, false, null);
             if (!GeckoLibCache.isRoamingVariableAssignment(expr)) {
                 ClientMotionSources.expression(animatable, expr, java.util.List.of());

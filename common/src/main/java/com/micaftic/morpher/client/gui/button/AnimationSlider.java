@@ -35,6 +35,7 @@ public class AnimationSlider extends RangedSliderWidget implements ISpecialWidge
         try {
             String str = this.controllerName + "=" + getValue();
             ClientMotionSources.beginEdit(this.model);
+            com.micaftic.morpher.cloud.client.CloudEntityMotionSync.rememberSetting(this.model, this.controllerName, str);
             this.model.executeExpression(GeckoLibCache.parseSimpleExpression(str), true, false, null);
             if (!GeckoLibCache.isRoamingVariableAssignment(str)) {
                 ClientMotionSources.expression(this.model, str, java.util.List.of());

@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.gui.resource.station;
 
 import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
+import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
 import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 
 import java.io.IOException;
@@ -12,6 +13,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 
 /**
  * Download / API candidate URL planning and probe ordering (R1.2.x §24.4).
@@ -83,13 +85,19 @@ public final class DownloadCandidatePlanner {
     }
 
     public static List<String> rankCandidates(List<String> candidates, ResourceStationConfig.State config) {
+        return rankCandidates(candidates, config, null);
+    }
+
+    public static List<String> rankCandidates(List<String> candidates, ResourceStationConfig.State config, ModelRepoClient.ProgressListener listener) {
+        HttpTransport.checkCancelled(listener);
         if (candidates.size() < 2) {
             return candidates;
         }
         List<CandidateProbe> probes = new ArrayList<>();
         for (int i = 0; i < candidates.size(); i++) {
+            HttpTransport.checkCancelled(listener);
             String url = candidates.get(i);
-            CandidateProbe probe = i < MAX_PROBED_CANDIDATES ? probeCandidate(url, config, i) : CandidateProbe.untested(url, i);
+            CandidateProbe probe = i < MAX_PROBED_CANDIDATES ? probeCandidate(url, config, i, listener) : CandidateProbe.untested(url, i);
             probes.add(probe);
         }
         probes.sort(Comparator
@@ -102,10 +110,25 @@ public final class DownloadCandidatePlanner {
     }
 
     public static CandidateProbe probeCandidate(String url, ResourceStationConfig.State config, int index) {
+        return probeCandidate(url, config, index, null);
+    }
+
+    private static CandidateProbe probeCandidate(String url, ResourceStationConfig.State config, int index, ModelRepoClient.ProgressListener listener) {
+        try {
+            return HttpTransport.runInterruptibly(listener, () -> probeCandidateDirect(url, config, index, listener));
+        } catch (IOException error) {
+            HttpTransport.checkCancelled(listener);
+            return new CandidateProbe(url, index, false, Long.MAX_VALUE);
+        }
+    }
+
+    private static CandidateProbe probeCandidateDirect(String url, ResourceStationConfig.State config, int index, ModelRepoClient.ProgressListener listener) {
+        HttpTransport.checkCancelled(listener);
         long started = System.nanoTime();
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+            HttpTransport.checkCancelled(listener);
             int timeout = Math.min(Math.max(1000, config.timeoutMs()), PROBE_TIMEOUT_MS);
             connection.setConnectTimeout(timeout);
             connection.setReadTimeout(timeout);
@@ -125,6 +148,7 @@ public final class DownloadCandidatePlanner {
                 byte[] buffer = new byte[8192];
                 int read;
                 while (total < PROBE_BYTES && (read = in.read(buffer, 0, Math.min(buffer.length, PROBE_BYTES - total))) >= 0) {
+                    HttpTransport.checkCancelled(listener);
                     if (read == 0) {
                         continue;
                     }
@@ -134,7 +158,10 @@ public final class DownloadCandidatePlanner {
             long elapsed = Math.max(1, HttpTransport.elapsedMs(started));
             HttpTransport.monitor(config, "Probe candidate ok url={} bytes={} elapsedMs={} speed={}", url, total, elapsed, HttpTransport.formatSpeed(HttpTransport.bytesPerSecond(total, started, System.nanoTime())));
             return new CandidateProbe(url, index, true, elapsed);
+        } catch (CancellationException cancelled) {
+            throw cancelled;
         } catch (IOException | RuntimeException e) {
+            HttpTransport.checkCancelled(listener);
             HttpTransport.monitor(config, "Probe candidate failed url={} error={}", url, e.toString());
             return new CandidateProbe(url, index, false, Long.MAX_VALUE);
         } finally {

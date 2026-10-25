@@ -26,7 +26,7 @@ public class FooterButton extends AbstractWidget {
         var font=net.minecraft.client.Minecraft.getInstance().font;
         if(width>32){var text=Component.literal(RoulettePanelStyle.trim(font,getMessage().getString(),width-12));g.drawString(font,text,getX()+(width-font.width(text))/2,com.micaftic.morpher.core.gui.UiElementLayout.centeredY(getY(),height,font.lineHeight),active?RoulettePanelStyle.TEXT:RoulettePanelStyle.MUTED,false);}
         else{int size=Math.min(14,Math.min(width,height)-6);RoulettePanelStyle.drawIconScaled(g,glyph,getX()+(width-size)/2,getY()+(height-size)/2,size);}
-        if(hover)g.renderComponentTooltip(font,java.util.List.of(getMessage()),mouseX,mouseY);
+        if(hover)RoulettePanelStyle.tooltip(g,font,java.util.List.of(getMessage()),mouseX,mouseY);
     }
 
     @Override

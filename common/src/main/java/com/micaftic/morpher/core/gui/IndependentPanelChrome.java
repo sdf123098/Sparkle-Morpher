@@ -7,7 +7,7 @@ import net.minecraft.network.chat.Component;
 /** Shared chrome for the handoff's independent editors, without the application rail. */
 public record IndependentPanelChrome(int left, int top, int right, int bottom, int inset) {
     public static IndependentPanelChrome of(int width, int height) {
-        int margin = width < 560 || height < 320 ? 12 : width < 800 ? 18 : 24;
+        int margin = height < 240 || width < 400 ? 6 : width < 560 || height < 320 ? 10 : width < 800 ? 18 : 24;
         return new IndependentPanelChrome(margin, margin, width - margin, height - margin,
                 margin == 24 ? 16 : margin == 18 ? 12 : 8);
     }
@@ -15,17 +15,19 @@ public record IndependentPanelChrome(int left, int top, int right, int bottom, i
     public int contentLeft() { return left + inset; }
     public int contentRight() { return right - inset; }
     public int headerY() { return top + 6; }
-    public int bodyTop() { return top + 62; }
-    public int footerY() { return bottom - 30; }
+    public int bodyTop() { return top + (bottom-top<250?44:62); }
+    public int footerY() { return bottom - (bottom-top<250?24:30); }
     public int footerRight() { return contentRight(); }
 
     public void frame(GuiGraphics g, Font font, Component title, Component subtitle,
                       int mouseX, int mouseY) {
         RoulettePanelStyle.glassPanel(g, left, top, right - left, bottom - top);
         icon(g, mouseX, mouseY, contentRight() - 22, headerY(), RoulettePanelStyle.Glyph.CLOSE);
-        text(g, font, title, contentLeft(), UiElementLayout.centeredY(headerY(),22,Math.round(font.lineHeight*1.4f)), 1.4f, 0xFFF4F4F4);
-        text(g, font, subtitle, contentLeft(), top + 29, .89f, 0xFFB1B1B1);
-        RoulettePanelStyle.fill(g, contentLeft(), top + 49, contentRight() - contentLeft(), 1, 0x1AFFFFFF);
+        boolean compact=bottom-top<250;
+        int titleWidth=Math.max(1,contentRight()-contentLeft()-30);
+        text(g, font, Component.literal(font.plainSubstrByWidth(title.getString(),(int)(titleWidth/1.1f))), contentLeft(), UiElementLayout.centeredY(headerY(),22,Math.round(font.lineHeight*1.1f)), 1.1f, 0xFFF4F4F4);
+        if(!compact)text(g, font, Component.literal(font.plainSubstrByWidth(subtitle.getString(),contentRight()-contentLeft())), contentLeft(), top + 29, .89f, 0xFFB1B1B1);
+        RoulettePanelStyle.fill(g, contentLeft(), bodyTop()-10, contentRight() - contentLeft(), 1, 0x1AFFFFFF);
     }
 
     public boolean isBackOrClose(double x, double y) {

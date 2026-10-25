@@ -378,24 +378,24 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         g.drawString(font,title,x,y+10,TEXT,false);String account=CloudManagementScreen.management().accountId(instanceId);g.drawString(font,fit(Component.literal(targetLabel().getString()+" · "+(account.isBlank()?"尚未登录":account)),w-180),x+Math.min(170,w/3),y+12,MUTED,false);
         var sr=FinalUiLayout.scene("upload",width,height).control(6);RoulettePanelStyle.roundedSurface(g,sr.x(),sr.y(),sr.w(),sr.h(),3,0x0CFFFFFF,0x22FFFFFF);
         g.drawString(font,fit(Component.literal(showingFailures?"失败详情":activeTab==UploadTab.LOCAL_FILES?"来源：选择的本机文件":"来源：模型文件夹现有模型"),w-12),x+6,compact()?65:80,MUTED,false);
-        RoulettePanelStyle.fill(g,x,listShellY(),w,listY()-listShellY(),0x0CFFFFFF);String[] labels=showingFailures?new String[]{"模型","失败原因","源文件"}:new String[]{"选择","模型 / 文件","大小","状态"};double[] cols=showingFailures?new double[]{0,.32,.7}:new double[]{0,.06,.62,.82};
+        RoulettePanelStyle.roundedFill(g,x,listShellY(),w,listY()-listShellY(),4,0x0CFFFFFF);String[] labels=showingFailures?new String[]{"模型","失败原因","源文件"}:new String[]{"选择","模型 / 文件","大小","状态"};double[] cols=showingFailures?new double[]{0,.32,.7}:new double[]{0,.06,.62,.82};
         for(int i=0;i<labels.length;i++)g.drawString(font,Component.literal(labels[i]),x+6+(int)(w*cols[i]),listShellY()+7,MUTED,false);
         List<String> items=filtered();scroll=Math.max(0,Math.min(scroll,Math.max(0,items.size()-rows())));g.enableScissor(x,listY(),x+w,listY()+listH());List<Component> tooltip=null;
         for(int i=0;i<rows()&&scroll+i<items.size();i++){
             String id=items.get(scroll+i);int yy=listY()+i*rowH();boolean checked=selected.contains(id),hover=RoulettePanelStyle.inside(mx,my,x,yy,w,rowH());
-            if(hover||checked)RoulettePanelStyle.fill(g,x,yy,w,rowH()-1,hover?0x18FFFFFF:0x0CFFFFFF);RoulettePanelStyle.fill(g,x,yy+rowH()-1,w,1,0x12FFFFFF);
+            if(hover||checked)RoulettePanelStyle.roundedFill(g,x+2,yy,w-4,rowH()-2,3,hover?0x18FFFFFF:0x0CFFFFFF);RoulettePanelStyle.fill(g,x,yy+rowH()-1,w,1,0x12FFFFFF);
             if(showingFailures){g.drawString(font,fit(Component.literal(rowName(id)),(int)(w*.3)),x+6,yy+8,TEXT,false);g.drawString(font,fit(failures.getOrDefault(id,Component.empty()),(int)(w*.36)),x+(int)(w*.32),yy+8,ERROR,false);Path source=sources.get(id);g.drawString(font,fit(Component.literal(source==null?rowName(id):source.toString()),(int)(w*.28)),x+(int)(w*.7),yy+8,MUTED,false);}
             else{
-                if(checked)RoulettePanelStyle.drawIconScaled(g,RoulettePanelStyle.Glyph.CHECK,x+6,yy+(rowH()-10)/2,10);else RoulettePanelStyle.border(g,x+7,yy+(rowH()-7)/2,7,7,MUTED);
+                if(checked)RoulettePanelStyle.drawIconScaled(g,RoulettePanelStyle.Glyph.CHECK,x+6,yy+(rowH()-10)/2,10);else RoulettePanelStyle.roundedBorder(g,x+7,yy+(rowH()-7)/2,7,7,2,MUTED);
                 g.drawString(font,fit(Component.literal(rowName(id)),(int)(w*.54)),x+(int)(w*.06),yy+(rowH()-9)/2,TEXT,false);PickedUpload picked=localFiles.get(id);long bytes=picked==null?sourceSizes.getOrDefault(id,0L):picked.size();g.drawString(font,Component.literal(bytes>0?formatBytes(bytes):"—"),x+(int)(w*.62),yy+(rowH()-9)/2,MUTED,false);
                 String state=states.getOrDefault(id,"waiting");Component st=id.equals(activeId)&&activeSession!=null&&!activeSession.isTerminal()?Component.literal(Math.round(activeSession.getProgress()*100)+"%"):label("state."+state);g.drawString(font,fit(st,(int)(w*.17)),x+(int)(w*.82),yy+(rowH()-9)/2,state.equals("failed")?ERROR:MUTED,false);
-                if(id.equals(activeId)&&activeSession!=null)RoulettePanelStyle.fill(g,x+6,yy+rowH()-2,(int)((w-12)*activeSession.getProgress()),2,ERROR);
+                if(id.equals(activeId)&&activeSession!=null)RoulettePanelStyle.roundedFill(g,x+6,yy+rowH()-3,Math.max(1,(int)((w-12)*activeSession.getProgress())),2,1,ERROR);
             }
             if(hover){tooltip=new ArrayList<>();tooltip.add(Component.literal(rowName(id)));if(failures.containsKey(id))tooltip.add(failures.get(id));}
         }
         if(items.isEmpty())g.drawString(font,fit(label("no_results"),w-16),x+8,listY()+12,MUTED,false);g.disableScissor();
         long bytes=selected.stream().mapToLong(id->localFiles.containsKey(id)?localFiles.get(id).size():sourceSizes.getOrDefault(id,0L)).sum();g.drawString(font,fit(Component.literal("已选 "+selected.size()+" 个 · "+formatBytes(bytes)+"   "+status.getString()),w-36),x,height-panelY()-16,MUTED,false);
-        super.render(g,mx,my,pt);controls.forEach(b->b.renderTooltip(g,this,mx,my));if(tooltip!=null)g.renderComponentTooltip(font,tooltip,mx,my);
+        super.render(g,mx,my,pt);controls.forEach(b->b.renderTooltip(g,this,mx,my));if(tooltip!=null)RoulettePanelStyle.tooltip(g,font,tooltip,mx,my,width,height);
     }
     @Override
     public boolean mouseClicked(double mouseX,double mouseY,int button){if(button==0&&RoulettePanelStyle.applicationRailClick(mouseX,mouseY,width,height,this::navigateFromRail))return true;return super.mouseClicked(mouseX,mouseY,button);}

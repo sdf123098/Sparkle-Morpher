@@ -38,9 +38,9 @@ public final class TargetActionSelectionScreen extends Screen {
     private EditBox search;
     private UUID selected;
     private String failure = "";
-    private int pageSize() { return Math.max(1, (IndependentPanelChrome.of(width, height).footerY() - rowTop() - 18) / rowHeight()); }
-    private int rowHeight() { return height < 360 ? 34 : 48; }
-    private int rowTop() { return IndependentPanelChrome.of(width, height).bodyTop() + 60; }
+    private int pageSize() { return Math.max(1, (IndependentPanelChrome.of(width, height).footerY() - rowTop() - 36) / rowHeight()); }
+    private int rowHeight() { return height < 240 ? 26 : height < 360 ? 34 : 48; }
+    private int rowTop() { return IndependentPanelChrome.of(width, height).bodyTop() + 48; }
     private List<TargetRow> visibleTargets() {
         String query = search == null ? "" : search.getValue().strip().toLowerCase(java.util.Locale.ROOT);
         return targets.stream().filter(row -> query.isEmpty() || (row.label() + " " + row.type() + " " + row.model()).toLowerCase(java.util.Locale.ROOT).contains(query)).toList();
@@ -61,6 +61,7 @@ public final class TargetActionSelectionScreen extends Screen {
     @Override
     protected void init() {
         String query = search == null ? "" : search.getValue();
+        clearWidgets();
         IndependentPanelChrome chrome = IndependentPanelChrome.of(width, height);
         search = new EditBox(font, chrome.contentLeft() + 7, chrome.bodyTop() + 7, Math.min(286, chrome.contentRight() - chrome.contentLeft() - 50), 14, Component.literal("搜索目标"));
         search.setBordered(false);

@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.gui;
 
 import com.micaftic.morpher.cloud.client.CloudAssetPage;
+import com.micaftic.morpher.cloud.client.CloudAssetClient;
 import com.micaftic.morpher.cloud.client.CloudAssetSummary;
 import com.micaftic.morpher.cloud.client.CloudAssetImportName;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
@@ -106,15 +107,23 @@ public final class ModernPlayerModelScreenController {
     private final ModelPanelState state;
     private final Host host;
 
-    private ResourceStationConfig.State resourceConfig = ResourceStationConfig.load();
+    private ResourceStationConfig.State resourceConfig;
+    private final java.util.function.ToIntFunction<List<ModelRepoEntry>> resourceEnqueue;
     private final List<ModelRepoEntry> resourceEntries = new ArrayList<>();
     private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
     private final Queue<FilePickerCoordinator.PickedFile> pendingImports = new ArrayDeque<>();
     private final ScreenGenerationGate screenGeneration = new ScreenGenerationGate();
 
     public ModernPlayerModelScreenController(ModelPanelState state, Host host) {
+        this(state, host, ResourceStationConfig.load(), null);
+    }
+
+    ModernPlayerModelScreenController(ModelPanelState state, Host host, ResourceStationConfig.State config,
+                                     java.util.function.ToIntFunction<List<ModelRepoEntry>> enqueue) {
         this.state = state;
         this.host = host;
+        this.resourceConfig = config;
+        this.resourceEnqueue = enqueue == null ? entries -> DownloadQueue.enqueueAll(entries, this.resourceConfig) : enqueue;
     }
 
     // ================================================================
@@ -201,7 +210,8 @@ public final class ModernPlayerModelScreenController {
      * <p>异步 + 超时 + 代际/请求号双重失效检查，行为与拆分前逐行等价。</p>
      */
     public void refreshResources(boolean manual) {
-        if (manual && resourcePreviewQueue != null) resourcePreviewQueue.retry();
+        closeResourcePreviews();
+        clearResourceSelection();
         int requestId = ++this.state.resourceRequestId;
         long generation = this.screenGeneration.capture();
         ResourceStationConfig.State config = this.resourceConfig;
@@ -288,12 +298,21 @@ public final class ModernPlayerModelScreenController {
         this.state.selectedResourceUrl = entry.url();
     }
 
+    /** Preview focus is independent from the checked download set. */
+    public void focusResource(ModelRepoEntry entry) {
+        this.state.selectedResourceUrl = entry.url();
+    }
+
     public boolean isResourceSelected(ModelRepoEntry entry) {
-        return entry.url().equals(this.state.selectedResourceUrl) || this.selectedResourceUrls.contains(entry.url());
+        return this.state.resourceMultiSelectMode ? this.selectedResourceUrls.contains(entry.url())
+                : entry.url().equals(this.state.selectedResourceUrl);
     }
 
     /** 切换资源多选模式（原 {@code toggleResourceMultiSelect}）。 */
     public void toggleResourceMultiSelect() {
+        if (!this.state.resourceMultiSelectMode && !this.state.selectedResourceUrl.isBlank()) {
+            this.selectedResourceUrls.add(this.state.selectedResourceUrl);
+        }
         this.state.resourceMultiSelectMode = !this.state.resourceMultiSelectMode;
         if (!this.state.resourceMultiSelectMode) {
             this.selectedResourceUrls.clear();
@@ -310,11 +329,33 @@ public final class ModernPlayerModelScreenController {
         return DownloadQueue.enqueue(entry, this.resourceConfig);
     }
 
-    /** 入队选中项（无选中则整页）；返回新增数量（原 {@code enqueueSelectedResources} 的判定部分）。 */
+    /** Only an explicit selection may enter the download queue. */
     public int enqueueSelectedResources() {
-        List<ModelRepoEntry> selected = this.resourceEntries.stream().filter(e -> this.selectedResourceUrls.contains(e.url())).toList();
-        return DownloadQueue.enqueueAll(selected.isEmpty() ? filteredResources() : selected, this.resourceConfig);
+        List<ModelRepoEntry> selected = this.resourceEntries.stream().filter(this::isResourceSelected).toList();
+        return selected.isEmpty() ? 0 : this.resourceEnqueue.applyAsInt(selected);
     }
+
+    public int resourceSelectionCount() {
+        return (int) this.resourceEntries.stream().filter(this::isResourceSelected).count();
+    }
+
+    public void selectVisibleResources(java.util.Collection<ModelRepoEntry> entries) {
+        if (!this.state.resourceMultiSelectMode) toggleResourceMultiSelect();
+        entries.forEach(entry -> this.selectedResourceUrls.add(entry.url()));
+    }
+
+    public void clearResourceSelection() {
+        this.selectedResourceUrls.clear();
+        this.state.selectedResourceUrl = "";
+    }
+
+    public void toggleResourceSelection(ModelRepoEntry entry) {
+        if (!this.state.resourceMultiSelectMode) toggleResourceMultiSelect();
+        if (!this.selectedResourceUrls.add(entry.url())) this.selectedResourceUrls.remove(entry.url());
+    }
+
+    public void cancelDownload(DownloadQueue.TaskSnapshot task) { DownloadQueue.cancel(task); }
+    public void cancelAllDownloads() { DownloadQueue.cancelAll(); }
 
     public boolean isQueued(ModelRepoEntry entry) {
         return DownloadQueue.isQueued(entry);
@@ -533,17 +574,6 @@ public final class ModernPlayerModelScreenController {
         }
     }
 
-    /** Opens the separate on-disk directory that stores imported Cloud model copies. */
-    public void openCloudModelFolder() {
-        try {
-            Files.createDirectories(ModelStoragePaths.cloudModels());
-            net.minecraft.Util.getPlatform().openFile(ModelStoragePaths.cloudModels().toFile());
-            this.host.postStatus(Component.literal(ModelStoragePaths.cloudModels().toString()), ChatFormatting.GRAY);
-        } catch (IOException e) {
-            this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.error.open_folder", e.getMessage()), ChatFormatting.RED);
-        }
-    }
-
     public boolean isAllowUpload() {
         return ClientModelManager.isAllowUpload();
     }
@@ -651,24 +681,205 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
         if (runtime == null) throw new IllegalStateException("Cloud runtime is not configured");
         return cloudIdentity(runtime, summary).runtimeModelId();
     }
-    private final java.util.LinkedHashMap<String,OuterFileTexture> resourcePreviews=new java.util.LinkedHashMap<>();
-    private com.micaftic.morpher.cloud.client.CloudPreviewQueue<ModelRepoEntry> resourcePreviewQueue;
-    private int resourcePreviewEpoch;
-    public OuterFileTexture resourcePreview(ModelRepoEntry entry){return resourcePreviews.get(entry.url());}
-    public void requestResourcePreviews(java.util.Collection<ModelRepoEntry> entries){
-        if(resourcePreviewQueue==null){int epoch=resourcePreviewEpoch;
-            resourcePreviewQueue=new com.micaftic.morpher.cloud.client.CloudPreviewQueue<>(2,entry->{
-                if(resourcePreviews.containsKey(entry.url())||entry.previewUrl()==null||entry.previewUrl().isBlank())return CompletableFuture.completedFuture(null);
-                return CompletableFuture.supplyAsync(()->{try{return ModelRepoClient.downloadPreview(entry,resourceConfig);}catch(Exception e){throw new java.util.concurrent.CompletionException(e);}},RESOURCE_EXECUTOR).thenCompose(bytes->{
-                    CompletableFuture<Void> result=new CompletableFuture<>();Minecraft.getInstance().execute(()->{try{
-                        if(epoch==resourcePreviewEpoch){while(resourcePreviews.size()>=48){var it=resourcePreviews.values().iterator();it.next().close();it.remove();}resourcePreviews.put(entry.url(),new OuterFileTexture(bytes));}result.complete(null);
-                    }catch(Throwable e){result.completeExceptionally(e);}});return result;
-                });
-            });
-        }
-        resourcePreviewQueue.update(entries);
+    private final java.util.LinkedHashMap<String, OuterFileTexture> resourcePreviews = new java.util.LinkedHashMap<>();
+    private record ResourcePreviewRequest(ModelRepoEntry entry, boolean modelAllowed, int authorization) {
+        String key() { return entry.url() + "|" + (modelAllowed ? authorization : "cover"); }
     }
-    private void closeResourcePreviews(){resourcePreviewEpoch++;if(resourcePreviewQueue!=null)resourcePreviewQueue.close();resourcePreviewQueue=null;resourcePreviews.values().forEach(OuterFileTexture::close);resourcePreviews.clear();}
+    private com.micaftic.morpher.client.gui.resource.station.ResourcePreviewQueue<ResourcePreviewRequest> resourcePreviewQueue;
+    private final java.util.Set<String> resourcePreviewFailures = new java.util.HashSet<>();
+    private final java.util.Set<String> resourceCoverFailures = new java.util.HashSet<>();
+    private final java.util.Map<String, String> resourcePreviewDesired = new java.util.HashMap<>();
+    private final java.util.Set<String> resourceModelPreviewAllowed = new java.util.HashSet<>();
+    private java.util.List<ModelRepoEntry> resourcePreviewVisible = java.util.List.of();
+    private com.micaftic.morpher.client.gui.resource.station.ResourcePreviewBudget resourcePreviewBudget =
+            new com.micaftic.morpher.client.gui.resource.station.ResourcePreviewBudget(64L * 1024 * 1024);
+    private volatile int resourcePreviewEpoch;
+    private int resourcePreviewAuthorization;
+    private final String resourcePreviewOwner = java.util.UUID.randomUUID().toString();
+    private final java.util.Map<String, com.micaftic.morpher.client.RuntimeModelLease> resourcePreviewModels = new java.util.HashMap<>();
+    private final java.util.Set<String> resourcePreviewModelsReady = new java.util.HashSet<>();
+
+    public String resourcePreviewModelId(ModelRepoEntry entry) {
+        var lease = resourcePreviewModels.get(entry.url());
+        return lease != null && lease.isValid() && resourcePreviewModelsReady.contains(entry.url()) ? lease.runtimeModelId() : "";
+    }
+
+    private String resourcePreviewRuntimeId(ModelRepoEntry entry) {
+        return new com.micaftic.morpher.core.model.CloudAssetIdentity("resource-station", resourcePreviewOwner,
+                "card", "preview", com.micaftic.morpher.util.DigestUtil.sha256Hex(entry.url().getBytes(java.nio.charset.StandardCharsets.UTF_8))).runtimeModelId();
+    }
+    private String resourcePreviewScope = "";
+
+    public OuterFileTexture resourcePreview(ModelRepoEntry entry) { return resourcePreviews.get(entry.url()); }
+    public boolean resourcePreviewFailed(ModelRepoEntry entry) {
+        return resourcePreviewFailures.contains(resourcePreviewDesired.get(entry.url()));
+    }
+    public boolean resourcePreviewLoading(ModelRepoEntry entry) {
+        return resourcePreviewDesired.containsKey(entry.url()) && !resourcePreviewModelsReady.contains(entry.url())
+                && !resourcePreviewFailed(entry);
+    }
+
+    public void requestResourcePreviews(java.util.Collection<ModelRepoEntry> entries) {
+        requestResourcePreviews(entries, null);
+    }
+
+    public void requestResourcePreviews(java.util.Collection<ModelRepoEntry> entries, ModelRepoEntry focused) {
+        // Keep the current page and an off-page detail preview in one lease scope.
+        // Focusing a card already on this page must not restart its downloads.
+        var visible = new java.util.LinkedHashMap<String, ModelRepoEntry>();
+        entries.forEach(entry -> visible.put(entry.url(), entry));
+        if (focused != null) visible.putIfAbsent(focused.url(), focused);
+        updateResourcePreviewScope("catalog:" + visible.keySet(), visible.values());
+    }
+
+    public void requestResourceDetailPreview(ModelRepoEntry entry) {
+        if (entry == null) { pauseResourcePreviews(); return; }
+        String scope = "detail:" + entry.url();
+        if (!scope.equals(resourcePreviewScope)) {
+            updateResourcePreviewScope(scope, java.util.List.of(entry));
+        }
+    }
+
+    private void updateResourcePreviewScope(String scope, java.util.Collection<ModelRepoEntry> entries) {
+        if (!scope.equals(resourcePreviewScope)) {
+            pauseResourcePreviews();
+            resourcePreviewScope = scope;
+            resourcePreviewVisible = java.util.List.copyOf(entries);
+            resourcePreviewAuthorization++;
+            resourcePreviewBudget = new com.micaftic.morpher.client.gui.resource.station.ResourcePreviewBudget(64L * 1024 * 1024);
+            entries.forEach(entry -> resourceModelPreviewAllowed.add(entry.url()));
+        }
+        updateResourcePreviewQueue();
+    }
+
+    /** Retry visible 3D cards with a fresh, bounded transfer allowance. */
+    public void previewVisibleResources(java.util.Collection<ModelRepoEntry> entries) {
+        resourcePreviewAuthorization++;
+        resourcePreviewBudget = new com.micaftic.morpher.client.gui.resource.station.ResourcePreviewBudget(64L * 1024 * 1024);
+        for (var entry : entries) resourceModelPreviewAllowed.add(entry.url());
+        updateResourcePreviewQueue();
+    }
+
+    public void pauseResourcePreviews() {
+        resourcePreviewEpoch++;
+        resourcePreviewDesired.clear();
+        resourceModelPreviewAllowed.clear();
+        resourcePreviewVisible = java.util.List.of();
+        resourcePreviewScope = "";
+        if (resourcePreviewQueue != null) resourcePreviewQueue.pause();
+        var released = java.util.List.copyOf(resourcePreviewModels.values());
+        resourcePreviewModels.clear();
+        resourcePreviewModelsReady.clear();
+        for (var lease : released) {
+            lease.close();
+            ClientModelManager.releaseCloudModel(lease.runtimeModelId());
+        }
+    }
+
+    private void updateResourcePreviewQueue() {
+        var expired = resourcePreviewModels.entrySet().stream().filter(entry -> !entry.getValue().isValid())
+                .map(java.util.Map.Entry::getKey).toList();
+        if (!expired.isEmpty()) {
+            expired.forEach(url -> { resourcePreviewModels.remove(url); resourcePreviewModelsReady.remove(url); });
+            resourcePreviewAuthorization++;
+        }
+        var requests = resourcePreviewVisible.stream().filter(entry -> !resourcePreviewModelsReady.contains(entry.url()))
+                .filter(entry -> resourceModelPreviewAllowed.contains(entry.url())
+                        || (entry.previewUrl() != null && !entry.previewUrl().isBlank()))
+                .map(entry -> new ResourcePreviewRequest(entry, resourceModelPreviewAllowed.contains(entry.url()), resourcePreviewAuthorization))
+                .toList();
+        resourcePreviewDesired.clear();
+        requests.forEach(request -> resourcePreviewDesired.put(request.entry().url(), request.key()));
+        if (resourcePreviewQueue == null) resourcePreviewQueue =
+                new com.micaftic.morpher.client.gui.resource.station.ResourcePreviewQueue<>(ResourcePreviewRequest::key, this::loadResourcePreview);
+        resourcePreviewQueue.update(requests);
+    }
+
+    private CompletableFuture<Void> loadResourcePreview(ResourcePreviewRequest request,
+            com.micaftic.morpher.client.gui.resource.station.DownloadCancellation cancellation) {
+        var entry = request.entry();
+        if (resourcePreviewModelsReady.contains(entry.url()) || resourcePreviewFailures.contains(request.key()))
+            return CompletableFuture.completedFuture(null);
+        int epoch = resourcePreviewEpoch;
+        var config = resourceConfig;
+        var budget = resourcePreviewBudget;
+        boolean skipCover = resourceCoverFailures.contains(entry.url()) || resourcePreviews.containsKey(entry.url());
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        Runnable worker = () -> {
+            byte[] image = null, modelSource = null;
+            boolean coverFailed = false;
+            try {
+                cancellation.checkCancelled();
+                if (budget.exhausted()) throw new java.util.concurrent.CancellationException("Preview page transfer limit");
+                var listener = budget.listener(cancellation);
+                if (!skipCover && entry.previewUrl() != null && !entry.previewUrl().isBlank()) {
+                    try { image = com.micaftic.morpher.client.gui.resource.station.EmbeddedModelPreview.normalizeImage(
+                            ModelRepoClient.downloadPreview(entry, config, listener)); }
+                    catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
+                    catch (Exception unavailable) { coverFailed = true; }
+                    if (image == null) coverFailed = true;
+                }
+                cancellation.checkCancelled();
+                if (request.modelAllowed()) modelSource = ModelRepoClient.downloadPreviewModel(entry, config, listener);
+                cancellation.checkCancelled();
+            } catch (Exception unavailable) { modelSource = null; }
+            final byte[] bytes = image, modelBytes = modelSource;
+            final boolean missingCover = coverFailed;
+            Minecraft.getInstance().execute(() -> {
+                try {
+                    if (epoch != resourcePreviewEpoch || cancellation.isCancelled()
+                            || !request.key().equals(resourcePreviewDesired.get(entry.url()))) {
+                        if (epoch == resourcePreviewEpoch && request.key().equals(resourcePreviewDesired.get(entry.url())))
+                            resourcePreviewFailures.add(request.key());
+                        result.complete(null); return;
+                    }
+                    if (missingCover) resourceCoverFailures.add(entry.url());
+                    if (bytes != null && !resourcePreviews.containsKey(entry.url())) {
+                        while (resourcePreviews.size() >= 48) {
+                            var it = resourcePreviews.values().iterator(); it.next().close(); it.remove();
+                        }
+                        resourcePreviews.put(entry.url(), new OuterFileTexture(bytes));
+                    }
+                    if (modelBytes == null) {
+                        resourcePreviewFailures.add(request.key());
+                        result.complete(null); return;
+                    }
+                    String runtimeId = resourcePreviewRuntimeId(entry);
+                    var lease = ClientModelManager.acquireRuntimeModelLease(runtimeId);
+                    resourcePreviewModels.put(entry.url(), lease);
+                    ClientModelManager.loadResourcePreviewInMemory(runtimeId, entry.fileName(), modelBytes,
+                            () -> epoch == resourcePreviewEpoch && !cancellation.isCancelled() && lease.isValid(), error -> {
+                        if (epoch == resourcePreviewEpoch && lease.isValid()) {
+                            if (error == null) resourcePreviewModelsReady.add(entry.url());
+                            else {
+                                resourcePreviewFailures.add(request.key());
+                                resourcePreviewModels.remove(entry.url(), lease);
+                                lease.close();
+                                ClientModelManager.releaseCloudModel(runtimeId);
+                            }
+                        }
+                        result.complete(null);
+                    });
+                } catch (Throwable error) { result.completeExceptionally(error); }
+            });
+        };
+        try { SmExecutors.pool(SmExecutors.Pool.DOWNLOAD_IO).execute(worker); }
+        catch (java.util.concurrent.RejectedExecutionException busy) {
+            resourcePreviewFailures.add(request.key());
+            result.complete(null);
+        }
+        return result;
+    }
+
+    private void closeResourcePreviews() {
+        pauseResourcePreviews();
+        if (resourcePreviewQueue != null) resourcePreviewQueue.close();
+        resourcePreviewQueue = null;
+        resourcePreviews.values().forEach(OuterFileTexture::close);
+        resourcePreviews.clear();
+        resourcePreviewFailures.clear();
+        resourceCoverFailures.clear();
+    }
     public java.util.List<com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskSnapshot> downloadTasks(){var snapshot=DownloadQueue.snapshot();var result=new ArrayList<com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskSnapshot>(snapshot.unfinishedTasks());result.addAll(snapshot.finishedTasks());return result;}
     public void retryDownload(com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskSnapshot task){DownloadQueue.retry(task);}
 
@@ -704,26 +915,14 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
                 && CloudClientRuntime.state(instanceId) == expected && previewRuntime == expected;
         if (expected == null || !current.getAsBoolean()) return CompletableFuture.completedFuture(null);
         String modelId = cloudModelId(summary);
-        if (assemblyOrNull(modelId) != null) return CompletableFuture.completedFuture(null);
         expected.assetCatalog().upsert(summary);
         CompletableFuture<Void> result = new CompletableFuture<>();
-        expected.assetMaterialization().ensure(summary.ref()).thenApplyAsync(path -> {
-            if (!current.getAsBoolean()) throw new java.util.concurrent.CancellationException();
-            try {
-                if (!com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission.previewFits(Files.size(path)))
-                    throw new IOException("Not enough free heap for this model preview; select the model to load it directly");
-                return Files.readAllBytes(path);
-            }
-            catch (IOException error) { throw new java.util.concurrent.CompletionException(error); }
-        }).whenComplete((bytes, failure) -> Minecraft.getInstance().execute(() -> {
-            if (!current.getAsBoolean()) { result.cancel(false); return; }
-            if (failure != null) { result.completeExceptionally(failure); return; }
-            ClientModelManager.loadCloudPreview(modelId, CloudAssetImportName.fileName(summary), bytes,
-                    expected.cacheRoot(), current, error -> {
-                if (error != null && !error.getString().isBlank()) result.completeExceptionally(new IllegalStateException(error.getString()));
-                else result.complete(null);
-            });
-        }));
+        ClientModelManager.ensureCloudRuntime(modelId, CloudAssetImportName.fileName(summary), current,
+                () -> expected.assetMaterialization().ensure(summary.ref()),
+                () -> expected.assets().authorizeDisplay(summary.ref()), error -> {
+                    if (error != null) result.completeExceptionally(new IllegalStateException(error.getString()));
+                    else result.complete(null);
+                }, true);
         return result.whenComplete((ignored,error)->{
             if(current.getAsBoolean()){
                 if(error==null)previewFailures.remove(modelId);else previewFailures.put(modelId,rootMessage(error));
@@ -731,7 +930,9 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
         });
     }
 
+    private long cloudApplyRequest;
     public void importCloudAsset(CloudAssetSummary summary, Consumer<Component> callback) {
+        long request = ++cloudApplyRequest;
         long generation = this.screenGeneration.capture();
         String instanceId = cloudInstanceId();
         CloudClientRuntime.RuntimeState expectedRuntime = CloudClientRuntime.state(instanceId);
@@ -741,21 +942,13 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
         boolean previouslyApplied = false;
         try { previouslyApplied = CloudModelSelectionStore.recent(instanceId).stream().anyMatch(entry -> entry.ref().equals(summary.ref())); }
         catch (RuntimeException error) { reportCloudStoreFailure(error); }
-        CompletableFuture<Path> materialized = previouslyApplied
-        ? expectedRuntime.assetMaterialization().ensurePreviouslyApplied(summary.ref())
-        : expectedRuntime.assetMaterialization().ensure(summary.ref());
-        materialized.thenApplyAsync(path -> {
-            try { return Files.readAllBytes(path); } catch (IOException e) { throw new java.util.concurrent.CompletionException(e); }
-        }).whenComplete((bytes, failure) -> Minecraft.getInstance().execute(() -> {
-            if (!this.screenGeneration.isCurrent(generation)) return;
-            if (CloudClientRuntime.state(instanceId) != expectedRuntime) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
-            if (failure != null) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.asset_download_failed", rootMessage(failure))); return; }
-            ClientModelManager.importCloudModel(modelId, CloudAssetImportName.fileName(summary), bytes, error -> {
-                if (!this.screenGeneration.isCurrent(generation)) return;
-                if (CloudClientRuntime.state(instanceId) != expectedRuntime) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
-                callback.accept(error);
-            });
-        }));
+        boolean restore = previouslyApplied;
+        ClientModelManager.ensureCloudRuntime(modelId, CloudAssetImportName.fileName(summary),
+                () -> request == cloudApplyRequest && screenGeneration.isCurrent(generation) && CloudClientRuntime.state(instanceId) == expectedRuntime
+                        && !expectedRuntime.assetMaterialization().isClosed(),
+                () -> restore ? expectedRuntime.assetMaterialization().ensurePreviouslyApplied(summary.ref())
+                        : expectedRuntime.assetMaterialization().ensure(summary.ref()),
+                () -> expectedRuntime.assets().authorizeDisplay(summary.ref()), callback, false);
     }
     private static CloudAssetIdentity cloudIdentity(CloudClientRuntime.RuntimeState runtime, CloudAssetSummary summary) {
         return new CloudAssetIdentity(runtime.instance().instanceId(), "catalog", summary.ref().assetId(),

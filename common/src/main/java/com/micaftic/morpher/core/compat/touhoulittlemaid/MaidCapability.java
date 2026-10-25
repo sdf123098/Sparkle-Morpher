@@ -28,6 +28,8 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     private Struct serverVars;
     private String rouletteAnimation = "";
     private boolean cloudModelStateApplied;
+    private boolean localModelStateApplied;
+    private boolean peerModelStateApplied;
     private Map<String, Float> displayMotionVariables;
     private boolean officialYsmStateApplied;
     private boolean syncedModelStateApplied;
@@ -45,7 +47,47 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     }
 
     /** Cloud bindings have priority over the optional legacy maid synchronization. */
+    public boolean hasLocalState() { return this.localModelStateApplied; }
+
+    public void applyLocalState(String modelId, String textureId) {
+        awaitAsyncResult();
+        this.cloudModelStateApplied = false;
+        this.localModelStateApplied = true;
+        this.peerModelStateApplied = false;
+        clearDisplayMotion();
+        this.rouletteAnimation = "";
+        this.serverVars = null;
+        initModelWithTexture(modelId, textureId);
+        setForceDisabled(false);
+    }
+
+    public boolean hasPeerState() { return this.peerModelStateApplied; }
+    public boolean hasCloudState() { return this.cloudModelStateApplied; }
+    public void applyPeerState(String modelId, String textureId) {
+        if (this.localModelStateApplied) return;
+        awaitAsyncResult();
+        this.peerModelStateApplied = true;
+        this.cloudModelStateApplied = false;
+        clearDisplayMotion();this.rouletteAnimation = "";this.serverVars = null;
+        initModelWithTexture(modelId, textureId);setForceDisabled(false);
+    }
+    public void clearPeerState() {
+        if (!this.peerModelStateApplied) return;
+        this.peerModelStateApplied = false;clearDisplayMotion();
+        this.rouletteAnimation = "";this.serverVars = null;resetModel();setForceDisabled(false);
+    }
+
+    public void clearLocalState() {
+        if (!this.localModelStateApplied) return;
+        this.localModelStateApplied = false;
+        clearDisplayMotion();
+        resetModel();
+        setForceDisabled(false);
+    }
+
     public void applyCloudState(String modelId, String textureId) {
+        if (this.localModelStateApplied || (this.peerModelStateApplied && !com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud())) return;
+        this.peerModelStateApplied = false;
         if (modelId == null || modelId.isBlank()) {
             clearCloudState();
             return;
@@ -79,7 +121,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
      * to activate the model.
      */
     public void syncOfficialYsmState() {
-        if (this.cloudModelStateApplied || this.syncedModelStateApplied) {
+        if (this.cloudModelStateApplied || this.localModelStateApplied || this.peerModelStateApplied || this.syncedModelStateApplied) {
             return;
         }
         if (!TouhouLittleMaidAccess.isYsmModel(this.entity)) {

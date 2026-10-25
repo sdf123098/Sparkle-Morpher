@@ -33,9 +33,8 @@ public class FlatColorButton extends Button {
 
     public void renderTooltip(GuiGraphics guiGraphics, Screen screen, int mouseX, int mouseY) {
         if (this.isHovered && this.tooltip != null) {
-            guiGraphics.renderComponentTooltip(Minecraft.getInstance().font, this.tooltip, mouseX, mouseY);
-/*             GuiGraphics.renderComponentTooltip(Minecraft.getInstance().font, this.tooltip, mouseX, mouseY);
- */
+            com.micaftic.morpher.core.gui.RoulettePanelStyle.tooltip(guiGraphics, Minecraft.getInstance().font,
+                    this.tooltip, mouseX, mouseY, screen.width, screen.height);
         }
     }
 

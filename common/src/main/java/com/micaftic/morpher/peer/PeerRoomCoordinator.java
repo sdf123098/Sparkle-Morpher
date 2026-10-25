@@ -7,11 +7,12 @@ import java.util.*;
 
 /** Pure bounded state machine. Does no networking, disk I/O or callbacks while its lock is held. */
 public final class PeerRoomCoordinator implements AutoCloseable {
-    public record Member(PeerSession session,PeerAppearance appearance){}
+    public record Member(PeerSession session,PeerAppearance appearance,UUID entityId){public Member(PeerSession session,PeerAppearance appearance){this(session,appearance,null);}}
     public record Snapshot(UUID roomId,UUID epoch,long rosterRevision,List<Member> members){public Snapshot{members=List.copyOf(members);}}
     public record Event(long rosterRevision,UUID memberId,Member member){}
     public record Welcome(PeerSession session,byte[] assetTicket){public Welcome{assetTicket=assetTicket.clone();}@Override public byte[] assetTicket(){return assetTicket.clone();}@Override public String toString(){return "Welcome[session="+session+",ticket=redacted]";}}
-    public record Grant(UUID id,PeerSession recipient,PeerSession owner,PeerAppearance appearance,long expiresAtNanos){}
+    public record Grant(UUID id,PeerSession recipient,PeerSession owner,PeerAppearance appearance,long expiresAtNanos,UUID entityId){}
+    private final PeerEntityCatalog entities = new PeerEntityCatalog();
     private static final int EVENT_COUNT=256;
     private final UUID roomId,epoch=UUID.randomUUID();
     private final int capacity;
@@ -54,12 +55,30 @@ public final class PeerRoomCoordinator implements AutoCloseable {
     public synchronized boolean publish(PeerSession session,PeerAppearance appearance) {
         requireCurrent(session);Objects.requireNonNull(appearance);var old=members.get(session.memberId());
         if(old.appearance!=null && appearance.revision()<=old.appearance.revision())return false;
-        grants.values().removeIf(g->g.owner.equals(session));
+        grants.values().removeIf(g->g.owner.equals(session) && g.entityId==null);
         observations.keySet().removeIf(key -> key.owner.equals(session.memberId()));
         motions.remove(session.memberId());
         var next=new Member(session,appearance);members.put(session.memberId(),next);emit(session.memberId(),next);return true;
     }
     public synchronized Member member(UUID id) { return members.get(id); }
+    public synchronized boolean publishEntity(PeerSession owner, PeerEntityAppearance entry) {
+        requireCurrent(owner);
+        if (!owner.equals(entry.owner())) throw new SecurityException("Entity publisher session mismatch");
+        if (!entities.publish(entry)) return false;
+        grants.values().removeIf(g -> g.owner.equals(owner) && Objects.equals(g.entityId, entry.entityId()));
+        return true;
+    }
+    public synchronized PeerEntityCatalog.Page entityPage(PeerSession reader, int cursor) { requireCurrent(reader); return entities.page(cursor); }
+    public synchronized Member assetOwner(UUID memberId, UUID entityId) {
+        var member = members.get(memberId);
+        if (member == null || entityId == null) return member;
+        var entity = entities.get(member.session, entityId);
+        return entity == null || entity.model() == null ? null : entity.assetOwner();
+    }
+    public synchronized boolean ownsModel(PeerSession owner, PeerModelIdentity model) {
+        return current(owner) && (Objects.equals(members.get(owner.memberId()).appearance == null ? null : members.get(owner.memberId()).appearance.model(), model)
+                || entities.ownsModel(owner, model));
+    }
     public synchronized boolean publishMotion(PeerSession owner,PeerMotion motion,long now) {
         requireCurrent(owner);var appearance=members.get(owner.memberId()).appearance;
         if(appearance==null||appearance.cleared()||appearance.revision()!=motion.appearanceRevision())return false;
@@ -95,7 +114,7 @@ public final class PeerRoomCoordinator implements AutoCloseable {
         return revoked;
     }
     public synchronized boolean owns(PeerSession session, PeerAppearance appearance) {
-        return current(session) && Objects.equals(members.get(session.memberId()).appearance, appearance);
+        return current(session) && (Objects.equals(members.get(session.memberId()).appearance, appearance) || entities.owns(session, appearance));
     }
     public synchronized Snapshot snapshot(PeerSession observer) {
         requireCurrent(observer);queues.get(observer.memberId()).clear();resync.remove(observer.memberId());
@@ -106,14 +125,17 @@ public final class PeerRoomCoordinator implements AutoCloseable {
         var queue=queues.get(observer.memberId());var result=List.copyOf(queue);queue.clear();return result;
     }
     public synchronized Grant grant(PeerSession recipient,PeerSession owner,long nowNanos,long ttlNanos) {
+        return grant(recipient,owner,null,nowNanos,ttlNanos);
+    }
+    public synchronized Grant grant(PeerSession recipient,PeerSession owner,UUID entityId,long nowNanos,long ttlNanos) {
         requireCurrent(recipient);requireCurrent(owner);
         if(ttlNanos<1 || ttlNanos>60_000_000_000L)throw new IllegalArgumentException("Invalid grant TTL");
-        var selection=members.get(owner.memberId()).appearance;
+        var member=assetOwner(owner.memberId(),entityId);var selection=member==null?null:member.appearance;
         if(selection==null || selection.cleared())throw new SecurityException("Owner has not shared an appearance");
         grants.values().removeIf(g->!valid(g,nowNanos));
         // At most one current grant per directed member pair, bounded by capacity squared.
-        grants.values().removeIf(g->g.recipient.equals(recipient) && g.owner.equals(owner));
-        var grant=new Grant(UUID.randomUUID(),recipient,owner,selection,Math.addExact(nowNanos,ttlNanos));grants.put(grant.id,grant);return grant;
+        grants.values().removeIf(g->g.recipient.equals(recipient) && g.owner.equals(owner) && Objects.equals(g.entityId,entityId));
+        var grant=new Grant(UUID.randomUUID(),recipient,owner,selection,Math.addExact(nowNanos,ttlNanos),entityId);grants.put(grant.id,grant);return grant;
     }
     public synchronized boolean authorize(UUID grantId,PeerSession recipient,PeerModelIdentity model,long nowNanos) {
         var grant=grants.get(grantId);return grant!=null && grant.recipient.equals(recipient)
@@ -122,14 +144,14 @@ public final class PeerRoomCoordinator implements AutoCloseable {
     /** Progress renews a live lease; a revoked/expired grant can never be revived. */
     public synchronized boolean renew(UUID grantId,PeerSession recipient,PeerModelIdentity model,long nowNanos) {
         if(!authorize(grantId,recipient,model,nowNanos))return false;
-        var old=grants.get(grantId);grants.put(grantId,new Grant(old.id,old.recipient,old.owner,old.appearance,Math.addExact(nowNanos,60_000_000_000L)));return true;
+        var old=grants.get(grantId);grants.put(grantId,new Grant(old.id,old.recipient,old.owner,old.appearance,Math.addExact(nowNanos,60_000_000_000L),old.entityId));return true;
     }
     private boolean valid(Grant grant,long now) {
         if(now>=grant.expiresAtNanos || !current(grant.owner) || !current(grant.recipient))return false;
-        return grant.appearance.equals(members.get(grant.owner.memberId()).appearance);
+        var current=assetOwner(grant.owner.memberId(),grant.entityId);return current!=null && grant.appearance.equals(current.appearance);
     }
     public synchronized void leave(PeerSession session) {
-        if(!current(session))return;members.remove(session.memberId());tickets.remove(session.memberId());queues.remove(session.memberId());resync.remove(session.memberId());motions.remove(session.memberId());
+        if(!current(session))return;entities.leave(session);members.remove(session.memberId());tickets.remove(session.memberId());queues.remove(session.memberId());resync.remove(session.memberId());motions.remove(session.memberId());
         grants.values().removeIf(g->g.owner.equals(session) || g.recipient.equals(session));emit(session.memberId(),null);
         observations.keySet().removeIf(key -> key.owner.equals(session.memberId()) || key.observer.equals(session.memberId()));
     }
@@ -142,5 +164,5 @@ public final class PeerRoomCoordinator implements AutoCloseable {
             else entry.getValue().addLast(event);
         }
     }
-    @Override public synchronized void close(){if(closed)return;closed=true;Arrays.fill(secret,(byte)0);tickets.values().forEach(t->Arrays.fill(t,(byte)0));tickets.clear();members.clear();queues.clear();resync.clear();grants.clear();observations.clear();motions.clear();}
+    @Override public synchronized void close(){if(closed)return;closed=true;Arrays.fill(secret,(byte)0);tickets.values().forEach(t->Arrays.fill(t,(byte)0));tickets.clear();entities.clear();members.clear();queues.clear();resync.clear();grants.clear();observations.clear();motions.clear();}
 }
