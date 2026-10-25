@@ -51,7 +51,8 @@ public final class CloudPlayerModelSync {
     private static long identityAttempt;
     private static boolean identityRefreshRequested;
     private record Identification(CloudIdentityClient.CloudIdentity identity, JsonObject nameProof, CloudOfflineCredentialStore.Scope scope, CloudOfflineCredentialStore.Credential credential) {}
-    private static String status = "Cloud 联机：等待进入世界";
+    private static net.minecraft.network.chat.Component status = net.minecraft.network.chat.Component.translatable("gui.sparkle_morpher.cloud_player.waiting_world");
+    private static boolean statusFailed;
     /** Firing adapters copy these values at input time; the backend still verifies the native owner identity. */
     public static String verifiedOwnIdentity() {
         var client=Minecraft.getInstance();return (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive())&&sessionRuntime==CloudClientRuntime.state()
@@ -85,7 +86,18 @@ public final class CloudPlayerModelSync {
                 && !com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud();
     }
 
-    public static String status() { return status; }
+    public static net.minecraft.network.chat.Component status() { return status; }
+    public static boolean statusFailed() { return statusFailed; }
+    private static void setStatus(String key, Object... args) {
+        status = net.minecraft.network.chat.Component.translatable("gui.sparkle_morpher.cloud_player." + key, args);
+        statusFailed = key.endsWith("_failed");
+    }
+    private static net.minecraft.network.chat.Component statusError(Throwable error) {
+        String detail = message(error);
+        if (detail.equals("sparkle_morpher:identity_ambiguous")) return net.minecraft.network.chat.Component.translatable("gui.sparkle_morpher.cloud_player.identity_ambiguous");
+        if (detail.equals("sparkle_morpher:profile_proof_unavailable")) return net.minecraft.network.chat.Component.translatable("gui.sparkle_morpher.cloud_player.profile_proof_unavailable");
+        return net.minecraft.network.chat.Component.literal(detail);
+    }
     public static boolean ownsAppearance(UUID playerId) { return (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !PrivacyMode.isActive()) && !com.micaftic.morpher.client.peer.ClientPeerRuntime.ownsAppearance(playerId) && STATE.ownsAppearance(playerId); }
 
     private static void clearRemote(Player player) {
@@ -122,7 +134,7 @@ public final class CloudPlayerModelSync {
         nextPoll = nextPublish = lastPollSuccess = 0; lastPublished = lastAttempted = null; publicationUuid = null;
         ownNameProof = null; nextIdentityRefresh = 0;
         identityAttempt++; identityRefreshRequested = false;
-        status = runtime == null ? "Cloud 联机：请先登录 Cloud 账号" : "Cloud 联机：正在检查当前游戏身份";
+        setStatus(runtime == null ? "login_required" : "checking_identity");
     }
 
     public static void disconnect() {
@@ -170,9 +182,9 @@ public final class CloudPlayerModelSync {
             var player=client.player;
             var credential=offlineCredential;var credentialScope=offlineCredentialScope;var uuid=player.getUUID();var name=MinecraftSessionServiceJoiner.currentProfile().name();
             OFFLINE.begin(now,()->{var operation=offlineRetirement.thenCompose(ignored->new CloudOfflineIdentityClient(runtime.http()).requestAndActivate(credentialScope,credential,uuid,name));pendingOfflineActivation=operation;return operation;});
-            if(OFFLINE.error()==com.micaftic.morpher.core.api.network.state.CloudErrorCode.OFFLINE_AUTHORIZATION_PENDING)status="Cloud 离线同步：申请已提交，等待管理员批准";
-            else if(OFFLINE.error()==com.micaftic.morpher.core.api.network.state.CloudErrorCode.OFFLINE_AUTHORIZATION_DENIED)status="Cloud 离线同步：账号授权已撤销";
-            else if(OFFLINE.state()==CloudOfflinePublicationCoordinator.State.STOPPED)status="Cloud 离线同步："+OFFLINE.error();
+            if(OFFLINE.error()==com.micaftic.morpher.core.api.network.state.CloudErrorCode.OFFLINE_AUTHORIZATION_PENDING)setStatus("offline_approval_pending");
+            else if(OFFLINE.error()==com.micaftic.morpher.core.api.network.state.CloudErrorCode.OFFLINE_AUTHORIZATION_DENIED)setStatus("offline_authorization_revoked");
+            else if(OFFLINE.state()==CloudOfflinePublicationCoordinator.State.STOPPED)setStatus("offline_stopped",OFFLINE.error());
         }
         CloudPlayerSelection selection = localSelection(runtime);
         boolean displayChanged = selection != null && now >= nextDisplayPublish
@@ -211,7 +223,7 @@ public final class CloudPlayerModelSync {
                     .thenApply(value->new Identification(null,null,scope,value));
             }
             if (matches.size() > 1) return CompletableFuture.<Identification>failedFuture(
-                    new IllegalStateException("当前 UUID 对应多个已验证身份，请在游戏身份管理确认登录提供方"));
+                    new IllegalStateException("sparkle_morpher:identity_ambiguous"));
             var identity = matches.get(0);
             if (entityUuid.equals(profile.profileId()))
                 return CompletableFuture.completedFuture(new Identification(identity, null, null, null));
@@ -229,11 +241,11 @@ public final class CloudPlayerModelSync {
             if (error == null && (identity == null || identity.identity()==null)) {
                 identityId = null; ownNameProof = null; onlineVerificationFailed=false;
                 offlineCredential=identity==null?null:identity.credential();offlineCredentialScope=identity==null?null:identity.scope();
-                status = offlineCredential==null ? "Cloud 离线同步：此实例已关闭授权或尚不支持离线同步"
-                    :runtime.instanceInfo()==null||!runtime.instanceInfo().supports(CloudOfflineIdentityClient.CAPABILITY)?"Cloud 离线同步：此实例尚未启用实验性离线身份":"Cloud 离线同步：正在激活当前角色";
+                setStatus(offlineCredential==null ? "offline_unavailable"
+                    :runtime.instanceInfo()==null||!runtime.instanceInfo().supports(CloudOfflineIdentityClient.CAPABILITY)?"offline_not_enabled":"offline_activating");
             }
-            else if (error == null) { retireOffline(); OFFLINE.reset(); onlineVerificationFailed=false; identityId = identity.identity().identityId(); ownNameProof = identity.nameProof(); nextIdentityRefresh = System.currentTimeMillis() + 120000; nextPublish = 0; status = "Cloud 联机：游戏身份已验证"; }
-            else { onlineVerificationFailed=true; retireOffline(); OFFLINE.reset(); nextIdentityRefresh = System.currentTimeMillis() + 10000; status = "Cloud 联机身份验证失败：" + message(error); YesSteveModel.LOGGER.warn("[SM][CloudPlayer] identity: {}", message(error)); }
+            else if (error == null) { retireOffline(); OFFLINE.reset(); onlineVerificationFailed=false; identityId = identity.identity().identityId(); ownNameProof = identity.nameProof(); nextIdentityRefresh = System.currentTimeMillis() + 120000; nextPublish = 0; setStatus("identity_verified"); }
+            else { onlineVerificationFailed=true; retireOffline(); OFFLINE.reset(); nextIdentityRefresh = System.currentTimeMillis() + 10000; status = net.minecraft.network.chat.Component.translatable("gui.sparkle_morpher.cloud_player.identity_failed", statusError(error)); statusFailed = true; YesSteveModel.LOGGER.warn("[SM][CloudPlayer] identity: {}", message(error)); }
         }));
     }
 
@@ -257,7 +269,7 @@ public final class CloudPlayerModelSync {
         Minecraft.getInstance().execute(() -> {
             if (runtime == null || runtime != CloudClientRuntime.state() || runtime != sessionRuntime) return;
             identityAttempt++; identifying = false; identityRefreshRequested = true;
-            status = "Cloud 联机：正在检查当前游戏身份";
+            setStatus("checking_identity");
         });
     }
 
@@ -301,10 +313,10 @@ public final class CloudPlayerModelSync {
             if (!current(token, runtime)) return; publishing = false;
             if (pendingPublication == operation) pendingPublication = null;
             if (error == null) { ownRevision = value; lastPublished = selection; lastPublishedMotion = motion; lastPublishedDisplay = display; hasPublished = true;
-                status = motionSupported(runtime) ? "Cloud 联机：已同步模型、贴图与动作" : "Cloud 联机：模型与贴图已同步；此实例需升级后端以同步动作"; }
+                setStatus(motionSupported(runtime) ? "synced_all" : "synced_without_motion"); }
             else { if(offlineSession!=null)OFFLINE.failed(error,System.currentTimeMillis()); ownRevision = -1; nextPublish = System.currentTimeMillis() + 3000; hasPublished = false;
                 nextMotionPublish = nextPublish;
-                status = "Cloud 联机发布失败：" + message(error); YesSteveModel.LOGGER.warn("[SM][CloudPlayer] publish: {}", message(error)); }
+                status = net.minecraft.network.chat.Component.translatable("gui.sparkle_morpher.cloud_player.publish_failed", statusError(error)); statusFailed = true; YesSteveModel.LOGGER.warn("[SM][CloudPlayer] publish: {}", message(error)); }
         }));
     }
 
@@ -315,7 +327,7 @@ public final class CloudPlayerModelSync {
         for (int i = 0; i < ids.size(); i += 64) requests.add(api.queryDetailed(ids.subList(i, Math.min(i + 64, ids.size())),runtime.instanceInfo()!=null&&runtime.instanceInfo().supports(CloudOfflineIdentityClient.CAPABILITY)));
         CompletableFuture.allOf(requests.toArray(CompletableFuture[]::new)).whenComplete((ignored, error) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, runtime)) return; polling = false;
-            if (error != null) { nextPoll = System.currentTimeMillis() + 3000; status = "Cloud 联机查询失败：" + message(error); return; }
+            if (error != null) { nextPoll = System.currentTimeMillis() + 3000; status = net.minecraft.network.chat.Component.translatable("gui.sparkle_morpher.cloud_player.query_failed", statusError(error)); statusFailed = true; return; }
             if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive())) return;
             Map<UUID, CloudPlayerDiscoveryEntry> entries = new HashMap<>(); requests.forEach(request -> entries.putAll(request.join()));
             lastPollSuccess = System.currentTimeMillis();

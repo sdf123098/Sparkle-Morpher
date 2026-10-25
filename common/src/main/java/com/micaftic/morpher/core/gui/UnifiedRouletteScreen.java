@@ -89,7 +89,7 @@ public class UnifiedRouletteScreen extends Screen {
     private final ModelAssembly renderContext;
 
     public UnifiedRouletteScreen(String modelId, ModelAssembly modelAssembly, AnimatableEntity<?> animatable) {
-        super(Component.literal("sparkle Roulette"));
+        super(Component.translatable("gui.sparkle_morpher.roulette.title"));
         this.renderContext = modelAssembly;
         this.animatableModel = animatable;
 
@@ -215,14 +215,14 @@ public class UnifiedRouletteScreen extends Screen {
     @Override
     public void render(GuiGraphics g,int mx,int my,float pt){
         var c=IndependentPanelChrome.of(width,height);RoulettePanelStyle.glassPanel(g,c.left(),c.top(),c.right()-c.left(),c.bottom()-c.top());int x=c.contentLeft(),y=c.top()+42;
-        IndependentPanelChrome.text(g,font,Component.literal(RoulettePanelStyle.trim(font,"动作轮盘 · "+renderContext.getDisplayName(lastModelId),(int)((c.contentRight()-x)/1.1f))),x,c.top()+15,1.1f,RoulettePanelStyle.TEXT);
+        IndependentPanelChrome.text(g,font,Component.literal(RoulettePanelStyle.trim(font,Component.translatable("gui.sparkle_morpher.action_wheel.title_prefix").getString()+renderContext.getDisplayName(lastModelId),(int)((c.contentRight()-x)/1.1f))),x,c.top()+15,1.1f,RoulettePanelStyle.TEXT);
         RoulettePanelStyle.Glyph[] icons={RoulettePanelStyle.Glyph.UP,RoulettePanelStyle.Glyph.USERS,RoulettePanelStyle.Glyph.SETTINGS,RoulettePanelStyle.Glyph.EDIT};for(int i=0;i<4;i++)IndependentPanelChrome.icon(g,mx,my,x+i*26,y,icons[i]);
         updateHover(logicalMouseX(mx),logicalMouseY(my));hoveredEdit=false;
         g.pose().pushPose();g.pose().translate(centerX,centerY,0);g.pose().scale(layoutScale,layoutScale,1);g.pose().translate(-centerX,-centerY,0);
         renderSlices(g);renderPageButtons(g);g.pose().popPose();renderResponsiveLabels(g);
-        g.drawString(font,Component.literal(navigationStack.size()>1?"左上角返回上一级 · Esc 关闭":"松开按键播放 · Esc 关闭"),x,height-c.top()-22,RoulettePanelStyle.MUTED,false);
+        g.drawString(font,Component.literal(navigationStack.size()>1?Component.translatable("gui.sparkle_morpher.action_wheel.hint.back").getString():Component.translatable("gui.sparkle_morpher.action_wheel.hint.play").getString()),x,height-c.top()-22,RoulettePanelStyle.MUTED,false);
         if(hoveredIndex>=0)RoulettePanelStyle.tooltip(g,font,java.util.List.of(Component.literal(displayLabel(hoveredIndex))),mx,my,width,height);
-        if(IndependentPanelChrome.inside(mx,my,x,y,104,22)){String[] tips={navigationStack.size()>1?"返回上一级轮盘":"返回游戏","选择动作目标","轮盘设置","编辑自定义布局"};int i=Math.min(3,(mx-x)/26);RoulettePanelStyle.tooltip(g,font,java.util.List.of(Component.literal(tips[i])),mx,my,width,height);}
+        if(IndependentPanelChrome.inside(mx,my,x,y,104,22)){String[] tips={navigationStack.size()>1?Component.translatable("gui.sparkle_morpher.action_wheel.back").getString():Component.translatable("gui.sparkle_morpher.action_wheel.exit").getString(),Component.translatable("gui.sparkle_morpher.target_action.title").getString(),Component.translatable("gui.sparkle_morpher.action_wheel.settings").getString(),Component.translatable("gui.sparkle_morpher.action_wheel.edit_layout").getString()};int i=Math.min(3,(mx-x)/26);RoulettePanelStyle.tooltip(g,font,java.util.List.of(Component.literal(tips[i])),mx,my,width,height);}
     }
 
     @Override
@@ -319,7 +319,7 @@ public class UnifiedRouletteScreen extends Screen {
             int x=centerX+(int)Math.round(104*layoutScale*Math.cos(angle)),y=centerY+(int)Math.round(104*layoutScale*Math.sin(angle))-4;
             g.drawCenteredString(font,Component.literal(RoulettePanelStyle.trim(font,displayLabel(slot),textWidth)),x,y,RoulettePanelStyle.TEXT);
         }
-        String name=currentNavEntry.getLeft();if(name==null||name.isBlank())name="根目录";
+        String name=currentNavEntry.getLeft();if(name==null||name.isBlank())name=Component.translatable("gui.sparkle_morpher.roulette.editor.root_label").getString();
         g.drawCenteredString(font,Component.literal(RoulettePanelStyle.trim(font,name,Math.max(20,Math.round(88*layoutScale)))),centerX,centerY-4,RoulettePanelStyle.TEXT);
     }
 
@@ -423,7 +423,7 @@ public class UnifiedRouletteScreen extends Screen {
                 "properties.extra_animation.%s".formatted(key), display);
     }
 
-    private void renderCenter(GuiGraphics g){String name=currentNavEntry.getLeft();if(name==null||name.isBlank())name="根目录";g.drawCenteredString(font,Component.literal(name),centerX,centerY-6,RoulettePanelStyle.TEXT);}
+    private void renderCenter(GuiGraphics g){String name=currentNavEntry.getLeft();if(name==null||name.isBlank())name=Component.translatable("gui.sparkle_morpher.roulette.editor.root_label").getString();g.drawCenteredString(font,Component.literal(name),centerX,centerY-6,RoulettePanelStyle.TEXT);}
 
     private void renderPageButtons(GuiGraphics g) {
         if (pageCount() <= 1) return;
