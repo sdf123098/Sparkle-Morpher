@@ -119,7 +119,7 @@ public class CustomRouletteEditorScreen extends Screen {
     }
 
     @Override
-    protected void init(){String query=search==null?"":search.getValue();clearWidgets();layout();search=new net.minecraft.client.gui.components.EditBox(font,leftX+6,listTop-27,listW-12,12,Component.literal("搜索动画"));search.setBordered(false);search.setValue(query);search.setHint(Component.literal(RoulettePanelStyle.trim(font,"搜索动画…",Math.max(1,listW-12))));search.setResponder(v->leftScroll=0);addRenderableWidget(search);}
+    protected void init(){String query=search==null?"":search.getValue();clearWidgets();layout();search=new net.minecraft.client.gui.components.EditBox(font,leftX+6,listTop-27,listW-12,12,Component.literal(Component.translatable("gui.sparkle_morpher.roulette.editor.search").getString()));search.setBordered(false);search.setValue(query);search.setHint(Component.literal(RoulettePanelStyle.trim(font,Component.translatable("gui.sparkle_morpher.roulette.editor.search_hint").getString(),Math.max(1,listW-12))));search.setResponder(v->leftScroll=0);addRenderableWidget(search);}
 
     private void layout(){var c=com.micaftic.morpher.core.gui.IndependentPanelChrome.of(width,height);panelLeft=c.left();panelTop=c.top();panelRight=c.right();panelBottom=c.bottom();leftX=c.contentLeft();int gap=width<560?8:PANEL_GAP;listW=Math.max(1,(c.contentRight()-leftX-gap)/2);rightX=leftX+listW+gap;listTop=panelTop+(height<220?96:height<300?108:141);listBottom=Math.max(listTop+26,panelBottom-12);}
 
@@ -128,8 +128,8 @@ public class CustomRouletteEditorScreen extends Screen {
         hits.clear();layout();RoulettePanelStyle.glassPanel(g,panelLeft,panelTop,panelRight-panelLeft,panelBottom-panelTop);com.micaftic.morpher.core.gui.IndependentPanelChrome.text(g,font,Component.literal(RoulettePanelStyle.trim(font,title.getString()+" · "+modelAssembly.getDisplayName(modelId),(int)((panelRight-leftX-10)/1.1f))),leftX,panelTop+15,1.1f,RoulettePanelStyle.TEXT);renderToolbar(g,mx,my);
         if(height>=300){g.text(font,Component.translatable("gui.sparkle_morpher.roulette.editor.available"),leftX,listTop-61,RoulettePanelStyle.TEXT,false);g.text(font,Component.translatable("gui.sparkle_morpher.roulette.editor.custom_layout"),rightX,listTop-61,RoulettePanelStyle.TEXT,false);}
         RoulettePanelStyle.roundedSurface(g,leftX,listTop-33,listW,22,3,0x0CFFFFFF,0x22FFFFFF);RoulettePanelStyle.roundedSurface(g,rightX,listTop-33,listW,22,3,0x0CFFFFFF,0x22FFFFFF);
-        String group=selectedGroupIndex<0?"根目录":pendingGroups.get(selectedGroupIndex).name;g.text(font,Component.literal(RoulettePanelStyle.trim(font,"分组："+group+" ▾",listW-12)),rightX+6,listTop-26,RoulettePanelStyle.TEXT,false);hits.add(new Hit(rightX,listTop-33,listW,22,Component.literal("切换分组"),()->{selectedGroupIndex++;if(selectedGroupIndex>=pendingGroups.size())selectedGroupIndex=-1;}));
-        renderListShell(g,leftX,listTop,listW,listBottom-listTop,Component.literal("动画"));renderListShell(g,rightX,listTop,listW,listBottom-listTop,Component.literal("分组 / 动画"));renderLeftList(g,mx,my,leftX,listTop+24,listW,listBottom-listTop-24);renderRightList(g,mx,my,rightX,listTop+24,listW,listBottom-listTop-24);
+        String group=selectedGroupIndex<0?Component.translatable("gui.sparkle_morpher.roulette.editor.root_label").getString():pendingGroups.get(selectedGroupIndex).name;g.text(font,Component.literal(RoulettePanelStyle.trim(font,Component.translatable("gui.sparkle_morpher.roulette.editor.group_prefix",group).getString()+" ▾",listW-12)),rightX+6,listTop-26,RoulettePanelStyle.TEXT,false);hits.add(new Hit(rightX,listTop-33,listW,22,Component.literal(Component.translatable("gui.sparkle_morpher.roulette.editor.switch_group").getString()),()->{selectedGroupIndex++;if(selectedGroupIndex>=pendingGroups.size())selectedGroupIndex=-1;}));
+        renderListShell(g,leftX,listTop,listW,listBottom-listTop,Component.literal(Component.translatable("gui.sparkle_morpher.roulette.editor.animations").getString()));renderListShell(g,rightX,listTop,listW,listBottom-listTop,Component.literal(Component.translatable("gui.sparkle_morpher.roulette.editor.groups_and_animations").getString()));renderLeftList(g,mx,my,leftX,listTop+24,listW,listBottom-listTop-24);renderRightList(g,mx,my,rightX,listTop+24,listW,listBottom-listTop-24);
         super.extractRenderState(g,mx,my,pt);renderTooltip(g,mx,my);
     }
 
@@ -167,7 +167,7 @@ public class CustomRouletteEditorScreen extends Screen {
             }
             int bg = selectedGroupIndex < 0 ? RoulettePanelStyle.PANEL_ACTIVE : hover ? RoulettePanelStyle.PANEL_HOVER : 0x55303030;
             RoulettePanelStyle.roundedFill(g, x + 3, rowY + 1, w - 6, ENTRY_H - 2, 4, bg);
-            g.text(this.font, Component.literal("根目录"), x + 7, rowY + 11,
+            g.text(this.font, Component.literal(Component.translatable("gui.sparkle_morpher.roulette.editor.root_label").getString()), x + 7, rowY + 11,
                     selectedGroupIndex < 0 ? 0xFFFFFFFF : RoulettePanelStyle.MUTED, false);
         }
         logical++;
@@ -226,7 +226,7 @@ public class CustomRouletteEditorScreen extends Screen {
         return logical;
     }
 
-    private void renderToolbar(GuiGraphicsExtractor g,int mx,int my){int x=leftX,y=panelTop+(height<220?32:42);RoulettePanelStyle.Glyph[] icons={RoulettePanelStyle.Glyph.UP,RoulettePanelStyle.Glyph.PLUS,RoulettePanelStyle.Glyph.DELETE,RoulettePanelStyle.Glyph.RELOAD,RoulettePanelStyle.Glyph.SAVE,RoulettePanelStyle.Glyph.SETTINGS};String[] labels={"返回动作轮盘","新建分组","删除分组","撤销布局修改","保存轮盘布局","轮盘设置"};Runnable[] actions={this::onClose,this::createNewGroup,this::deleteSelectedGroup,this::revertLayout,this::saveLayout,this::openSettings};for(int i=0;i<6;i++){int xx=x+i*26+(i>=4?8:0);com.micaftic.morpher.core.gui.IndependentPanelChrome.icon(g,mx,my,xx,y,icons[i]);if(i!=2||selectedGroupIndex>=0)hits.add(new Hit(xx,y,22,22,Component.literal(labels[i]),actions[i]));}}
+    private void renderToolbar(GuiGraphicsExtractor g,int mx,int my){int x=leftX,y=panelTop+(height<220?32:42);RoulettePanelStyle.Glyph[] icons={RoulettePanelStyle.Glyph.UP,RoulettePanelStyle.Glyph.PLUS,RoulettePanelStyle.Glyph.DELETE,RoulettePanelStyle.Glyph.RELOAD,RoulettePanelStyle.Glyph.SAVE,RoulettePanelStyle.Glyph.SETTINGS};String[] labels={"gui.sparkle_morpher.roulette.editor.back","gui.sparkle_morpher.roulette.editor.new_group","gui.sparkle_morpher.roulette.editor.delete_group","gui.sparkle_morpher.roulette.editor.revert","gui.sparkle_morpher.roulette.editor.save","gui.sparkle_morpher.roulette.editor.settings"};Runnable[] actions={this::onClose,this::createNewGroup,this::deleteSelectedGroup,this::revertLayout,this::saveLayout,this::openSettings};for(int i=0;i<6;i++){int xx=x+i*26+(i>=4?8:0);com.micaftic.morpher.core.gui.IndependentPanelChrome.icon(g,mx,my,xx,y,icons[i]);if(i!=2||selectedGroupIndex>=0)hits.add(new Hit(xx,y,22,22,Component.translatable(labels[i]),actions[i]));}}
 
     private void renderIconButton(GuiGraphicsExtractor g, int mouseX, int mouseY, int x, int y,
                                   RoulettePanelStyle.Glyph glyph, Component tooltip, Runnable action, boolean active) {
