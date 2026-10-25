@@ -445,18 +445,8 @@ public final class LocalModelService {
             default:
                 break;
         }
-        Path temp = Files.createTempFile("ysm-import-", ".zip");
-        try {
-            Files.write(temp, raw);
-            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(temp)) {
-                return deserializer.deserialize();
-            }
-        } finally {
-            try {
-                Files.deleteIfExists(temp);
-            } catch (IOException e) {
-                YesSteveModel.LOGGER.warn("[SM] Failed to remove temporary model archive {}", temp, e);
-            }
+        try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(raw)) {
+            return deserializer.deserialize();
         }
     }
 

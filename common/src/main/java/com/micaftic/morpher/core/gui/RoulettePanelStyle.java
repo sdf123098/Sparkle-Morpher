@@ -123,6 +123,42 @@ public final class RoulettePanelStyle {
     public static boolean inside(double px, double py, int x, int y, int w, int h) {
         return px >= x && py >= y && px < x + w && py < y + h;
     }
+
+    /** 圆角提示框；自带换行与窗口内收边，替代原版方角 tooltip。 */
+    public static void tooltip(GuiGraphicsExtractor g, Font font, java.util.List<Component> lines, int mouseX, int mouseY) {
+        var window = net.minecraft.client.Minecraft.getInstance().getWindow();
+        tooltip(g, font, lines, mouseX, mouseY, window.getGuiScaledWidth(), window.getGuiScaledHeight());
+    }
+
+    public static void tooltip(GuiGraphicsExtractor g, Font font, java.util.List<Component> lines,
+                               int mouseX, int mouseY, int screenWidth, int screenHeight) {
+        if (lines == null || lines.isEmpty()) {
+            return;
+        }
+        int maxTextWidth = Math.max(1, Math.min(240, screenWidth - 24));
+        java.util.List<net.minecraft.util.FormattedCharSequence> wrapped = new java.util.ArrayList<>();
+        for (Component line : lines) {
+            var split = font.split(line == null ? Component.empty() : line, maxTextWidth);
+            if (split.isEmpty()) {
+                wrapped.add(net.minecraft.util.FormattedCharSequence.EMPTY);
+            } else {
+                wrapped.addAll(split);
+            }
+        }
+        int lineHeight = font.lineHeight + 1;
+        int tw = wrapped.stream().mapToInt(font::width).max().orElse(0) + 10;
+        int visibleLines=Math.max(1,(screenHeight-15)/lineHeight);
+        if(wrapped.size()>visibleLines){wrapped=new java.util.ArrayList<>(wrapped.subList(0,visibleLines));wrapped.set(visibleLines-1,net.minecraft.util.FormattedCharSequence.forward("…",net.minecraft.network.chat.Style.EMPTY));}
+        int th = wrapped.size() * lineHeight + 7;
+        int tx = Math.max(4, Math.min(mouseX + 10, screenWidth - tw - 4));
+        int ty = Math.max(4, Math.min(mouseY + 10, screenHeight - th - 4));
+        roundedSurface(g, tx, ty, tw, th, 5, 0xF2141216, 0x3DFFFFFF);
+        int textY = ty + 4;
+        for (var line : wrapped) {
+            g.text(font, line, tx + 5, textY, 0xFFEDEDED, false);
+            textY += lineHeight;
+        }
+    }
     public static void roundedFill(GuiGraphicsExtractor g,int x,int y,int w,int h,int radius,int color){
         RoundedRectGeometry.fill((rx,ry,rw,rh,c)->fill(g,rx,ry,rw,rh,c),x,y,w,h,radius,color);
     }
@@ -149,10 +185,10 @@ public final class RoulettePanelStyle {
         fill(g,p+side,p,1,height-2*p,0x1AFFFFFF);
         applicationLogo(g,p+(side-logoSize)/2,p+6,logoSize);
         Glyph[] icons={Glyph.MODEL,Glyph.RESOURCE,Glyph.USERS,Glyph.SETTINGS};
-        int top=p+logoSize+17;
+        int top=p+logoSize+17,stride=ResponsiveUiLayout.railStride(height,top,p+32),rowHeight=Math.min(24,stride);
         for(int i=0;i<4;i++){
-            int y=top+i*30;
-            if(i==selected){roundedFill(g,p+3,y,side-6,24,3,0x18FFFFFF);fill(g,p,y+4,2,16,RED);}
+            int y=top+i*stride;
+            if(i==selected){roundedFill(g,p+3,y,side-6,rowHeight,3,0x18FFFFFF);fill(g,p,y+4,2,16,RED);}
             drawIconScaled(g,icons[i],p+(side-12)/2,y+6,12);
         }
         drawIconScaled(g,Glyph.LOGOUT,p+(side-12)/2,height-p-24,12);
@@ -160,7 +196,8 @@ public final class RoulettePanelStyle {
     public static boolean applicationRailClick(double x,double y,int width,int height,java.util.function.IntConsumer navigate){
         int p=applicationMargin(width),side=width<560?28:width<800?30:36,top=p+(width<560?20:width<800?22:26)+17;
         if(x<p||x>=p+side)return false;
-        for(int i=0;i<4;i++)if(y>=top+i*30&&y<top+i*30+24){navigate.accept(i);return true;}
+        int stride=ResponsiveUiLayout.railStride(height,top,p+32),rowHeight=Math.min(24,stride);
+        for(int i=0;i<4;i++)if(y>=top+i*stride&&y<top+i*stride+rowHeight){navigate.accept(i);return true;}
         if(y>=height-p-28&&y<height-p-5){navigate.accept(-1);return true;}
         return false;
     }

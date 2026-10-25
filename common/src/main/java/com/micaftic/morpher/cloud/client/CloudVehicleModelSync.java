@@ -5,6 +5,7 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.capability.VehicleCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
+import com.micaftic.morpher.client.RuntimeModelLease;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
@@ -13,14 +14,13 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.*;
 
 /** Client display adapter. Reads native control ownership; never modifies a seat, entity or game tick. */
 public final class CloudVehicleModelSync {
     private record Bound(CloudVehicleAppearance appearance,long deadline) {}
-    private record Applied(Entity entity,VehicleCapability cap,String model,Map<String,Float> variables) {}
+    private record Applied(Entity entity,VehicleCapability cap,String model,Map<String,Float> variables,RuntimeModelLease lease) {}
     private static final Map<UUID,Bound> BINDINGS=new HashMap<>();
     private static final Map<UUID,Applied> APPLIED=new HashMap<>();
     private static final Map<CloudPlayerSelection,CompletableFuture<String>> IMPORTS=new HashMap<>();
@@ -36,7 +36,7 @@ public final class CloudVehicleModelSync {
     private static boolean candidate(Entity entity){return !(entity instanceof Player)
         && !(entity instanceof net.minecraft.world.entity.projectile.Projectile) && !vanilla(entity);}
     private static void reset(){
-        APPLIED.values().forEach(applied->{applied.cap.awaitAsyncResult();applied.cap.resetModel();applied.cap.setFloatMap(new Int2FloatOpenHashMap());});
+        APPLIED.values().forEach(applied->{if(applied.lease!=null)applied.lease.close();applied.cap.awaitAsyncResult();applied.cap.resetModel();applied.cap.setFloatMap(new Int2FloatOpenHashMap());});
         APPLIED.clear();BINDINGS.clear();IMPORTS.clear();RETRIES.clear();polling=false;nextPoll=0;generation++;
     }
     private static EntityDisplayContext currentContext(Minecraft client,CloudClientRuntime.RuntimeState next){
@@ -66,7 +66,7 @@ public final class CloudVehicleModelSync {
         Set<CloudPlayerSelection> activeSelections=new HashSet<>();
         BINDINGS.values().forEach(bound->{if(bound.appearance.selection()!=null)activeSelections.add(bound.appearance.selection());});
         RETRIES.keySet().retainAll(activeSelections);
-        for(UUID id:List.copyOf(APPLIED.keySet()))if(!loaded.contains(id)){var old=APPLIED.remove(id);old.cap.awaitAsyncResult();old.cap.resetModel();}
+        for(UUID id:List.copyOf(APPLIED.keySet()))if(!loaded.contains(id)){var old=APPLIED.remove(id);if(old.lease!=null)old.lease.close();old.cap.awaitAsyncResult();old.cap.resetModel();}
         long now=System.nanoTime();
         if(context!=null&&!polling&&now-nextPoll>=0&&!vehicles.isEmpty())poll(vehicles,now);
         for(Entity entity:vehicles)apply(entity,now,client);
@@ -110,22 +110,24 @@ public final class CloudVehicleModelSync {
         var cap=VehicleCapability.get(entity).orElse(null);if(cap==null)return;
         Applied old=APPLIED.get(entity.getUUID());
         if(old==null||old.entity!=entity||old.cap!=cap||!Objects.equals(old.model,model)){
-            cap.awaitAsyncResult();cap.resetModel();cap.setOwnerModelId(model);cap.setFloatMap(values(variables));APPLIED.put(entity.getUUID(),new Applied(entity,cap,model,variables));
-        }else if(!old.variables.equals(variables)){cap.awaitAsyncResult();cap.setFloatMap(values(variables));APPLIED.put(entity.getUUID(),new Applied(entity,cap,model,variables));}
+            cap.awaitAsyncResult();cap.resetModel();cap.setOwnerModelId(model);cap.setFloatMap(values(variables));APPLIED.put(entity.getUUID(),new Applied(entity,cap,model,variables,lease(model)));
+            if(old!=null&&old.lease!=null)old.lease.close();
+        }else if(!old.variables.equals(variables)){cap.awaitAsyncResult();cap.setFloatMap(values(variables));APPLIED.put(entity.getUUID(),new Applied(entity,cap,model,variables,old.lease));}
     }
+    private static RuntimeModelLease lease(String model){return model==null?null:ClientModelManager.acquireRuntimeModelLease(model);}
     private static Int2FloatOpenHashMap values(Map<String,Float> variables){var values=new Int2FloatOpenHashMap();variables.forEach((name,value)->values.put(StringPool.computeIfAbsent(name),value.floatValue()));return values;}
-    private static void clear(Entity entity){Applied old=APPLIED.remove(entity.getUUID());if(old!=null){old.cap.awaitAsyncResult();old.cap.resetModel();old.cap.setFloatMap(new Int2FloatOpenHashMap());}}
+    private static void clear(Entity entity){Applied old=APPLIED.remove(entity.getUUID());if(old!=null){if(old.lease!=null)old.lease.close();old.cap.awaitAsyncResult();old.cap.resetModel();old.cap.setFloatMap(new Int2FloatOpenHashMap());}}
     private static void materialize(CloudPlayerSelection selection){
         if(runtime==null||context==null||IMPORTS.containsKey(selection)||IMPORTS.size()>=128
                 ||System.nanoTime()-RETRIES.getOrDefault(selection,0L)<0)return;
         final var session=runtime;final var expected=context;
         var future=new CompletableFuture<String>();IMPORTS.put(selection,future);
-        session.assetCache().downloadAndStore(session.assets(),selection.ref(),session.cacheRoot()).thenApplyAsync(path->{
-            try{return Files.readAllBytes(path);}catch(java.io.IOException error){throw new CompletionException(error);}
-        }).whenComplete((bytes,failure)->Minecraft.getInstance().execute(()->{
+        session.downloadDisplayAsset(selection.ref(),selection.format())
+            .thenApply(CloudAssetClient.MemoryAsset::bytes)
+            .whenComplete((bytes,failure)->Minecraft.getInstance().execute(()->{
             if(!current(expected,session)){future.completeExceptionally(new CancellationException("Vehicle context changed"));return;}
             if(failure!=null){IMPORTS.remove(selection,future);RETRIES.put(selection,System.nanoTime()+5_000_000_000L);future.completeExceptionally(failure);YesSteveModel.LOGGER.debug("[SPM Cloud vehicle] download failed",failure);return;}
-            ClientModelManager.importLocalModel(selection.runtimeModelId(),selection.importFileName(),bytes,error->{
+            ClientModelManager.importCloudModelInMemory(selection.runtimeModelId(),selection.importFileName(),bytes,error->{
                 if(!current(expected,session)){future.completeExceptionally(new CancellationException("Vehicle context changed"));return;}
                 IMPORTS.remove(selection,future);
                 if(error==null){RETRIES.remove(selection);future.complete(selection.runtimeModelId());}else{RETRIES.put(selection,System.nanoTime()+5_000_000_000L);future.completeExceptionally(new IllegalStateException(error.getString()));}
