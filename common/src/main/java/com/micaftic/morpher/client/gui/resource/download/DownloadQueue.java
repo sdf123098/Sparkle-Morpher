@@ -3,6 +3,7 @@ package com.micaftic.morpher.client.gui.resource.download;
 import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
 import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
 import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
+import com.micaftic.morpher.client.gui.resource.station.DownloadCancellation;
 import com.micaftic.morpher.client.upload.ModelUploadSession;
 import com.micaftic.morpher.util.SmExecutors;
 import net.minecraft.ChatFormatting;
@@ -17,6 +18,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 下载任务队列与下载执行内核（1.2.8，历史下载门面已移除）。
@@ -39,9 +41,9 @@ public final class DownloadQueue {
         CANCELLED
     }
 
-    public record TaskSnapshot(String name, String fileName, TaskState state, float progress, Component message, String sourceUrl, long byteLength) {
-        public TaskSnapshot(String name,String fileName,TaskState state,float progress,Component message){this(name,fileName,state,progress,message,"",0);}
-
+    public record TaskSnapshot(String name, String fileName, TaskState state, float progress, Component message, String sourceUrl, long byteLength, long taskId) {
+        public TaskSnapshot(String name,String fileName,TaskState state,float progress,Component message){this(name,fileName,state,progress,message,"",0,0);}
+        public TaskSnapshot(String name,String fileName,TaskState state,float progress,Component message,String sourceUrl,long byteLength){this(name,fileName,state,progress,message,sourceUrl,byteLength,0);}
     }
 
     public record Snapshot(TaskSnapshot currentTask, List<TaskSnapshot> unfinishedTasks, List<TaskSnapshot> finishedTasks,
@@ -60,6 +62,7 @@ public final class DownloadQueue {
     static final List<DownloadTask> HISTORY = new ArrayList<>();
     static DownloadTask currentTask;
     static boolean downloadLoading;
+    private static final AtomicLong NEXT_TASK_ID = new AtomicLong();
 
     public static boolean enqueue(ModelRepoEntry entry, ResourceStationConfig.State config) {
         boolean added;
@@ -112,9 +115,18 @@ public final class DownloadQueue {
 
     /** Retry the exact original source/config, including tasks no longer in the current catalog. */
     public static boolean retry(TaskSnapshot snapshot) {
-        DownloadTask found;
-        synchronized(LOCK){found=HISTORY.stream().filter(t->t.entry.url().equals(snapshot.sourceUrl())&&t.entry.fileName().equals(snapshot.fileName())).reduce((a,b)->b).orElse(null);}
-        return found!=null && enqueue(found.entry,found.config);
+        if (snapshot == null || snapshot.taskId() <= 0) return false;
+        boolean added;
+        synchronized (LOCK) {
+            DownloadTask found = HISTORY.stream().filter(t -> t.id == snapshot.taskId()).findFirst().orElse(null);
+            if (found == null || found.state != TaskState.FAILED && found.state != TaskState.CANCELLED) return false;
+            added = enqueueLocked(found.entry, found.config);
+        }
+        if (added) {
+            DownloadPresenter.notifyListeners();
+            processNextDownload();
+        }
+        return added;
     }
     public static void clearFinished() {
         synchronized (LOCK) {
@@ -131,34 +143,86 @@ public final class DownloadQueue {
     }
 
     public static void cancelCurrent() {
-        DownloadTask cancelledTask;
-        boolean cancelUpload;
-        boolean waitForDownloader;
+        long id;
         synchronized (LOCK) {
-            if (currentTask == null) {
-                return;
-            }
-            cancelledTask = currentTask;
-            cancelUpload = cancelledTask.state == TaskState.UPLOADING;
-            waitForDownloader = cancelledTask.state == TaskState.DOWNLOADING;
-            cancelledTask.cancelRequested = true;
-            currentTask.state = TaskState.CANCELLED;
-            currentTask.message = Component.translatable("gui.sparkle_morpher.resource_station.cancelled");
-            DownloadPresenter.status = currentTask.message;
-            DownloadPresenter.statusColor = ChatFormatting.GRAY;
-            if (!waitForDownloader) {
-                HISTORY.add(currentTask);
-                trimHistoryLocked();
+            id = currentTask == null ? 0 : currentTask.id;
+        }
+        cancel(id);
+    }
+
+    public static boolean cancel(TaskSnapshot snapshot) {
+        return snapshot != null && cancel(snapshot.taskId());
+    }
+
+    /** An old UI row can only cancel its own attempt, never a replacement task. */
+    public static boolean cancel(long taskId) {
+        DownloadTask task;
+        ModelUploadSession ownedUpload;
+        synchronized (LOCK) {
+            task = currentTask != null && currentTask.id == taskId ? currentTask
+                    : QUEUE.stream().filter(t -> t.id == taskId).findFirst().orElse(null);
+            if (task == null) return false;
+            ownedUpload = task == currentTask && task.state == TaskState.UPLOADING ? task.uploadSession : null;
+            QUEUE.remove(task);
+            cancelLocked(task);
+            if (currentTask == task) {
                 currentTask = null;
                 downloadLoading = false;
             }
         }
-        if (cancelUpload) {
-            ModelUploadSession.failCurrent(Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
-        }
+        task.cancellation.cancel();
+        cancelOwnedUpload(ownedUpload);
         DownloadPresenter.notifyListeners();
-        if (!waitForDownloader) {
-            processNextDownload();
+        processNextDownload();
+        return true;
+    }
+
+    /** Atomically cancels the current attempt and every queued attempt. */
+    public static int cancelAll() {
+        List<DownloadTask> cancelled = new ArrayList<>();
+        ModelUploadSession ownedUpload;
+        synchronized (LOCK) {
+            ownedUpload = currentTask != null && currentTask.state == TaskState.UPLOADING ? currentTask.uploadSession : null;
+            if (currentTask != null) cancelled.add(currentTask);
+            cancelled.addAll(QUEUE);
+            QUEUE.clear();
+            currentTask = null;
+            downloadLoading = false;
+            for (DownloadTask task : cancelled) cancelLocked(task);
+        }
+        cancelled.forEach(task -> task.cancellation.cancel());
+        cancelOwnedUpload(ownedUpload);
+        DownloadPresenter.notifyListeners();
+        return cancelled.size();
+    }
+
+    private static void cancelLocked(DownloadTask task) {
+        task.cancelRequested = true;
+        task.state = TaskState.CANCELLED;
+        task.message = Component.translatable("gui.sparkle_morpher.resource_station.cancelled");
+        DownloadPresenter.status = task.message;
+        DownloadPresenter.statusColor = ChatFormatting.GRAY;
+        HISTORY.add(task);
+        trimHistoryLocked();
+    }
+
+    private static void cancelOwnedUpload(ModelUploadSession ownedUpload) {
+        if (ownedUpload == null) return;
+        // start/failCurrent synchronize on this class. Keep identity check and cancellation atomic.
+        synchronized (ModelUploadSession.class) {
+            if (ModelUploadSession.getInstance() == ownedUpload) {
+                ModelUploadSession.failCurrent(Component.translatable("gui.sparkle_morpher.resource_station.cancelled"));
+            }
+        }
+    }
+
+    static boolean activeLocked(DownloadTask task) {
+        return currentTask == task && !task.cancelRequested && task.state != TaskState.CANCELLED;
+    }
+
+    static void ensureActive(DownloadTask task) {
+        synchronized (LOCK) {
+            if (!activeLocked(task)) throw new CancellationException("cancelled");
         }
     }
 
@@ -227,6 +291,10 @@ public final class DownloadQueue {
                         }
                     }
 
+                    @Override public Runnable onCancel(Runnable action) {
+                        return task.cancellation.onCancel(action);
+                    }
+
                     @Override
                     public void onProgress(int downloaded, int total, long bytesPerSecond) {
                         ensureNotCancelled(task);
@@ -285,7 +353,7 @@ public final class DownloadQueue {
     }
 
     static TaskSnapshot snapshot(DownloadTask task) {
-        return new TaskSnapshot(task.entry.name(), task.entry.fileName(), task.state, task.progress, task.message, task.entry.url(), task.entry.size());
+        return new TaskSnapshot(task.entry.name(), task.entry.fileName(), task.state, task.progress, task.message, task.entry.url(), task.entry.size(), task.id);
     }
 
     static int progressTotal(int contentLength, long entrySize) {
@@ -326,12 +394,15 @@ public final class DownloadQueue {
     }
 
     static class DownloadTask {
+        final long id = NEXT_TASK_ID.incrementAndGet();
+        final DownloadCancellation cancellation = new DownloadCancellation();
         final ModelRepoEntry entry;
         final ResourceStationConfig.State config;
         TaskState state = TaskState.QUEUED;
         float progress;
         Component message = Component.empty();
         boolean cancelRequested;
+        ModelUploadSession uploadSession;
         long uploadStartedAtMs;
         long lastUploadProgressAtMs;
         long uploadFinishingAtMs;

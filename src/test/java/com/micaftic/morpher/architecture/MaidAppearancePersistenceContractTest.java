@@ -19,8 +19,9 @@ class MaidAppearancePersistenceContractTest {
                 Path.of("common/src/main/java/com/micaftic/morpher/client/compat/touhoulittlemaid/TouhouLittleMaidClientCompat.java"),
                 Path.of("../common/src/main/java/com/micaftic/morpher/client/compat/touhoulittlemaid/TouhouLittleMaidClientCompat.java"));
 
-        assertTrue(sync.contains("MaidCapability.get(entity).ifPresent(cap -> cap.applyCloudState"));
-        assertTrue(sync.contains("MaidCapability.get(entity).ifPresent(cap -> cap.clearCloudState()"));
+        assertTrue(sync.contains("cap.applyCloudState(modelId"));
+        assertTrue(sync.contains("ClientModelManager.acquireRuntimeModelLease(modelId)"));
+        assertTrue(sync.contains("cap.clearCloudState()"));
         assertTrue(compat.contains("handleMaidInteraction"));
         assertTrue(compat.contains("registerMaidAnimStates"));
     }

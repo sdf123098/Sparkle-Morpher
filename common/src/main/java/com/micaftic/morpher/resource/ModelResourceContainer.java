@@ -107,9 +107,10 @@ public final class ModelResourceContainer implements AutoCloseable {
         ModelResourceContainer container = new ModelResourceContainer();
         try {
             readZipEntries(container, archive, charset);
-        } catch (ZipException e) {
+        } catch (ZipException | IllegalArgumentException e) {
             // 中文 Windows 压缩工具生成的 zip 常用 GBK 编码条目名（jdk 按 UTF-8 解码会报
             // "invalid CEN header (bad entry name)"）。UTF-8 读取失败时回退 GBK。
+            // JDK21 的 ZipInputStream 对坏条目名抛 IllegalArgumentException（JDK25 抛 ZipException）。
             System.err.println("[SM] Warning: Zip entry names are not " + charset.name()
                     + ", retrying with GBK: " + archive);
             readZipEntries(container, archive, Charset.forName("GBK"));
@@ -169,6 +170,78 @@ public final class ModelResourceContainer implements AutoCloseable {
             container.lowerIndex.put(normalized.toLowerCase(Locale.ROOT), normalized);
             container.expandedBytes += entry.getValue().length;
         }
+    }
+
+    /**
+     * zip 字节源：在内存中展开有界压缩包，不落临时文件。
+     * 条目数 / 单项 / 总量逐项计费，声明长度不可信；CRC 由 {@link java.util.zip.ZipInputStream}
+     * 在条目读完时校验。UTF-8 条目名失败时回退 GBK（中文 Windows 压缩工具产物）。
+     */
+    public static ModelResourceContainer zipBytes(byte[] archive) throws IOException {
+        try {
+            return zipBytes(archive, StandardCharsets.UTF_8, MAX_FILE_COUNT, MAX_PER_FILE_BYTES, MAX_EXPANDED_BYTES);
+        } catch (ZipException | IllegalArgumentException malformedUtf8Name) {
+            // ZipInputStream 把条目名解码失败包成 ZipException；JDK21 直接抛
+            // IllegalArgumentException（cause 为 MalformedInputException）
+            System.err.println("[SM] Warning: Zip entry names are not UTF-8, retrying with GBK");
+            return zipBytes(archive, Charset.forName("GBK"), MAX_FILE_COUNT, MAX_PER_FILE_BYTES, MAX_EXPANDED_BYTES);
+        }
+    }
+
+    static ModelResourceContainer zipBytes(byte[] archive, Charset charset, int maxFiles, long maxPerFile,
+                                           long maxTotal) throws IOException {
+        if (archive == null || archive.length < 22) {
+            throw new IOException("Model archive is not a complete zip");
+        }
+        Map<String, byte[]> rawEntries = new LinkedHashMap<>();
+        long totalExpanded = 0L;
+        try (java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(
+                new java.io.ByteArrayInputStream(archive), charset)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
+                if (rawEntries.size() >= maxFiles) {
+                    System.err.println("[SM] Warning: Skipping rest of archive (file count limit "
+                            + maxFiles + ")");
+                    break;
+                }
+                if (normalize(entry.getName()) == null) {
+                    System.err.println("[SM] Warning: Skipping escaping zip entry: " + entry.getName());
+                    continue;
+                }
+                byte[] bytes = zip.readNBytes((int) Math.min(maxPerFile + 1, Integer.MAX_VALUE));
+                if (bytes.length > maxPerFile) {
+                    System.err.println("[SM] Warning: Skipping oversized zip entry ("
+                            + bytes.length + " bytes): " + entry.getName());
+                    continue;
+                }
+                totalExpanded += bytes.length;
+                if (totalExpanded > maxTotal) {
+                    throw new IOException("Model archive exceeds its expanded byte budget");
+                }
+                if (rawEntries.putIfAbsent(entry.getName(), bytes) != null) {
+                    System.err.println("[SM] Warning: Skipping duplicate zip entry: " + entry.getName());
+                }
+            }
+        }
+        ModelResourceContainer container = new ModelResourceContainer();
+        String rootPrefix = detectModelRoot(rawEntries.keySet());
+        for (Map.Entry<String, byte[]> entry : rawEntries.entrySet()) {
+            String name = entry.getKey();
+            if (rootPrefix != null && !rootPrefix.isEmpty() && name.startsWith(rootPrefix)) {
+                name = name.substring(rootPrefix.length()).replaceFirst("^/+", "");
+            }
+            String normalized = normalize(name);
+            if (normalized == null || normalized.isEmpty()) continue;
+            if (container.entries.containsKey(normalized)
+                    || container.lowerIndex.containsKey(normalized.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            container.entries.put(normalized, entry.getValue());
+            container.lowerIndex.put(normalized.toLowerCase(Locale.ROOT), normalized);
+            container.expandedBytes += entry.getValue().length;
+        }
+        return container;
     }
 
     /** 探测 zip 条目中的模型根前缀：返回需剥离的前缀；null/"" 表示以整个包为根。 */

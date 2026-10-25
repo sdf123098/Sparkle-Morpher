@@ -29,8 +29,8 @@ public final class HudLayoutConfig {
     public static HudLayoutConfig define(ModConfigSpec.Builder builder, String keyPrefix,
                                          int defaultX, int defaultY, double defaultScale, double defaultYaw) {
         return new HudLayoutConfig(
-                builder.defineInRange(keyPrefix + "PlayerPosX", defaultX, 0, Integer.MAX_VALUE),
-                builder.defineInRange(keyPrefix + "PlayerPosY", defaultY, 0, Integer.MAX_VALUE),
+                builder.defineInRange(keyPrefix + "PlayerPosX", defaultX, -Integer.MAX_VALUE, Integer.MAX_VALUE),
+                builder.defineInRange(keyPrefix + "PlayerPosY", defaultY, -Integer.MAX_VALUE, Integer.MAX_VALUE),
                 builder.defineInRange(keyPrefix + "PlayerScale", defaultScale, 8.0d, 360.0d),
                 builder.defineInRange(keyPrefix + "PlayerYawOffset", defaultYaw, -Double.MAX_VALUE, Double.MAX_VALUE));
     }

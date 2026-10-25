@@ -10,6 +10,7 @@ import com.micaftic.morpher.client.gui.resource.station.RepositorySource;
 import com.micaftic.morpher.util.ModelIdUtil;
 
 import java.io.IOException;
+import java.util.concurrent.CancellationException;
 import java.net.URI;
 import java.util.List;
 
@@ -72,53 +73,99 @@ public final class ModelRepoClient {
     }
 
     public static byte[] download(ModelRepoEntry entry, ResourceStationConfig.State config) throws IOException {
-        IOException last = null;
-        List<String> candidates = DownloadCandidatePlanner.rankCandidates(DownloadCandidatePlanner.downloadCandidates(entry, config), config);
-        if (HttpTransport.debugLogEnabled()) {
-            YesSteveModel.LOGGER.info("[SM][ResourceStation] Download candidates entry={} fileName={} githubFile={} candidates={}",
-                    entry.name(), entry.fileName(), entry.isGithubFile(), candidates);
-        }
-        for (String url : candidates) {
-            try {
-                return HttpTransport.read(url, config.timeoutMs(), config.maxDownloadBytes());
-            } catch (IOException | RuntimeException e) {
-                last = HttpTransport.asIOException(e);
-                YesSteveModel.LOGGER.warn("[SM] Resource download candidate failed: {}", url, e);
-            }
-        }
-        throw last == null ? new IOException("No download URL") : last;
+        return download(entry, config, null);
     }
 
     public static byte[] download(ModelRepoEntry entry, ResourceStationConfig.State config, ProgressListener listener) throws IOException {
+        HttpTransport.checkCancelled(listener);
         IOException last = null;
-        List<String> candidates = DownloadCandidatePlanner.rankCandidates(DownloadCandidatePlanner.downloadCandidates(entry, config), config);
-        if (HttpTransport.debugLogEnabled()) {
-            YesSteveModel.LOGGER.info("[SM][ResourceStation] Download candidates entry={} fileName={} githubFile={} candidates={}",
-                    entry.name(), entry.fileName(), entry.isGithubFile(), candidates);
-        }
+        List<String> candidates = DownloadCandidatePlanner.rankCandidates(DownloadCandidatePlanner.downloadCandidates(entry, config), config, listener);
+        HttpTransport.monitor(config, "Download start name={} fileName={} size={} candidates={} githubFile={}", entry.name(), entry.fileName(), entry.size(), candidates.size(), entry.isGithubFile());
         for (int i = 0; i < candidates.size(); i++) {
+            HttpTransport.checkCancelled(listener);
             String url = candidates.get(i);
             if (listener != null) {
                 listener.onCandidate(url, i + 1, candidates.size());
             }
             try {
-                return HttpTransport.read(url, config.timeoutMs(), config.maxDownloadBytes(), listener, entry.size());
+                byte[] data = HttpTransport.read(url, config.timeoutMs(), config.maxDownloadBytes(), listener, entry.size());
+                HttpTransport.monitor(config, "Download complete name={} url={} bytes={}", entry.name(), url, data.length);
+                return data;
+            } catch (CancellationException e) {
+                throw e;
             } catch (IOException | RuntimeException e) {
+                HttpTransport.checkCancelled(listener);
                 last = HttpTransport.asIOException(e);
                 YesSteveModel.LOGGER.warn("[SM] Resource download candidate failed: {}", url, e);
+                HttpTransport.monitor(config, "Download candidate failed name={} url={} error={}", entry.name(), url, e.toString());
             }
         }
+        HttpTransport.monitor(config, "Download failed name={} candidates={} last={}", entry.name(), candidates.size(), last == null ? "none" : last.toString());
         throw last == null ? new IOException("No download URL") : last;
     }
 
     public static byte[] downloadPreview(ModelRepoEntry entry, ResourceStationConfig.State config) throws IOException {
+        return downloadPreview(entry, config, null);
+    }
+
+    public static byte[] downloadPreview(ModelRepoEntry entry, ResourceStationConfig.State config, ProgressListener listener) throws IOException {
+        HttpTransport.checkCancelled(listener);
         if (entry.previewUrl() == null || entry.previewUrl().isBlank()) {
             throw new IOException("No preview URL");
         }
-        if (HttpTransport.debugLogEnabled()) {
-            YesSteveModel.LOGGER.info("[SM][ResourceStation] Preview download started entry={} previewUrl={}", entry.name(), entry.previewUrl());
+        HttpTransport.monitor(config, "Preview download start name={} url={}", entry.name(), entry.previewUrl());
+        byte[] data = readPreviewCandidates(DownloadCandidatePlanner.urlCandidates(entry.previewUrl(), config),
+                config, 2 * 1024 * 1024, listener);
+        HttpTransport.monitor(config, "Preview download complete name={} bytes={}", entry.name(), data.length);
+        return data;
+    }
+
+    /** Only requested for the opened detail page, with a smaller transfer limit than model import. */
+    public static byte[] downloadEmbeddedPreview(ModelRepoEntry entry, ResourceStationConfig.State config) throws Exception {
+        return downloadEmbeddedPreview(entry, config, null);
+    }
+
+    public static byte[] downloadEmbeddedPreview(ModelRepoEntry entry, ResourceStationConfig.State config, ProgressListener listener) throws Exception {
+        HttpTransport.checkCancelled(listener);
+        int limit = Math.min(config.maxDownloadBytes(),
+                com.micaftic.morpher.client.gui.resource.station.EmbeddedModelPreview.MAX_MODEL_BYTES);
+        if (entry.size() > limit) return null;
+        var bounded = new ResourceStationConfig.State(config.urls(), config.selectedUrl(), config.timeoutMs(),
+                limit, config.mainlandChinaMode(), config.githubAccelerators());
+        byte[] source = readPreviewCandidates(DownloadCandidatePlanner.downloadCandidates(entry, bounded), bounded, limit, listener);
+        HttpTransport.checkCancelled(listener);
+        byte[] preview = com.micaftic.morpher.client.gui.resource.station.EmbeddedModelPreview.extract(source, entry.fileName());
+        HttpTransport.checkCancelled(listener);
+        return preview;
+    }
+
+    /** In-memory 3D card source, bounded independently of local model downloads. */
+    public static byte[] downloadPreviewModel(ModelRepoEntry entry, ResourceStationConfig.State config, ProgressListener listener) throws IOException {
+        HttpTransport.checkCancelled(listener);
+        int limit = Math.min(config.maxDownloadBytes(),
+                com.micaftic.morpher.client.gui.resource.station.EmbeddedModelPreview.MAX_MODEL_BYTES);
+        if (entry.size() > limit) throw new IOException("Model exceeds the 3D preview transfer limit");
+        return readPreviewCandidates(DownloadCandidatePlanner.downloadCandidates(entry, config), config, limit, listener);
+    }
+
+    private static byte[] readPreviewCandidates(List<String> candidates, ResourceStationConfig.State config, int limit) throws IOException {
+        return readPreviewCandidates(candidates, config, limit, null);
+    }
+
+    private static byte[] readPreviewCandidates(List<String> candidates, ResourceStationConfig.State config, int limit, ProgressListener listener) throws IOException {
+        IOException last = null;
+        for (int i = 0; i < candidates.size(); i++) {
+            HttpTransport.checkCancelled(listener);
+            String url = candidates.get(i);
+            if (listener != null) listener.onCandidate(url, i + 1, candidates.size());
+            try { return HttpTransport.read(url, config.timeoutMs(), limit, listener, true); }
+            catch (CancellationException cancelled) { throw cancelled; }
+            catch (IOException | RuntimeException failure) {
+                HttpTransport.checkCancelled(listener);
+                last = HttpTransport.asIOException(failure);
+            }
         }
-        return HttpTransport.readFirst(DownloadCandidatePlanner.urlCandidates(entry.previewUrl(), config), config.timeoutMs(), 2 * 1024 * 1024, true);
+        throw last == null ? new IOException("No preview URL") : last;
     }
 
     public static String safeModelId(ModelRepoEntry entry) {
@@ -148,6 +195,7 @@ public final class ModelRepoClient {
 
     public interface ProgressListener {
         void onProgress(int downloaded, int total);
+        default Runnable onCancel(Runnable action) { return () -> {}; }
 
         default boolean isCancelled() {
             return false;

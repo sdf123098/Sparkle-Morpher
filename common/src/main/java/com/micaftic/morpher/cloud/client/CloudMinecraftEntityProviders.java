@@ -2,14 +2,13 @@ package com.micaftic.morpher.cloud.client;
 
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.RuntimeModelLease;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.util.Objects;
 import java.util.Map;
 import java.util.IdentityHashMap;
@@ -37,6 +36,7 @@ public final class CloudMinecraftEntityProviders {
         final CloudAssetIdentity identity;
         java.util.function.BooleanSupplier current;
         String ownedModel;
+        RuntimeModelLease lease;
         boolean applied;
         long retryAt;
         final CloudDisplayPermissionLease permission = new CloudDisplayPermissionLease();
@@ -48,6 +48,18 @@ public final class CloudMinecraftEntityProviders {
             this.runtime = runtime;
             this.identity = identity;
             ownedModel = capability.getModelId();
+        }
+
+        void holdModel(String modelId) {
+            if (lease != null && modelId.equals(lease.runtimeModelId())) return;
+            releaseModel();
+            lease = ClientModelManager.acquireRuntimeModelLease(modelId);
+        }
+
+        void releaseModel() {
+            if (lease == null) return;
+            lease.close();
+            lease = null;
         }
     }
 
@@ -107,7 +119,8 @@ public final class CloudMinecraftEntityProviders {
             Entity entity = entity(entityUuid);
             if (entity == null || entity == Minecraft.getInstance().player) return;
             if (kind == Kind.MAID) {
-                MaidCapability.get(entity).ifPresent(capability -> applyModel(capability, appearance, bindingRevision));
+                MaidCapability.get(entity).filter(capability -> !capability.hasLocalState() && (!capability.hasPeerState() || com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud()))
+                        .ifPresent(capability -> applyModel(capability, appearance, bindingRevision));
             } else {
                 PlayerCapability.get(entity).ifPresent(capability -> applyModel(capability, appearance, bindingRevision));
             }
@@ -128,6 +141,7 @@ public final class CloudMinecraftEntityProviders {
                 && entry.targetId().equals(appearance.targetId()) && entry.revision() == bindingRevision).findFirst().orElse(null);
             AppearanceRequest request = new AppearanceRequest(capability, appearance, runtime, identity);
             request.current = () -> REQUESTS.get(capability) == request && CloudClientRuntime.state() == runtime
+                && (!(capability instanceof MaidCapability maid) || (!maid.hasLocalState() && (!maid.hasPeerState() || com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud())))
                 && (com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && !com.micaftic.morpher.client.PrivacyMode.isActive())
                 && client.level == expectedLevel && client.getConnection() == expectedConnection
                 && runtime.scopeLifecycle().contextGeneration() == scopeGeneration
@@ -137,7 +151,11 @@ public final class CloudMinecraftEntityProviders {
                 && !capability.getEntity().isRemoved()
                 && client.level.getEntity(capability.getEntity().getId()) == capability.getEntity()
                 && Objects.equals(appearance, runtime.appearances().get(scope, appearance.targetId()));
-            REQUESTS.put(capability, request);
+            AppearanceRequest previous = REQUESTS.put(capability, request);
+            if (previous != null && previous != request) {
+                request.lease = previous.lease;
+                previous.lease = null;
+            }
             capability.awaitAsyncResult();
             capability.setForceDisabled(true);
             if (request.current.getAsBoolean()) tryApply(request);
@@ -149,11 +167,13 @@ public final class CloudMinecraftEntityProviders {
                 AppearanceRequest request = iterator.next().getValue();
                 if (!request.current.getAsBoolean()) {
                     LivingAnimatable<?> cap = request.capability;
-                    if (Objects.equals(cap.getModelId(), request.ownedModel)) {
+                    if (!(cap instanceof MaidCapability maid && (maid.hasLocalState() || maid.hasPeerState()))
+                            && Objects.equals(cap.getModelId(), request.ownedModel)) {
                         cap.awaitAsyncResult();
                         cap.resetModel();
                         cap.setForceDisabled(true);
                     }
+                    request.releaseModel();
                     iterator.remove();
                 } else {
                     long now = System.nanoTime();
@@ -175,6 +195,7 @@ public final class CloudMinecraftEntityProviders {
                             request.ownedModel = request.capability.getModelId();
                             request.applied = false;
                         }
+                        request.releaseModel();
                     } else if (!request.applied && now - request.retryAt >= 0) {
                         tryApply(request);
                     }
@@ -189,11 +210,13 @@ public final class CloudMinecraftEntityProviders {
             capability.awaitAsyncResult();
             if (capability instanceof PlayerCapability player) player.isDisabled = appearance.disabled();
             if (appearance.disabled()) {
+                request.releaseModel();
                 capability.setForceDisabled(true);
                 request.applied = true;
                 return;
             }
             if (appearance.assetId() == null || appearance.assetId().isBlank()) {
+                request.releaseModel();
                 capability.resetModel();
                 request.ownedModel = capability.getModelId();
                 request.applied = true;
@@ -201,9 +224,11 @@ public final class CloudMinecraftEntityProviders {
             }
             String modelId = request.identity == null ? null : request.identity.runtimeModelId();
             if (modelId != null && ClientModelManager.getAvailableModelIds().contains(modelId)) {
-                capability.initModelWithTexture(modelId, appearance.textureId() == null ? "default" : appearance.textureId());
+                if(capability instanceof MaidCapability maid)maid.applyCloudState(modelId, appearance.textureId() == null ? "default" : appearance.textureId());
+                else capability.initModelWithTexture(modelId, appearance.textureId() == null ? "default" : appearance.textureId());
                 capability.setForceDisabled(false);
                 request.ownedModel = modelId;
+                request.holdModel(modelId);
                 request.applied = true;
                 return;
             }
@@ -216,21 +241,17 @@ public final class CloudMinecraftEntityProviders {
             var ref = new CloudAssetRef(appearance.assetId(), appearance.assetRevision(), appearance.rawSha256());
             var catalog = runtime.assetCatalog().get(ref.assetId());
             String fallbackFormat = catalog != null && catalog.ref().equals(ref) ? catalog.format() : null;
-            runtime.assetCache().downloadForDisplay(runtime.assets(), ref, runtime.cacheRoot(), fallbackFormat)
-                .thenApplyAsync(asset -> {
-                    try {
-                        byte[] bytes = Files.readAllBytes(asset.path());
-                        return new ImportData(CloudAssetImportName.fileName(
-                            new CloudAssetSummary(ref, ref.assetId(), asset.format(), bytes.length)), bytes);
-                    } catch (IOException error) { throw new java.util.concurrent.CompletionException(error); }
-                }).whenComplete((data, error) -> Minecraft.getInstance().execute(() -> {
+            runtime.downloadDisplayAsset(ref, fallbackFormat)
+                .thenApplyAsync(asset -> new ImportData(CloudAssetImportName.fileName(
+                    new CloudAssetSummary(ref, ref.assetId(), asset.format(), asset.bytes().length)), asset.bytes()))
+                .whenComplete((data, error) -> Minecraft.getInstance().execute(() -> {
                     if (error != null || !request.current.getAsBoolean() || !request.permission.valid(System.nanoTime())) {
                         MATERIALIZING.remove(capability, request);
                         request.retryAt = System.nanoTime() + 5_000_000_000L;
                         return;
                     }
                     try {
-                        ClientModelManager.importLocalModel(modelId, data.fileName(), data.bytes(), failure ->
+                        ClientModelManager.importCloudModelInMemory(modelId, data.fileName(), data.bytes(), failure ->
                             Minecraft.getInstance().execute(() -> {
                                 MATERIALIZING.remove(capability, request);
                                 request.retryAt = System.nanoTime() + 5_000_000_000L;
