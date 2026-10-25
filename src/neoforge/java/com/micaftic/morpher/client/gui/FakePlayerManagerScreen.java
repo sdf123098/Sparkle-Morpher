@@ -47,7 +47,8 @@ public final class FakePlayerManagerScreen extends Screen {
         int columnX(int column){return x+(int)Math.round(w*switch(column){case 1->.23;case 2->.58;case 3->.82;default->0;})+10;}
     }
 
-    private FakePlayerManagerScreen(){super(Component.literal("假人外观管理"));}
+    private static String managerString(String key, Object... args) { return Component.translatable("gui.sparkle_morpher.fake_manager." + key, args).getString(); }
+    private FakePlayerManagerScreen(){super(Component.translatable("gui.sparkle_morpher.fake_manager.title"));}
     public static void open(){
         FakePlayerListCache.replace(List.of());
         InputUtil.setScreen(new FakePlayerManagerScreen());
@@ -58,31 +59,31 @@ public final class FakePlayerManagerScreen extends Screen {
     @Override protected void init(){
         layout=Layout.create(width,height);overflowOpen=false;moreOpen=false;
         clearWidgets();
-        search=new EditBox(font,layout.x+8,layout.toolbarY+(layout.toolbarH-10)/2,Math.max(1,layout.searchW-16),10,Component.literal("搜索假人"));
+        search=new EditBox(font,layout.x+8,layout.toolbarY+(layout.toolbarH-10)/2,Math.max(1,layout.searchW-16),10,Component.literal(managerString("search.label")));
         search.setBordered(false);
         search.setTextColor(RoulettePanelStyle.TEXT);
         search.setMaxLength(128);
-        search.setHint(Component.literal(RoulettePanelStyle.trim(font,"搜索名称、UUID、模型或提供者…",Math.max(1,search.getWidth()))));
+        search.setHint(Component.literal(RoulettePanelStyle.trim(font,managerString("search.hint"),Math.max(1,search.getWidth()))));
         search.setValue(query);
         search.setResponder(value->{query=value;offset=0;});
         addRenderableWidget(search);
         actionButtons.clear();
         for(int i=0;i<layout.visibleActions;i++){int action=i;actionButtons.add(addWidget(new HitButton(layout.actionX(i),layout.toolbarY,layout.toolbarH,layout.toolbarH,Component.literal(actionLabel(i)),()->activateAction(action))));}
-        if(layout.visibleActions<9)addWidget(new HitButton(layout.actionX(layout.visibleActions),layout.toolbarY,layout.toolbarH,layout.toolbarH,Component.literal("更多工具"),()->{overflowOpen=!overflowOpen;moreOpen=false;overflowScroll=0;}));
+        if(layout.visibleActions<9)addWidget(new HitButton(layout.actionX(layout.visibleActions),layout.toolbarY,layout.toolbarH,layout.toolbarH,Component.literal(managerString("more_tools")),()->{overflowOpen=!overflowOpen;moreOpen=false;overflowScroll=0;}));
         int p=RoulettePanelStyle.applicationMargin(width),side=width<560?28:width<800?30:36,top=p+(width<560?20:width<800?22:26)+17;
-        for(int i=0;i<4;i++){int page=i;addWidget(new HitButton(p,top+i*com.micaftic.morpher.core.gui.ResponsiveUiLayout.railStride(height,top,p+32),side,Math.min(24,com.micaftic.morpher.core.gui.ResponsiveUiLayout.railStride(height,top,p+32)),Component.literal(new String[]{"模型管理","资源站","假人外观管理","设置"}[i]),()->navigateFromRail(page)));}
+        for(int i=0;i<4;i++){int page=i;addWidget(new HitButton(p,top+i*com.micaftic.morpher.core.gui.ResponsiveUiLayout.railStride(height,top,p+32),side,Math.min(24,com.micaftic.morpher.core.gui.ResponsiveUiLayout.railStride(height,top,p+32)),Component.literal(new String[]{managerString("tab.models"),managerString("tab.resources"),managerString("title"),managerString("tab.settings")}[i]),()->navigateFromRail(page)));}
         addWidget(new HitButton(p,height-p-28,side,23,Component.translatable("gui.back"),this::onClose));
-        for(int i=0;i<layout.visibleRows;i++){int row=i;addWidget(new HitButton(layout.x,layout.listY+i*layout.rowH,layout.w,layout.rowH,Component.literal("选择假人"),()->selectRow(row)));}
+        for(int i=0;i<layout.visibleRows;i++){int row=i;addWidget(new HitButton(layout.x,layout.listY+i*layout.rowH,layout.w,layout.rowH,Component.literal(managerString("select_player")),()->selectRow(row)));}
         updateActionButtons();
     }
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mouseX,int mouseY,float partialTick){
         RoulettePanelStyle.applicationRail(g,width,height,2);
         tooltip=null;
-        draw(g,"假人外观管理",layout.x,layout.y+10,RoulettePanelStyle.TEXT);
+        draw(g,managerString("title"),layout.x,layout.y+10,RoulettePanelStyle.TEXT);
         RoulettePanelStyle.roundedSurface(g,layout.x,layout.toolbarY,layout.searchW,layout.toolbarH,3,0x0BFFFFFF,search.isFocused()?0xCCE05252:0x26FFFFFF);
         search.extractWidgetRenderState(g,mouseX,mouseY,partialTick);
         Glyph[] actions={Glyph.RESOURCE,Glyph.EYE,Glyph.MODEL,Glyph.GLOBE,Glyph.FILTER,Glyph.RELOAD,Glyph.MODEL,Glyph.UNPLUG,Glyph.MORE};
-        String[] labels={"全部假人","在线假人","已配置模型","按维度筛选","假人排序","刷新假人","为所选假人选择模型","解除外观绑定","假人更多操作"};
+        String[] labels={managerString("filter.all"),managerString("filter.online"),managerString("filter.configured"),managerString("filter.dimension"),managerString("sort"),managerString("refresh"),managerString("choose_model"),managerString("unbind"),managerString("more_actions")};
         boolean selection=selectedEntry()!=null;
         for(int i=0;i<layout.visibleActions;i++){
             int ax=layout.actionX(i),size=layout.toolbarH;
@@ -97,10 +98,10 @@ public final class FakePlayerManagerScreen extends Screen {
         if(layout.visibleActions<9){int ax=layout.actionX(layout.visibleActions),size=layout.toolbarH;
             RoulettePanelStyle.roundedSurface(g,ax,layout.toolbarY,size,size,3,0x0BFFFFFF,0x22FFFFFF);
             RoulettePanelStyle.drawIconScaled(g,Glyph.MORE,ax+(size-14)/2,layout.toolbarY+(size-14)/2,14);
-            if(inside(mouseX,mouseY,ax,layout.toolbarY,size,size))tooltip="更多工具";
+            if(inside(mouseX,mouseY,ax,layout.toolbarY,size,size))tooltip=managerString("more_tools");
         }
         RoulettePanelStyle.roundedFill(g,layout.x,layout.headerY,layout.w,23,3,0x0DFFFFFF);
-        String[] headers={"假人","模型 / 提供者","维度","状态"};
+        String[] headers={managerString("column.fake_player"),managerString("column.model_provider"),managerString("column.dimension"),managerString("column.status")};
         for(int i=0;i<headers.length;i++)draw(g,headers[i],layout.columnX(i),layout.headerY+8,0xFFB1B1B1);
         List<FakePlayerListEntry> rows=rows();
         clampOffset(rows.size());
@@ -110,15 +111,15 @@ public final class FakePlayerManagerScreen extends Screen {
             boolean selected=entry.uuid().equals(selectedUuid),hover=inside(mouseX,mouseY,layout.x,ry,layout.w,layout.rowH-2);
             if(selected||hover)RoulettePanelStyle.roundedFill(g,layout.x,ry,layout.w,layout.rowH-2,3,selected?0x13FFFFFF:0x09FFFFFF);
             if(selected)RoulettePanelStyle.fill(g,layout.x,ry+4,2,layout.rowH-10,RoulettePanelStyle.RED);
-            String[] values={displayName(entry),(entry.modelId().isBlank()?"未设置模型":entry.modelId())+" · "+entry.providerId(),entry.dimensionId(),entry.online()?"在线":"离线"};
+            String[] values={displayName(entry),(entry.modelId().isBlank()?managerString("model_unset"):entry.modelId())+" · "+entry.providerId(),entry.dimensionId(),entry.online()?managerString("online"):managerString("offline")};
             for(int col=0;col<values.length;col++){
                 int cx=layout.columnX(col),end=col==3?layout.x+layout.w-10:layout.columnX(col+1)-12;
                 draw(g,RoulettePanelStyle.trim(font,values[col],Math.max(1,end-cx)),cx,ry+(layout.rowH-9)/2,col==0?RoulettePanelStyle.TEXT:0xFFB1B1B1);
             }
             RoulettePanelStyle.fill(g,layout.x+8,ry+layout.rowH-2,layout.w-16,1,0x0DFFFFFF);
         }
-        if(rows.isEmpty())draw(g,RoulettePanelStyle.trim(font,FakePlayerListCache.entries().isEmpty()?Component.translatable("gui.sparkle_morpher.cloud.entity.fake_empty").getString():"没有匹配的假人。清空搜索或调整筛选。",layout.w-20),layout.x+10,layout.listY+13,RoulettePanelStyle.MUTED);
-        draw(g,rows.size()+" 个假人"+(selection?" · 已选择："+selectedName:""),layout.x,layout.footerY,0xFFB1B1B1);
+        if(rows.isEmpty())draw(g,RoulettePanelStyle.trim(font,FakePlayerListCache.entries().isEmpty()?Component.translatable("gui.sparkle_morpher.cloud.entity.fake_empty").getString():managerString("no_matches"),layout.w-20),layout.x+10,layout.listY+13,RoulettePanelStyle.MUTED);
+        draw(g,managerString("footer.count", rows.size())+(selection?managerString("footer.selected", selectedName):""),layout.x,layout.footerY,0xFFB1B1B1);
         if(moreOpen)renderMore(g);
         if(overflowOpen)renderOverflow(g);
         if(tooltip!=null){
@@ -143,8 +144,8 @@ public final class FakePlayerManagerScreen extends Screen {
     private void renderMore(GuiGraphicsExtractor g){
         int x=Math.min(layout.actionX(8),width-154),y=layout.toolbarY+layout.toolbarH+4;
         RoulettePanelStyle.roundedSurface(g,x,y,148,48,4,0xF0171717,0x44FFFFFF);
-        draw(g,"复制所选假人 UUID",x+8,y+8,selectedEntry()==null?RoulettePanelStyle.MUTED:RoulettePanelStyle.TEXT);
-        draw(g,"清空搜索与筛选",x+8,y+29,RoulettePanelStyle.TEXT);
+        draw(g,managerString("menu.copy_uuid"),x+8,y+8,selectedEntry()==null?RoulettePanelStyle.MUTED:RoulettePanelStyle.TEXT);
+        draw(g,managerString("menu.clear_search"),x+8,y+29,RoulettePanelStyle.TEXT);
     }
     private List<FakePlayerListEntry> rows(){
         String q=query.toLowerCase(Locale.ROOT).trim();
@@ -173,7 +174,7 @@ public final class FakePlayerManagerScreen extends Screen {
         }
         return super.mouseClicked(event,flag);
     }
-    private String actionLabel(int i){return new String[]{"全部假人","在线假人","已配置模型","按维度筛选","假人排序","刷新假人","为所选假人选择模型","解除外观绑定","假人更多操作"}[i];}
+    private String actionLabel(int i){return new String[]{managerString("filter.all"),managerString("filter.online"),managerString("filter.configured"),managerString("filter.dimension"),managerString("sort"),managerString("refresh"),managerString("choose_model"),managerString("unbind"),managerString("more_actions")}[i];}
     private void updateActionButtons(){boolean selected=selectedEntry()!=null;for(int i=0;i<actionButtons.size();i++)actionButtons.get(i).active=i!=6&&i!=7||selected;}
     private void selectRow(int row){var rows=rows();clampOffset(rows.size());int index=offset+row;if(index<rows.size()){var entry=rows.get(index);selectedUuid=entry.uuid();selectedName=displayName(entry);search.setFocused(false);updateActionButtons();}}
     private void activateAction(int action){
