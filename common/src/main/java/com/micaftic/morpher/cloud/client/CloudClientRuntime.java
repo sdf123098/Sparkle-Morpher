@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 
 /**
  * Process-local, cross-loader Cloud client runtime.
@@ -24,9 +25,26 @@ import java.util.function.Consumer;
  */
 public final class CloudClientRuntime {
     private static volatile RuntimeState current;
+    private static final java.util.concurrent.atomic.AtomicLong DISPLAY_GENERATION = new java.util.concurrent.atomic.AtomicLong();
+    private static volatile Runnable displayReset = () -> {};
+
+    public static long displayGeneration() { return DISPLAY_GENERATION.get(); }
+    public static void setDisplayReset(Runnable reset) { displayReset = Objects.requireNonNull(reset); }
+
+    private static void invalidateDisplay() {
+        DISPLAY_GENERATION.incrementAndGet();
+        CloudSelectedModelRecovery.reset();
+        for (RuntimeState runtime : INSTANCES.values()) {
+            runtime.assetMaterialization().cancelPending();
+            runtime.http().cancelDisplayRequests();
+        }
+        displayReset.run();
+    }
     private static final Map<String, RuntimeState> INSTANCES = new ConcurrentHashMap<>();
     private static final CloudWorldSession WORLD_SESSION = new CloudWorldSession();
     private static final ConcurrentLinkedQueue<Runnable> CLIENT_TASKS = new ConcurrentLinkedQueue<>();
+    /** Hard client-side ceiling for one display asset; the instance limit may only lower it. */
+    static final long MAX_DISPLAY_ASSET_BYTES = 128L * 1024 * 1024;
 
     private CloudClientRuntime() {
     }
@@ -59,6 +77,7 @@ public final class CloudClientRuntime {
         Objects.requireNonNull(messageConsumer, "messageConsumer");
         Objects.requireNonNull(eventConsumer, "eventConsumer");
 
+        invalidateDisplay();
         RuntimeState previous = INSTANCES.remove(instance.instanceId());
         if (previous != null) closeState(previous);
 
@@ -93,7 +112,6 @@ public final class CloudClientRuntime {
                 session,
                 http,
                 assets,
-                new CloudAssetCache(),
                 new CloudScopeClient(http),
                 new CloudIdentityClient(http),
                 new CloudIdentityBindingClient(http),
@@ -157,6 +175,7 @@ public final class CloudClientRuntime {
     }
 
     public static void networkPolicyChanged() {
+        invalidateDisplay();
         for(RuntimeState runtime : INSTANCES.values()) {
             runtime.realtime().suspend();
             if(com.micaftic.morpher.core.network.NetworkAccess.allowsCloud()) runtime.realtime().connect().thenCompose(ignored -> {
@@ -203,6 +222,7 @@ public final class CloudClientRuntime {
     }
 
     public static void leaveScope() {
+        invalidateDisplay();
         RuntimeState state = current;
         if (state != null) {
             String scopeId = state.scopeLifecycle().activeScopeId();
@@ -298,17 +318,17 @@ public final class CloudClientRuntime {
         state.assetCatalog().upsert(summary);
     }
 
-    public static CompletableFuture<Path> downloadAsset(CloudAssetRef ref) {
+    public static CompletableFuture<CloudAssetClient.MemoryAsset> downloadAsset(CloudAssetRef ref) {
         RuntimeState state = requireState();
         CloudAssetSummary summary = state.assetCatalog().get(ref.assetId());
         if (summary == null || !summary.ref().equals(ref)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Cloud asset revision is not in the current catalog"));
         }
-        return state.assetCache().downloadAndStore(state.assets(), ref, state.cacheRoot());
+        return state.downloadDisplayAsset(ref, summary.format());
     }
 
     /** Ensures a catalog-approved asset revision is downloaded exactly once per runtime. */
-    public static CompletableFuture<Path> materializeAsset(CloudAssetRef ref) {
+    public static CompletableFuture<CloudAssetClient.MemoryAsset> materializeAsset(CloudAssetRef ref) {
         return requireState().assetMaterialization().ensure(ref);
     }
 
@@ -328,6 +348,7 @@ public final class CloudClientRuntime {
     }
 
     public static synchronized void clear() {
+        invalidateDisplay();
         for (RuntimeState state : INSTANCES.values()) closeState(state);
         INSTANCES.clear();
         current = null;
@@ -343,6 +364,9 @@ public final class CloudClientRuntime {
     }
 
     private static void closeState(RuntimeState previous) {
+        invalidateDisplay();
+        previous.assetMaterialization().close();
+        previous.http().cancelDisplayRequests();
         previous.assetCatalog().clear();
         previous.animations().clear();
         previous.entityCoordinator().deactivate();
@@ -356,7 +380,6 @@ public final class CloudClientRuntime {
         private final CloudSession session;
         private final CloudHttpClient http;
         private final CloudAssetClient assets;
-        private final CloudAssetCache assetCache;
         private final CloudAssetMaterializationCoordinator assetMaterialization;
         private final CloudAssetCatalogStore assetCatalog;
         private final CloudScopeClient scopes;
@@ -377,7 +400,6 @@ public final class CloudClientRuntime {
                 CloudSession session,
                 CloudHttpClient http,
                 CloudAssetClient assets,
-                CloudAssetCache assetCache,
                 CloudScopeClient scopes,
                 CloudIdentityClient identities,
                 CloudIdentityBindingClient identityBindings,
@@ -392,10 +414,9 @@ public final class CloudClientRuntime {
             this.session = session;
             this.http = http;
             this.assets = assets;
-            this.assetCache = assetCache;
             this.assetCatalog = new CloudAssetCatalogStore();
             this.assetMaterialization = new CloudAssetMaterializationCoordinator(
-                    assetCatalog, ref -> assetCache.downloadAndStore(assets, ref, cacheRoot),
+                    assetCatalog, ref -> downloadCatalogAsset(assets, assetCatalog, this::displayAssetBudget, ref),
                     ref -> CloudModelSelectionStore.recent(instance.instanceId()).stream().anyMatch(asset -> asset.ref().equals(ref)));
             this.scopes = scopes;
             this.identities = identities;
@@ -414,7 +435,6 @@ public final class CloudClientRuntime {
         public CloudSession session() { return session; }
         public CloudHttpClient http() { return http; }
         public CloudAssetClient assets() { return assets; }
-        public CloudAssetCache assetCache() { return assetCache; }
         public CloudAssetMaterializationCoordinator assetMaterialization() { return assetMaterialization; }
         public CloudAssetCatalogStore assetCatalog() { return assetCatalog; }
         public CloudScopeClient scopes() { return scopes; }
@@ -429,6 +449,26 @@ public final class CloudClientRuntime {
         public CloudEntityObservationCoordinator observations() { return observations; }
         public Path cacheRoot() { return cacheRoot; }
         public CloudInstanceInfo instanceInfo() { return instanceInfo; }
+
+        /** One display asset never exceeds the client ceiling or the current server limit. */
+        public long displayAssetBudget() {
+            CloudInstanceInfo info = instanceInfo;
+            long limit = info == null ? MAX_DISPLAY_ASSET_BYTES : Math.min(MAX_DISPLAY_ASSET_BYTES, info.maxAssetBytes());
+            return Math.max(1L, limit);
+        }
+
+        CompletableFuture<CloudAssetClient.MemoryAsset> downloadDisplayAsset(CloudAssetRef ref, String fallbackFormat) {
+            return assets.downloadForDisplay(ref, fallbackFormat, displayAssetBudget());
+        }
+
+        static CompletableFuture<CloudAssetClient.MemoryAsset> downloadCatalogAsset(
+                CloudAssetClient assets, CloudAssetCatalogStore catalog, LongSupplier budget, CloudAssetRef ref) {
+            CloudAssetSummary summary = catalog.get(ref.assetId());
+            String format = summary != null && summary.ref().equals(ref) ? summary.format() : null;
+            if (format == null) format = CloudSelectedModelRecovery.savedFormat(
+                    ref, CloudModelSelectionStore.recent(assets.instanceId()));
+            return assets.downloadForDisplay(ref, format, budget.getAsLong());
+        }
 
         private ModelUploadTransport uploadTransport() {
             return new CloudUploadTransport(assets);

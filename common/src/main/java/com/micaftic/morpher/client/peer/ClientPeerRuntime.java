@@ -26,7 +26,7 @@ public final class ClientPeerRuntime {
     private static Object world, connection;
     private static volatile long generation;
     private static String status = "P2P 未启用", invitation, lastSelection;
-    private static boolean sharing;
+    private static final PeerSharingPreference sharingPreference = new PeerSharingPreference();
     private static boolean hosting;
     private static Set<UUID> approvedWorldPlayers = Set.of();
     private static long nextPlayerApproval;
@@ -35,7 +35,6 @@ public final class ClientPeerRuntime {
     private static Runnable bootstrapRequest = () -> {};
     private static Object autoConnection, advertisedServer;
     private static boolean autoSuppressed, automatic;
-    private static boolean shareSuppressed;
     private static final Map<UUID, String> receiveErrors = new HashMap<>();
     private static Map<UUID, PeerRoomCoordinator.Member> roomMembers = Map.of();
     private static final Map<UUID, PeerObservation.Report> localReports = new ConcurrentHashMap<>();
@@ -86,7 +85,7 @@ public final class ClientPeerRuntime {
         return key == null ? Component.literal(status) : Component.translatable("gui.sparkle_morpher.settings.peer.status." + key);
     }
     public static String invitation() { return invitation; }
-    public static boolean sharing() { return sharing; }
+    public static boolean sharing() { return sharingPreference.enabled(); }
     public static int members() { return members; }
     public static boolean running() { return runtime != null && !runtime.isClosed(); }
     public static boolean automatic() { return automatic; }
@@ -105,7 +104,7 @@ public final class ClientPeerRuntime {
         return Component.translatable("gui.sparkle_morpher.settings.peer.observers", submitted, Math.max(0, members - 1), failed);
     }
     public static String diagnostics() {
-        var lines = new StringBuilder("SPM Peer protocol 1.2\n").append(status).append('\n');
+        var lines = new StringBuilder("SPM Peer protocol 1.3\n").append(status).append('\n');
         localReports.forEach((uuid, report) -> lines.append("receive owner=").append(uuid).append(" revision=").append(report.revision())
                 .append(" state=").append(report.state()).append(" failure=").append(report.failure()).append('\n'));
         receiveErrors.forEach((uuid, error) -> lines.append("receive error owner=").append(uuid).append(" reason=").append(error).append('\n'));
@@ -148,7 +147,7 @@ public final class ClientPeerRuntime {
             var endpoint = PeerModelEntrances.automaticRoute(address.getAddress(),offered.endpoints());
             var invite = new PeerInvitation(offered.roomId(), List.of(endpoint), offered.pin(), offered.expiresAt(), offered.secret());
             if(begin()) {
-                automatic = true; sharing = !shareSuppressed;
+                automatic = true; sharingPreference.automaticRoomStarted();
                 runtime.join(invite, mc.player.getUUID());
             }
         } catch(RuntimeException invalid) { status = "邀请无效或已过期"; }
@@ -156,7 +155,7 @@ public final class ClientPeerRuntime {
     private static void tickAutomatic(Minecraft mc) {
         if(!com.micaftic.morpher.core.network.NetworkAccess.allowsPeer()) return;
         if(autoConnection != mc.getConnection()) {
-            autoConnection = mc.getConnection(); autoSuppressed = shareSuppressed = automaticRetryExhausted = false;
+            autoConnection = mc.getConnection(); autoSuppressed = automaticRetryExhausted = false;
             automaticFailures = 0; nextBootstrap = nextAutomaticAttempt = 0;
         }
         if(mc.player == null || mc.level == null || mc.getConnection() == null || PrivacyMode.isActive() || autoSuppressed) return;
@@ -164,7 +163,7 @@ public final class ClientPeerRuntime {
         var integrated = mc.getSingleplayerServer();
         if(integrated != null && integrated.isPublished()) {
             if(!begin()) return;
-            automatic = true; sharing = !shareSuppressed; hosting = true;
+            automatic = true; sharingPreference.automaticRoomStarted(); hosting = true;
             var active = runtime; long token = generation;
             approvedWorldPlayers = Set.copyOf(currentWorldPlayers(mc));
             active.hostAutomatic(mc.player.getUUID(), approvedWorldPlayers, invite -> {
@@ -186,6 +185,9 @@ public final class ClientPeerRuntime {
     public static void enableAutomatic() { autoSuppressed = automaticRetryExhausted = false; automaticFailures = 0; nextBootstrap = nextAutomaticAttempt = 0; }
     public static void retrySharing() { lastSelection = null; retryAt.clear(); receiveErrors.clear(); }
     public static boolean ownsAppearance(UUID uuid) { return owned.containsKey(uuid); }
+    static boolean retainsPeerModel(String model) {
+        return ownedModels.containsValue(model)||pending.values().stream().anyMatch(v->v.member.appearance().model().runtimeModelId().equals(model))||PeerMaidModelSync.retainsModel(model);
+    }
     static PeerRoomCoordinator.Member motionMember(UUID uuid) { return roomMembers.get(uuid); }
     static boolean retainsMotionPolicy(String model){return views.values().stream().anyMatch(view->view.member.appearance()!=null&&!view.member.appearance().cleared()&&view.member.appearance().model().runtimeModelId().equals(model));}
     private static boolean cloudPreferred(UUID uuid) {
@@ -209,6 +211,7 @@ public final class ClientPeerRuntime {
                 message -> { if(token == generation) status = message; });
         runtime.onObservations(receipts -> { if(token == generation) observerReceipts = receipts; });
         runtime.onMotions(receipts -> { if(token == generation) PeerMotionSync.receive(receipts); });
+        runtime.onEntities(entries -> { if(token == generation) PeerMaidModelSync.receive(entries); });
         status = "P2P 正在连接"; return true;
     }
     public static void host(String authority) {
@@ -254,7 +257,7 @@ public final class ClientPeerRuntime {
         try { var invite = PeerModelEntrances.localRoute(PeerInvitation.decode(encoded),localRoute); if(begin()) { autoSuppressed = true; runtime.join(invite, Minecraft.getInstance().player.getUUID()); } }
         catch(RuntimeException invalid) { status = "邀请无效或已过期"; }
     }
-    public static void setSharing(boolean approved) { sharing = approved; shareSuppressed = !approved; lastSelection = null; if(!approved && runtime != null) runtime.clear(); }
+    public static void setSharing(boolean approved) { sharingPreference.setEnabled(approved); lastSelection = null; if(!approved && runtime != null) { runtime.clear(); runtime.clearEntities(); } }
     public static void approvePlayers() {
         if(runtime != null && Minecraft.getInstance().level != null) {
             currentWorldPlayers(Minecraft.getInstance()).forEach(runtime::approve);
@@ -292,7 +295,7 @@ public final class ClientPeerRuntime {
         });
         var lease = leases.remove(uuid); if(lease != null) lease.close();
         String model = ownedModels.remove(uuid);
-        if(model != null && !ownedModels.containsValue(model) && pending.values().stream().noneMatch(view -> view.member.appearance().model().runtimeModelId().equals(model))) {
+        if(model != null && !retainsPeerModel(model)) {
             ClientModelManager.releasePeerModel(model); PeerMotionSync.forget(model);PeerDiagnostics.forget(model);
         }
         com.micaftic.morpher.cloud.client.CloudPlayerModelSync.peerOwnershipChanged(uuid);
@@ -319,6 +322,8 @@ public final class ClientPeerRuntime {
         }
         if(!active.connected()) return;
         automaticFailures = 0;
+        boolean sharing = sharing();
+        PeerMaidModelSync.tick(active, sharing);
         ownedModels.forEach((uuid,model)->{
             var error=PeerDiagnostics.uploadFailure(model);var view=views.get(uuid);
             if(error!=null&&view!=null){receiveErrors.put(uuid,"gpu_upload:"+error);observe(view.member,PeerObservation.State.FAILED,PeerFrame.ErrorCode.IMPORT_FAILED);}
@@ -409,13 +414,14 @@ public final class ClientPeerRuntime {
     public static void disconnect() {
         var probingNow=probeDialer;if(probingNow!=null)probingNow.close();probeStatus=Component.translatable("gui.sparkle_morpher.settings.peer.probe_idle");
         if(advertisedServer != null) { PeerLanBootstrap.clear(advertisedServer); advertisedServer = null; }
+        PeerMaidModelSync.reset();
         PeerMotionSync.reset();timelines.clear();PeerDiagnostics.reset(); generation++; var active = runtime; runtime = null; if(active != null) active.close();
         for(UUID uuid : List.copyOf(owned.keySet())) release(uuid);
         views = Map.of(); pending.clear(); retryAt.clear(); leases.values().forEach(PeerAssetStore.Lease::close); leases.clear(); ownedModels.clear();
         receiveErrors.clear();
         roomMembers = Map.of(); localReports.clear(); observerReceipts = List.of(); cloudCandidates = Set.of();
         if(active != null) ClientModelManager.releasePeerModels();
-        world = connection = null; sharing = false; invitation = lastSelection = null; members = 0; status = "P2P 已退出";
+        world = connection = null; invitation = lastSelection = null; members = 0; status = "P2P 已退出";
         hosting = false; approvedWorldPlayers = Set.of(); nextPlayerApproval = 0;
         automatic = false;
     }

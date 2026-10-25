@@ -45,6 +45,39 @@ public final class CloudHttpClient {
     private final CloudInstanceConfig instance;
     private final HttpClient httpClient;
     private final String accessToken;
+    // Weak identity keys: delayed consumers carry their download epoch without retaining any model bytes.
+    private static final java.util.Map<byte[], Long> DISPLAY_BYTE_GENERATIONS =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    public static boolean currentDisplayBytes(byte[] bytes) {
+        Long admitted = DISPLAY_BYTE_GENERATIONS.get(bytes);
+        return admitted == null || admitted == CloudClientRuntime.displayGeneration();
+    }
+
+    private CompletableFuture<HttpResponse<byte[]>> displayResponse(
+            CompletableFuture<HttpResponse<byte[]>> request, long generation) {
+        var stamped = request.thenApply(response -> {
+            if (generation != CloudClientRuntime.displayGeneration())
+                throw new java.util.concurrent.CancellationException("Cloud download belongs to an obsolete world or account");
+            if (response.body() != null) DISPLAY_BYTE_GENERATIONS.put(response.body(), generation);
+            return response;
+        });
+        stamped.whenComplete((ignored, failure) -> { if (stamped.isCancelled()) request.cancel(true); });
+        return trackDisplay(stamped);
+    }
+    private final java.util.Set<CompletableFuture<?>> displayRequests = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public void cancelDisplayRequests() {
+        var pending = java.util.List.copyOf(displayRequests);
+        displayRequests.clear();
+        pending.forEach(future -> future.cancel(true));
+    }
+
+    private <T> CompletableFuture<T> trackDisplay(CompletableFuture<T> request) {
+        displayRequests.add(request);
+        request.whenComplete((ignored, failure) -> displayRequests.remove(request));
+        return request;
+    }
 
     public CloudHttpClient(CloudInstanceConfig instance) {
         this(instance, HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build(), null);
@@ -303,7 +336,69 @@ public final class CloudHttpClient {
         if (ifNoneMatch != null && !ifNoneMatch.isBlank()) {
             builder.header("If-None-Match", ifNoneMatch);
         }
-        return sendAsync(builder.GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        long generation = CloudClientRuntime.displayGeneration();
+        var request = sendAsync(builder.GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        return path.startsWith("/v1/assets/") && path.endsWith("/content") ? displayResponse(request, generation) : request;
+    }
+
+    /** Binary download with a hard memory budget; the declared length is checked before the body is read. */
+    public CompletableFuture<HttpResponse<byte[]>> getBoundedBytes(String path, long maximumBytes) {
+        long generation = CloudClientRuntime.displayGeneration();
+        return displayResponse(sendAsync(requestBuilder(path).timeout(REQUEST_TIMEOUT)
+                .header("Accept", "application/octet-stream").GET().build(), boundedBinaryHandler(maximumBytes)), generation);
+    }
+
+    static HttpResponse.BodyHandler<byte[]> boundedBinaryHandler(long maximumBytes) {
+        if (maximumBytes < 1 || maximumBytes > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Invalid binary byte budget");
+        }
+        return info -> new BoundedBinarySubscriber((int) maximumBytes,
+                info.headers().firstValueAsLong("Content-Length").orElse(-1L));
+    }
+
+    static final class BoundedBinarySubscriber implements HttpResponse.BodySubscriber<byte[]> {
+        private final int maximum;
+        private final long declared;
+        private final java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        private final CompletableFuture<byte[]> result = new CompletableFuture<>();
+        private java.util.concurrent.Flow.Subscription subscription;
+        private boolean finished;
+
+        BoundedBinarySubscriber(int maximum, long declared) { this.maximum = maximum; this.declared = declared; }
+        public java.util.concurrent.CompletionStage<byte[]> getBody() { return result; }
+        public void onSubscribe(java.util.concurrent.Flow.Subscription next) {
+            subscription = next;
+            if (declared > maximum) { next.cancel(); fail(); return; }
+            next.request(1);
+        }
+        public void onNext(java.util.List<java.nio.ByteBuffer> buffers) {
+            if (finished) return;
+            long size = bytes.size();
+            for (var buffer : buffers) size += buffer.remaining();
+            if (size > maximum) { subscription.cancel(); fail(); return; }
+            for (var buffer : buffers) {
+                byte[] chunk = new byte[Math.min(8192, buffer.remaining())];
+                while (buffer.hasRemaining()) {
+                    int length = Math.min(chunk.length, buffer.remaining());
+                    buffer.get(chunk, 0, length); bytes.write(chunk, 0, length);
+                }
+            }
+            subscription.request(1);
+        }
+        public void onError(Throwable error) {
+            if (finished) return;
+            finished = true; result.completeExceptionally(error);
+        }
+        public void onComplete() {
+            if (finished) return;
+            finished = true; result.complete(bytes.toByteArray());
+        }
+        private void fail() {
+            if (finished) return;
+            finished = true;
+            result.completeExceptionally(new CloudHttpException(200, CloudErrorCode.MESSAGE_TOO_LARGE,
+                    "Cloud asset exceeded its memory budget"));
+        }
     }
 
     /** Rechecks ACL before accepting a resident resource; never buffers model bytes. */
@@ -312,7 +407,7 @@ public final class CloudHttpClient {
         var request = requestBuilder(path).timeout(REQUEST_TIMEOUT)
                 .header("If-None-Match", etag).GET().build();
         long policyEpoch = com.micaftic.morpher.core.network.NetworkAccess.state().epoch();
-        return sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()).thenApply(response -> {
+        return trackDisplay(sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())).thenApply(response -> {
             try (var body = response.body()) {
                 return com.micaftic.morpher.core.network.NetworkAccess.current(policyEpoch) && (response.statusCode() == 304 || response.statusCode() == 200)
                         && etag.equals(response.headers().firstValue("ETag").orElse(null));

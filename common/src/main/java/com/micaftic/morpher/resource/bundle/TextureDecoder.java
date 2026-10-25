@@ -57,7 +57,7 @@ public final class TextureDecoder {
                     case 1:
                     case 2:
                     case 3:
-                        return readImageWithMemoryGuard(data);
+                        return readImageWithMemoryGuard(data, imageFormat);
                     case 4:
                         if (width > 0 && height > 0) requireTextureMemory(width, height, 3);
                         return new WebpDecoder().read(data);
@@ -74,15 +74,19 @@ public final class TextureDecoder {
         return null;
     }
 
-    private static BufferedImage readImageWithMemoryGuard(byte[] data) throws IOException {
+    private static BufferedImage readImageWithMemoryGuard(byte[] data, int imageFormat) throws IOException {
+        // Header dimensions first: some ImageReader SPIs decode inside getWidth(), which would
+        // allocate the raster before the budget check could reject it.
+        var declared = com.micaftic.morpher.resource.ImageHeaderDimensions.read(data, imageFormat);
         try (var input = new MemoryCacheImageInputStream(new ByteArrayInputStream(data))) {
             var readers = ImageIO.getImageReaders(input);
             if (!readers.hasNext()) return null;
             var reader = readers.next();
             try {
                 reader.setInput(input, true, true);
-                // Trust the image header rather than potentially stale model metadata.
-                requireTextureMemory(reader.getWidth(0), reader.getHeight(0), 2);
+                int width = declared != null ? declared.width() : reader.getWidth(0);
+                int height = declared != null ? declared.height() : reader.getHeight(0);
+                requireTextureMemory(width, height, 2);
                 return reader.read(0);
             } finally { reader.dispose(); }
         }

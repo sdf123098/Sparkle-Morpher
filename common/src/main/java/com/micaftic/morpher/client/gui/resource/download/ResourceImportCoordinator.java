@@ -57,7 +57,8 @@ public final class ResourceImportCoordinator {
         DownloadPresenter.notifyListeners();
         CompletableFuture.runAsync(() -> {
                     try {
-                        saveDownloadedModel(task.entry.fileName(), modelId, data);
+                        DownloadQueue.ensureActive(task);
+                        saveDownloadedModel(task.entry.fileName(), modelId, data, () -> DownloadQueue.ensureActive(task));
                     } catch (IOException e) {
                         throw new CompletionException(e);
                     }
@@ -76,7 +77,9 @@ public final class ResourceImportCoordinator {
             DownloadQueue.finishTask(task, DownloadQueue.TaskState.FAILED, Component.translatable("gui.sparkle_morpher.resource_station.save_failed", DownloadQueue.rootMessage(saveError)));
             return;
         }
-        ClientModelManager.importLocalModel(modelId, task.entry.fileName(), data, localError -> onLocalImportFinished(task, modelId, data, localError));
+        ClientModelManager.importLocalModel(modelId, task.entry.fileName(), data, () -> {
+            synchronized (DownloadQueue.LOCK) { return DownloadQueue.activeLocked(task); }
+        }, localError -> onLocalImportFinished(task, modelId, data, localError));
     }
 
     static void onLocalImportFinished(DownloadQueue.DownloadTask task, String modelId, byte[] data, Component localError) {
@@ -97,6 +100,11 @@ public final class ResourceImportCoordinator {
     }
 
     static void saveDownloadedModel(String fileName, String modelId, byte[] data) throws IOException {
+        saveDownloadedModel(fileName, modelId, data, () -> {});
+    }
+
+    static void saveDownloadedModel(String fileName, String modelId, byte[] data, Runnable checkActive) throws IOException {
+        checkActive.run();
         if (data == null || data.length == 0) {
             throw new IOException("Empty model file");
         }
@@ -112,13 +120,17 @@ public final class ResourceImportCoordinator {
         boolean moved = false;
         try {
             Files.write(temp, data);
-            try {
-                Files.move(temp, absoluteTarget, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, absoluteTarget, StandardCopyOption.REPLACE_EXISTING);
+            synchronized (DownloadQueue.LOCK) {
+                // Cancellation may win while bytes are being written; never commit that temp file.
+                checkActive.run();
+                try {
+                    Files.move(temp, absoluteTarget, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(temp, absoluteTarget, StandardCopyOption.REPLACE_EXISTING);
+                }
+                moved = true;
+                removeSiblingModelFiles(customRoot, modelId, absoluteTarget);
             }
-            moved = true;
-            removeSiblingModelFiles(customRoot, modelId, absoluteTarget);
         } finally {
             if (!moved) {
                 Files.deleteIfExists(temp);

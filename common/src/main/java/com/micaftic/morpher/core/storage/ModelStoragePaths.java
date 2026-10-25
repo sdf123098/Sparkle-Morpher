@@ -11,6 +11,7 @@ import java.nio.file.Path;
  *     built/   模型站内置模型（只读副本）
  *     custom/  用户导入模型（.ysm/.zip/.bbmodel）
  *     auth/    授权（付费）模型
+ *     cloud_models/ 旧版 Cloud 导入副本（仅保留供用户清理，不再读取）
  *     export/  导出目录
  *     cache/
  *       server_index         本地模型定义索引（保留旧目录名）

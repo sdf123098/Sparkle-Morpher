@@ -13,6 +13,8 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -144,6 +146,8 @@ public final class GitHubSource implements RepositorySource {
         JsonArray tree = root.has("tree") && root.get("tree").isJsonArray() ? root.getAsJsonArray("tree") : new JsonArray();
         HttpTransport.monitor(config, "GitHub tree loaded owner={} repo={} branch={} path={} treeItems={}", owner, repo, branch, path, tree.size());
         String prefix = path == null || path.isBlank() ? "" : path.replace('\\', '/').replaceAll("^/+", "").replaceAll("/+$", "") + "/";
+        int first = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         for (JsonElement element : tree) {
             JsonObject object = element.getAsJsonObject();
             String type = RepositoryEntryParser.firstString(object, "type");
@@ -152,6 +156,10 @@ public final class GitHubSource implements RepositorySource {
                 continue;
             }
             String name = RepositoryEntryParser.fileNameOnly(childPath);
+            if (RepositoryPreviews.isImage(name)) {
+                images.put(childPath, rawUrl(owner, repo, branch, childPath));
+                continue;
+            }
             if (!RepositoryEntryParser.isImportFile(name)) {
                 continue;
             }
@@ -159,6 +167,7 @@ public final class GitHubSource implements RepositorySource {
             String rawUrl = "https://raw.githubusercontent.com/" + RepositoryEntryParser.encPath(owner) + "/" + RepositoryEntryParser.encPath(repo) + "/" + RepositoryEntryParser.encPath(branch) + "/" + RepositoryEntryParser.encPath(childPath);
             entries.add(new ModelRepoEntry(name, rawUrl, name, size, "GitHub: " + owner + "/" + repo, owner, repo, branch, childPath));
         }
+        RepositoryPreviews.attach(entries, first, images);
         if (root.has("truncated") && root.get("truncated").getAsBoolean()) {
             YesSteveModel.LOGGER.warn("[SM] GitHub tree response was truncated for {}/{}", owner, repo);
             HttpTransport.monitor(config, "GitHub tree truncated owner={} repo={} branch={}", owner, repo, branch);
@@ -169,6 +178,8 @@ public final class GitHubSource implements RepositorySource {
         String archiveUrl = "https://codeload.github.com/" + RepositoryEntryParser.encPath(owner) + "/" + RepositoryEntryParser.encPath(repo) + "/zip/refs/heads/" + RepositoryEntryParser.encPath(branch);
         byte[] bytes = HttpTransport.read(archiveUrl, config.timeoutMs(), config.maxDownloadBytes(), config, "github-archive");
         String prefix = path == null || path.isBlank() ? "" : path.replace('\\', '/').replaceAll("^/+", "").replaceAll("/+$", "") + "/";
+        int first = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         try (ZipInputStream zip = new ZipInputStream(new java.io.ByteArrayInputStream(bytes))) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
@@ -180,6 +191,10 @@ public final class GitHubSource implements RepositorySource {
                     continue;
                 }
                 String name = RepositoryEntryParser.fileNameOnly(childPath);
+                if (RepositoryPreviews.isImage(name)) {
+                    images.put(childPath, rawUrl(owner, repo, branch, childPath));
+                    continue;
+                }
                 if (!RepositoryEntryParser.isImportFile(name)) {
                     continue;
                 }
@@ -187,6 +202,7 @@ public final class GitHubSource implements RepositorySource {
                 entries.add(new ModelRepoEntry(name, rawUrl, name, entry.getSize(), "GitHub: " + owner + "/" + repo, owner, repo, branch, childPath));
             }
         }
+        RepositoryPreviews.attach(entries, first, images);
         HttpTransport.monitor(config, "GitHub archive fallback complete owner={} repo={} branch={} path={} entries={}",
                 owner, repo, branch, path, entries.size());
     }
@@ -199,12 +215,16 @@ public final class GitHubSource implements RepositorySource {
         api += "?ref=" + RepositoryEntryParser.enc(branch);
         JsonElement root = readGithubJson(api, config, 4 * 1024 * 1024);
         JsonArray array = root.isJsonArray() ? root.getAsJsonArray() : new JsonArray();
+        int first = entries.size();
+        Map<String, String> images = new LinkedHashMap<>();
         for (JsonElement element : array) {
             JsonObject object = element.getAsJsonObject();
             String type = RepositoryEntryParser.firstString(object, "type");
             String name = RepositoryEntryParser.firstString(object, "name");
             String childPath = RepositoryEntryParser.firstString(object, "path");
-            if ("dir".equals(type)) {
+            if ("file".equals(type) && name != null && RepositoryPreviews.isImage(name)) {
+                images.put(childPath == null ? name : childPath, rawUrl(owner, repo, branch, childPath == null ? name : childPath));
+            } else if ("dir".equals(type)) {
                 walkGithub(owner, repo, branch, childPath == null ? "" : childPath, config, entries);
             } else if ("file".equals(type) && RepositoryEntryParser.isImportFile(name)) {
                 String url = RepositoryEntryParser.firstString(object, "download_url");
@@ -212,6 +232,13 @@ public final class GitHubSource implements RepositorySource {
                 entries.add(new ModelRepoEntry(name, url, name, size, "GitHub: " + owner + "/" + repo, owner, repo, branch, childPath == null ? name : childPath));
             }
         }
+        RepositoryPreviews.attach(entries, first, images);
+    }
+
+    private static String rawUrl(String owner, String repo, String branch, String path) {
+        return "https://raw.githubusercontent.com/" + RepositoryEntryParser.encPath(owner) + "/"
+                + RepositoryEntryParser.encPath(repo) + "/" + RepositoryEntryParser.encPath(branch)
+                + "/" + RepositoryEntryParser.encPath(path);
     }
 
     public static String resolveDefaultBranch(String owner, String repo, ResourceStationConfig.State config) {

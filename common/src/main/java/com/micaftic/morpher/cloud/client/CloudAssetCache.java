@@ -2,79 +2,21 @@ package com.micaftic.morpher.cloud.client;
 
 import com.micaftic.morpher.core.api.network.state.CloudErrorCode;
 
-import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Objects;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
-/** Content-addressed client cache with verify-before-publish and atomic replacement. */
+/** Verifies Cloud display bytes against the trusted exact revision without touching the filesystem. */
 public final class CloudAssetCache {
 
-    public record DisplayAsset(Path path, String format) {}
-
-    /** The format comes from the authenticated exact revision, never the latest catalog entry. */
-    public CompletableFuture<DisplayAsset> downloadForDisplay(CloudAssetClient client, CloudAssetRef ref,
-                                                             Path cacheRoot, String exactCatalogFormat) {
-        return client.download(ref, null, null).thenApply(response -> {
-            if (response.statusCode() != 200)
-                throw new CloudHttpException(response.statusCode(), CloudErrorCode.ASSET_NOT_FOUND,
-                        "Cloud display revision is unavailable");
-            String format = response.headers().firstValue("x-asset-format").orElse(exactCatalogFormat);
-            if (format == null || !java.util.Set.of("ysm", "zip", "bbmodel", "gltf", "glb").contains(format))
-                throw new IllegalArgumentException("Exact Cloud revision parser format is unavailable");
-            try { return new DisplayAsset(writeVerified(cacheRoot, ref, response.body()), format); }
-            catch (IOException error) { throw new java.util.concurrent.CompletionException(error); }
-        });
-    }
-
-    public CompletableFuture<Path> downloadAndStore(CloudAssetClient client, CloudAssetRef ref, Path cacheRoot) {
-        Objects.requireNonNull(client, "client");
-        Objects.requireNonNull(ref, "ref");
-        Objects.requireNonNull(cacheRoot, "cacheRoot");
-        return client.download(ref, null, null).thenApply(response -> {
-            if (response.statusCode() != 200) {
-                throw new CloudHttpException(response.statusCode(), response.statusCode() == 404 ? CloudErrorCode.ASSET_NOT_FOUND : CloudErrorCode.INTERNAL, "Cloud asset download did not return the complete object");
-            }
-            try {
-                return writeVerified(cacheRoot, ref, response.body());
-            } catch (IOException e) {
-                throw new CloudHttpException(500, CloudErrorCode.INTERNAL, "Cloud asset cache write failed: " + e.getMessage());
-            }
-        });
-    }
-
-    static Path writeVerified(Path cacheRoot, CloudAssetRef ref, byte[] bytes) throws IOException {
-        Objects.requireNonNull(cacheRoot, "cacheRoot");
+    static String verify(CloudAssetRef ref, byte[] bytes) {
         Objects.requireNonNull(ref, "ref");
         Objects.requireNonNull(bytes, "bytes");
         String actualSha = sha256(bytes);
         if (!actualSha.equals(ref.rawSha256())) {
             throw new CloudHttpException(200, CloudErrorCode.ASSET_HASH_MISMATCH, "Cloud asset SHA-256 does not match its trusted reference");
         }
-        Path root = cacheRoot.toAbsolutePath().normalize();
-        Files.createDirectories(root);
-        Path target = root.resolve(ref.assetId() + "-r" + ref.revision() + "-" + actualSha + ".bin");
-        if (Files.isRegularFile(target) && Files.size(target) == bytes.length
-                && sha256(Files.readAllBytes(target)).equals(actualSha)) return target;
-        Path temp = root.resolve("." + target.getFileName() + ".part-" + UUID.randomUUID());
-        try {
-            Files.write(temp, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-            try {
-                Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException ignored) {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-            return target;
-        } finally {
-            Files.deleteIfExists(temp);
-        }
+        return actualSha;
     }
 
     static String sha256(byte[] bytes) {

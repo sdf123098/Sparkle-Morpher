@@ -17,7 +17,12 @@ public final class PeerRoomServer implements AutoCloseable {
     private final PeerAssetStore assets;
     private final PeerRelayScheduler relay = new PeerRelayScheduler();
     private final Map<UUID,PeerCapabilities> capabilities = new ConcurrentHashMap<>();
-    private final Map<UUID, PeerAssetStore.Lease> retained = new ConcurrentHashMap<>();
+    private record AssetKey(UUID owner,PeerModelIdentity model) {}
+    private final Map<AssetKey, PeerAssetStore.Lease> retained = new ConcurrentHashMap<>();
+    private void trimRetained(PeerSession owner,boolean all) {
+        for(var entry:retained.entrySet())if(entry.getKey().owner().equals(owner.memberId())
+                && (all || !room.ownsModel(owner,entry.getKey().model())) && retained.remove(entry.getKey(),entry.getValue()))entry.getValue().close();
+    }
     private final java.util.concurrent.ScheduledExecutorService deadlines = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(task -> {
         var thread = new Thread(task, "SPM-Peer-Relay-Deadline"); thread.setDaemon(true); return thread;
     });
@@ -56,7 +61,7 @@ public final class PeerRoomServer implements AutoCloseable {
             approved.retainAll(allowed); approved.addAll(allowed);
             revoked = room.retainMinecraftBindings(allowed);
         }
-        for(var session : revoked) { var lease = retained.remove(session.memberId()); if(lease != null) lease.close(); }
+        for(var session : revoked) trimRetained(session,true);
     }
     private synchronized PeerRoomCoordinator.Welcome authenticate(UUID player, byte[] secret) throws PeerFailure {
         if(!approved.contains(player)) throw new PeerFailure(PeerFailure.Stage.AUTH, PeerFrame.ErrorCode.UNAPPROVED_UUID);
@@ -115,8 +120,19 @@ public final class PeerRoomServer implements AutoCloseable {
                         var appearance=PeerRoomCodec.decode(frame.payload(),PeerRoomCodec::appearance);
                         if(appearance!=null && !appearance.cleared()) negotiated.requireProfile(appearance.model().importerProfile());
                         if(appearance==null || !room.publish(session,appearance))throw new IOException("Stale appearance publication");
-                        var old = retained.remove(session.memberId()); if(old != null) old.close();
+                        trimRetained(session,false);
                         new PeerFrame(PeerFrame.Type.APPEARANCE_ACCEPTED,frame.requestId(),new byte[0]).write(out);
+                    }
+                    case ENTITY_PUBLISH -> {
+                        var entity=PeerRoomCodec.decode(frame.payload(),PeerRoomCodec::entity);
+                        if(entity.model()!=null)negotiated.requireProfile(entity.model().importerProfile());
+                        if(!room.publishEntity(session,entity))throw new IOException("Stale entity publication");
+                        trimRetained(session,false);
+                        new PeerFrame(PeerFrame.Type.APPEARANCE_ACCEPTED,frame.requestId(),new byte[0]).write(out);
+                    }
+                    case ENTITY_QUERY -> {
+                        int cursor=PeerRoomCodec.decode(frame.payload(),input->input.readInt());
+                        new PeerFrame(PeerFrame.Type.ENTITY_SNAPSHOT,frame.requestId(),PeerRoomCodec.entityPage(room.entityPage(session,cursor))).write(out);
                     }
                     case PING,RESYNC -> new PeerFrame(PeerFrame.Type.ROSTER_SNAPSHOT,frame.requestId(),PeerRoomCodec.snapshot(room.snapshot(session))).write(out);
                     case MOTION_DELTA -> {
@@ -146,7 +162,7 @@ public final class PeerRoomServer implements AutoCloseable {
             System.getLogger("SPM-Peer").log(System.Logger.Level.DEBUG, "Room connection ended: {0}", failure.getMessage());
             throw failure;
         }
-        finally {if(session!=null){capabilities.remove(session.memberId());room.leave(session);var lease=retained.remove(session.memberId());if(lease!=null)lease.close();}}
+        finally {if(session!=null){capabilities.remove(session.memberId());room.leave(session);trimRetained(session,true);}}
     }
     private void transfer(PeerSession session, SSLSocket socket, DataInputStream in, DataOutputStream out) throws IOException {
         var request = PeerFrame.read(in, true);
@@ -156,14 +172,14 @@ public final class PeerRoomServer implements AutoCloseable {
         UUID ownerId=session.memberId();
         java.util.function.BooleanSupplier authorized=()->room.current(session);
         if(request.type() == PeerFrame.Type.ASSET_REQUEST) {
-            record Request(UUID owner, long revision, boolean cacheHave) {}
-            var value = PeerRoomCodec.decode(request.payload(), input -> new Request(PeerRoomCodec.uuid(input), input.readLong(), input.readBoolean()));
-            var owner = room.member(value.owner);
+            record Request(UUID owner, long revision, boolean cacheHave,UUID entityId) {}
+            var value = PeerRoomCodec.decode(request.payload(), input -> new Request(PeerRoomCodec.uuid(input), input.readLong(), input.readBoolean(),input.readBoolean()?PeerRoomCodec.uuid(input):null));
+            var owner = room.assetOwner(value.owner,value.entityId);
             if(owner == null || owner.appearance() == null || owner.appearance().cleared() || owner.appearance().revision() != value.revision)
                 throw new PeerFailure(PeerFailure.Stage.TRANSFER, PeerFrame.ErrorCode.STALE_REVISION);
             policy.requireProfile(owner.appearance().model().importerProfile());
             ownerId=owner.session().memberId();
-            requestedGrant = room.grant(session, owner.session(), System.nanoTime(), 60_000_000_000L);
+            requestedGrant = room.grant(session, owner.session(), owner.entityId(), System.nanoTime(), 60_000_000_000L);
             if(!room.authorize(requestedGrant.id(), session, requestedGrant.appearance().model(), System.nanoTime()))
                 throw new PeerFailure(PeerFailure.Stage.TRANSFER, PeerFrame.ErrorCode.REVOKED);
             new PeerFrame(PeerFrame.Type.ASSET_GRANT, request.requestId(), PeerRoomCodec.encode(output -> {
@@ -183,9 +199,9 @@ public final class PeerRoomServer implements AutoCloseable {
                 PeerAssetWire.receive(appearance.model().contentRoot(), assets, in, out, () -> room.owns(session, appearance),policy,appearance.model().importerProfile());
                 var lease = assets.retain(appearance.model().contentRoot());
                 if(!room.owns(session, appearance)) { lease.close(); throw new IOException("Asset offer superseded"); }
-                var old = retained.put(session.memberId(), lease); if(old != null) old.close();
+                var retainedKey=new AssetKey(session.memberId(),appearance.model());var old = retained.put(retainedKey, lease); if(old != null) old.close();
                 // Never acquire the asset-store lock under the coordinator lock: commit guards acquire them in the reverse order.
-                if(!room.owns(session, appearance)) { if(retained.remove(session.memberId(), lease)) lease.close(); throw new IOException("Asset offer superseded"); }
+                if(!room.owns(session, appearance)) { if(retained.remove(retainedKey, lease)) lease.close(); throw new IOException("Asset offer superseded"); }
                 new PeerFrame(PeerFrame.Type.ACK, request.requestId(), new byte[0]).write(out);
             } else if(request.type() == PeerFrame.Type.ASSET_REQUEST) {
                 var grant = requestedGrant;
