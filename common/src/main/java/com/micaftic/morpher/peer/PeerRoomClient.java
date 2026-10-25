@@ -19,6 +19,7 @@ public final class PeerRoomClient implements AutoCloseable {
     private volatile boolean closed;
     private final PeerInvitation invitation;
     private final Set<PeerTlsTransport> assetTransfers = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Object uploadLock = new Object();
     private final java.util.concurrent.ScheduledExecutorService deadlines = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(task -> {
         var thread = new Thread(task, "SPM-Peer-Asset-Deadline"); thread.setDaemon(true); return thread;
     });
@@ -49,6 +50,25 @@ public final class PeerRoomClient implements AutoCloseable {
     public synchronized void publish(PeerAppearance appearance)throws IOException {
         long id=send(PeerFrame.Type.PUBLISH_APPEARANCE,PeerRoomCodec.encode(out->PeerRoomCodec.appearance(out,appearance)));
         receive(PeerFrame.Type.APPEARANCE_ACCEPTED,id);
+    }
+    public synchronized void publishEntity(PeerEntityAppearance entry)throws IOException {
+        if(!session.equals(entry.owner()))throw new IOException("Entity publisher session mismatch");
+        long id=send(PeerFrame.Type.ENTITY_PUBLISH,PeerRoomCodec.encode(out->PeerRoomCodec.entity(out,entry)));
+        receive(PeerFrame.Type.APPEARANCE_ACCEPTED,id);
+    }
+    public synchronized List<PeerEntityAppearance> entities()throws IOException {
+        var result=new LinkedHashMap<String,PeerEntityAppearance>();int cursor=0,pages=0;
+        do {
+            final int start=cursor;long id=send(PeerFrame.Type.ENTITY_QUERY,PeerRoomCodec.encode(out->out.writeInt(start)));
+            var page=PeerRoomCodec.entityPage(receive(PeerFrame.Type.ENTITY_SNAPSHOT,id).payload());
+            for(var entry:page.entries()) {
+                if(!entry.owner().roomId().equals(session.roomId())||!entry.owner().epoch().equals(session.epoch()))throw new IOException("Entity room mismatch");
+                if(snapshot.members().stream().anyMatch(m->m.session().equals(entry.owner())))result.put(entry.owner().memberId()+"/"+entry.entityId(),entry);
+            }
+            if(page.next()!=-1&&page.next()<=cursor)throw new IOException("Entity page did not advance");cursor=page.next();
+            if(++pages>PeerLimits.CAPACITY_CEILING*PeerEntityCatalog.PER_OWNER/PeerEntityCatalog.PAGE_SIZE+1)throw new IOException("Too many entity pages");
+        }while(cursor!=-1);
+        return List.copyOf(result.values());
     }
     public synchronized PeerRoomCoordinator.Snapshot poll()throws IOException {
         long id=send(PeerFrame.Type.PING,new byte[0]);install(receive(PeerFrame.Type.ROSTER_SNAPSHOT,id));return snapshot;
@@ -110,6 +130,13 @@ public final class PeerRoomClient implements AutoCloseable {
         } catch(IOException | RuntimeException e) { assetTransfers.remove(transport); transport.close(); throw e; }
     }
     public void upload(PeerAppearance appearance, PeerAssetStore.Verified asset, java.util.function.BooleanSupplier current) throws IOException {
+        // The relay admits one owner -> self upload at a time. Never hold the control-channel monitor here.
+        synchronized(uploadLock) {
+            if(closed)throw new PeerFailure(PeerFailure.Stage.TRANSFER,PeerFrame.ErrorCode.CANCELLED);
+            uploadCurrent(appearance,asset,current);
+        }
+    }
+    private void uploadCurrent(PeerAppearance appearance, PeerAssetStore.Verified asset, java.util.function.BooleanSupplier current) throws IOException {
         if(appearance.cleared() || !asset.manifest().contentRoot().equals(appearance.model().contentRoot())) throw new IOException("Asset offer identity mismatch");
         capabilities.requireProfile(appearance.model().importerProfile());capabilities.requireManifest(asset.manifest());
         try(var channel = openAsset()) {
@@ -132,7 +159,7 @@ public final class PeerRoomClient implements AutoCloseable {
         // Even hot-cache callers must obtain a current room grant; bytes are never authorization.
         try(var channel = openAsset()) {
             try {
-                new PeerFrame(PeerFrame.Type.ASSET_REQUEST, 0, PeerRoomCodec.encode(out -> { PeerRoomCodec.uuid(out, owner.session().memberId()); out.writeLong(owner.appearance().revision()); out.writeBoolean(have); })).write(channel.output);
+                new PeerFrame(PeerFrame.Type.ASSET_REQUEST, 0, PeerRoomCodec.assetRequest(owner,have)).write(channel.output);
                 var grant = checkedRead(channel.input, true);
                 if(grant.type() != PeerFrame.Type.ASSET_GRANT) throw new IOException("Expected current asset grant");
                 record Binding(PeerSession owner, PeerAppearance appearance) {}
@@ -151,7 +178,7 @@ public final class PeerRoomClient implements AutoCloseable {
         if(closed || !current.getAsBoolean())throw new PeerFailure(PeerFailure.Stage.TRANSFER,PeerFrame.ErrorCode.CANCELLED);
         try(var channel=openAsset()) {
             try {
-                new PeerFrame(PeerFrame.Type.ASSET_REQUEST,0,PeerRoomCodec.encode(out->{PeerRoomCodec.uuid(out,owner.session().memberId());out.writeLong(owner.appearance().revision());out.writeBoolean(true);})).write(channel.output);
+                new PeerFrame(PeerFrame.Type.ASSET_REQUEST,0,PeerRoomCodec.assetRequest(owner,true)).write(channel.output);
                 var grant=checkedRead(channel.input,true);if(grant.type()!=PeerFrame.Type.ASSET_GRANT)throw new IOException("Expected current grant");
                 PeerRoomCodec.decode(grant.payload(),in->{if(!PeerRoomCodec.session(in).equals(owner.session()) || !Objects.equals(PeerRoomCodec.appearance(in),owner.appearance()))throw new IOException("Grant binding changed");return true;});
                 if(closed || !current.getAsBoolean())throw new PeerFailure(PeerFailure.Stage.TRANSFER,PeerFrame.ErrorCode.CANCELLED);

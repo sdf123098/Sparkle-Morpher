@@ -56,6 +56,13 @@ public class YSMFolderDeserializer implements AutoCloseable {
         this.model.formatVersion = 65535;
     }
 
+    /** 直接从 zip 字节解析，不经过任何临时文件。 */
+    public YSMFolderDeserializer(byte[] archive) throws IOException {
+        this.container = ModelResourceContainer.zipBytes(archive);
+        this.model = new RawYsmModel();
+        this.model.formatVersion = 65535;
+    }
+
     private byte[] readResource(String relativePath) {
         if (container == null) return null; // 静态探测构造（parseBedrockGeometry 等不读资源）
         if (relativePath == null || relativePath.isEmpty()) return null;

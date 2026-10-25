@@ -50,21 +50,23 @@ public final class FinalUiLayout {
         public int referenceHeight() { return data.get("height").getAsInt(); }
         public int x(double x) {
             // Fixed native-size controls: only anchors on the right track a wider window.
-            return (int)Math.round(x + (x > referenceWidth() * .65 ? width - referenceWidth() : 0));
+            return com.micaftic.morpher.core.gui.ResponsiveUiLayout.authoredPosition(x,referenceWidth(),width,.65);
         }
         public int y(double y) {
-            return (int)Math.round(y + (y > referenceHeight() * .88 ? height - referenceHeight() : 0));
+            return com.micaftic.morpher.core.gui.ResponsiveUiLayout.authoredPosition(y,referenceHeight(),height,.88);
         }
         public Rect control(int index) {
             var c = data.getAsJsonArray("controls").get(index).getAsJsonArray();
             return new Rect(x(c.get(0).getAsDouble()), y(c.get(1).getAsDouble()),
-                    (int)Math.round(c.get(2).getAsDouble()), (int)Math.round(c.get(3).getAsDouble()));
+                    com.micaftic.morpher.core.gui.ResponsiveUiLayout.authoredSize(c.get(2).getAsDouble(),referenceWidth(),width),
+                    com.micaftic.morpher.core.gui.ResponsiveUiLayout.authoredSize(c.get(3).getAsDouble(),referenceHeight(),height));
         }
         public Rect area(String key) {
             var c = data.getAsJsonObject("pageData").getAsJsonArray(key);
             int extra = c.get(0).getAsDouble() <= referenceWidth()*.65 && c.get(0).getAsDouble() + c.get(2).getAsDouble() >= referenceWidth()-16 ? width-referenceWidth() : 0;
             return new Rect(x(c.get(0).getAsDouble()), y(c.get(1).getAsDouble()),
-                    Math.max(1,(int)Math.round(c.get(2).getAsDouble())+extra), (int)Math.round(c.get(3).getAsDouble()));
+                    Math.max(1,com.micaftic.morpher.core.gui.ResponsiveUiLayout.authoredSize(c.get(2).getAsDouble(),referenceWidth(),width)+Math.max(0,extra)),
+                    com.micaftic.morpher.core.gui.ResponsiveUiLayout.authoredSize(c.get(3).getAsDouble(),referenceHeight(),height));
         }
     }
 }

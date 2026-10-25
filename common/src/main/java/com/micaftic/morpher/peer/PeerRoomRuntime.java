@@ -36,6 +36,13 @@ public final class PeerRoomRuntime implements AutoCloseable {
     public List<PeerEndpoint> listenerCoverage(){return listenerCoverage;}
     private volatile PeerFailure terminalFailure;
     private PeerAssetStore.Lease offered;
+    private final AtomicLong entityRevision = new AtomicLong();
+    private final Map<UUID,Long> entityChoices = new ConcurrentHashMap<>();
+    private final Map<UUID,Long> entityWithdrawals = new ConcurrentHashMap<>();
+    private final Map<UUID,PeerAssetStore.Lease> entityOffers = new ConcurrentHashMap<>();
+    private Consumer<List<PeerEntityAppearance>> entities = ignored -> {};
+    private List<PeerEntityAppearance> queuedEntities = List.of();
+    public void onEntities(Consumer<List<PeerEntityAppearance>> receiver) { entities = Objects.requireNonNull(receiver); }
     private record Watch(Supplier<LocalShareSourceResolver.Selection> resolver,String texture,long revision,PeerModelIdentity model) {}
     private volatile Watch watch;private volatile boolean checkingSource;private long nextSourceCheck;
     private volatile Consumer<List<PeerObservation.Receipt>> observations = ignored -> {};
@@ -110,28 +117,29 @@ public final class PeerRoomRuntime implements AutoCloseable {
             if(closed) return;
             try {
                 drainWithdrawal(joined);
+                drainEntityWithdrawals(joined);
                 var motion=outgoingMotion.getAndSet(null);if(motion!=null&&publishedAppearance!=null&&publishedAppearance.revision()==motion.appearanceRevision())joined.publishMotion(motion);
                 for(var entry : pendingObservations.entrySet()) if(pendingObservations.remove(entry.getKey(), entry.getValue())) joined.observe(entry.getValue());
-                var snapshot = joined.poll(); var receipts = joined.observations();var state=joined.motions();probeSource();
-                roomEvent(joined,snapshot,receipts,state);
+                var snapshot = joined.poll(); var receipts = joined.observations();var state=joined.motions();var entityState=joined.entities();probeSource();
+                roomEvent(joined,snapshot,receipts,state,entityState);
             }
             catch(Exception failure) { fail(PeerFailure.Stage.CONTROL, failure); }
         }, 0, 250, TimeUnit.MILLISECONDS);
     }
     /** One outstanding UI event. Merge delta motion until delivery and charge queue delay against its TTL. */
-    private void roomEvent(PeerRoomClient joined,PeerRoomCoordinator.Snapshot snapshot,List<PeerObservation.Receipt> receipts,List<PeerMotionReceipt> state) {
+    private void roomEvent(PeerRoomClient joined,PeerRoomCoordinator.Snapshot snapshot,List<PeerObservation.Receipt> receipts,List<PeerMotionReceipt> state,List<PeerEntityAppearance> entityState) {
         synchronized(queuedMotions){
-            queuedSnapshot=snapshot;queuedReceipts=receipts;
+            queuedSnapshot=snapshot;queuedReceipts=receipts;queuedEntities=List.copyOf(entityState);
             for(var receipt:state)if(queuedMotions.size()<PeerLimits.CAPACITY_CEILING||queuedMotions.containsKey(receipt.owner().memberId()))queuedMotions.put(receipt.owner().memberId(),new QueuedMotion(receipt,System.nanoTime()));
             if(roomEventQueued)return;roomEventQueued=true;
         }
         events.execute(()->{
-            PeerRoomCoordinator.Snapshot latest;List<PeerObservation.Receipt> reports;List<PeerMotionReceipt> motionsToApply=new ArrayList<>();
-            synchronized(queuedMotions){latest=queuedSnapshot;reports=queuedReceipts;roomEventQueued=false;
+            PeerRoomCoordinator.Snapshot latest;List<PeerObservation.Receipt> reports;List<PeerEntityAppearance> entitiesToApply;List<PeerMotionReceipt> motionsToApply=new ArrayList<>();
+            synchronized(queuedMotions){latest=queuedSnapshot;reports=queuedReceipts;entitiesToApply=queuedEntities;roomEventQueued=false;
                 for(var pending:queuedMotions.values()){long age=pending.receipt.transitAgeMillis()+Math.max(0,(System.nanoTime()-pending.received)/1_000_000L);if(age<pending.receipt.motion().ttlMillis())motionsToApply.add(new PeerMotionReceipt(pending.receipt.owner(),pending.receipt.motion(),age));}
                 queuedMotions.clear();queuedSnapshot=null;queuedReceipts=List.of();
             }
-            if(!closed&&client==joined&&latest!=null){snapshots.accept(latest);observations.accept(reports);motions.accept(List.copyOf(motionsToApply));}
+            if(!closed&&client==joined&&latest!=null){snapshots.accept(latest);observations.accept(reports);motions.accept(List.copyOf(motionsToApply));entities.accept(entitiesToApply);}
         });
     }
     private void fail(PeerFailure.Stage stage, Throwable error) {
@@ -193,6 +201,56 @@ public final class PeerRoomRuntime implements AutoCloseable {
             }
         });
     }
+    /** A separate revision per entity; changing one maid cannot cancel another publication. */
+    public void shareEntity(UUID entity, Supplier<LocalShareSourceResolver.Selection> resolver, String texture, Consumer<Boolean> completion) {
+        var joined=client;if(joined==null||closed){events.execute(()->completion.accept(false));return;}
+        if(!entityChoices.containsKey(entity)&&entityChoices.size()>=PeerEntityCatalog.PER_OWNER){events.execute(()->completion.accept(false));return;}
+        long revision=entityRevision.incrementAndGet();entityChoices.put(entity,revision);entityWithdrawals.remove(entity);
+        BooleanSupplier current=()->!closed&&joined==client&&Objects.equals(entityChoices.get(entity),revision);
+        if(resolver==null){
+            command(()->{try{if(!current.getAsBoolean())return;joined.publishEntity(new PeerEntityAppearance(joined.session(),entity,revision,null,texture,false));
+                var old=entityOffers.remove(entity);if(old!=null)old.close();events.execute(()->{if(current.getAsBoolean())completion.accept(true);});
+            }catch(Exception error){events.execute(()->{if(current.getAsBoolean())completion.accept(false);});}},()->completion.accept(false));return;
+        }
+        assetTask(()->{
+            PeerAssetStore.Lease retained=null;
+            try {
+                var selected=resolver.get();
+                try(var frozen=store.freeze(selected,current)) {
+                    var identity=new PeerModelIdentity(frozen.manifest().contentRoot(),selected.profile());
+                    retained=store.retain(identity.contentRoot());var lease=retained;
+                    var asset=store.copy(frozen,current);
+                    var entry=new PeerEntityAppearance(joined.session(),entity,revision,identity,texture,false);
+                    var accepted=new CompletableFuture<Boolean>();
+                    command(()->{try{if(!current.getAsBoolean()){accepted.complete(false);return;}
+                        joined.publishEntity(entry);var old=entityOffers.put(entity,lease);if(old!=null)old.close();accepted.complete(true);
+                    }catch(Exception error){accepted.completeExceptionally(error);}},()->accepted.complete(false));
+                    if(!accepted.get(12,TimeUnit.SECONDS)){lease.close();return;}
+                    joined.upload(entry.assetAppearance(),asset,current);
+                    events.execute(()->{if(current.getAsBoolean())completion.accept(true);});
+                }
+            }catch(Exception error){
+                if(retained!=null)retained.close();
+                events.execute(()->{if(current.getAsBoolean()){clearEntity(entity);completion.accept(false);}});
+            }
+        },()->{if(current.getAsBoolean())completion.accept(false);});
+    }
+    public void clearEntity(UUID entity) {
+        var joined=client;if(joined==null||closed||!entityChoices.containsKey(entity))return;
+        long revision=entityRevision.incrementAndGet();entityChoices.put(entity,revision);
+        entityWithdrawals.put(entity,revision);
+    }
+    public void clearEntities() { for(UUID entity:List.copyOf(entityChoices.keySet()))clearEntity(entity); }
+    private void drainEntityWithdrawals(PeerRoomClient joined)throws IOException {
+        for(var pending:entityWithdrawals.entrySet()) {
+            UUID entity=pending.getKey();long revision=pending.getValue();
+            if(Objects.equals(entityChoices.get(entity),revision)) {
+                joined.publishEntity(new PeerEntityAppearance(joined.session(),entity,revision,null,null,true));
+                if(entityChoices.remove(entity,revision)){var old=entityOffers.remove(entity);if(old!=null)old.close();}
+            }
+            entityWithdrawals.remove(entity,revision);
+        }
+    }
     public void clear() {
         clear("P2P 已停止分享");
     }
@@ -247,10 +305,10 @@ public final class PeerRoomRuntime implements AutoCloseable {
             }catch(Exception rejected){downloadLeases.remove(ticket,lease);downloadOwners.remove(ticket);ticket.close();lease.close();events.execute(()->failure.accept(PeerFailure.classify(PeerFailure.Stage.TRANSFER,rejected)));}
         },completions).exceptionally(error->{downloadLeases.remove(ticket,lease);downloadOwners.remove(ticket);ticket.close();lease.close();events.execute(()->failure.accept(new PeerFailure(PeerFailure.Stage.TRANSFER,closed?PeerFrame.ErrorCode.CANCELLED:PeerFrame.ErrorCode.BUSY)));return null;});
         if(ticket.leader())assetTask(()->{
-            var tried=new HashSet<PeerSession>();Exception last=new PeerFailure(PeerFailure.Stage.TRANSFER,PeerFrame.ErrorCode.CANCELLED);
+            var tried=new HashSet<PeerRoomCoordinator.Member>();Exception last=new PeerFailure(PeerFailure.Stage.TRANSFER,PeerFrame.ErrorCode.CANCELLED);
             while(ticket.current()) {
-                var candidate=downloadOwners.entrySet().stream().filter(entry->entry.getKey().model().equals(ticket.model())&&entry.getKey().callerCurrent()&&!tried.contains(entry.getValue().session())).findFirst().orElse(null);
-                if(candidate==null)break;var owner=candidate.getValue();tried.add(owner.session());
+                var candidate=downloadOwners.entrySet().stream().filter(entry->entry.getKey().model().equals(ticket.model())&&entry.getKey().callerCurrent()&&!tried.contains(entry.getValue())).findFirst().orElse(null);
+                if(candidate==null)break;var owner=candidate.getValue();tried.add(owner);
                 try{ticket.complete(joined.download(owner,store,ticket::current));return;}catch(Exception rejected){last=rejected;}
             }
             ticket.fail(last);
@@ -267,6 +325,7 @@ public final class PeerRoomRuntime implements AutoCloseable {
     }
     @Override public synchronized void close() {
         if(closed) return; closed = true; selection.incrementAndGet();
+        entityChoices.clear();entityWithdrawals.clear();entityOffers.values().forEach(PeerAssetStore.Lease::close);entityOffers.clear();queuedEntities=List.of();
         listenerCoverage=List.of();pendingObservations.clear();withdrawal=null;watch=null;publishedAppearance=null;outgoingMotion.set(null);downloads.close();downloadLeases.values().forEach(PeerAssetStore.Lease::close);downloadLeases.clear();downloadOwners.clear(); synchronized(queuedMotions){queuedMotions.clear();queuedSnapshot=null;queuedReceipts=List.of();}
         var joined = client; if(joined != null) joined.close(); var host = server; if(host != null) host.close();
         control.shutdownNow(); transfers.shutdownNow();completions.shutdownNow(); if(offered != null) { offered.close(); offered = null; }

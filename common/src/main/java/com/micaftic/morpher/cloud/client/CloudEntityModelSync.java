@@ -4,6 +4,7 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
+import com.micaftic.morpher.client.RuntimeModelLease;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
 import net.minecraft.client.Minecraft;
@@ -21,6 +22,7 @@ public final class CloudEntityModelSync {
     private static final Map<UUID, Attempt> ATTEMPTS = new HashMap<>();
     private record Ready(CloudEntityPresenceClient.Entry entry, Entity entity, String modelId, long generation) {}
     private static final Map<UUID,Ready> READY=new HashMap<>();
+    private static final Map<UUID, RuntimeModelLease> LEASES = new HashMap<>();
     private static final CloudEntityApplyGuard APPLY_GUARD = new CloudEntityApplyGuard();
     private static final CloudEntityModelMaterializer IMPORTS = new CloudEntityModelMaterializer();
     private static final Map<UUID, CompletableFuture<CloudEntityPresenceClient.Entry>> PUBLICATIONS = new HashMap<>();
@@ -35,7 +37,15 @@ public final class CloudEntityModelSync {
     public record Feedback(Component message, boolean failed, boolean pending) {}
     private CloudEntityModelSync() {}
     public static void disconnect() { clearAll(); generation++; runtime=null; connection=level=null; worldKey=null; polling=false; nextPoll=0; }
-    public static void peerOwnershipChanged(UUID uuid) { ATTEMPTS.remove(uuid); }
+    public static void peerOwnershipChanged(UUID uuid) { ATTEMPTS.remove(uuid); READY.remove(uuid); releaseLease(uuid); }
+    private static void releaseLease(UUID uuid) {
+        RuntimeModelLease lease = LEASES.remove(uuid);
+        if (lease != null) lease.close();
+    }
+    private static void releaseAllLeases() {
+        LEASES.values().forEach(RuntimeModelLease::close);
+        LEASES.clear();
+    }
     public static boolean readyCandidate(UUID uuid) {
         var ready=READY.get(uuid);
         return ready!=null && ready.entry.kind()==CloudEntityProvider.Kind.FAKE_PLAYER
@@ -91,11 +101,12 @@ public final class CloudEntityModelSync {
             generation++; mutation++;
             runtime = nextRuntime; connection = client.getConnection(); level = client.level; worldKey = nextKey;
             ENTRIES.clear(); ATTEMPTS.clear(); IMPORTS.clear(); PUBLICATIONS.clear(); CHOICES.clear(); FEEDBACK.clear();
+            releaseAllLeases();
             APPLY_GUARD.clear();
             polling = false; nextPoll = lastVerified = 0;
         } else if (level != client.level) {
             generation++; mutation++; level = client.level;
-            ENTRIES.clear(); ATTEMPTS.clear(); polling = false; nextPoll = lastVerified = 0;
+            ENTRIES.clear(); ATTEMPTS.clear(); releaseAllLeases(); polling = false; nextPoll = lastVerified = 0;
             APPLY_GUARD.clear();
         }
     }
@@ -106,6 +117,16 @@ public final class CloudEntityModelSync {
     }
     public static void applySelection(CloudEntityProvider.Kind kind, UUID entityId, String name, String modelId, String textureId) {
         context();
+        if (kind == CloudEntityProvider.Kind.MAID && !CloudAssetIdentity.isRuntimeModelId(modelId)) {
+            try {
+                com.micaftic.morpher.client.compat.touhoulittlemaid.LocalMaidModelSync.select(worldKey, entityId, modelId, textureId);
+                mutation++; ENTRIES.remove(entityId); ATTEMPTS.remove(entityId); READY.remove(entityId);
+                APPLY_GUARD.remove(entityId); releaseLease(entityId);
+                CHOICES.put(entityId, ++nextChoice);
+                notify(entityId, "local_applied", name);
+            } catch (Exception failure) { notify(entityId, "local_failed", message(failure)); }
+            return;
+        }
         if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive())) { notify(entityId, "privacy"); return; }
         if (kind == CloudEntityProvider.Kind.PLAYER || runtime == null || worldKey == null) {
             notify(entityId, "unavailable"); return;
@@ -140,6 +161,10 @@ public final class CloudEntityModelSync {
             PUBLICATIONS.remove(entityId, request);
             if (!Objects.equals(CHOICES.get(entityId), choice)) return;
             if (error != null) { notifyFailure(entityId, error); return; }
+            if (kind == CloudEntityProvider.Kind.MAID) {
+                try { com.micaftic.morpher.client.compat.touhoulittlemaid.LocalMaidModelSync.forget(key, entityId); }
+                catch (java.io.IOException failure) { notify(entityId, "local_failed", message(failure)); return; }
+            }
             mutation++; ENTRIES.put(entityId, entry); ATTEMPTS.remove(entityId); nextPoll = 0;
             lastVerified = System.currentTimeMillis();
             tick();
@@ -149,6 +174,7 @@ public final class CloudEntityModelSync {
     public static void tick() {
         context();
         Minecraft client = Minecraft.getInstance();
+        com.micaftic.morpher.client.compat.touhoulittlemaid.LocalMaidModelSync.tick(worldKey);
         if (runtime == null || worldKey == null || client.level == null) return;
         // Explicit scope bindings are owned by the permission-checked provider.
         // The compatibility path must not overwrite its fallback after revocation.
@@ -163,16 +189,20 @@ public final class CloudEntityModelSync {
             ENTRIES.remove(id);
             ATTEMPTS.remove(id);
             APPLY_GUARD.remove(id);
+            READY.remove(id);
+            releaseLease(id);
         }
         List<Entity> visible = new ArrayList<>();
         for (Entity entity : client.level.entitiesForRendering()) {
             if (entity != client.player && !explicitlyBound.contains(entity.getUUID())
-                    && (entity instanceof Player || MaidCapability.get(entity).isPresent())) visible.add(entity);
+                    && (entity instanceof Player || MaidCapability.get(entity).isPresent())
+                    && !MaidCapability.get(entity).map(cap -> cap.hasLocalState()
+                            || (cap.hasPeerState() && !com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud())).orElse(false)) visible.add(entity);
         }
         Set<UUID> visibleIds = new HashSet<>();
         visible.forEach(entity -> visibleIds.add(entity.getUUID()));
         for (UUID id : List.copyOf(ENTRIES.keySet())) if (!visibleIds.contains(id)) {
-            ENTRIES.remove(id); ATTEMPTS.remove(id); APPLY_GUARD.remove(id);
+            ENTRIES.remove(id); ATTEMPTS.remove(id); APPLY_GUARD.remove(id); READY.remove(id); releaseLease(id);
         }
         long now = System.currentTimeMillis();
         if (lastVerified > 0 && now - lastVerified > 60000) clearAll();
@@ -239,14 +269,22 @@ public final class CloudEntityModelSync {
         var application = APPLY_GUARD.begin(entry, entity, token);
         importModel(expected, key, entry).whenComplete((modelId, failure) -> Minecraft.getInstance().execute(() -> {
             if (!current(token, expected, key) || ATTEMPTS.get(entity.getUUID()) != attempt
+                    || MaidCapability.get(entity).map(cap -> cap.hasLocalState()
+                            || (cap.hasPeerState() && !com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud())).orElse(false)
                     || !APPLY_GUARD.accept(application, ENTRIES.get(entity.getUUID()), loadedEntity(entity.getUUID()), generation,
                             (!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()), entry.kind() == CloudEntityProvider.Kind.FAKE_PLAYER && (peerBlocks(entity.getUUID()) || CloudPlayerModelSync.ownsAppearance(entity.getUUID())))) {
                 ATTEMPTS.remove(entity.getUUID(), attempt); return;
             }
             ATTEMPTS.put(entity.getUUID(), new Attempt(entry, entity, false, failure == null, System.currentTimeMillis() + 5000));
             if (failure != null) { YesSteveModel.LOGGER.warn("[SPM Cloud entity] model download failed: {}", message(failure)); return; }
-            if (entry.kind() == CloudEntityProvider.Kind.MAID) MaidCapability.get(entity).ifPresent(cap -> cap.applyCloudState(modelId, entry.selection().textureId()));
+            if (entry.kind() == CloudEntityProvider.Kind.MAID) MaidCapability.get(entity).ifPresent(cap -> {
+                releaseLease(entity.getUUID());
+                LEASES.put(entity.getUUID(), ClientModelManager.acquireRuntimeModelLease(modelId));
+                cap.applyCloudState(modelId, entry.selection().textureId());
+            });
             else if (entity instanceof Player player) PlayerCapability.get(player).ifPresent(cap -> {
+                releaseLease(entity.getUUID());
+                LEASES.put(entity.getUUID(), ClientModelManager.acquireRuntimeModelLease(modelId));
                 READY.put(entity.getUUID(),new Ready(entry,entity,modelId,generation));
                 com.micaftic.morpher.client.peer.ClientPeerRuntime.yieldToCloud(entity.getUUID());
                 cap.initModelWithTexture(modelId, entry.selection().textureId()); cap.setForceDisabled(false);
@@ -271,19 +309,16 @@ public final class CloudEntityModelSync {
     private static CompletableFuture<String> downloadModel(CloudClientRuntime.RuntimeState expected, String key, CloudEntityPresenceClient.Entry entry) {
         String id = entry.selection().runtimeModelId();
         var future = new CompletableFuture<String>();
-        new CloudEntityPresenceClient(expected.http()).download(key, entry).thenApplyAsync(response -> {
+        new CloudEntityPresenceClient(expected.http())
+                .download(key, entry, expected.displayAssetBudget()).thenApplyAsync(response -> {
             if (response.statusCode() != 200) throw CloudHttpClient.httpFailure(response);
-            try {
-                byte[] verifiedBytes = response.body();
-                CloudAssetCache.writeVerified(expected.cacheRoot(), entry.selection().ref(), verifiedBytes);
-                return verifiedBytes;
-            }
-            catch (java.io.IOException error) { throw new CompletionException(error); }
+            CloudAssetCache.verify(entry.selection().ref(), response.body());
+            return response.body();
         }).whenComplete((bytes, error) -> Minecraft.getInstance().execute(() -> {
             if (expected != runtime || expected != CloudClientRuntime.state()) future.completeExceptionally(new CancellationException("Cloud session changed"));
             else if (error != null) future.completeExceptionally(error);
             else if (ClientModelManager.getAvailableModelIds().contains(id)) future.complete(id);
-            else ClientModelManager.importLocalModel(id, entry.selection().importFileName(), bytes, failure -> {
+            else ClientModelManager.importCloudModelInMemory(id, entry.selection().importFileName(), bytes, failure -> {
                 if (failure == null) future.complete(id); else future.completeExceptionally(new IllegalStateException(failure.getString()));
             });
         }));
@@ -297,7 +332,7 @@ public final class CloudEntityModelSync {
     }
     private static void notify(UUID entityId, String key, Object... args) {
         Component text = Component.translatable("gui.sparkle_morpher.cloud.entity." + key, args);
-        FEEDBACK.put(entityId, new Feedback(text, !Set.of("pending", "synced").contains(key), "pending".equals(key)));
+        FEEDBACK.put(entityId, new Feedback(text, !Set.of("pending", "synced", "local_applied").contains(key), "pending".equals(key)));
         var player = Minecraft.getInstance().player;
         if (player != null) player.sendSystemMessage(text);
     }

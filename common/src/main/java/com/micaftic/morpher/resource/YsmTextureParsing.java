@@ -1,13 +1,19 @@
 package com.micaftic.morpher.resource;
 
+import com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import rip.ysm.imagestream.avif.AvifDecoder;
 import rip.ysm.imagestream.webp.WebpDecoder;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 
 import static com.micaftic.morpher.util.DigestUtil.sha256Hex;
 
@@ -53,16 +59,19 @@ public final class YsmTextureParsing {
             throw new RuntimeException("Unsupported image format for: " + path);
         }
 
-        if (format == 2 && data.length >= 24) {
-            int w = ((data[16] & 0xFF) << 24) | ((data[17] & 0xFF) << 16) | ((data[18] & 0xFF) << 8) | (data[19] & 0xFF);
-            int h = ((data[20] & 0xFF) << 24) | ((data[21] & 0xFF) << 16) | ((data[22] & 0xFF) << 8) | (data[23] & 0xFF);
-            return new ImageMeta(w, h, format);
-        }
-
         try {
+            ImageHeaderDimensions.Size declared = ImageHeaderDimensions.read(data, format);
+            if (declared != null) {
+                if (!ModelDecodeAdmission.textureFits(declared.width(), declared.height(), 2)) {
+                    throw new IOException("Image exceeds the decode budget ("
+                            + declared.width() + "x" + declared.height() + "): " + path);
+                }
+                return new ImageMeta(declared.width(), declared.height(), format);
+            }
+
             BufferedImage img = null;
             switch (format) {
-                case 1, 3 -> img = ImageIO.read(new ByteArrayInputStream(data));
+                case 1, 3 -> img = readImageInMemory(data, path);
                 case 4 -> img = new WebpDecoder().read(data);
                 case 5 -> img = new AvifDecoder().read(data);
             }
@@ -72,6 +81,30 @@ public final class YsmTextureParsing {
             throw new RuntimeException("Failed to decode image dimensions for: " + path);
         } catch (Exception e) {
             throw new RuntimeException("Error processing image: " + path, e);
+        }
+    }
+
+    /** MemoryCacheImageInputStream：不启用 ImageIO 磁盘缓存；解码前按像素预算预检。 */
+    private static BufferedImage readImageInMemory(byte[] data, String path) throws IOException {
+        try (ImageInputStream input = new MemoryCacheImageInputStream(new ByteArrayInputStream(data))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) {
+                throw new IOException("No image reader available: " + path);
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (width <= 0 || height <= 0
+                        || !ModelDecodeAdmission.textureFits(width, height, 2)) {
+                    throw new IOException("Image exceeds the decode budget ("
+                            + width + "x" + height + "): " + path);
+                }
+                return reader.read(0);
+            } finally {
+                reader.dispose();
+            }
         }
     }
 

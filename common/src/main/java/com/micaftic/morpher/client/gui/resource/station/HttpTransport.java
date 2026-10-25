@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.util.List;
+import java.util.concurrent.Callable;
+import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
 
 /**
  * R1.2.x §24.4 HttpTransport（neo26.x 适配版，行为等价搬运）。
@@ -71,23 +73,33 @@ public final class HttpTransport {
 
     public static byte[] readFirst(List<String> candidates, int timeoutMs, int maxBytes, ModelRepoClient.ProgressListener listener, boolean bypassCache) throws IOException {
         IOException last = null;
-        for (String candidate : candidates) {
-            try {
-                return read(candidate, timeoutMs, maxBytes, listener, bypassCache);
-            } catch (IOException | RuntimeException e) {
-                last = asIOException(e);
-                YesSteveModel.LOGGER.warn("[SM] Resource candidate failed: {}", candidate, e);
-            }
+        for (int i = 0; i < candidates.size(); i++) {
+            checkCancelled(listener);
+            String candidate = candidates.get(i);
+            if (listener != null) listener.onCandidate(candidate, i + 1, candidates.size());
+            try { return read(candidate, timeoutMs, maxBytes, listener, bypassCache); }
+            catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
+            catch (IOException | RuntimeException error) { checkCancelled(listener); last = asIOException(error); }
         }
         throw last == null ? new IOException("No resource URL") : last;
     }
 
     public static byte[] read(String url, int timeoutMs, int maxBytes, ModelRepoClient.ProgressListener listener, long expectedBytes, boolean bypassCache) throws IOException {
+        return runInterruptibly(listener, () -> readDirect(url, timeoutMs, maxBytes, listener, expectedBytes, bypassCache));
+    }
+
+    static <T> T runInterruptibly(ModelRepoClient.ProgressListener listener, Callable<T> operation) throws IOException {
+        return InterruptibleResourceRequest.call(listener, operation);
+    }
+
+    private static byte[] readDirect(String url, int timeoutMs, int maxBytes, ModelRepoClient.ProgressListener listener, long expectedBytes, boolean bypassCache) throws IOException {
+        checkCancelled(listener);
         long requestId = REQUEST_IDS.incrementAndGet();
         long start = System.nanoTime();
         String requestUrl = bypassCache ? withCacheBuster(url) : url;
         HttpURLConnection connection = (HttpURLConnection) URI.create(requestUrl).toURL().openConnection();
         try {
+            checkCancelled(listener);
             connection.setConnectTimeout(timeoutMs);
             connection.setReadTimeout(timeoutMs);
             connection.setUseCaches(false);
@@ -157,6 +169,9 @@ public final class HttpTransport {
                 }
                 return data;
             }
+        } catch (IOException error) {
+            checkCancelled(listener);
+            throw error;
         } finally {
             connection.disconnect();
         }
@@ -173,7 +188,7 @@ public final class HttpTransport {
     }
 
     public static void checkCancelled(ModelRepoClient.ProgressListener listener) {
-        if (listener != null && listener.isCancelled()) {
+        if (Thread.currentThread().isInterrupted() || listener != null && listener.isCancelled()) {
             throw new java.util.concurrent.CancellationException();
         }
     }
@@ -217,4 +232,10 @@ public final class HttpTransport {
         return String.format(java.util.Locale.ROOT, "%.2f MB/s", bytesPerSecond / (1024.0 * 1024.0));
     }
 
+
+    public static void monitor(ResourceStationConfig.State config, String message, Object... args) {
+        if (com.micaftic.morpher.core.config.ConfigPolicies.diagnostics().resourceStationMonitorLog()) {
+            YesSteveModel.LOGGER.info("[SM-RESOURCE] " + message, args);
+        }
+    }
 }

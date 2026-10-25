@@ -17,6 +17,8 @@ import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 /** Typed P1 directory and original-byte operations. */
 public final class CloudAssetClient {
 
+    private static final java.util.concurrent.atomic.AtomicLong DISPLAY_DOWNLOADS = new java.util.concurrent.atomic.AtomicLong();
+    public static long displayDownloadCount() { return DISPLAY_DOWNLOADS.get(); }
     private final CloudHttpClient http;
     private final CloudCatalogPageCache pages = new CloudCatalogPageCache();
     private volatile boolean publicBrowseRequiresSearch;
@@ -119,6 +121,54 @@ public final class CloudAssetClient {
     public CompletableFuture<HttpResponse<byte[]>> download(CloudAssetRef ref, String range, String ifNoneMatch) {
         return http.getBytes(ref.contentPath(), range, ifNoneMatch);
     }
+
+    /** Verified display bytes held only in memory; never a cache path and never a partial response. */
+    public record MemoryAsset(byte[] bytes, String format) {}
+
+    /**
+     * Downloads one exact revision into memory under a hard budget and verifies its SHA-256
+     * before any parser sees it. A 206 response is rejected because it is not the complete object.
+     */
+    public CompletableFuture<MemoryAsset> downloadForDisplay(CloudAssetRef ref, String exactCatalogFormat,
+                                                             long maximumBytes) {
+        java.util.Objects.requireNonNull(ref, "ref");
+        DISPLAY_DOWNLOADS.incrementAndGet();
+        var request = http.getBoundedBytes(ref.contentPath(), maximumBytes);
+        var verified = request.thenApply(response -> {
+            if (response.statusCode() == 206) {
+                throw new CloudHttpException(206,
+                        com.micaftic.morpher.core.api.network.state.CloudErrorCode.MALFORMED_MESSAGE,
+                        "Partial Cloud asset response is not a complete display object");
+            }
+            if (response.statusCode() != 200) {
+                throw new CloudHttpException(response.statusCode(),
+                        response.statusCode() == 404
+                                ? com.micaftic.morpher.core.api.network.state.CloudErrorCode.ASSET_NOT_FOUND
+                                : com.micaftic.morpher.core.api.network.state.CloudErrorCode.INTERNAL,
+                        "Cloud display revision is unavailable");
+            }
+            String format = response.headers().firstValue("x-asset-format").orElse(exactCatalogFormat);
+            if (format == null || !java.util.Set.of("ysm", "zip", "bbmodel", "gltf", "glb").contains(format)) {
+                throw new IllegalArgumentException("Exact Cloud revision parser format is unavailable");
+            }
+            byte[] bytes = response.body();
+            if (bytes == null || bytes.length > maximumBytes) {
+                throw new CloudHttpException(200,
+                        com.micaftic.morpher.core.api.network.state.CloudErrorCode.MESSAGE_TOO_LARGE,
+                        "Cloud asset exceeded its memory budget");
+            }
+            if (!CloudAssetCache.sha256(bytes).equals(ref.rawSha256())) {
+                throw new CloudHttpException(200,
+                        com.micaftic.morpher.core.api.network.state.CloudErrorCode.ASSET_HASH_MISMATCH,
+                        "Cloud asset SHA-256 does not match its trusted reference");
+            }
+            return new MemoryAsset(bytes, format);
+        });
+        verified.whenComplete((ignored, failure) -> { if (verified.isCancelled()) request.cancel(true); });
+        return verified;
+    }
+
+    public String instanceId() { return http.instance().instanceId(); }
 
     public CompletableFuture<Boolean> authorizeDisplay(CloudAssetRef ref) {
         return http.authorizeAsset(ref.contentPath(), ref.rawSha256());
