@@ -92,6 +92,9 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
         return font.width(text) <= width ? text : Component.literal(font.plainSubstrByWidth(text.getString(),
                 Math.max(0, width - font.width("…"))) + "…");
     }
+    private Component auditText(String key, Object... args) { return Component.translatable("gui.sparkle_morpher.audit." + key, args); }
+    private String auditString(String key) { return auditText(key).getString(); }
+
     private Component label(String key) { return Component.translatable("gui.sparkle_morpher.cloud_upload." + key); }
     private Component targetLabel() {
         String name = CloudManagementScreen.management().registry().find(instanceId)
@@ -377,10 +380,10 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
     @Override
     public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float pt){
         int x=panelX(),y=panelY(),w=panelW();RoulettePanelStyle.applicationRail(g,width,height,0);
-        g.text(font,title,x,y+10,TEXT,false);String account=CloudManagementScreen.management().accountId(instanceId);g.text(font,fit(Component.literal(targetLabel().getString()+" · "+(account.isBlank()?"尚未登录":account)),w-180),x+Math.min(170,w/3),y+12,MUTED,false);
+        g.text(font,title,x,y+10,TEXT,false);String account=CloudManagementScreen.management().accountId(instanceId);g.text(font,fit(Component.literal(targetLabel().getString()+" · "+(account.isBlank()?auditString("hardcoded_117"):account)),w-180),x+Math.min(170,w/3),y+12,MUTED,false);
         var sr=FinalUiLayout.scene("upload",width,height).control(6);RoulettePanelStyle.roundedSurface(g,sr.x(),sr.y(),sr.w(),sr.h(),3,0x0CFFFFFF,0x22FFFFFF);
-        g.text(font,fit(Component.literal(showingFailures?"失败详情":activeTab==UploadTab.LOCAL_FILES?"来源：选择的本机文件":"来源：模型文件夹现有模型"),w-12),x+6,compact()?65:80,MUTED,false);
-        RoulettePanelStyle.roundedFill(g,x,listShellY(),w,listY()-listShellY(),4,0x0CFFFFFF);String[] labels=showingFailures?new String[]{"模型","失败原因","源文件"}:new String[]{"选择","模型 / 文件","大小","状态"};double[] cols=showingFailures?new double[]{0,.32,.7}:new double[]{0,.06,.62,.82};
+        g.text(font,fit(Component.literal(showingFailures?auditString("hardcoded_118"):activeTab==UploadTab.LOCAL_FILES?auditString("hardcoded_119"):auditString("hardcoded_120")),w-12),x+6,compact()?65:80,MUTED,false);
+        RoulettePanelStyle.roundedFill(g,x,listShellY(),w,listY()-listShellY(),4,0x0CFFFFFF);String[] labels=showingFailures?new String[]{auditString("hardcoded_121"),auditString("hardcoded_122"),auditString("hardcoded_123")}:new String[]{auditString("hardcoded_124"),auditString("hardcoded_125"),auditString("hardcoded_126"),auditString("hardcoded_058")};double[] cols=showingFailures?new double[]{0,.32,.7}:new double[]{0,.06,.62,.82};
         for(int i=0;i<labels.length;i++)g.text(font,Component.literal(labels[i]),x+6+(int)(w*cols[i]),listShellY()+7,MUTED,false);
         List<String> items=filtered();scroll=Math.max(0,Math.min(scroll,Math.max(0,items.size()-rows())));g.enableScissor(x,listY(),x+w,listY()+listH());List<Component> tooltip=null;
         for(int i=0;i<rows()&&scroll+i<items.size();i++){
@@ -396,7 +399,7 @@ public class CloudUploadWorkspaceScreen extends Screen implements ModelUploadSes
             if(hover){tooltip=new ArrayList<>();tooltip.add(Component.literal(rowName(id)));if(failures.containsKey(id))tooltip.add(failures.get(id));}
         }
         if(items.isEmpty())g.text(font,fit(label("no_results"),w-16),x+8,listY()+12,MUTED,false);g.disableScissor();
-        long bytes=selected.stream().mapToLong(id->localFiles.containsKey(id)?localFiles.get(id).size():sourceSizes.getOrDefault(id,0L)).sum();g.text(font,fit(Component.literal("已选 "+selected.size()+" 个 · "+formatBytes(bytes)+"   "+status.getString()),w-36),x,height-panelY()-16,MUTED,false);
+        long bytes=selected.stream().mapToLong(id->localFiles.containsKey(id)?localFiles.get(id).size():sourceSizes.getOrDefault(id,0L)).sum();g.text(font,fit(auditText("upload_footer",selected.size(),formatBytes(bytes),status.getString()),w-36),x,height-panelY()-16,MUTED,false);
         super.extractRenderState(g,mx,my,pt);controls.forEach(b->b.renderTooltip(g,this,mx,my));if(tooltip!=null)RoulettePanelStyle.tooltip(g,font,tooltip,mx,my,width,height);
     }
     @Override

@@ -71,6 +71,7 @@ public final class ClientPeerRuntime {
             case "P2P 已分享当前本地模型与贴图" -> "shared";
             case "当前来源无法分享，或资源超过 P2P 预算" -> "cannot_share";
             case "P2P 已停止分享" -> "withdrawn";
+            case "P2P 源文件失效，已停止分享" -> "withdrawn";
             case "P2P 等待局域网房主提供自动接入" -> "waiting_lan";
             case "此服务器尚未提供局域网自动 P2P" -> "lan_unavailable";
             case "P2P 已连接；当前未选择可分享的本地模型" -> "no_local_model";
