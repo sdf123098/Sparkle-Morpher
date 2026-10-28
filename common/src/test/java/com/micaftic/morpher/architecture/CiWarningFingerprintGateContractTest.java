@@ -1,5 +1,6 @@
 package com.micaftic.morpher.architecture;
 
+import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -16,17 +17,22 @@ class CiWarningFingerprintGateContractTest {
         String ci = Files.readString(workflow, StandardCharsets.UTF_8);
         Path repoRoot = workflow.getParent().getParent().getParent();
 
-        assertTrue(ci.contains("diagnostic_branch:"), "CI must use the baseline's diagnostic branch identity");
-        assertTrue(ci.contains("compile_task:"), "CI must target the effective JavaCompile task");
-        assertTrue(ci.contains("java: '21.0.12'"), "1.21 branches must pin the baseline JDK patch");
-        assertTrue(ci.contains("java: '25.0.4'"), "26.x branches must pin the baseline JDK patch");
-        assertTrue(ci.contains("JAVA_TOOL_OPTIONS: '-Duser.language=zh -Duser.country=CN'"),
-                "javac message language must match the diagnostic baseline locale");
-        assertTrue(ci.contains("Compile and compare native javac baseline"));
-        assertTrue(ci.contains("Compile and compare CurseForge javac baseline"));
-        assertTrue(ci.contains("--rerun-tasks --no-build-cache"), "diagnostic sampling must force javac to run");
-        assertTrue(ci.contains("-Dist native"));
-        assertTrue(ci.contains("-Dist curseforge"));
+        String build = Files.readString(repoRoot.resolve("scripts/ci-build.sh"));
+        assertTrue(ci.contains("COMPILE_TASK: ${{ matrix.compile_task }}"));
+        assertTrue(ci.contains("DIAGNOSTIC_BRANCH: ${{ matrix.diagnostic_branch }}"));
+        assertTrue(build.contains("for dist in native curseforge"), "Both distributions must be built and tested");
+        assertTrue(build.contains("--no-build-cache"), "A restored cache must not bypass compiler diagnostics");
+        assertTrue(build.contains("--warning-mode fail"), "Gradle deprecations must fail CI");
+        assertTrue(build.contains("-Dist \"$dist\""));
+        assertTrue(build.contains("check-javac-warning-fingerprints.ps1"));
+        var baselines = JsonParser.parseString(Files.readString(repoRoot.resolve(
+                "gradle/diagnostic-warning-baselines.json"))).getAsJsonObject().getAsJsonArray("baselines");
+        org.junit.jupiter.api.Assertions.assertEquals(16, baselines.size());
+        for (var baseline : baselines) {
+            org.junit.jupiter.api.Assertions.assertEquals(0,
+                    baseline.getAsJsonObject().getAsJsonArray("fingerprints").size(),
+                    "Resolved source warnings must not remain allowed in CI");
+        }
         assertTrue(Files.isRegularFile(repoRoot.resolve("scripts/check-javac-warning-fingerprints.ps1")));
         assertTrue(Files.isRegularFile(repoRoot.resolve("gradle/diagnostic-warning-baselines.json")));
     }
