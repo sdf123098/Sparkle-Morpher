@@ -45,7 +45,7 @@ public class GeckoVehicleEntity extends GeoEntity<Entity> {
     @Override
     @Nullable
     public GeoEntity.ModelWrapper buildRenderShape(ModelAssembly modelAssembly, boolean isDefault) {
-        VehicleModelBundle modelBundle = modelAssembly.getVehicleModels().get(this.entity.getType().builtInRegistryHolder().key().location());
+        VehicleModelBundle modelBundle = modelAssembly.getVehicleModels().get(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(this.entity.getType()));
         if (modelBundle != null) {
             return new EntityModelWrapper(modelAssembly, isDefault, modelBundle);
         }
@@ -55,7 +55,7 @@ public class GeckoVehicleEntity extends GeoEntity<Entity> {
     @Override
     public void onModelLoaded(ModelAssembly modelAssembly) {
         super.onModelLoaded(modelAssembly);
-        this.vehicleModel = modelAssembly.getVehicleModels().get(this.entity.getType().builtInRegistryHolder().key().location());
+        this.vehicleModel = modelAssembly.getVehicleModels().get(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(this.entity.getType()));
     }
 
     @Override

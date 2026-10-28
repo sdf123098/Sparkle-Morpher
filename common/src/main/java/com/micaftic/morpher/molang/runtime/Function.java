@@ -35,7 +35,7 @@ public interface Function {
         return true;
     }
 
-    ArgumentCollection EMPTY_ARGUMENT = new ArgumentCollection(new ArrayList());
+    ArgumentCollection EMPTY_ARGUMENT = new ArgumentCollection(new ArrayList<>());
 
     Function NOOP = (executionContext, argumentCollection) -> null;
 

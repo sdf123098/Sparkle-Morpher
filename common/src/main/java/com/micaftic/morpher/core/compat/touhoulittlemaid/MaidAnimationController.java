@@ -39,7 +39,8 @@ public final class MaidAnimationController {
     private MaidAnimationController() {
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    // The parallel slots intentionally keep the old YSM blending mode.
+    @SuppressWarnings({"rawtypes", "unchecked", "deprecation"})
     private static void registerControllers() {
         IAnimationPredicate<MaidCapability> stop = (event, evaluator) ->
                 com.micaftic.morpher.geckolib3.core.enums.PlayState.STOP;

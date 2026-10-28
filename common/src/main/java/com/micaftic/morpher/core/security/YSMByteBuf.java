@@ -2,14 +2,13 @@ package com.micaftic.morpher.core.security;
 
 import io.netty.buffer.ByteBuf;
 
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
 public class YSMByteBuf implements AutoCloseable {
     private final ByteBuf buf;
 
     public YSMByteBuf(ByteBuf buf) {
-        this.buf = buf.order(ByteOrder.LITTLE_ENDIAN); // YSM的基於C++，使用小端序
+        this.buf = buf; // YSM的基於C++，使用小端序
     }
 
     public ByteBuf getRawBuf() { return this.buf; }
@@ -48,15 +47,15 @@ public class YSMByteBuf implements AutoCloseable {
     }
 
     public float readFloat() {
-        return buf.readFloat();
+        return buf.readFloatLE();
     }
 
     public long readDword() {
-        return buf.readUnsignedInt();
+        return buf.readUnsignedIntLE();
     }
 
     public void writeDword(int format) {
-        buf.writeInt(format);
+        buf.writeIntLE(format);
     }
 
     public int readVarInt() {
@@ -154,7 +153,7 @@ public class YSMByteBuf implements AutoCloseable {
     }
 
     public void writeFloat(float value) {
-        buf.writeFloat(value);
+        buf.writeFloatLE(value);
     }
 
     public void writeByteArray(byte[] data) {

@@ -334,6 +334,12 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
         }
         evaluator.entity().setIsClientSide(false);
         this.currentEntry = nextState;
+        TransitionVector3f.RotationBlendMode rotationBlendMode = nextState != null && nextState.isBlendViaShortestPath()
+                ? TransitionVector3f.RotationBlendMode.SHORTEST_EULER
+                : TransitionVector3f.RotationBlendMode.EULER;
+        for (BoneBlendState boneBlendState : this.boneTransformMap.values()) {
+            boneBlendState.rotationOut.rotationBlendMode = rotationBlendMode;
+        }
         for (BoneBlendState activeBoneTransform : this.activeBoneTransforms) {
             activeBoneTransform.resetAndClear();
         }
@@ -582,7 +588,7 @@ public class AnimationControllerRuntime<T extends AnimatableEntity<?>> implement
             }
             if (hasData) {
                 if (isTransition) {
-                    MathUtil.nlerpEulerAngles(lerpFactor, offsetPoint, transitionVector3f, initialRotaiton, transitionVector3f, this.rotScratch);
+                    transitionVector3f.blendRotation(lerpFactor, offsetPoint, transitionVector3f, initialRotaiton, transitionVector3f, this.rotScratch);
                 }
                 return transitionVector3f;
             }

@@ -133,6 +133,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
 
     public void reset() {
         HudPoseCache.invalidate();
+        HudAnimationGate.invalidate(this);
         this.currentModel = null;
         this.animationMap = null;
         this.animationProcessor.reset();
@@ -253,7 +254,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
         if (!ConfigPolicies.render().animationDistanceLod()) {
             return ClientTickEvent.getRefreshRate();
         }
-        TEntity tentity = (TEntity) Minecraft.getInstance().player;
+        var tentity = Minecraft.getInstance().player;
         if (tentity != null && tentity != this.entity) {
             Vec3 vec3Position = tentity.position();
             if (vec3Position.x != 0.0d || vec3Position.y != 0.0d || vec3Position.z != 0.0d) {
@@ -408,12 +409,17 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
             boolean z3 = (!z || (this.seekTime == 0.0f && !this.hasUpdatedThisTick)) && this.isTickTriggered && !this.hasUpdatedThisTick;
             HudAnimationGate.Decision hudDecision = HudAnimationGate.decide(this, event);
             if (hudDecision == HudAnimationGate.Decision.REUSE_WORLD_POSE && HudPoseCache.applyTo(this)) {
+                // World poses may carry first-person camera-only head hiding.
+                resetHeadTracking(false);
                 applyHudHeadTracking(event, HudPoseCache.headBaseX(), HudPoseCache.headBaseY());
+                HudAnimationGate.captureSample(this, HudPoseCache.headBaseX(), HudPoseCache.headBaseY());
                 this.wasEvaluatedLastFrame = false;
             } else {
+                boolean restoredHudSample = hudDecision == HudAnimationGate.Decision.HOLD_SAMPLED_POSE
+                        && HudAnimationGate.restoreSample(this);
                 resetHeadTracking(this.wasEvaluatedLastFrame);
-                if (hudDecision == HudAnimationGate.Decision.HOLD_SAMPLED_POSE) {
-                    applyHeadTracking(event, false);
+                if (restoredHudSample) {
+                    applyHudHeadTracking(event, HudAnimationGate.sampleHeadBaseX(), HudAnimationGate.sampleHeadBaseY());
                     this.wasEvaluatedLastFrame = false;
                 } else {
                     AnimationFrameProfiler.Scope profilerScope = null;
@@ -472,6 +478,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
                         }
                     }
                     applyHeadTracking(event, z2);
+                    HudAnimationGate.captureSample(this);
                     this.wasEvaluatedLastFrame = z2;
                 }
             }

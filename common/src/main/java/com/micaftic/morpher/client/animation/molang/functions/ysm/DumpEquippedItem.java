@@ -33,7 +33,7 @@ public class DumpEquippedItem extends LivingEntityFunction {
         stack.getTags().forEach(tagKey -> {
             context.entity().logWarningComponent(Component.literal("Tag ").append(ComponentUtils.copyOnClickText(tagKey.location().toString())));
         });
-        ItemEnchantments enchantments = stack.getEnchantments();
+        ItemEnchantments enchantments = stack.getOrDefault(net.minecraft.core.component.DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
         for (var entry : enchantments.entrySet()) {
             Holder<Enchantment> enchantment = entry.getKey();
             int level = entry.getIntValue();

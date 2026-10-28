@@ -11,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
 
 public class TempVariableRegistry implements ObjectBinding, CloseVariable {
 
-    private final Object2ReferenceMap<String, TempVariable> variableMap = new Object2ReferenceOpenHashMap();
+    private final Object2ReferenceMap<String, TempVariable> variableMap = new Object2ReferenceOpenHashMap<>();
 
     private int topPointer = 0;
 

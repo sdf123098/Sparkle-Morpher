@@ -1,5 +1,5 @@
 plugins {
-    id 'com.github.johnrengelman.shadow'
+    id 'com.gradleup.shadow'
 }
 
 loom {
@@ -58,15 +58,16 @@ dependencies {
 
     modCompileOnly "com.terraformersmc:modmenu:$rootProject.modmenu_version"
 
-    common(project(path: ':common', configuration: 'namedElements')) { transitive false }
+    common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
     shadowBundle project(path: ':common', configuration: 'transformProductionFabric')
 }
 
 processResources {
-    inputs.property 'version', project.version
+    def resourceModVersion = project.version.toString()
+    inputs.property 'version', resourceModVersion
 
     filesMatching('fabric.mod.json') {
-        expand version: project.version
+        expand version: resourceModVersion
     }
 
     from(project(':common').sourceSets.main.resources)

@@ -14,7 +14,7 @@
 package com.micaftic.morpher.core.zstd;
 
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_LONG;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 import static com.micaftic.morpher.core.zstd.Util.checkArgument;
 
 class BitOutputStream
@@ -65,7 +65,7 @@ class BitOutputStream
     {
         int bytes = bitCount >>> 3;
 
-        UNSAFE.putLong(outputBase, currentAddress, container);
+        MEMORY.putLong(outputBase, currentAddress, container);
         currentAddress += bytes;
 
         if (currentAddress > outputLimit) {

@@ -9,6 +9,7 @@ public final class ConfigRegistration {
     }
 
     @ExpectPlatform
+    @SuppressWarnings("removal") // The 1.21.1 port still supplies Forge-format config specs.
     public static void register(String modId, ModConfig.Type type, Object spec) {
         throw new AssertionError();
     }

@@ -58,6 +58,7 @@ public abstract class GeoEntityRenderer<TEntity extends Entity, T extends Animat
                 poseStack.pushPose();
                 poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - f));
                 renderWithBoneAndRenderType(model, t, f2, renderType, poseStack, multiBufferSource, 0, null, i, packOverlayCoords(entity, 0.0f), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f);
+                com.micaftic.morpher.client.animation.particle.AnimationParticleRuntime.flush(t, event, this.worldMatrix, poseStack.last().pose());
                 poseStack.popPose();
             }
         }

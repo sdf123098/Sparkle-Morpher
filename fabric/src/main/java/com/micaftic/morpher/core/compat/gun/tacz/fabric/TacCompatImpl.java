@@ -42,7 +42,7 @@ public final class TacCompatImpl {
             registerUnavailableFunctions(binding);
             return;
         }
-        binding.livingEntityVar("tac_hold_gun", ctx -> IGun.mainhandHoldGun(ctx.entity()));
+        binding.livingEntityVar("tac_hold_gun", ctx -> ctx.entity().getMainHandItem().getItem() instanceof IGun);
         binding.livingEntityVar("tac_gun_type", ctx -> getGunType(ctx.entity().getMainHandItem()));
         binding.livingEntityVar("tac_gun_id", ctx -> getGunId(ctx.entity().getMainHandItem()));
         binding.livingEntityVar("tac_is_fire", ctx -> operator(ctx.entity()).getSynShootCoolDown() > 0);

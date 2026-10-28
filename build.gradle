@@ -1,7 +1,7 @@
 plugins {
     id 'dev.architectury.loom' version '1.14-SNAPSHOT' apply false
     id 'architectury-plugin' version '3.4-SNAPSHOT'
-    id 'com.github.johnrengelman.shadow' version '8.1.1' apply false
+    id 'com.gradleup.shadow' version '8.3.10' apply false
 }
 
 architectury {
@@ -9,6 +9,13 @@ architectury {
 }
 
 apply from: rootProject.file('gradle/distribution.gradle')
+
+// JVM tests use heap-backed JOML operations and need no internal Unsafe access.
+allprojects {
+    tasks.withType(Test).configureEach {
+        systemProperty 'joml.nounsafe', 'true'
+    }
+}
 
 allprojects {
     group = rootProject.maven_group
@@ -90,6 +97,7 @@ subprojects {
     tasks.withType(JavaCompile).configureEach {
         it.options.release = 21
         it.options.compilerArgs.addAll([
+                '-Xlint:deprecation', '-Xlint:unchecked',
                 // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
                 // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
                 // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.

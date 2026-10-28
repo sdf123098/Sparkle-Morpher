@@ -8,6 +8,7 @@ public final class ConfigRegistrationImpl {
     private ConfigRegistrationImpl() {
     }
 
+    @SuppressWarnings("removal") // The 1.21.1 port still supplies Forge-format config specs.
     public static void register(String modId, ModConfig.Type type, Object spec) {
         ForgeConfigRegistry.INSTANCE.register(modId, type, (net.minecraftforge.fml.config.IConfigSpec<?>) spec);
     }

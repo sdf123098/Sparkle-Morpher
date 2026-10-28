@@ -5,9 +5,26 @@ import java.security.MessageDigest
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 
+// Capture project metadata during configuration; task actions only use values/files.
+def distributionProjectName = project.name
+def distributionProjectVersion = project.version.toString()
+def distributionRootDirectory = rootProject.projectDir
+// Audit identity must also work in an arbitrarily named clone or CI checkout.
+def distributionRepositoryName = "Sparkle-Morpher-${project.name == 'fabric' ? 'Fa' : 'Neo'}${rootProject.property('minecraft_version')}"
+def distributionAuditFile = rootProject.file('gradle/distribution-audit-allowlist.json')
+def distributionBuildScripts = rootProject.allprojects.collect { it.file('build.gradle') }
+def distributionLoaderBuildFile = project.file('build.gradle')
+def distributionExpectedModId = rootProject.findProperty('mod_id')?.toString()
+def distributionDependencyVersions = (new JsonSlurper().parse(distributionAuditFile)
+        .registeredThirdPartyNamespaceClasses ?: [:]).values().collectEntries { entry ->
+    String propertyName = entry.versionProperty.toString()
+    [(propertyName): rootProject.findProperty(propertyName)?.toString()]
+}
+
 def distributionName = rootProject.ext.distributionVariant.toString()
-def finalJarTaskName = project.name == 'fabric' && tasks.findByName('remapJar') != null ? 'remapJar' : 'jar'
+def finalJarTaskName = distributionProjectName == 'fabric' && tasks.findByName('remapJar') != null ? 'remapJar' : 'jar'
 def finalJarProvider = tasks.named(finalJarTaskName, AbstractArchiveTask)
+def finalJarFile = finalJarProvider.flatMap { it.archiveFile }
 def javaCompileTask = tasks.named('compileJava', JavaCompile).get()
 def javaInputs = new LinkedHashSet(javaCompileTask.source.files.findAll { it.isFile() && it.name.endsWith('.java') })
 rootProject.allprojects.each { candidate ->
@@ -18,7 +35,7 @@ rootProject.allprojects.each { candidate ->
 }
 javaInputs = javaInputs.toList().sort { it.path }
 def commonRoot = rootProject.file('common/src/main/java').canonicalFile
-def isFa121 = rootProject.projectDir.name.toLowerCase().contains('fa1.21.1')
+def isFa121 = distributionRepositoryName.toLowerCase().contains('fa1.21.1')
 def fa121CommonLoaderAllowlist = [
         'net.fabricmc.api.EnvType',
         'net.fabricmc.api.Environment',
@@ -124,11 +141,12 @@ def verifySourceInputs = tasks.register('verifyProductionSourceBoundary') {
     description = 'Checks the effective production JavaCompile inputs for test code and common loader API leaks.'
     inputs.files(javaInputs)
     inputs.property('distribution', distributionName)
+    inputs.property('modVersion', distributionProjectVersion)
     doLast {
         verifyScannerExamples()
         List<String> errors = []
         javaInputs.each { File sourceFile ->
-            String relative = rootProject.projectDir.toPath().toAbsolutePath().normalize()
+            String relative = distributionRootDirectory.toPath().toAbsolutePath().normalize()
                     .relativize(sourceFile.toPath().toAbsolutePath().normalize()).toString().replace('\\', '/')
             if (sourceFile.name in ['BBModelTest.java', 'LetianerEndToEndTest.java']) {
                 errors.add("production self-check source: ${relative}")
@@ -154,37 +172,38 @@ def verifySourceInputs = tasks.register('verifyProductionSourceBoundary') {
 def verifyJar = tasks.register('verifyDistributionArtifact') {
     group = 'verification'
     description = 'Audits the exact remapped/NeoForge release JAR selected by its archiveFile provider.'
-    inputs.file(finalJarProvider.flatMap { it.archiveFile })
-    inputs.file(rootProject.file('gradle/distribution-audit-allowlist.json'))
+    inputs.file(finalJarFile)
+    inputs.file(distributionAuditFile)
     inputs.property('distribution', distributionName)
-    inputs.property('loader', project.name == 'fabric' ? 'fabric' : 'neoforge')
+    inputs.property('modVersion', distributionProjectVersion)
+    inputs.property('loader', distributionProjectName == 'fabric' ? 'fabric' : 'neoforge')
     dependsOn(verifySourceInputs)
     doLast {
         verifyArtifactRuleExamples()
-        File artifact = finalJarProvider.get().archiveFile.get().asFile
+        File artifact = finalJarFile.get().asFile
         if (!artifact.isFile()) throw new GradleException("Final distribution JAR is missing: ${artifact}")
         ZipFile zip = new ZipFile(artifact)
         try {
             List<String> names = []
             def enumeration = zip.entries()
             while (enumeration.hasMoreElements()) names.add(enumeration.nextElement().name)
-            String metadataPath = project.name == 'fabric' ? 'fabric.mod.json' : 'META-INF/neoforge.mods.toml'
+            String metadataPath = distributionProjectName == 'fabric' ? 'fabric.mod.json' : 'META-INF/neoforge.mods.toml'
             def coreErrors = coreArtifactEntryViolations(names, metadataPath)
             if (!coreErrors.isEmpty()) throw new GradleException("Final JAR entry audit failed for ${artifact.name}: ${coreErrors}")
-            String repoTag = rootProject.projectDir.name.replaceFirst('(?i)^Sparkle-Morpher-', '').toLowerCase()
+            String repoTag = distributionRepositoryName.replaceFirst('(?i)^Sparkle-Morpher-', '').toLowerCase()
             String artifactTag = repoTag in ['fa26.1.2', 'neo26.1.2'] ? repoTag.replace('26.1.2', '26.1.x') : repoTag
             String suffix = distributionName == 'curseforge' ? '-curseforge.jar' : '.jar'
-            if (!artifact.name.startsWith("sparkle-morpher-${project.version}-${artifactTag}") || !artifact.name.endsWith(suffix)) {
+            if (!artifact.name.startsWith("sparkle-morpher-${distributionProjectVersion}-${artifactTag}") || !artifact.name.endsWith(suffix)) {
                 throw new GradleException("Artifact filename does not match branch/distribution metadata: ${artifact.name} (expected ${artifactTag}, ${distributionName})")
             }
 
-            def auditAllowlist = new JsonSlurper().parse(rootProject.file('gradle/distribution-audit-allowlist.json'))
+            def auditAllowlist = new JsonSlurper().parse(distributionAuditFile)
             Set<String> expectedOwnedShims = (auditAllowlist.temporaryOwnedUpstreamNamespaceClasses[repoTag] ?: []) as Set<String>
             def registeredDependency = auditAllowlist.registeredThirdPartyNamespaceClasses[repoTag]
             Set<String> expectedThirdPartyClasses = (registeredDependency?.classes ?: []) as Set<String>
             def registeredEmbedded = auditAllowlist.registeredEmbeddedLibraries[repoTag]
             if (registeredEmbedded == null) throw new GradleException("No embedded-library allowlist registered for ${repoTag}")
-            def buildScripts = rootProject.allprojects.collect { it.file('build.gradle') }.findAll { it.isFile() }.collect { it.getText('UTF-8') }
+            def buildScripts = distributionBuildScripts.findAll { it.isFile() }.collect { it.getText('UTF-8') }
             registeredEmbedded.coordinates.each { coordinate ->
                 if (!buildScripts.any { it.contains(coordinate.toString()) }) {
                     throw new GradleException("Embedded dependency ${coordinate} has no source build declaration for ${repoTag}")
@@ -192,8 +211,8 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
             }
             if (!expectedThirdPartyClasses.isEmpty()) {
                 String versionProperty = registeredDependency.versionProperty.toString()
-                def dependencyVersion = rootProject.findProperty(versionProperty)
-                File loaderBuild = project.name == 'fabric' ? project.file('build.gradle') : project.file('build.gradle')
+                def dependencyVersion = distributionDependencyVersions[versionProperty]
+                File loaderBuild = distributionLoaderBuildFile
                 String dependencyScript = loaderBuild.getText('UTF-8')
                 if (dependencyVersion == null || !dependencyScript.contains(registeredDependency.coordinate.toString())) {
                     throw new GradleException("Registered third-party namespace classes have no matching dependency coordinate/version: ${registeredDependency.coordinate}:${dependencyVersion}")
@@ -265,11 +284,11 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
                 }
             }
 
-            if (project.name == 'fabric') {
+            if (distributionProjectName == 'fabric') {
                 def fabricMetadata = new JsonSlurper().parse(zip.getInputStream(zip.getEntry(metadataPath)))
-                String expectedModId = rootProject.findProperty('mod_id')?.toString() ?: 'sparkle_morpher'
+                String expectedModId = distributionExpectedModId ?: 'sparkle_morpher'
                 if (fabricMetadata.id != expectedModId) throw new GradleException("Fabric mod id ${fabricMetadata.id} does not match expected ${expectedModId} in ${artifact.name}")
-                if (fabricMetadata.version != project.version.toString()) throw new GradleException("Fabric version does not match ${project.version} in ${artifact.name}")
+                if (fabricMetadata.version != distributionProjectVersion) throw new GradleException("Fabric version does not match ${distributionProjectVersion} in ${artifact.name}")
                 def entrypoints = fabricMetadata.entrypoints.values().flatten().collect { it instanceof Map ? it.value : it.toString() }
                 entrypoints.each { String className ->
                     String classPath = className.replace('.', '/') + '.class'
@@ -283,9 +302,9 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
                 if (declaredNested != (nestedJarPaths as Set<String>)) throw new GradleException("Fabric nested-JAR metadata does not match actual entries: declared=${declaredNested}, actual=${nestedJarPaths}")
             } else {
                 String toml = zip.getInputStream(zip.getEntry(metadataPath)).getText('UTF-8')
-                String expectedModId = rootProject.findProperty('mod_id')?.toString()
+                String expectedModId = distributionExpectedModId
                 if (!(toml =~ /(?m)^modId\s*=\s*"${java.util.regex.Pattern.quote(expectedModId)}"\s*$/)) throw new GradleException("NeoForge metadata mod id does not match ${expectedModId}")
-                if (!(toml =~ /(?m)^version\s*=\s*"${java.util.regex.Pattern.quote(project.version.toString())}"\s*$/)) throw new GradleException("NeoForge metadata version does not match ${project.version}")
+                if (!(toml =~ /(?m)^version\s*=\s*"${java.util.regex.Pattern.quote(distributionProjectVersion)}"\s*$/)) throw new GradleException("NeoForge metadata version does not match ${distributionProjectVersion}")
                 def mixinConfigs = (toml =~ /(?m)^config\s*=\s*"([^"]+)"/).collect { it[1] }
                 mixinConfigs.each { mixinPath -> verifyMixinConfig(mixinPath) }
                 if (!nestedJarPaths.isEmpty()) {

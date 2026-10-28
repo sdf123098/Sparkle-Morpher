@@ -41,8 +41,8 @@ public final class YsmAnimationParsing {
 
                 if (aObj.has("loop")) {
                     String loopStr = YsmJsonSupport.getJsonString(aObj.get("loop"));
-                    if ("true".equals(loopStr)) anim.loopMode = 1;
-                    else if ("hold_on_last_frame".equals(loopStr)) anim.loopMode = 3;
+                    if ("true".equalsIgnoreCase(loopStr) || "loop".equalsIgnoreCase(loopStr)) anim.loopMode = 1;
+                    else if ("hold_on_last_frame".equalsIgnoreCase(loopStr)) anim.loopMode = 3;
                     else anim.loopMode = 0;
                 } else {
                     anim.loopMode = 2;
@@ -95,6 +95,8 @@ public final class YsmAnimationParsing {
                     }
                 }
 
+                anim.timelineEvents.addAll(AnimationParticleEvents.read(aObj));
+                anim.timelineEvents.sort(Comparator.comparingDouble(frame -> frame.timestamp));
                 raf.animations.put(anim.name, anim);
             }
         }
