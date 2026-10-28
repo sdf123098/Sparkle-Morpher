@@ -136,7 +136,7 @@ public final class TextureDecoder {
         if (imageFormat == -1 || data == null || data.length == 0) {
             return imageFormat;
         }
-        int detectedFormat = YSMFolderDeserializer.detectFormat(data);
+        int detectedFormat = com.micaftic.morpher.resource.YsmTextureParsing.detectFormat(data);
         if (detectedFormat != 0) {
             return detectedFormat;
         }

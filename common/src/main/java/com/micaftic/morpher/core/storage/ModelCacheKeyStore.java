@@ -36,7 +36,7 @@ public final class ModelCacheKeyStore {
         String json = Files.readString(index, StandardCharsets.UTF_8);
         if (json.length() > 1024 * 1024) throw new IOException("Model cache key index is too large; retained at " + index);
         try (JsonReader reader = new JsonReader(new StringReader(json))) {
-            reader.setLenient(false);
+            reader.setStrictness(com.google.gson.Strictness.LEGACY_STRICT);
             reader.beginObject(); var fields = new HashSet<String>(); String encoded = null;
             while (reader.hasNext()) {
                 String name = reader.nextName();

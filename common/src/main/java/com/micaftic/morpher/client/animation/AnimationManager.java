@@ -24,11 +24,11 @@ import java.util.function.BiPredicate;
 
 public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity> {
 
-    private static final ReferenceArrayList<AnimationState<Player, CustomPlayerEntity>>[] data = new ReferenceArrayList[Priority.LOWEST + 1];
+    private static final List<ReferenceArrayList<AnimationState<Player, CustomPlayerEntity>>> data = new java.util.ArrayList<>(Priority.LOWEST + 1);
 
     static {
-        for (int i = 0; i < data.length; i++) {
-            data[i] = new ReferenceArrayList<>(6);
+        for (int i = 0; i <= Priority.LOWEST; i++) {
+            data.add(new ReferenceArrayList<>(6));
         }
     }
 
@@ -105,7 +105,7 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
     }
 
     public static void register(AnimationState<Player, CustomPlayerEntity> state) {
-        data[state.getPriority()].add(state);
+        data.get(state.getPriority()).add(state);
     }
 
     @Override
@@ -133,7 +133,7 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
             return IAnimationPredicate.predicate(event, "parcool:ride_zipline");
         }
         for (int i = Priority.HIGHEST; i <= Priority.LOWEST; i++) {
-            for (AnimationState<Player, CustomPlayerEntity> animationState : data[i]) {
+            for (AnimationState<Player, CustomPlayerEntity> animationState : data.get(i)) {
                 if (animationState.getPredicate().test(player, event)) {
                     String name = animationState.getAnimationName();
                     ILoopType loopType = animationState.getLoopType();

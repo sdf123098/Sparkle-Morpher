@@ -28,7 +28,7 @@ import static com.micaftic.morpher.core.zstd.Constants.SEQUENCE_ENCODING_COMPRES
 import static com.micaftic.morpher.core.zstd.Constants.SEQUENCE_ENCODING_RLE;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_SHORT;
 import static com.micaftic.morpher.core.zstd.FiniteStateEntropy.optimalTableLog;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 import static com.micaftic.morpher.core.zstd.Util.checkArgument;
 
 final class SequenceEncoder
@@ -72,18 +72,18 @@ final class SequenceEncoder
 
         int sequenceCount = sequences.sequenceCount;
         if (sequenceCount < 0x7F) {
-            UNSAFE.putByte(outputBase, output, (byte) sequenceCount);
+            MEMORY.putByte(outputBase, output, (byte) sequenceCount);
             output++;
         }
         else if (sequenceCount < LONG_NUMBER_OF_SEQUENCES) {
-            UNSAFE.putByte(outputBase, output, (byte) (sequenceCount >>> 8 | 0x80));
-            UNSAFE.putByte(outputBase, output + 1, (byte) sequenceCount);
+            MEMORY.putByte(outputBase, output, (byte) (sequenceCount >>> 8 | 0x80));
+            MEMORY.putByte(outputBase, output + 1, (byte) sequenceCount);
             output += SIZE_OF_SHORT;
         }
         else {
-            UNSAFE.putByte(outputBase, output, (byte) 0xFF);
+            MEMORY.putByte(outputBase, output, (byte) 0xFF);
             output++;
-            UNSAFE.putShort(outputBase, output, (short) (sequenceCount - LONG_NUMBER_OF_SEQUENCES));
+            MEMORY.putShort(outputBase, output, (short) (sequenceCount - LONG_NUMBER_OF_SEQUENCES));
             output += SIZE_OF_SHORT;
         }
 
@@ -108,7 +108,7 @@ final class SequenceEncoder
         FseCompressionTable literalLengthTable;
         switch (literalsLengthEncodingType) {
             case SEQUENCE_ENCODING_RLE:
-                UNSAFE.putByte(outputBase, output, sequences.literalLengthCodes[0]);
+                MEMORY.putByte(outputBase, output, sequences.literalLengthCodes[0]);
                 output++;
                 workspace.literalLengthTable.initializeRleTable(maxSymbol);
                 literalLengthTable = workspace.literalLengthTable;
@@ -147,7 +147,7 @@ final class SequenceEncoder
         FseCompressionTable offsetCodeTable;
         switch (offsetEncodingType) {
             case SEQUENCE_ENCODING_RLE:
-                UNSAFE.putByte(outputBase, output, sequences.offsetCodes[0]);
+                MEMORY.putByte(outputBase, output, sequences.offsetCodes[0]);
                 output++;
                 workspace.offsetCodeTable.initializeRleTable(maxSymbol);
                 offsetCodeTable = workspace.offsetCodeTable;
@@ -183,7 +183,7 @@ final class SequenceEncoder
         FseCompressionTable matchLengthTable;
         switch (matchLengthEncodingType) {
             case SEQUENCE_ENCODING_RLE:
-                UNSAFE.putByte(outputBase, output, sequences.matchLengthCodes[0]);
+                MEMORY.putByte(outputBase, output, sequences.matchLengthCodes[0]);
                 output++;
                 workspace.matchLengthTable.initializeRleTable(maxSymbol);
                 matchLengthTable = workspace.matchLengthTable;
@@ -210,7 +210,7 @@ final class SequenceEncoder
         }
 
         // flags
-        UNSAFE.putByte(outputBase, headerAddress, (byte) ((literalsLengthEncodingType << 6) | (offsetEncodingType << 4) | (matchLengthEncodingType << 2)));
+        MEMORY.putByte(outputBase, headerAddress, (byte) ((literalsLengthEncodingType << 6) | (offsetEncodingType << 4) | (matchLengthEncodingType << 2)));
 
         output += encodeSequences(outputBase, output, outputLimit, matchLengthTable, offsetCodeTable, literalLengthTable, sequences);
 

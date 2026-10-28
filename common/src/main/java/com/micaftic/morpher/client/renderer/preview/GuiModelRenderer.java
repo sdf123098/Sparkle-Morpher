@@ -422,6 +422,7 @@ public final class GuiModelRenderer {
         }
     }
 
+    @SuppressWarnings("unchecked") // Renderer and entity are paired by the preview request.
     public static void renderEntityPreview(float x, float y, float scale, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
         if (!PreviewRenderBridge.isDirectGuiPreviewSupported()) {
             return;

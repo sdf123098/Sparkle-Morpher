@@ -33,6 +33,12 @@ public class SoundKeyFrameExecutor {
         }
     }
 
+    /** Finish the event window without cancelling sounds that outlive the clip boundary. */
+    public void finishCycle(AnimatableEntity<?> entity, float endTick, boolean playAudio) {
+        playSound(entity, endTick, playAudio);
+        this.nextIndex = 0;
+    }
+
     public void reset() {
         this.nextIndex = 0;
         this.audioPlayerManager.stopAll();

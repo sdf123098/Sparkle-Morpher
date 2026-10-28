@@ -29,7 +29,17 @@ import java.util.concurrent.TimeUnit;
 
 @Environment(EnvType.CLIENT)
 public class ParticleEffectUtil {
-    private static final Cache<String, ParticleOptions> particleCache = CacheBuilder.newBuilder().expireAfterAccess(60, TimeUnit.SECONDS).build();
+    private static final Cache<String, ParticleOptions> particleCache = CacheBuilder.newBuilder().expireAfterAccess(java.time.Duration.ofSeconds(60)).build();
+
+    public static boolean canSpawnAnimationParticle(Entity entity, String particleId) throws ExecutionException {
+        return particleCache.get(particleId, () ->
+                ParticleArgument.readParticle(new StringReader(particleId), entity.level().registryAccess())) != null;
+    }
+
+    public static void spawnAnimationParticle(Entity entity, String particleId, Vector3d offset, RandomSource random)
+            throws ExecutionException, CommandSyntaxException {
+        spawnParticles(entity, particleId, offset, new Vector3d(), 0, 0, 20, true, random);
+    }
 
     public static boolean handleParticle(ExecutionContext<IContext<Entity>> context, Function.ArgumentCollection arguments, boolean isAbsolute) throws ExecutionException, CommandSyntaxException {
         String particleId = arguments.getAsString(context, 0);

@@ -19,7 +19,7 @@ import static com.micaftic.morpher.core.zstd.BitInputStream.isEndOfStream;
 import static com.micaftic.morpher.core.zstd.BitInputStream.peekBitsFast;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_INT;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_SHORT;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 import static com.micaftic.morpher.core.zstd.Util.isPowerOf2;
 import static com.micaftic.morpher.core.zstd.Util.verify;
 
@@ -56,7 +56,7 @@ class Huffman
 
         // read table header
         verify(size > 0, input, "Not enough input bytes");
-        int inputSize = UNSAFE.getByte(inputBase, input++) & 0xFF;
+        int inputSize = MEMORY.getByte(inputBase, input++) & 0xFF;
 
         int outputSize;
         if (inputSize >= 128) {
@@ -67,7 +67,7 @@ class Huffman
             verify(outputSize <= MAX_SYMBOL + 1, input, "Input is corrupted");
 
             for (int i = 0; i < outputSize; i += 2) {
-                int value = UNSAFE.getByte(inputBase, input + i / 2) & 0xFF;
+                int value = MEMORY.getByte(inputBase, input + i / 2) & 0xFF;
                 weights[i] = (byte) (value >>> 4);
                 weights[i + 1] = (byte) (value & 0b1111);
             }
@@ -168,9 +168,9 @@ class Huffman
         verify(inputLimit - inputAddress >= 10, inputAddress, "Input is corrupted"); // jump table + 1 byte per stream
 
         long start1 = inputAddress + 3 * SIZE_OF_SHORT; // for the shorts we read below
-        long start2 = start1 + (UNSAFE.getShort(inputBase, inputAddress) & 0xFFFF);
-        long start3 = start2 + (UNSAFE.getShort(inputBase, inputAddress + 2) & 0xFFFF);
-        long start4 = start3 + (UNSAFE.getShort(inputBase, inputAddress + 4) & 0xFFFF);
+        long start2 = start1 + (MEMORY.getShort(inputBase, inputAddress) & 0xFFFF);
+        long start3 = start2 + (MEMORY.getShort(inputBase, inputAddress + 2) & 0xFFFF);
+        long start4 = start3 + (MEMORY.getShort(inputBase, inputAddress + 4) & 0xFFFF);
 
         verify(start2 < start3 && start3 < start4 && start4 < inputLimit, inputAddress, "Input is corrupted");
 
@@ -319,7 +319,7 @@ class Huffman
     private static int decodeSymbol(Object outputBase, long outputAddress, long bitContainer, int bitsConsumed, int tableLog, byte[] numbersOfBits, byte[] symbols)
     {
         int value = (int) peekBitsFast(bitsConsumed, bitContainer, tableLog);
-        UNSAFE.putByte(outputBase, outputAddress, symbols[value]);
+        MEMORY.putByte(outputBase, outputAddress, symbols[value]);
         return bitsConsumed + numbersOfBits[value];
     }
 }

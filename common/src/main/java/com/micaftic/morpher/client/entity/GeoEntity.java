@@ -285,15 +285,15 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
         // by freezes (visible as ~20Hz stutter on other players' models).
         int capturedTickCount = this.entity.tickCount;
         int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
-        UnsafeUtil.getUnsafe().storeFence();
+        java.lang.invoke.VarHandle.releaseFence();
         this.asyncSubmitFrameId = renderFrameId;
         this.modelFuture = YSMThreadPool.submitCallable(() -> {
             try {
                 AnimationEvent<?> event = super.processAnimationImpl(partialTick, capturedTickCount, false);
-                UnsafeUtil.getUnsafe().storeFence();
+                java.lang.invoke.VarHandle.releaseFence();
                 return event;
             } catch (Throwable th) {
-                UnsafeUtil.getUnsafe().storeFence();
+                java.lang.invoke.VarHandle.releaseFence();
                 throw th;
             }
         });
@@ -345,7 +345,7 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
             AnimationEvent<?> event = null;
             try {
                 event = this.modelFuture.get();
-                UnsafeUtil.getUnsafe().loadFence();
+                java.lang.invoke.VarHandle.acquireFence();
             } catch (InterruptedException e) {
             } catch (Throwable th) {
                 th.printStackTrace();

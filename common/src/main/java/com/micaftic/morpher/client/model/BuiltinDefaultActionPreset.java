@@ -16,10 +16,10 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/** Shared YSM actions own their resources independently of any bundled model. */
 public final class BuiltinDefaultActionPreset {
 
-    private static final String BASE_PATH = "/assets/sparkle_morpher/builtin/default/animations/";
-    private static final String EXTERNAL_YSM_BASE_PATH = "/assets/sparkle_morpher/builtin/external_ysm/animations/";
+    private static final String BASE_PATH = "/assets/sparkle_morpher/action_presets/ysm/animations/";
     private static final Map<String, String> PLAYER_ANIMATION_FILES = createPlayerAnimationFiles();
 
     private static volatile Map<String, AnimationFile> playerAnimations;
@@ -62,13 +62,13 @@ public final class BuiltinDefaultActionPreset {
     private static Map<String, AnimationFile> loadPlayerAnimations() {
         LinkedHashMap<String, AnimationFile> result = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : PLAYER_ANIMATION_FILES.entrySet()) {
-            byte[] data = readResource(resolveResourcePath(entry));
+            byte[] data = readResource(BASE_PATH + entry.getValue());
             if (data == null) {
                 YesSteveModel.LOGGER.warn("[SM] Missing builtin default action preset file {}", entry.getValue());
                 continue;
             }
             try {
-                RawYsmModel.RawAnimationFile rawFile = YSMFolderDeserializer.parseAnimationFile(data);
+                RawYsmModel.RawAnimationFile rawFile = com.micaftic.morpher.resource.YsmAnimationParsing.parseAnimationFile(data);
                 Map<String, Animation> animations = AnimationMapper.buildAnimations(rawFile, false);
                 animations.values().forEach(animation -> {
                     if (animation.sourceKey == null) {
@@ -98,13 +98,6 @@ public final class BuiltinDefaultActionPreset {
         files.put("irons_spell_books", "iss.animation.json");
         files.put("fp_arm", "fp.arm.animation.json");
         return Collections.unmodifiableMap(files);
-    }
-
-    private static String resolveResourcePath(Map.Entry<String, String> entry) {
-        if ("main".equals(entry.getKey())) {
-            return EXTERNAL_YSM_BASE_PATH + entry.getValue();
-        }
-        return BASE_PATH + entry.getValue();
     }
 
     private static byte[] readResource(String path) {

@@ -46,7 +46,7 @@ public class ParallelProcessor<T extends GeoEntity<?>, TModel> implements ModelP
 
     @Override
     public ControllerFactory<T> process(TModel modelData, ModelResourceBundle resourceBundle) {
-        Object2ReferenceRBTreeMap matchedSlots = new Object2ReferenceRBTreeMap();
+        Object2ReferenceRBTreeMap<String, String> matchedSlots = new Object2ReferenceRBTreeMap<>();
         Object2ReferenceMaps.fastForEach(this.animationDataProvider.getAnimationEntries(modelData, resourceBundle), entry -> {
             if (this.animationEntryMatcher.test(entry.getKey())) {
                 matchedSlots.put(entry.getKey(), null);

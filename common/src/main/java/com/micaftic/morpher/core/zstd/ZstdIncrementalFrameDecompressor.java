@@ -22,7 +22,7 @@ import static com.micaftic.morpher.core.zstd.Constants.RAW_BLOCK;
 import static com.micaftic.morpher.core.zstd.Constants.RLE_BLOCK;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_BLOCK_HEADER;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_INT;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 import static com.micaftic.morpher.core.zstd.Util.checkArgument;
 import static com.micaftic.morpher.core.zstd.Util.checkState;
 import static com.micaftic.morpher.core.zstd.Util.fail;
@@ -36,7 +36,7 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.lang.Math.toIntExact;
 import static java.lang.String.format;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.ARRAY_BYTE_BASE_OFFSET;
 
 public class ZstdIncrementalFrameDecompressor
 {
@@ -181,13 +181,13 @@ public class ZstdIncrementalFrameDecompressor
                     return;
                 }
                 if (inputBufferSize >= SIZE_OF_INT) {
-                    blockHeader = UNSAFE.getInt(inputBase, input) & 0xFF_FFFF;
+                    blockHeader = MEMORY.getInt(inputBase, input) & 0xFF_FFFF;
                 }
                 else {
-                    blockHeader = UNSAFE.getByte(inputBase, input) & 0xFF |
-                            (UNSAFE.getByte(inputBase, input + 1) & 0xFF) << 8 |
-                            (UNSAFE.getByte(inputBase, input + 2) & 0xFF) << 16;
-                    int expected = UNSAFE.getInt(inputBase, input) & 0xFF_FFFF;
+                    blockHeader = MEMORY.getByte(inputBase, input) & 0xFF |
+                            (MEMORY.getByte(inputBase, input + 1) & 0xFF) << 8 |
+                            (MEMORY.getByte(inputBase, input + 2) & 0xFF) << 16;
+                    int expected = MEMORY.getInt(inputBase, input) & 0xFF_FFFF;
                     verify(blockHeader == expected, input, "oops");
                 }
                 input += SIZE_OF_BLOCK_HEADER;
@@ -256,7 +256,7 @@ public class ZstdIncrementalFrameDecompressor
                     }
 
                     // read checksum
-                    int checksum = UNSAFE.getInt(inputBase, input);
+                    int checksum = MEMORY.getInt(inputBase, input);
                     input += SIZE_OF_INT;
 
                     checkState(partialHash != null, "Partial hash not set");
@@ -348,7 +348,7 @@ public class ZstdIncrementalFrameDecompressor
     {
         verify(inputAddress < inputLimit, inputAddress, "Not enough input bytes");
 
-        int frameHeaderDescriptor = UNSAFE.getByte(inputBase, inputAddress) & 0xFF;
+        int frameHeaderDescriptor = MEMORY.getByte(inputBase, inputAddress) & 0xFF;
         boolean singleSegment = (frameHeaderDescriptor & 0b100000) != 0;
         int dictionaryDescriptor = frameHeaderDescriptor & 0b11;
         int contentSizeDescriptor = frameHeaderDescriptor >>> 6;
