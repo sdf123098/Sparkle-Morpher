@@ -17,10 +17,10 @@ import static com.micaftic.morpher.core.zstd.BitInputStream.peekBits;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_INT;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_LONG;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_SHORT;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 import static com.micaftic.morpher.core.zstd.Util.checkArgument;
 import static com.micaftic.morpher.core.zstd.Util.verify;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.ARRAY_BYTE_BASE_OFFSET;
 
 final class FiniteStateEntropy
 {
@@ -79,22 +79,22 @@ final class FiniteStateEntropy
         while (output <= outputLimit - 4) {
             int numberOfBits;
 
-            UNSAFE.putByte(outputBase, output, symbols[state1]);
+            MEMORY.putByte(outputBase, output, symbols[state1]);
             numberOfBits = numbersOfBits[state1];
             state1 = (int) (newStates[state1] + peekBits(bitsConsumed, bits, numberOfBits));
             bitsConsumed += numberOfBits;
 
-            UNSAFE.putByte(outputBase, output + 1, symbols[state2]);
+            MEMORY.putByte(outputBase, output + 1, symbols[state2]);
             numberOfBits = numbersOfBits[state2];
             state2 = (int) (newStates[state2] + peekBits(bitsConsumed, bits, numberOfBits));
             bitsConsumed += numberOfBits;
 
-            UNSAFE.putByte(outputBase, output + 2, symbols[state1]);
+            MEMORY.putByte(outputBase, output + 2, symbols[state1]);
             numberOfBits = numbersOfBits[state1];
             state1 = (int) (newStates[state1] + peekBits(bitsConsumed, bits, numberOfBits));
             bitsConsumed += numberOfBits;
 
-            UNSAFE.putByte(outputBase, output + 3, symbols[state2]);
+            MEMORY.putByte(outputBase, output + 3, symbols[state2]);
             numberOfBits = numbersOfBits[state2];
             state2 = (int) (newStates[state2] + peekBits(bitsConsumed, bits, numberOfBits));
             bitsConsumed += numberOfBits;
@@ -113,7 +113,7 @@ final class FiniteStateEntropy
 
         while (true) {
             verify(output <= outputLimit - 2, input, "Output buffer is too small");
-            UNSAFE.putByte(outputBase, output++, symbols[state1]);
+            MEMORY.putByte(outputBase, output++, symbols[state1]);
             int numberOfBits = numbersOfBits[state1];
             state1 = (int) (newStates[state1] + peekBits(bitsConsumed, bits, numberOfBits));
             bitsConsumed += numberOfBits;
@@ -125,12 +125,12 @@ final class FiniteStateEntropy
             currentAddress = loader.getCurrentAddress();
 
             if (loader.isOverflow()) {
-                UNSAFE.putByte(outputBase, output++, symbols[state2]);
+                MEMORY.putByte(outputBase, output++, symbols[state2]);
                 break;
             }
 
             verify(output <= outputLimit - 2, input, "Output buffer is too small");
-            UNSAFE.putByte(outputBase, output++, symbols[state2]);
+            MEMORY.putByte(outputBase, output++, symbols[state2]);
             int numberOfBits1 = numbersOfBits[state2];
             state2 = (int) (newStates[state2] + peekBits(bitsConsumed, bits, numberOfBits1));
             bitsConsumed += numberOfBits1;
@@ -142,7 +142,7 @@ final class FiniteStateEntropy
             currentAddress = loader.getCurrentAddress();
 
             if (loader.isOverflow()) {
-                UNSAFE.putByte(outputBase, output++, symbols[state1]);
+                MEMORY.putByte(outputBase, output++, symbols[state1]);
                 break;
             }
         }
@@ -175,22 +175,22 @@ final class FiniteStateEntropy
 
         if ((inputSize & 1) != 0) {
             input--;
-            state1 = table.begin(UNSAFE.getByte(inputBase, input));
+            state1 = table.begin(MEMORY.getByte(inputBase, input));
 
             input--;
-            state2 = table.begin(UNSAFE.getByte(inputBase, input));
+            state2 = table.begin(MEMORY.getByte(inputBase, input));
 
             input--;
-            state1 = table.encode(stream, state1, UNSAFE.getByte(inputBase, input));
+            state1 = table.encode(stream, state1, MEMORY.getByte(inputBase, input));
 
 /*             stream.flush(); */
         }
         else {
             input--;
-            state2 = table.begin(UNSAFE.getByte(inputBase, input));
+            state2 = table.begin(MEMORY.getByte(inputBase, input));
 
             input--;
-            state1 = table.begin(UNSAFE.getByte(inputBase, input));
+            state1 = table.begin(MEMORY.getByte(inputBase, input));
         }
 
         // join to mod 4
@@ -198,10 +198,10 @@ final class FiniteStateEntropy
 
         if ((SIZE_OF_LONG * 8 > MAX_TABLE_LOG * 4 + 7) && (inputSize & 2) != 0) {  /* test bit 2 */
             input--;
-            state2 = table.encode(stream, state2, UNSAFE.getByte(inputBase, input));
+            state2 = table.encode(stream, state2, MEMORY.getByte(inputBase, input));
 
             input--;
-            state1 = table.encode(stream, state1, UNSAFE.getByte(inputBase, input));
+            state1 = table.encode(stream, state1, MEMORY.getByte(inputBase, input));
 
 /*             stream.flush(); */
         }
@@ -209,21 +209,21 @@ final class FiniteStateEntropy
         // 2 or 4 encoding per loop
         while (input > start) {
             input--;
-            state2 = table.encode(stream, state2, UNSAFE.getByte(inputBase, input));
+            state2 = table.encode(stream, state2, MEMORY.getByte(inputBase, input));
 
             if (SIZE_OF_LONG * 8 < MAX_TABLE_LOG * 2 + 7) {
 /*                 stream.flush(); */
             }
 
             input--;
-            state1 = table.encode(stream, state1, UNSAFE.getByte(inputBase, input));
+            state1 = table.encode(stream, state1, MEMORY.getByte(inputBase, input));
 
             if (SIZE_OF_LONG * 8 > MAX_TABLE_LOG * 4 + 7) {
                 input--;
-                state2 = table.encode(stream, state2, UNSAFE.getByte(inputBase, input));
+                state2 = table.encode(stream, state2, MEMORY.getByte(inputBase, input));
 
                 input--;
-                state1 = table.encode(stream, state1, UNSAFE.getByte(inputBase, input));
+                state1 = table.encode(stream, state1, MEMORY.getByte(inputBase, input));
             }
 
 /*             stream.flush(); */
@@ -447,7 +447,7 @@ final class FiniteStateEntropy
                     bitStream |= (0b11_11_11_11_11_11_11_11 << bitCount);
                     checkArgument(output + SIZE_OF_SHORT <= outputLimit, "Output buffer too small");
 
-                    UNSAFE.putShort(outputBase, output, (short) bitStream);
+                    MEMORY.putShort(outputBase, output, (short) bitStream);
                     output += SIZE_OF_SHORT;
 
                     // flush now, so no need to increase bitCount by 16
@@ -469,7 +469,7 @@ final class FiniteStateEntropy
                 if (bitCount > 16) {
                     checkArgument(output + SIZE_OF_SHORT <= outputLimit, "Output buffer too small");
 
-                    UNSAFE.putShort(outputBase, output, (short) bitStream);
+                    MEMORY.putShort(outputBase, output, (short) bitStream);
                     output += SIZE_OF_SHORT;
 
                     bitStream >>>= Short.SIZE;
@@ -502,7 +502,7 @@ final class FiniteStateEntropy
             if (bitCount > 16) {
                 checkArgument(output + SIZE_OF_SHORT <= outputLimit, "Output buffer too small");
 
-                UNSAFE.putShort(outputBase, output, (short) bitStream);
+                MEMORY.putShort(outputBase, output, (short) bitStream);
                 output += SIZE_OF_SHORT;
 
                 bitStream >>>= Short.SIZE;
@@ -512,7 +512,7 @@ final class FiniteStateEntropy
 
         // flush remaining bitstream
         checkArgument(output + SIZE_OF_SHORT <= outputLimit, "Output buffer too small");
-        UNSAFE.putShort(outputBase, output, (short) bitStream);
+        MEMORY.putShort(outputBase, output, (short) bitStream);
         output += (bitCount + 7) / 8;
 
         checkArgument(symbol <= maxSymbol + 1, "Error"); // TODO

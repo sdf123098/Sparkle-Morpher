@@ -8,6 +8,6 @@ public class YesSteveModelModMenu implements ModMenuApi {
 
     @Override
     public ConfigScreenFactory<?> getModConfigScreenFactory() {
-        return ExtraPlayerConfigScreen::new;
+        return parent -> com.micaftic.morpher.client.gui.ModernPlayerModelScreen.settings();
     }
 }

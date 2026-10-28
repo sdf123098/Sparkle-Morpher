@@ -110,10 +110,11 @@ dependencies {
 }
 
 processResources {
-    inputs.property 'version', project.version
+    def resourceModVersion = project.version.toString()
+    inputs.property 'version', resourceModVersion
 
     filesMatching('fabric.mod.json') {
-        expand version: project.version
+        expand version: resourceModVersion
     }
 
     from(rootProject.file('LICENSE')) {
@@ -142,9 +143,14 @@ remapJar {
     archiveFileName = rootProject.ext.distributionArchiveName(releaseArchiveName)
 
     doLast {
-        def bundledCompat = zipTree(archiveFile.get().asFile).matching {
-            include 'META-INF/jars/sparkle-morpher-caustica-compat-*.jar'
-        }.files
+        List<String> bundledCompat = []
+        new java.util.zip.ZipFile(archiveFile.get().asFile).withCloseable { zip ->
+            zip.entries().each { entry ->
+                if (entry.name ==~ /META-INF\/jars\/sparkle-morpher-caustica-compat-[^\/]*\.jar/) {
+                    bundledCompat.add(entry.name)
+                }
+            }
+        }
         if (bundledCompat.size() != 1) {
             throw new GradleException("Expected exactly one bundled Caustica compatibility JAR, found ${bundledCompat.size()}")
         }

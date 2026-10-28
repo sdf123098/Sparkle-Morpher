@@ -28,7 +28,8 @@ public class ProjectileAnimationController {
 
     private static final ProcessorPipeline<GeckoProjectileEntity, ProjectileModelBundle> REGISTRY = new ProcessorPipeline<>();
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    // The parallel slots intentionally keep the old YSM blending mode.
+    @SuppressWarnings({"rawtypes", "unchecked", "deprecation"})
     private static void registerControllers() {
         registerNamedController("pre_main", null, true, (animationEntryKey, entity) ->
             new CompositeAnimationController(entity, animationEntryKey, 0.0f, new StopAnimationPredicate()));

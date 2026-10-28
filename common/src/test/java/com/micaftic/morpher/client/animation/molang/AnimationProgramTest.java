@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AnimationProgramTest {
     private java.util.Queue<MolangParser> parserPool;
     private List<MolangParser> savedParsers;
+    @SuppressWarnings("unchecked") // The reflected field is declared Queue<MolangParser>.
     @BeforeEach void useRealCoreBindingsWithoutPlatformBootstrap() throws Exception {
         // Plain JVM tests have no Architectury platform implementation in the 1.21.1 branch.
         // Isolate the pool, using the actual physics functions and PrimaryBinding's math/query bindings.
@@ -115,9 +116,9 @@ class AnimationProgramTest {
         var f = simple();
         var controller = f.controllers.getFirst().getAnimationControllers().values().iterator().next();
         var state = controller.getStates().values().iterator().next();
-        var stateWithFeedback = new AnimationState("default", new org.apache.commons.lang3.tuple.Pair[]{
-                org.apache.commons.lang3.tuple.Pair.of("arbitrary", AnimationMapper.parse("v.motion"))},
-                new org.apache.commons.lang3.tuple.Pair[0], new String[0], new IValue[0], new IValue[0], state.getBlendTransition(), false);
+        var stateWithFeedback = new AnimationState("default", com.micaftic.morpher.util.data.TypedArrays.pairs(List.of(
+                org.apache.commons.lang3.tuple.Pair.of("arbitrary", AnimationMapper.parse("v.motion")))),
+                com.micaftic.morpher.util.data.TypedArrays.pairs(List.of()), new String[0], new IValue[0], new IValue[0], state.getBlendTransition(), false);
         f.controllers.set(0, new AnimationControllerFile(Map.of("controller", new AnimationController("default", new AnimationState[]{stateWithFeedback}))));
         assertFalse(f.bind().getFirst().accepted());
         var history = fixture("history", "motion", "v.motion=ysm.first_order('spring',v.previous);v.previous=q.life_time;");
@@ -149,18 +150,18 @@ class AnimationProgramTest {
         assertFalse(AnimationProgramAnalyzer.inspect(parser.parseExpression("v.x=injected.life_time", false)).reasons().isEmpty());
     }
     @Test void knownPhysicsBindingUsesOnlyProgramManager() throws Exception {
-        var context = new AnimationContext<>(null, null, null, null);
+        var context = new AnimationContext<net.minecraft.world.entity.Entity>(null, null, null, null);
         context.setStorage(new VariableStorage()); context.programPhysics = new PhysicsManager();
-        var evaluator = ExpressionEvaluator.evaluator(context);
+        var evaluator = ExpressionEvaluator.<com.micaftic.morpher.geckolib3.core.molang.context.IContext<net.minecraft.world.entity.Entity>>evaluator(context);
         var first = new com.micaftic.morpher.client.animation.molang.functions.ysm.FirstOrderFunction();
         var args = new Function.ArgumentCollection(List.of(new StringExpression("shared"), new FloatExpression(3), new FloatExpression(2)));
         context.programPhysics.updateSimulation(0, true);
-        assertEquals(3f, first.eval((ExecutionContext)evaluator, args));
+        assertEquals(3f, first.eval(evaluator, args));
         context.programPhysics.updateSimulation(.02, false);
         var changed = new Function.ArgumentCollection(List.of(new StringExpression("shared"), new FloatExpression(9), new FloatExpression(2)));
-        float moved = ((Number)first.eval((ExecutionContext)evaluator, changed)).floatValue();
+        float moved = ((Number)first.eval(evaluator, changed)).floatValue();
         assertTrue(moved > 3 && moved < 9);
-        assertEquals(moved, first.eval((ExecutionContext)evaluator, args));
+        assertEquals(moved, first.eval(evaluator, args));
     }
     private AnimationProgramPlan runtimePlan(Map<Variable, String> inputs) {
         return new AnimationProgramPlan("test", "test", .023, List.of(), Set.of(), Set.of("value"), Set.of("first:node"), inputs,

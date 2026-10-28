@@ -25,7 +25,7 @@ public class UUIDComponentData {
         this.isEnabled = isEnabled;
         this.displayComponent = (Component) obj;
         this.uuidSet = ImmutableSet.copyOf(uuidArr);
-        this.uuidComponentMap = map == null ? null : (Map<UUID, Component>) ImmutableMap.copyOf((Map<?, ?>) map);
+        this.uuidComponentMap = map == null ? null : map.entrySet().stream().collect(ImmutableMap.toImmutableMap(Map.Entry::getKey, entry -> (Component) entry.getValue()));
     }
 
     public boolean isEnabled() {

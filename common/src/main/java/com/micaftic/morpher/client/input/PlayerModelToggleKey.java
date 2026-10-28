@@ -31,6 +31,7 @@ public final class PlayerModelToggleKey {
         });
     }
 
+    @SuppressWarnings("deprecation") // Close legacy screens opened by external callers.
     private static boolean onKeyInput(int action, int keyCode, int scanCode, int modifiers) {
         if (action != 1 || !InputUtil.isKeyPressed(keyCode, scanCode, modifiers, KEY_MAPPING)) {
             return false;
@@ -53,6 +54,7 @@ public final class PlayerModelToggleKey {
         return true;
     }
 
+    @SuppressWarnings("deprecation") // Close legacy screens opened by external callers.
     private static boolean onMouseInput(int action, int button, int modifiers) {
         if (action != 1 || !InputUtil.isMousePressed(button, modifiers, KEY_MAPPING)) {
             return false;

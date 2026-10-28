@@ -28,7 +28,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.component.KineticWeapon;
 import com.mojang.math.Axis;
-import org.joml.Matrix4f;
 import com.micaftic.morpher.util.ItemTagsConstants;
 
 public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEntity> implements HeldItemLayer {
@@ -106,6 +105,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
 
     public void renderItem(AnimatedGeoModel model, LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, MultiBufferSource multiBufferSource, int i, float partialTick, HandLocatorProfile handLocatorProfile) {
         if (!itemStack.isEmpty()) {
+            float inheritedItemScale = BowItemScale.largestAxisScale(poseStack.last().pose());
             boolean isLeftHand = humanoidArm == HumanoidArm.LEFT;
             boolean renderedDirectly = false;
             boolean hasDirectAnchor = hasDirectHandAnchor(model, humanoidArm);
@@ -120,7 +120,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                             poseStack.translate(0.1d, 0.0d, 0.0d);
                             poseStack.scale(1.25f, 1.25f, 1.25f);
                         }
-                        renderVanillaItemWithUseOrientation(livingEntity, itemStack, itemDisplayContext, humanoidArm, poseStack, i, partialTick, true);
+                        renderVanillaItemWithUseOrientation(livingEntity, itemStack, itemDisplayContext, humanoidArm, poseStack, i, partialTick, true, inheritedItemScale);
                     } else {
                         applySpearUseItemTransformIfActive(livingEntity, itemStack, humanoidArm, poseStack, partialTick, false);
                         renderVanillaItem(livingEntity, itemStack, itemDisplayContext, humanoidArm, poseStack, i);
@@ -131,7 +131,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                         poseStack.translate(0.1d, 0.0d, 0.0d);
                         poseStack.scale(1.25f, 1.25f, 1.25f);
                     }
-                    renderVanillaItemWithUseOrientation(livingEntity, itemStack, itemDisplayContext, humanoidArm, poseStack, i, partialTick, vanillaEquipment);
+                    renderVanillaItemWithUseOrientation(livingEntity, itemStack, itemDisplayContext, humanoidArm, poseStack, i, partialTick, vanillaEquipment, inheritedItemScale);
                 }
                 poseStack.popPose();
                 renderedDirectly = true;
@@ -144,7 +144,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                         if (SWarfareCompat.isGunItem(itemStack)) {
                             poseStack.scale(1.25f, 1.25f, 1.25f);
                         }
-                        renderVanillaItemWithUseOrientation(livingEntity, itemStack, itemDisplayContext, humanoidArm, poseStack, i, partialTick, vanillaEquipment);
+                        renderVanillaItemWithUseOrientation(livingEntity, itemStack, itemDisplayContext, humanoidArm, poseStack, i, partialTick, vanillaEquipment, inheritedItemScale);
                     }
                     poseStack.popPose();
                 });
@@ -241,9 +241,9 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         poseStack.mulPose(Axis.XP.rotationDegrees(-90.0f));
     }
 
-    private void renderVanillaItemWithUseOrientation(LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, int packedLight, float partialTick, boolean vanillaEquipment) {
+    private void renderVanillaItemWithUseOrientation(LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, int packedLight, float partialTick, boolean vanillaEquipment, float inheritedItemScale) {
         if (shouldNormalizeBowItemScale(itemStack)) {
-            normalizeBowItemScale(poseStack);
+            normalizeBowItemScale(poseStack, inheritedItemScale);
         }
         if (shouldApplySpearUseItemTransform(livingEntity, itemStack, humanoidArm)) {
             applySpearUseItemTransform(livingEntity, itemStack, humanoidArm, poseStack, partialTick, vanillaEquipment);
@@ -255,24 +255,9 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         return !itemStack.isEmpty() && itemStack.getUseAnimation() == ItemUseAnimation.BOW;
     }
 
-    private void normalizeBowItemScale(PoseStack poseStack) {
-        float scale = getLargestAxisScale(poseStack.last().pose());
-        if (scale <= 1.0f || scale < 1.0E-4f) {
-            return;
-        }
-        float inverseScale = 1.0f / scale;
-        poseStack.scale(inverseScale, inverseScale, inverseScale);
-    }
-
-    private float getLargestAxisScale(Matrix4f matrix) {
-        float xScale = length(matrix.m00(), matrix.m01(), matrix.m02());
-        float yScale = length(matrix.m10(), matrix.m11(), matrix.m12());
-        float zScale = length(matrix.m20(), matrix.m21(), matrix.m22());
-        return Math.max(xScale, Math.max(yScale, zScale));
-    }
-
-    private float length(float x, float y, float z) {
-        return (float) Math.sqrt(x * x + y * y + z * z);
+    private void normalizeBowItemScale(PoseStack poseStack, float inheritedItemScale) {
+        float correction = BowItemScale.correction(poseStack.last().pose(), inheritedItemScale);
+        poseStack.scale(correction, correction, correction);
     }
 
     private void applySpearUseItemTransform(LivingEntity livingEntity, ItemStack itemStack, HumanoidArm humanoidArm, PoseStack poseStack, float partialTick, boolean vanillaEquipment) {
@@ -395,7 +380,8 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
             return;
         }
         renderVanillaItemWithUseOrientation(livingEntity, itemStack, getDisplayContext(humanoidArm),
-                humanoidArm, poseStack, packedLight, partialTick, false);
+                humanoidArm, poseStack, packedLight, partialTick, false,
+                BowItemScale.largestAxisScale(poseStack.last().pose()));
     }
 
     private ItemDisplayContext getDisplayContext(HumanoidArm humanoidArm) {

@@ -86,7 +86,7 @@ public class JsonKeyFrameUtils {
         if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
             return;
         }
-        String easingTypeText = element.getAsJsonPrimitive().toString().toLowerCase(Locale.ENGLISH);
+        String easingTypeText = element.getAsJsonPrimitive().getAsString().toLowerCase(Locale.ENGLISH);
         if ("linear".equals(easingTypeText)) {
             keyframe.easingType = EasingType.LINEAR;
         } else if ("catmullrom".equals(easingTypeText)) {
@@ -98,7 +98,7 @@ public class JsonKeyFrameUtils {
         if (element.isJsonPrimitive()) {
             JsonPrimitive primitive = element.getAsJsonPrimitive();
             if (primitive.isString()) {
-                IValue value = parser.parseExpression(primitive.toString(), false);
+                IValue value = parser.parseExpression(primitive.getAsString(), false);
                 keyframe.preXValue = value;
                 keyframe.preYValue = value;
                 keyframe.preZValue = value;
@@ -123,19 +123,19 @@ public class JsonKeyFrameUtils {
                 JsonPrimitive zPri = array.get(2).getAsJsonPrimitive();
 
                 if (xPri.isString()) {
-                    keyframe.preXValue = parser.parseExpression(xPri.toString(), false);
+                    keyframe.preXValue = parser.parseExpression(xPri.getAsString(), false);
                 } else if (xPri.isNumber()) {
                     keyframe.preX = xPri.getAsDouble();
                 }
 
                 if (yPri.isString()) {
-                    keyframe.preYValue = parser.parseExpression(yPri.toString(), false);
+                    keyframe.preYValue = parser.parseExpression(yPri.getAsString(), false);
                 } else if (yPri.isNumber()) {
                     keyframe.preY = yPri.getAsDouble();
                 }
 
                 if (zPri.isString()) {
-                    keyframe.preZValue = parser.parseExpression(zPri.toString(), false);
+                    keyframe.preZValue = parser.parseExpression(zPri.getAsString(), false);
                 } else if (zPri.isNumber()) {
                     keyframe.preZ = zPri.getAsDouble();
                 }
@@ -145,7 +145,7 @@ public class JsonKeyFrameUtils {
 
             JsonPrimitive primitive = array.get(0).getAsJsonPrimitive();
             if (primitive.isString()) {
-                IValue value = parser.parseExpression(primitive.toString(), false);
+                IValue value = parser.parseExpression(primitive.getAsString(), false);
                 keyframe.preXValue = value;
                 keyframe.preYValue = value;
                 keyframe.preZValue = value;
@@ -162,7 +162,7 @@ public class JsonKeyFrameUtils {
         if (element.isJsonPrimitive()) {
             JsonPrimitive primitive = element.getAsJsonPrimitive();
             if (primitive.isString()) {
-                IValue value = parser.parseExpression(primitive.toString(), false);
+                IValue value = parser.parseExpression(primitive.getAsString(), false);
                 keyframe.postXValue = value;
                 keyframe.postYValue = value;
                 keyframe.postZValue = value;
@@ -187,19 +187,19 @@ public class JsonKeyFrameUtils {
                 JsonPrimitive zPri = array.get(2).getAsJsonPrimitive();
 
                 if (xPri.isString()) {
-                    keyframe.postXValue = parser.parseExpression(xPri.toString(), false);
+                    keyframe.postXValue = parser.parseExpression(xPri.getAsString(), false);
                 } else if (xPri.isNumber()) {
                     keyframe.postX = xPri.getAsDouble();
                 }
 
                 if (yPri.isString()) {
-                    keyframe.postYValue = parser.parseExpression(yPri.toString(), false);
+                    keyframe.postYValue = parser.parseExpression(yPri.getAsString(), false);
                 } else if (yPri.isNumber()) {
                     keyframe.postY = yPri.getAsDouble();
                 }
 
                 if (zPri.isString()) {
-                    keyframe.postZValue = parser.parseExpression(zPri.toString(), false);
+                    keyframe.postZValue = parser.parseExpression(zPri.getAsString(), false);
                 } else if (zPri.isNumber()) {
                     keyframe.postZ = zPri.getAsDouble();
                 }
@@ -209,7 +209,7 @@ public class JsonKeyFrameUtils {
 
             JsonPrimitive primitive = array.get(0).getAsJsonPrimitive();
             if (primitive.isString()) {
-                IValue value = parser.parseExpression(primitive.toString(), false);
+                IValue value = parser.parseExpression(primitive.getAsString(), false);
                 keyframe.postXValue = value;
                 keyframe.postYValue = value;
                 keyframe.postZValue = value;

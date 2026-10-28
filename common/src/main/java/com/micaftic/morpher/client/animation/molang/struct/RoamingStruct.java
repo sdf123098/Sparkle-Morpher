@@ -80,7 +80,7 @@ public class RoamingStruct implements Struct {
     public void forEachVar(Consumer<String> consumer) {
         IntIterator it = this.varNames.iterator();
         while (it.hasNext()) {
-            String str = StringPool.getString(it.next().intValue());
+            String str = StringPool.getString(it.nextInt());
             if (str != null) {
                 consumer.accept(str);
             }
