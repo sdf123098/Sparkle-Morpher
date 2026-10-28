@@ -2,6 +2,7 @@ package com.micaftic.morpher.peer;
 
 import java.io.*;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -167,13 +168,30 @@ public final class PeerAssetStore implements AutoCloseable {
         if(bytes + ledger.reserved + incoming > budget) throw new PeerFailure(PeerFailure.Stage.TRANSFER,PeerFrame.ErrorCode.BUDGET_EXCEEDED);
     }
     private long privateBytes(Path root)throws IOException {
-        long bytes=0;
-        try(var paths=Files.walk(root)) {
-            var iterator=paths.iterator();int count=0;
-            while(iterator.hasNext()){var path=iterator.next();if(++count>65536)throw new PeerFailure(PeerFailure.Stage.TRANSFER,PeerFrame.ErrorCode.BUDGET_EXCEEDED);if(Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS)
-                    && ledger.active.keySet().stream().noneMatch(path::startsWith))bytes=Math.addExact(bytes,Files.size(path));}
-        }
-        return bytes;
+        // The caller holds ledger. Active trees are already charged by their
+        // reservations, and their owners can create/delete files outside that lock.
+        // Skip them before descending, rather than filtering a live Files.walk.
+        var counter=new SimpleFileVisitor<Path>() {
+            long bytes;int count;
+            private boolean active(Path path){return ledger.active.keySet().stream().anyMatch(path::startsWith);}
+            private void visit()throws IOException {
+                if(++count>65536)throw new PeerFailure(PeerFailure.Stage.TRANSFER,PeerFrame.ErrorCode.BUDGET_EXCEEDED);
+            }
+            @Override public FileVisitResult preVisitDirectory(Path path,BasicFileAttributes attributes)throws IOException {
+                if(active(path))return FileVisitResult.SKIP_SUBTREE;
+                visit();return FileVisitResult.CONTINUE;
+            }
+            @Override public FileVisitResult visitFile(Path path,BasicFileAttributes attributes)throws IOException {
+                if(!active(path)){visit();if(attributes.isRegularFile())bytes=Math.addExact(bytes,attributes.size());}
+                return FileVisitResult.CONTINUE;
+            }
+            @Override public FileVisitResult visitFileFailed(Path path,IOException failure)throws IOException {
+                if(active(path))return FileVisitResult.CONTINUE;
+                throw failure;
+            }
+        };
+        Files.walkFileTree(root,counter);
+        return counter.bytes;
     }
     private void recover(Path parent,String prefix,boolean resumable)throws IOException {
         try(var paths=Files.list(parent)) {
