@@ -1,0 +1,27 @@
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository
+
+// Opt-in only: CI passes --init-script. Local builds keep their existing mirrors.
+def useUpstream = { repositories ->
+    repositories.all { repo ->
+        if (repo instanceof MavenArtifactRepository) {
+            String address = repo.url.toString()
+            if (address.startsWith('https://bmclapi2.bangbang93.com/maven')) {
+                repo.url = new URI('https://libraries.minecraft.net/')
+            } else if (address.startsWith('https://maven.aliyun.com/repository/gradle-plugin')) {
+                repo.url = new URI('https://plugins.gradle.org/m2/')
+            } else if (address.startsWith('https://maven.aliyun.com/repository/')) {
+                repo.url = new URI('https://repo.maven.apache.org/maven2/')
+            }
+        }
+    }
+}
+gradle.beforeSettings { settings ->
+    useUpstream(settings.pluginManagement.repositories)
+    useUpstream(settings.dependencyResolutionManagement.repositories)
+}
+gradle.projectsLoaded {
+    gradle.rootProject.allprojects { candidate ->
+        useUpstream(candidate.repositories)
+        useUpstream(candidate.buildscript.repositories)
+    }
+}

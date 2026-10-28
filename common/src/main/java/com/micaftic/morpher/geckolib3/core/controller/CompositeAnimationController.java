@@ -106,6 +106,7 @@ public class CompositeAnimationController<T extends AnimatableEntity<?>> impleme
     }
 
     @Override
+    @Deprecated
     public boolean isDeprecatedMode() {
         return this.activeController.isDeprecatedMode();
     }

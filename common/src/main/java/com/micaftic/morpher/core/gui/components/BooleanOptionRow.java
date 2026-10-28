@@ -25,7 +25,7 @@ public class BooleanOptionRow extends OptionRow<Boolean> {
     }
 
     @Override
-    public void onClick(double mouseX, double mouseY) {
+    public void onClick(double mouseX, double mouseY, int button) {
         if (isMouseOverControl(mouseX, mouseY)) {
             option.setPending(!option.get());
         }

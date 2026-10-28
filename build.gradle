@@ -9,6 +9,13 @@ version = mod_version
 group = maven_group
 
 apply from: rootProject.file('gradle/distribution.gradle')
+
+// JVM tests use heap-backed JOML operations and need no internal Unsafe access.
+allprojects {
+    tasks.withType(Test).configureEach {
+        systemProperty 'joml.nounsafe', 'true'
+    }
+}
 def isCurseForgeDist = rootProject.ext.isCurseForgeDist
 
 repositories {
@@ -105,16 +112,21 @@ dependencies {
     // 注入普通和 merged 工件而在测试启动时产生重复类。
     testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    // Tests also resolve loader annotations referenced by the main classes.
+    testCompileOnly files(sourceSets.main.compileClasspath)
 }
 
 test {
     useJUnitPlatform()
+    // The suite loads Minecraft; keep room for the texture decoder's heap reserve.
+    maxHeapSize = '1G'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 21
-    options.compilerArgs.addAll(["--add-modules", "jdk.incubator.vector"])
+    options.compilerArgs.addAll([
+                '-Xlint:deprecation', '-Xlint:unchecked',"--add-modules", "jdk.incubator.vector"])
 }
 
 java {

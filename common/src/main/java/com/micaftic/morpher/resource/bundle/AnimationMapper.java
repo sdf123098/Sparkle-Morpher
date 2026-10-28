@@ -81,7 +81,7 @@ public final class AnimationMapper {
 
             // blendWeight 必须落在 Animation 的 blendWeight 形参上：运行时按该字段决定动画权重，
             // 传进 unKnowData1 会让 YSM 作者化的 blend_weight 静默失效（恒按 1.0 播放）。
-            Animation anim = new Animation(ra.name, ra.length * 20.0f, loopMode, null, null, blendWeight, null, boneAnims.toArray(new BoneAnimation[0]), soundEffects.toArray(new EventKeyFrame[0]), new ParticleEventKeyFrame[0], timelineEvents.toArray(new EventKeyFrame[0]));
+            Animation anim = new Animation(ra.name, ra.length * 20.0f, loopMode, null, null, blendWeight, null, boneAnims.toArray(new BoneAnimation[0]), com.micaftic.morpher.util.data.TypedArrays.events(soundEffects), new ParticleEventKeyFrame[0], com.micaftic.morpher.util.data.TypedArrays.events(timelineEvents));
             anim.programExpressions = List.copyOf(parsed);
             anim.declaredPeriodSeconds = ra.length;
             result.put(ra.name, anim);
@@ -204,7 +204,7 @@ public final class AnimationMapper {
                     blendTransition = new TicksInterpolator(rs.blendTransitionValue);
                 }
 
-                states.add(new AnimationState(rs.name, animations.toArray(new Pair[0]), transitions.toArray(new Pair[0]), rs.soundEffects.toArray(new String[0]), onEntry.toArray(new IValue[0]), onExit.toArray(new IValue[0]), blendTransition, rs.blendViaShortestPath));
+                states.add(new AnimationState(rs.name, com.micaftic.morpher.util.data.TypedArrays.pairs(animations), com.micaftic.morpher.util.data.TypedArrays.pairs(transitions), rs.soundEffects.toArray(new String[0]), onEntry.toArray(new IValue[0]), onExit.toArray(new IValue[0]), blendTransition, rs.blendViaShortestPath));
             }
             result.put(rac.animationName,
                     new AnimationController(

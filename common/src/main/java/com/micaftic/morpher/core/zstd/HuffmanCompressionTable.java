@@ -20,7 +20,7 @@ import static com.micaftic.morpher.core.zstd.Huffman.MAX_SYMBOL;
 import static com.micaftic.morpher.core.zstd.Huffman.MAX_SYMBOL_COUNT;
 import static com.micaftic.morpher.core.zstd.Huffman.MAX_TABLE_LOG;
 import static com.micaftic.morpher.core.zstd.Huffman.MIN_TABLE_LOG;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 import static com.micaftic.morpher.core.zstd.Util.checkArgument;
 import static com.micaftic.morpher.core.zstd.Util.minTableLog;
 
@@ -235,7 +235,7 @@ final class HuffmanCompressionTable
             //   - the compressed size is better than what we'd get with the raw encoding below
             //   - the compressed size is <= 127 bytes, which is the most that the encoding can hold for FSE-compressed weights (see RFC 8478 section 4.2.1.1). This is implied
             //     by the maxSymbol / 2 check, since maxSymbol must be <= 255
-            UNSAFE.putByte(outputBase, output, (byte) size);
+            MEMORY.putByte(outputBase, output, (byte) size);
             return size + 1; // header + size
         }
         else {
@@ -249,12 +249,12 @@ final class HuffmanCompressionTable
 
             // encode number of symbols
             // header = #entries + 127 per RFC
-            UNSAFE.putByte(outputBase, output, (byte) (127 + entryCount));
+            MEMORY.putByte(outputBase, output, (byte) (127 + entryCount));
             output++;
 
             weights[maxSymbol] = 0; // last weight is implicit, so set to 0 so that it doesn't get encoded below
             for (int i = 0; i < entryCount; i += 2) {
-                UNSAFE.putByte(outputBase, output, (byte) ((weights[i] << 4) + weights[i + 1]));
+                MEMORY.putByte(outputBase, output, (byte) ((weights[i] << 4) + weights[i + 1]));
                 output++;
             }
 

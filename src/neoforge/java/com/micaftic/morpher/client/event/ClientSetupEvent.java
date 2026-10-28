@@ -21,6 +21,10 @@ import com.micaftic.morpher.core.api.PlatformAPI;
 public final class ClientSetupEvent {
     private ClientSetupEvent() {}
     @SubscribeEvent public static void onSetup(FMLClientSetupEvent event) {
+        com.micaftic.morpher.core.api.client.BlockRenderBridge.install((state, poses, buffers, light, overlay) ->
+                net.minecraft.client.Minecraft.getInstance().getBlockRenderer().renderSingleBlock(
+                        state, poses, buffers, light, overlay,
+                        net.neoforged.neoforge.client.model.data.ModelData.EMPTY, null));
         RenderLivingBridge.install(new RenderLivingBridge.Dispatcher() {
             @SuppressWarnings({"rawtypes", "unchecked"})
             @Override

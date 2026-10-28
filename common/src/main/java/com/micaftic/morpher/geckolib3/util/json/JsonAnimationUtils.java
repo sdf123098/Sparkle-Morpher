@@ -112,6 +112,10 @@ public class JsonAnimationUtils {
             }
         }
 
+        for (var particle : com.micaftic.morpher.resource.AnimationParticleEvents.read(animationJsonObject)) {
+            IValue[] values = particle.events.stream().map(script -> parser.parseExpression(script, false)).toArray(IValue[]::new);
+            customInstructionKeyframes.add(new EventKeyFrame<>(particle.timestamp * 20.0, values));
+        }
         customInstructionKeyframes.sort(Comparator.comparingDouble(EventKeyFrame::getStartTick));
 
         for (Map.Entry<String, JsonElement> bone : getBones(animationJsonObject)) {

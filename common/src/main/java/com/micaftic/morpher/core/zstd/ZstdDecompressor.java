@@ -2,7 +2,7 @@ package com.micaftic.morpher.core.zstd;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.ARRAY_BYTE_BASE_OFFSET;
 
 public class ZstdDecompressor {
     private final ZstdFrameDecompressor decompressor = new ZstdFrameDecompressor();

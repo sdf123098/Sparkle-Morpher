@@ -12,6 +12,7 @@ public final class GuiModelRenderer {
     public record DollOptions(float headYawOffset,float headYawOffsetO,boolean alignWithVehicle){
         public static final DollOptions GUI_PREVIEW=new DollOptions(0,0,false);
     }
+    @SuppressWarnings("unchecked") // Renderer and entity originate from the same preview request.
     public static void enqueueLivingPreview(GuiGraphics g,int left,int top,int right,int bottom,float ox,float oy,float scale,float tick,LivingAnimatable<?> entity,GeoReplacedEntityRenderer renderer,boolean fixed,boolean hide,float yaw,float pitch,boolean extra,DollOptions options){
         g.enableScissor(left,top,right,bottom);
         try{ModelPreviewRenderer.renderLivingEntityPreview(ox,oy,scale,tick,entity,renderer,fixed,hide,yaw);}

@@ -30,7 +30,7 @@ public class FooterButton extends AbstractWidget {
     }
 
     @Override
-    public void onClick(double mouseX,double mouseY) {
+    public void onClick(double mouseX,double mouseY, int button) {
         if (active) onPress.run();
     }
 

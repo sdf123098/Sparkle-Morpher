@@ -48,7 +48,7 @@ public class RadioOptionRow extends OptionRow<Integer> {
     }
 
     @Override
-    public void onClick(double mouseX, double mouseY) {
+    public void onClick(double mouseX, double mouseY, int button) {
         if (!isMouseOverControl(mouseX, mouseY)) return;
         open = !open;
         if (open) {

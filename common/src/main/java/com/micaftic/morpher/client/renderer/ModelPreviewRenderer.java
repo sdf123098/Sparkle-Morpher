@@ -59,6 +59,11 @@ import java.util.concurrent.ExecutionException;
 import com.mojang.math.Axis;
 
 public final class ModelPreviewRenderer {
+    @SuppressWarnings("deprecation") // 1.21.1 requires this graphics-mode guard for inventory previews.
+    private static void runPreviewAsFancy(Runnable draw) {
+        RenderSystem.runAsFancy(draw);
+    }
+
 
     public static final float FRONT_FACING_YAW = 180.0f;
 
@@ -200,6 +205,7 @@ public final class ModelPreviewRenderer {
     }
 
     // 动画测试界面的模型
+    @SuppressWarnings("unchecked") // The preview request pairs the renderer and animatable.
     public static void renderEntityPreview(float x, float y, float scale, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
         setPreviewMode(true);
         LivingEntity livingEntity = (LivingEntity) animatableEntity.getEntity();
@@ -240,7 +246,7 @@ public final class ModelPreviewRenderer {
         entityRenderDispatcher.setRenderShadow(false);
         MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
 
-        RenderSystem.runAsFancy(() -> {
+        runPreviewAsFancy(() -> {
             AnimationTracker animationTracker = ((IPreviewAnimatable) animatableEntity).getAnimationStateMachine();
             if (animationTracker.isCurrentAnimation("sleep")) {
                 poseStack.mulPose(Axis.YP.rotationDegrees(yaw - 90.0f));
@@ -306,7 +312,7 @@ public final class ModelPreviewRenderer {
         poseStack.mulPose(rotationZ);
         poseStack.mulPose(Axis.YP.rotationDegrees(yaw + 180.0f));
         poseStack.translate(-0.5d, 0.0d, 0.5d);
-        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.RED_BED.defaultBlockState(), poseStack, bufferSource, 15728880, OverlayTexture.NO_OVERLAY);
+        com.micaftic.morpher.core.api.client.BlockRenderBridge.render(Blocks.RED_BED.defaultBlockState(), poseStack, bufferSource, 15728880, OverlayTexture.NO_OVERLAY);
     }
 
     private static void renderGroundPreview(float x, float y, float scale, float pitch, float yaw, MultiBufferSource.BufferSource bufferSource) {
@@ -323,15 +329,15 @@ public final class ModelPreviewRenderer {
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
                 poseStack.translate(0.0f, 0.0f, 1.0f);
-                Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.GRASS_BLOCK.defaultBlockState(), poseStack, bufferSource, 15728880, OverlayTexture.NO_OVERLAY);
+                com.micaftic.morpher.core.api.client.BlockRenderBridge.render(Blocks.GRASS_BLOCK.defaultBlockState(), poseStack, bufferSource, 15728880, OverlayTexture.NO_OVERLAY);
             }
             poseStack.translate(1.0f, 0.0f, -3.0f);
         }
 
         poseStack.translate(-1.0f, 1.0f, 1.0f);
-        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.SHORT_GRASS.defaultBlockState(), poseStack, bufferSource, 15728880, OverlayTexture.NO_OVERLAY);
+        com.micaftic.morpher.core.api.client.BlockRenderBridge.render(Blocks.SHORT_GRASS.defaultBlockState(), poseStack, bufferSource, 15728880, OverlayTexture.NO_OVERLAY);
         poseStack.translate(0.0f, 0.0f, 1.0f);
-        Minecraft.getInstance().getBlockRenderer().renderSingleBlock(Blocks.RED_TULIP.defaultBlockState(), poseStack, bufferSource, 15728880, OverlayTexture.NO_OVERLAY);
+        com.micaftic.morpher.core.api.client.BlockRenderBridge.render(Blocks.RED_TULIP.defaultBlockState(), poseStack, bufferSource, 15728880, OverlayTexture.NO_OVERLAY);
     }
 
     private static void renderVehicleForAnimation(float yaw, AnimatableEntity animatableEntity, float partialTick, PoseStack poseStack, EntityRenderDispatcher entityRenderDispatcher, MultiBufferSource.BufferSource bufferSource) throws ExecutionException {
@@ -451,7 +457,7 @@ public final class ModelPreviewRenderer {
         entityRenderDispatcher.overrideCameraOrientation(rotationX);
         entityRenderDispatcher.setRenderShadow(false);
         try {
-            RenderSystem.runAsFancy(() -> {
+            runPreviewAsFancy(() -> {
                 renderer.renderEntity(animatable, 0.0f, partialTick, poseStack, bufferSource, 15728880);
             });
         } finally {
@@ -712,13 +718,13 @@ public final class ModelPreviewRenderer {
             boolean renderedCustomModel = PlayerCapability.get(localPlayer)
                     .filter(PlayerCapability::isModelActive)
                     .map(cap -> {
-                        RenderSystem.runAsFancy(() -> RendererManager.getPlayerRenderer()
+                        runPreviewAsFancy(() -> RendererManager.getPlayerRenderer()
                                 .render(localPlayer, previewYaw, partialTick, poseStack, bufferSource, 15728880));
                         return true;
                     })
                     .orElse(false);
             if (!renderedCustomModel) {
-                RenderSystem.runAsFancy(() -> {
+                runPreviewAsFancy(() -> {
                     entityRenderDispatcher.render(localPlayer, 0.0d, 0.0d, 0.0d, previewYaw, partialTick, poseStack, bufferSource, 15728880);
                 });
             }

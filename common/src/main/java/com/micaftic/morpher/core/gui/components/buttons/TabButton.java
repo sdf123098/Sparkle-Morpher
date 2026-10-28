@@ -41,7 +41,7 @@ public class TabButton extends AbstractWidget {
     }
 
     @Override
-    public void onClick(double mouseX,double mouseY) {
+    public void onClick(double mouseX,double mouseY, int button) {
         onSelect.accept(group);
     }
 

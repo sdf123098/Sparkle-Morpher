@@ -301,7 +301,7 @@ public class ModelSettingsScreen extends OptionScreen {
             IndependentPanelChrome.text(g, font, Component.literal(RoulettePanelStyle.trim(font, description.getString(), w - 164)), x, y + 34, .89f, 0xFFB1B1B1);
         RoulettePanelStyle.fill(g, x, y + rowHeight() - 1, w, 1, 0x12FFFFFF);
         if (item.kind == SettingKind.BOOL) {
-            boolean value = Boolean.TRUE.equals(((Option<Boolean>) item.option).get());
+            boolean value = Boolean.TRUE.equals(item.option.get());
             int bx = x + w - 36;
             RoulettePanelStyle.roundedSurface(g, bx, y + 17, 30, 14, 7, value ? 0xFFDC5159 : 0xFF404040, 0);
             RoulettePanelStyle.roundedSurface(g, bx + (value ? 17 : 3), y + 19, 10, 10, 5, 0xFFF4F4F4, 0);
@@ -311,7 +311,7 @@ public class ModelSettingsScreen extends OptionScreen {
         int cx = x + w - cw;
         if (item.kind == SettingKind.RANGE) {
             RoulettePanelStyle.roundedSurface(g, cx, y + 13, cw, 22, 3, 0x0EFFFFFF, 0x24FFFFFF);
-            g.drawCenteredString(font, Component.literal(formatValue(((Option<Double>) item.option).get(), item.step)), cx + cw / 2, UiElementLayout.centeredY(y+13,22,font.lineHeight), RoulettePanelStyle.TEXT);
+            g.drawCenteredString(font, Component.literal(formatValue(((Number) item.option.get()).doubleValue(), item.step)), cx + cw / 2, UiElementLayout.centeredY(y+13,22,font.lineHeight), RoulettePanelStyle.TEXT);
             // The two halves of the value field decrement/increment; scrolling is also supported.
             return;
         }

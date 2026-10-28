@@ -245,6 +245,8 @@ public class AnimatedGeoBone implements IBone {
         this.matrixData[this.matrixOffset + TRACK_XFORM_OFFSET] = z ? 1.0f : 0.0f;
     }
 
+    // The optional maid API is absent from the common compile classpath.
+    @SuppressWarnings("unchecked")
     public <T> T getTouhouMaidBone() {
         if (this.touhouMaidBone == null) {
             this.touhouMaidBone = TouhouMaidBoneProcessor.createLocationBone(this);

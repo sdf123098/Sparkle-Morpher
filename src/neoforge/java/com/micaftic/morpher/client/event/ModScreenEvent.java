@@ -24,6 +24,7 @@ public class ModScreenEvent {
         receivedScreen = screen;
     }
 
+    @Deprecated // Retained as a binary-compatible entry point for the old screen.
     public static void openScreen(PlayerModelScreen modelScreen) {
         Minecraft.getInstance().setScreen(Objects.requireNonNullElseGet(receivedScreen, ModernPlayerModelScreen::downloads));
     }

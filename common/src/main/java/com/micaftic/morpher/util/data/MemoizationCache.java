@@ -6,13 +6,13 @@ import java.util.function.Function;
 
 public class MemoizationCache<T, U> {
 
-    private final Map<T, U> cache = new ConcurrentHashMap();
+    private final Map<T, U> cache = new ConcurrentHashMap<>();
 
     private MemoizationCache() {
     }
 
     public static <T, U> Function<T, U> memoize(Function<T, U> function) {
-        return new MemoizationCache().wrapFunction(function);
+        return new MemoizationCache<T, U>().wrapFunction(function);
     }
 
     private Function<T, U> wrapFunction(Function<T, U> function) {

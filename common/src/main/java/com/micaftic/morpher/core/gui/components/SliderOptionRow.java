@@ -54,7 +54,7 @@ public class SliderOptionRow extends OptionRow<Double> {
     }
 
     @Override
-    public void onClick(double mouseX, double mouseY) {
+    public void onClick(double mouseX, double mouseY, int button) {
         if (isMouseOverControl(mouseX, mouseY)) {
             dragging = true;
             updateFromMouse(mouseX);

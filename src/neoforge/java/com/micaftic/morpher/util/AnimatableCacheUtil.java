@@ -10,5 +10,5 @@ import java.util.concurrent.TimeUnit;
 
 @OnlyIn(Dist.CLIENT)
 public final class AnimatableCacheUtil {
-    public static final Cache<ResourceLocation, Entity> ENTITIES_CACHE = CacheBuilder.newBuilder().expireAfterAccess(5, TimeUnit.MINUTES).build();
+    public static final Cache<ResourceLocation, Entity> ENTITIES_CACHE = CacheBuilder.newBuilder().expireAfterAccess(java.time.Duration.ofMinutes(5)).build();
 }

@@ -169,7 +169,7 @@ public class ModelAssemblyFactory {
     private static ModelAssembly primaryAssembly;
 
     public static ModelAssembly buildAssembly(ClientModelInfo clientModelInfo, boolean isPrimary, boolean isAuth) {
-        ArrayList<AbstractTexture> textureList = new ArrayList();
+        ArrayList<AbstractTexture> textureList = new ArrayList<>();
         ModelResourceBundle resourceBundle = buildResourceBundle(clientModelInfo);
         ModelAssembly assembly = new ModelAssembly(
                 buildPlayerModelBundle(clientModelInfo, resourceBundle, isPrimary, textureList),
@@ -407,15 +407,15 @@ public class ModelAssemblyFactory {
     }
 
     private static Map<ResourceLocation, ProjectileModelBundle> buildProjectileModels(ClientModelInfo clientModelInfo, ModelResourceBundle resourceBundle, boolean isPrimary, List<AbstractTexture> textureList) {
-        Object2ReferenceOpenHashMap<ResourceLocation, ProjectileModelBundle> projectileMap = new Object2ReferenceOpenHashMap();
+        Object2ReferenceOpenHashMap<ResourceLocation, ProjectileModelBundle> projectileMap = new Object2ReferenceOpenHashMap<>();
         for (ProjectileModelFiles projectileFiles : clientModelInfo.getExtraItemModels()) {
             GeoModel model = projectileFiles.getModel();
             AnimationFile animationFile = projectileFiles.getAnimations();
             AnimationControllerFile controllerFile = projectileFiles.getAnimationController();
-            Object2ReferenceOpenHashMap<String, Animation> animations = new Object2ReferenceOpenHashMap(animationFile != null ? animationFile.getAnimations() : Object2ReferenceMaps.emptyMap());
+            Object2ReferenceOpenHashMap<String, Animation> animations = new Object2ReferenceOpenHashMap<>(animationFile != null ? animationFile.getAnimations() : Object2ReferenceMaps.emptyMap());
             Object2ReferenceMap<String, AnimationController> controllers = Object2ReferenceMaps.emptyMap();
             if (controllerFile != null) {
-                controllers = new Object2ReferenceOpenHashMap(controllerFile.getAnimationControllers());
+                controllers = new Object2ReferenceOpenHashMap<>(controllerFile.getAnimationControllers());
             }
             textureList.add(projectileFiles.getTexture());
             textureList.addAll(projectileFiles.getTexture().getSuffixTextures().values());
@@ -483,7 +483,7 @@ public class ModelAssemblyFactory {
             int atIndex = entry.getKey().indexOf('@');
             if (atIndex != -1 && atIndex + 1 < entry.getKey().length()) {
                 events.computeIfAbsent(entry.getKey().substring(atIndex + 1).toLowerCase(), obj -> {
-                    return new ReferenceArrayList();
+                    return new ReferenceArrayList<>();
                 }).add(entry.getValue());
             }
         }
@@ -491,7 +491,7 @@ public class ModelAssemblyFactory {
     }
 
     public static Map<String, AbstractTexture> extractExtraTextures(ClientModelInfo clientModelInfo, List<AbstractTexture> textureList) {
-        Object2ObjectOpenHashMap<String, AbstractTexture> extraTextures = new Object2ObjectOpenHashMap();
+        Object2ObjectOpenHashMap<String, AbstractTexture> extraTextures = new Object2ObjectOpenHashMap<>();
         if (clientModelInfo.getInfo().getModelProperties() != null) {
             for (Map.Entry<String, OuterFileTexture> entry : clientModelInfo.getGuiTextures().entrySet()) {
                 OuterFileTexture texture = entry.getValue();

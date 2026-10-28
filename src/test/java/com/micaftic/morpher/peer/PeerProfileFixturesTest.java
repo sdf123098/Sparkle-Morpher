@@ -50,7 +50,7 @@ class PeerProfileFixturesTest {
                 if(profile.equals("ysm-v1")){try(var decoder=new YSMBinaryDeserializer(YsmCrypt.decryptYsmFile(entry.getValue()))){parsed=decoder.deserializeKeepOpen();decoder.parseYSMFooter(parsed);}}
                 else if(profile.equals("ysm-zip-v1")){try(var decoder=new YSMFolderDeserializer(asset.entrypoint())){parsed=decoder.deserialize();}}
                 else if(profile.equals("bbmodel-v1"))parsed=BBToRawConverter.convert(BBModelParser.parse(bb));
-                else {var sniff=ZipModelSniffer.sniff(entry.getValue(),PeerLimits.EXPANDED_BYTES);if(profile.equals("bedrock-v1")){parsed=new RawYsmModel();parsed.mainEntity.mainModel=YSMFolderDeserializer.parseBedrockGeometry(sniff.bedrockGeoBytes,"geometry.peer");parsed.mainEntity.textures.put("texture",YSMFolderDeserializer.parseBedrockTexture(texture,"texture.png"));}else parsed=BBToRawConverter.convert(BBModelParser.parse(new String(sniff.bbmodelBytes,StandardCharsets.UTF_8)),sniff.sideTextures);}
+                else {var sniff=ZipModelSniffer.sniff(entry.getValue(),PeerLimits.EXPANDED_BYTES);if(profile.equals("bedrock-v1")){parsed=new RawYsmModel();parsed.mainEntity.mainModel=com.micaftic.morpher.resource.YsmGeometryParsing.parseBedrockGeometry(sniff.bedrockGeoBytes,"geometry.peer");parsed.mainEntity.textures.put("texture",com.micaftic.morpher.resource.YsmTextureParsing.parseBedrockTexture(texture,"texture.png"));}else parsed=BBToRawConverter.convert(BBModelParser.parse(new String(sniff.bbmodelBytes,StandardCharsets.UTF_8)),sniff.sideTextures);}
                 PeerModelPreflight.validateParsed(parsed);assertFalse(parsed.mainEntity.mainModel.bones.isEmpty(),profile);
             }
         }

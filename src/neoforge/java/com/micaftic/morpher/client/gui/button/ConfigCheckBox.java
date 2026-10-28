@@ -37,7 +37,7 @@ public class ConfigCheckBox extends StateSwitchingButton implements ISpecialWidg
         guiGraphics.drawString(Minecraft.getInstance().font,this.component2,getX()+16,getY()+2,0xFFF0F0F0,false);
     }
 
-    public void onClick(double mouseX, double mouseY) {
+    public void onClick(double mouseX, double mouseY, int button) {
         this.isStateTriggered = !this.isStateTriggered;
         this.consumer2.accept(Boolean.valueOf(this.isStateTriggered));
     }

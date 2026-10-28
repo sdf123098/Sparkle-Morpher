@@ -241,7 +241,6 @@ public class ModernPlayerModelScreen extends Screen {
     private EditBox cloudScopeNameBox;
     private EditBox cloudWorldEpochBox;
     private Component status = Component.empty();
-    private ChatFormatting statusColor = ChatFormatting.GRAY;
     private boolean resourceStatusMessage;
     private boolean draggingResourceScroll;
     private String previewModelId = "";
@@ -797,7 +796,6 @@ public class ModernPlayerModelScreen extends Screen {
             case ACCOUNT, INSTANCE -> renderCloudAccountPanel(g, mainMouseX, mainMouseY, this.layout.contentLeft, this.layout.contentTop, this.layout.contentWidth, this.layout.contentHeight, partialTick);
             case SETTINGS -> renderSettingsTab(g, mainMouseX, mainMouseY, partialTick);
         }
-        if(!modal)renderFooter(g);
         renderSecondaryPanel(g, mouseX, mouseY, partialTick);
         if(keyboardHit>=0&&keyboardHit<hits.size()){Hit focus=hits.get(keyboardHit);border(g,focus.x()-1,focus.y()-1,focus.w()+2,focus.h()+2,RED);}
         renderConfirmation(g,mouseX,mouseY);
@@ -2583,51 +2581,6 @@ public class ModernPlayerModelScreen extends Screen {
         renderTextButton(g,mx,my,x+w-Math.min(130,w),height-layout.top-uiButtonHeight()-8,Math.min(130,w),uiButtonHeight(),Component.literal(auditString("hardcoded_041")),this::openCloudUpload);
     }
 
-    private void renderFooter(GuiGraphics g) {
-        if(STATE.activeTab==ModelPanelState.Tab.RESOURCE)return;
-        if (STATE.activeTab == ModelPanelState.Tab.MODEL) {
-            if (!this.status.getString().isBlank()) hit(this.layout.contentLeft, this.layout.footerTop,
-                    this.layout.contentWidth, this.layout.footerHeight, this.status, () -> {});
-            return;
-        }
-        if (STATE.activeTab == ModelPanelState.Tab.SETTINGS && this.status.getString().isBlank()) return;
-        fill(g, this.layout.left, this.layout.footerTop, this.layout.width, 1, 0x55303030);
-        Component line = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatus() : this.status;
-        if (this.modelSelectionTarget == null && STATE.modelSource != ModelPanelState.ModelSource.LOCAL) {
-            Component cloudSync = com.micaftic.morpher.cloud.client.CloudPlayerModelSync.status();
-            if (line.getString().isBlank() || com.micaftic.morpher.cloud.client.CloudPlayerModelSync.statusFailed()) line = cloudSync;
-        }
-        ChatFormatting color = this.status.getString().isBlank() && STATE.activeTab == ModelPanelState.Tab.RESOURCE ? this.controller.queueStatusColor() : this.statusColor;
-        if (this.modelSelectionTarget != null) {
-            var feedback = com.micaftic.morpher.cloud.client.CloudEntityModelSync.feedback(this.stateKeyValue);
-            if (feedback != null) {
-                line = feedback.message();
-                color = feedback.failed() ? ChatFormatting.RED : feedback.pending() ? ChatFormatting.YELLOW : ChatFormatting.GREEN;
-            } else {
-                line = Component.translatable(this.stateKeyValue.startsWith("maid:") && STATE.modelSource == ModelPanelState.ModelSource.LOCAL
-                        ? "gui.sparkle_morpher.cloud.entity.local_hint" : "gui.sparkle_morpher.cloud.entity.share_hint");
-                color = ChatFormatting.GRAY;
-            }
-        }
-        int c = chatColor(color);
-        g.drawString(this.font, trim(line.getString(), this.layout.contentWidth - 20), this.layout.contentLeft + 10, this.layout.footerTop + 8, c, false);
-    }
-
-    private int chatColor(ChatFormatting color) {
-        if (color == null) {
-            return MUTED;
-        }
-        return switch (color) {
-            case RED, DARK_RED -> 0xFFE05252;
-            case YELLOW, GOLD -> 0xFFFFC857;
-            case GREEN, DARK_GREEN -> 0xFF4CAF50;
-            case AQUA, DARK_AQUA, BLUE, DARK_BLUE -> 0xFF5ECAE8;
-            case WHITE -> 0xFFFFFFFF;
-            case BLACK, DARK_GRAY -> 0xFF6F757A;
-            default -> MUTED;
-        };
-    }
-
     private void renderTooltip(GuiGraphics g, int mouseX, int mouseY) {
         for (int i = this.hits.size() - 1; i >= 0; i--) {
             Hit hit = this.hits.get(i);
@@ -3742,13 +3695,11 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void setStatus(Component component, ChatFormatting color) {
         this.status = component == null ? Component.empty() : component;
-        this.statusColor = color == null ? ChatFormatting.GRAY : color;
         this.resourceStatusMessage = false;
     }
 
     private void setResourceStatus(Component component, ChatFormatting color) {
         this.status = component == null ? Component.empty() : component;
-        this.statusColor = color == null ? ChatFormatting.GRAY : color;
         this.resourceStatusMessage = true;
     }
 

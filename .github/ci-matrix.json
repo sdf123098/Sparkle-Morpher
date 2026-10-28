@@ -1,0 +1,82 @@
+[
+  {
+    "branch": "main",
+    "diagnostic_branch": "fa1.21.1",
+    "java": "21.0.12",
+    "compile_task": ":fabric:compileJava",
+    "gradle_task": ":fabric:build",
+    "jar_glob": "fabric/build/libs/sparkle-morpher-*-fa1.21.1.jar",
+    "mod_meta": "fabric.mod.json",
+    "curseforge_glob": "fabric/build/libs/sparkle-morpher-*-fa1.21.1-curseforge.jar"
+  },
+  {
+    "branch": "fa26.1.2",
+    "diagnostic_branch": "fa26.1.2",
+    "java": "25.0.4",
+    "compile_task": ":fabric:compileJava",
+    "gradle_task": ":fabric:build",
+    "jar_glob": "fabric/build/libs/sparkle-morpher-*-fa26.1.x.jar",
+    "mod_meta": "fabric.mod.json",
+    "curseforge_glob": "fabric/build/libs/sparkle-morpher-*-fa26.1.x-curseforge.jar"
+  },
+  {
+    "branch": "fa26.2",
+    "diagnostic_branch": "fa26.2",
+    "java": "25.0.4",
+    "compile_task": ":fabric:compileJava",
+    "gradle_task": ":fabric:build",
+    "jar_glob": "fabric/build/libs/sparkle-morpher-*-fa26.2.jar",
+    "mod_meta": "fabric.mod.json",
+    "curseforge_glob": "fabric/build/libs/sparkle-morpher-*-fa26.2-curseforge.jar"
+  },
+  {
+    "branch": "fa26.3",
+    "diagnostic_branch": "fa26.3",
+    "java": "25.0.4",
+    "compile_task": ":fabric:compileJava",
+    "gradle_task": ":fabric:build",
+    "jar_glob": "fabric/build/libs/sparkle-morpher-*-fa26.3.jar",
+    "mod_meta": "fabric.mod.json",
+    "curseforge_glob": "fabric/build/libs/sparkle-morpher-*-fa26.3-curseforge.jar"
+  },
+  {
+    "branch": "neo1.21.1",
+    "diagnostic_branch": "neo1.21.1",
+    "java": "21.0.12",
+    "compile_task": "compileJava",
+    "gradle_task": ":build",
+    "jar_glob": "build/libs/sparkle-morpher-*-neo1.21.1.jar",
+    "mod_meta": "META-INF/neoforge.mods.toml",
+    "curseforge_glob": "build/libs/sparkle-morpher-*-neo1.21.1-curseforge.jar"
+  },
+  {
+    "branch": "neo26.1.2",
+    "diagnostic_branch": "neo26.1.2",
+    "java": "25.0.4",
+    "compile_task": "compileJava",
+    "gradle_task": ":build",
+    "jar_glob": "build/libs/sparkle-morpher-*-neo26.1.x.jar",
+    "mod_meta": "META-INF/neoforge.mods.toml",
+    "curseforge_glob": "build/libs/sparkle-morpher-*-neo26.1.x-curseforge.jar"
+  },
+  {
+    "branch": "neo26.2",
+    "diagnostic_branch": "neo26.2",
+    "java": "25.0.4",
+    "compile_task": "compileJava",
+    "gradle_task": ":build",
+    "jar_glob": "build/libs/sparkle-morpher-*-neo26.2.jar",
+    "mod_meta": "META-INF/neoforge.mods.toml",
+    "curseforge_glob": "build/libs/sparkle-morpher-*-neo26.2-curseforge.jar"
+  },
+  {
+    "branch": "neo26.3",
+    "diagnostic_branch": "neo26.3",
+    "java": "25.0.4",
+    "compile_task": "compileJava",
+    "gradle_task": ":build",
+    "jar_glob": "build/libs/sparkle-morpher-*-neo26.3.jar",
+    "mod_meta": "META-INF/neoforge.mods.toml",
+    "curseforge_glob": "build/libs/sparkle-morpher-*-neo26.3-curseforge.jar"
+  }
+]

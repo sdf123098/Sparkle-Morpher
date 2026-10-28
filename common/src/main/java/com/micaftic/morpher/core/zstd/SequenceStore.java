@@ -14,8 +14,8 @@
 package com.micaftic.morpher.core.zstd;
 
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_LONG;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.ARRAY_BYTE_BASE_OFFSET;
 
 final class SequenceStore
 {
@@ -74,7 +74,7 @@ final class SequenceStore
 
     public void appendLiterals(Object inputBase, long inputAddress, int inputSize)
     {
-        UNSAFE.copyMemory(inputBase, inputAddress, literalsBuffer, ARRAY_BYTE_BASE_OFFSET + literalsLength, inputSize);
+        MEMORY.copyMemory(inputBase, inputAddress, literalsBuffer, ARRAY_BYTE_BASE_OFFSET + literalsLength, inputSize);
         literalsLength += inputSize;
     }
 
@@ -84,7 +84,7 @@ final class SequenceStore
         long output = ARRAY_BYTE_BASE_OFFSET + literalsLength;
         int copied = 0;
         do {
-            UNSAFE.putLong(literalsBuffer, output, UNSAFE.getLong(literalBase, input));
+            MEMORY.putLong(literalsBuffer, output, MEMORY.getLong(literalBase, input));
             input += SIZE_OF_LONG;
             output += SIZE_OF_LONG;
             copied += SIZE_OF_LONG;

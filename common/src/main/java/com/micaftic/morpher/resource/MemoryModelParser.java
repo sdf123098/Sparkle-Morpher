@@ -138,7 +138,7 @@ public final class MemoryModelParser {
 
     private static RawYsmModel parseBedrockGeo(byte[] data, String fileName) {
         String identifier = bedrockIdentifierFromFileName(fileName);
-        RawYsmModel.RawGeometry geometry = YSMFolderDeserializer.parseBedrockGeometry(data, identifier);
+        RawYsmModel.RawGeometry geometry = com.micaftic.morpher.resource.YsmGeometryParsing.parseBedrockGeometry(data, identifier);
         if (geometry == null || geometry.bones.isEmpty()) {
             throw new IllegalArgumentException("Invalid Bedrock geometry: " + fileName);
         }
@@ -151,7 +151,7 @@ public final class MemoryModelParser {
     private static RawYsmModel parseBedrockPack(ZipModelSniffer sniff) {
         String identifier = bedrockIdentifierFromFileName(sniff.bedrockGeoPath);
         RawYsmModel.RawGeometry geometry =
-                YSMFolderDeserializer.parseBedrockGeometry(sniff.bedrockGeoBytes, identifier);
+                com.micaftic.morpher.resource.YsmGeometryParsing.parseBedrockGeometry(sniff.bedrockGeoBytes, identifier);
         if (geometry == null || geometry.bones.isEmpty()) {
             throw new IllegalArgumentException(
                     "Invalid Bedrock pack (no usable geometry): " + sniff.bedrockGeoPath);
@@ -160,7 +160,7 @@ public final class MemoryModelParser {
         Map<String, RawYsmModel.RawTexture> textures = new LinkedHashMap<>();
         for (Map.Entry<String, byte[]> entry : sniff.sideTextures.entrySet()) {
             RawYsmModel.RawTexture texture =
-                    YSMFolderDeserializer.parseBedrockTexture(entry.getValue(), entry.getKey());
+                    com.micaftic.morpher.resource.YsmTextureParsing.parseBedrockTexture(entry.getValue(), entry.getKey());
             if (texture.data != null) {
                 textures.put(entry.getKey(), texture);
             }
@@ -171,7 +171,7 @@ public final class MemoryModelParser {
         for (Map.Entry<String, byte[]> entry : sniff.bedrockAnimations.entrySet()) {
             try {
                 RawYsmModel.RawAnimationFile animationFile =
-                        YSMFolderDeserializer.parseAnimationFile(entry.getValue());
+                        com.micaftic.morpher.resource.YsmAnimationParsing.parseAnimationFile(entry.getValue());
                 if (!animationFile.animations.isEmpty()) {
                     animationFiles.put("bedrock-anim-" + (index++), animationFile);
                 }
