@@ -3,7 +3,7 @@ package com.micaftic.morpher.core.zstd;
 import static com.micaftic.morpher.core.zstd.Constants.MAX_BLOCK_SIZE;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.ARRAY_BYTE_BASE_OFFSET;
 
 public class ZstdCompressor {
     public int maxCompressedLength(int uncompressedSize) {

@@ -17,6 +17,8 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 public class AnimatedGeoModel {
+    public final com.micaftic.morpher.client.animation.particle.AnimationParticleQueue animationParticles =
+            new com.micaftic.morpher.client.animation.particle.AnimationParticleQueue();
 
     private static final int MATRIX_STRIDE = 12;
 
@@ -253,6 +255,8 @@ public class AnimatedGeoModel {
         return this.headBones;
     }
 
+    // The optional maid API is absent from the common compile classpath.
+    @SuppressWarnings("unchecked")
     public <T> T getTouhouMaidData() {
         if (this.touhouMaidData == null) {
             this.touhouMaidData = TouhouMaidBoneProcessor.createLocationModel(this);

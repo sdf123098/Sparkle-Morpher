@@ -67,6 +67,7 @@ public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T e
                 }
                 poseStack.mulPose(Axis.ZP.rotationDegrees(xRot));
                 renderWithBoneAndRenderType(model, animatable, partialTick, renderType, poseStack, bufferSource, 0, null, packedLight, getPackedLight(projectile, 0.0f), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f);
+                com.micaftic.morpher.client.animation.particle.AnimationParticleRuntime.flush(animatable, event, this.modelViewMatrix, poseStack.last().pose());
                 poseStack.popPose();
             }
         }

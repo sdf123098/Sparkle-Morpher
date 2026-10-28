@@ -13,7 +13,7 @@ import net.minecraft.world.entity.Entity;
 import java.util.Objects;
 
 /**
- * 本帧世界渲染完成后的本地玩家骨骼姿态快照，供经典 HUD 复用，避免第二次动画求值。
+ * 本帧世界渲染完成后的本地玩家骨骼姿态快照，供 HUD 复用，避免第二次动画求值。
  *
  * <p>快照只在本帧、同一实体/模型/seekTime 下有效；任何一项不匹配都回退到 HUD 自评估。
  * 复制使用静态数组，容量只在模型骨骼数变化时增长。</p>
@@ -28,6 +28,7 @@ public final class HudPoseCache {
     private static AnimatedGeoModel model;
     private static String modelId;
     private static int tickCount;
+    private static int renderFrameId = -1;
     private static float partialTick;
     private static float seekTime;
     private static float headBaseX;
@@ -75,6 +76,7 @@ public final class HudPoseCache {
         model = currentModel;
         modelId = modelIdOf(animatable);
         tickCount = entity.tickCount;
+        renderFrameId = AnimationFrameProfiler.getRenderFrameId();
         partialTick = sanitizePartialTick(worldPartialTick);
         seekTime = animatable.getSeekTime();
         headBaseX = living.getHeadBaseRotationX();
@@ -83,7 +85,7 @@ public final class HudPoseCache {
     }
 
     public static boolean canReuse(AnimatableEntity<?> animatable, float hudPartialTick) {
-        if (!valid) {
+        if (!valid || renderFrameId != AnimationFrameProfiler.getRenderFrameId()) {
             return false;
         }
         Entity entity = animatable.getEntity();
@@ -102,7 +104,9 @@ public final class HudPoseCache {
 
     public static boolean applyTo(AnimatableEntity<?> animatable) {
         AnimatedGeoModel currentModel = animatable.getCurrentModel();
-        if (currentModel == null
+        if (!valid || currentModel == null || renderFrameId != AnimationFrameProfiler.getRenderFrameId()
+                || animatable.getEntity() != owner || currentModel != model
+                || !Objects.equals(modelIdOf(animatable), modelId)
                 || currentModel.getMatrixData().length != matrixLength
                 || currentModel.getAbsPivotData().length != absPivotLength) {
             return false;
@@ -122,6 +126,7 @@ public final class HudPoseCache {
 
     public static void invalidate() {
         valid = false;
+        renderFrameId = -1;
         owner = null;
         model = null;
         modelId = null;

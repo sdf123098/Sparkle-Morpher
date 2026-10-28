@@ -9,6 +9,13 @@ group = mod_group_id
 version = mod_version
 
 apply from: rootProject.file('gradle/distribution.gradle')
+
+// JVM tests use heap-backed JOML operations and need no internal Unsafe access.
+allprojects {
+    tasks.withType(Test).configureEach {
+        systemProperty 'joml.nounsafe', 'true'
+    }
+}
 def isCurseForgeDist = rootProject.ext.isCurseForgeDist
 
 base {
@@ -115,6 +122,7 @@ tasks.withType(JavaCompile).configureEach {
     options.release = 25
     options.encoding = "UTF-8"
     options.compilerArgs.addAll([
+                '-Xlint:deprecation', '-Xlint:unchecked',
             // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
             // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
             // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
@@ -164,6 +172,8 @@ dependencies {
     // + moddev 生成的 MC 类 jar（接口签名引用 MC 类需要）。
     testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    // Tests also resolve loader annotations referenced by the main classes.
+    testCompileOnly files(sourceSets.main.compileClasspath)
     testImplementation "net.neoforged:neoforge:$neo_version"
     testImplementation "net.neoforged:minecraft-dependencies:$minecraft_version"
     testRuntimeOnly files(fileTree("build/moddev/artifacts") {

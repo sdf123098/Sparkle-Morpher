@@ -38,7 +38,7 @@ public class FnBinding implements ObjectBinding, ResetVariable {
         @Nullable
         public Object evaluate(@NotNull ExecutionContext<?> context, @NotNull Function.ArgumentCollection arguments) {
             Object entity = context.entity();
-            if (entity instanceof IContext ctx) {
+            if (entity instanceof IContext<?> ctx) {
                 if (this.cachedIValue == null) {
                     if (this.functionName == null) {
                         return null;

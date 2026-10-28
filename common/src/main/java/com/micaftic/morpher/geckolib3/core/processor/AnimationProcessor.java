@@ -143,7 +143,11 @@ public class AnimationProcessor<TEntity extends Entity> {
         AnimationData manager = this.animatable.getAnimationData();
         this.currentEvaluator = evaluator;
         this.currentSeekTime = seekTime;
-        for (IAnimationController controller : manager.getAnimationControllers()) {
+        for (IAnimationController<?> registered : manager.getAnimationControllers()) {
+            // Each controller is registered by this animatable's model processor.
+            @SuppressWarnings("unchecked")
+            IAnimationController<AnimatableEntity<TEntity>> controller =
+                    (IAnimationController<AnimatableEntity<TEntity>>) registered;
             if (this.needsInit) {
                 controller.init(this.bones, this.initExpressions);
             }
@@ -155,7 +159,9 @@ public class AnimationProcessor<TEntity extends Entity> {
                     reportControllerFailure(controller, exception);
                 }
             }
-            this.currentDeprecatedMode = controller.isDeprecatedMode();
+            @SuppressWarnings("deprecation") // Old YSM models still require legacy pose blending.
+            boolean legacyMode = controller.isDeprecatedMode();
+            this.currentDeprecatedMode = legacyMode;
             controller.forEachTransform(this.transformConsumer);
         }
         this.currentEvaluator = null;
@@ -231,6 +237,7 @@ public class AnimationProcessor<TEntity extends Entity> {
         }
     }
 
+    @SuppressWarnings("deprecation") // Legacy blending reads the retained currentValue channel.
     private void applyTransform(BoneTransformProvider provider) {
         final BoneTopLevelSnapshot snapshot = provider.getBoneTarget();
         if (!snapshot.isCurrentlyRunningAnimation) {

@@ -50,7 +50,11 @@ public final class NeoForgeClientEventBridge {
     }
 
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
+        var categories = new java.util.HashSet<net.minecraft.client.KeyMapping.Category>();
         for (var mapping : KeyMappingRegistry.getCustomKeyMappings()) {
+            if (categories.add(mapping.getCategory())) {
+                event.registerCategory(mapping.getCategory());
+            }
             event.register(mapping);
         }
     }

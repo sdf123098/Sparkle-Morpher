@@ -15,7 +15,7 @@ package com.micaftic.morpher.core.zstd;
 
 import static com.micaftic.morpher.core.zstd.FiniteStateEntropy.MAX_SYMBOL;
 import static com.micaftic.morpher.core.zstd.FiniteStateEntropy.MIN_TABLE_LOG;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 import static com.micaftic.morpher.core.zstd.Util.highestBit;
 import static com.micaftic.morpher.core.zstd.Util.verify;
 
@@ -34,7 +34,7 @@ class FseTableReader
         int symbolNumber = 0;
         boolean previousIsZero = false;
 
-        int bitStream = UNSAFE.getInt(inputBase, input);
+        int bitStream = MEMORY.getInt(inputBase, input);
 
         int tableLog = (bitStream & 0xF) + MIN_TABLE_LOG;
 
@@ -54,7 +54,7 @@ class FseTableReader
                     n0 += 24;
                     if (input < inputLimit - 5) {
                         input += 2;
-                        bitStream = (UNSAFE.getInt(inputBase, input) >>> bitCount);
+                        bitStream = (MEMORY.getInt(inputBase, input) >>> bitCount);
                     }
                     else {
                         // end of bit stream
@@ -78,7 +78,7 @@ class FseTableReader
                 if ((input <= inputLimit - 7) || (input + (bitCount >>> 3) <= inputLimit - 4)) {
                     input += bitCount >>> 3;
                     bitCount &= 7;
-                    bitStream = UNSAFE.getInt(inputBase, input) >>> bitCount;
+                    bitStream = MEMORY.getInt(inputBase, input) >>> bitCount;
                 }
                 else {
                     bitStream >>>= 2;
@@ -117,7 +117,7 @@ class FseTableReader
                 bitCount -= (int) (8 * (inputLimit - 4 - input));
                 input = inputLimit - 4;
             }
-            bitStream = UNSAFE.getInt(inputBase, input) >>> (bitCount & 31);
+            bitStream = MEMORY.getInt(inputBase, input) >>> (bitCount & 31);
         }
 
         verify(remaining == 1 && bitCount <= 32, input, "Input is corrupted");

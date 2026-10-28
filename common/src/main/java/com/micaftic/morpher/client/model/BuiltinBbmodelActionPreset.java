@@ -79,7 +79,7 @@ public final class BuiltinBbmodelActionPreset {
                 continue;
             }
             try {
-                RawYsmModel.RawAnimationFile rawFile = YSMFolderDeserializer.parseAnimationFile(data);
+                RawYsmModel.RawAnimationFile rawFile = com.micaftic.morpher.resource.YsmAnimationParsing.parseAnimationFile(data);
                 // 预设动画的 rotation keyframe 是 Blockbench 原始欧拉角(THREE 'XYZ' 序)，
                 // 必须转换为 YSM 渲染端语义，否则多轴旋转动画镜像。
                 com.micaftic.morpher.resource.bbmodel.BbRotationCompat.convertRawAnimationFile(rawFile);
