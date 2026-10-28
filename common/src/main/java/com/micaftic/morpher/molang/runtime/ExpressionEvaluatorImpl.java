@@ -81,7 +81,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
                 if (val == null) {
                     return null;
                 }
-                ExpressionEvaluatorImpl child = evaluator.createChild(val);
+                ExpressionEvaluatorImpl<?> child = evaluator.createChild(val);
                 Object res = b.visit(child);
                 evaluator.returnValue = child.returnValue;
                 return res;
@@ -589,7 +589,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
         throw new UnsupportedOperationException("Unsupported expression type: " + expression);
     }
 
-    private interface Evaluator<TEntity> {
-        Object eval(ExpressionEvaluatorImpl<TEntity> evaluator, Expression a, Expression b);
+    private interface Evaluator {
+        Object eval(ExpressionEvaluatorImpl<?> evaluator, Expression a, Expression b);
     }
 }

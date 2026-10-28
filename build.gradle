@@ -5,6 +5,13 @@ plugins {
 
 apply from: rootProject.file('gradle/distribution.gradle')
 
+// JVM tests use heap-backed JOML operations and need no internal Unsafe access.
+allprojects {
+    tasks.withType(Test).configureEach {
+        systemProperty 'joml.nounsafe', 'true'
+    }
+}
+
 allprojects {
     group = rootProject.maven_group
     version = rootProject.mod_version
@@ -72,6 +79,7 @@ subprojects {
     tasks.withType(JavaCompile).configureEach {
         it.options.release = 25
         it.options.compilerArgs.addAll([
+                '-Xlint:deprecation', '-Xlint:unchecked',
                 // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
                 // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
                 // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.

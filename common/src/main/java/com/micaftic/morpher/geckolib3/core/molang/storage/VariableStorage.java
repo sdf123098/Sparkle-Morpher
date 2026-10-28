@@ -64,7 +64,7 @@ public class VariableStorage implements IScopedVariableStorage, IForeignVariable
     public void forEachPropertyName(Consumer<String> consumer) {
         IntIterator it = this.scopedMap.keySet().iterator();
         while (it.hasNext()) {
-            consumer.accept(StringPool.getString(it.next().intValue()));
+            consumer.accept(StringPool.getString(it.nextInt()));
         }
     }
 

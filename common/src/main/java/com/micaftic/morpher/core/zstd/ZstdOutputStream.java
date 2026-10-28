@@ -24,7 +24,7 @@ import static com.micaftic.morpher.core.zstd.Util.checkState;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.util.Objects.requireNonNull;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.ARRAY_BYTE_BASE_OFFSET;
 
 public class ZstdOutputStream
         extends OutputStream

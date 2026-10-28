@@ -68,10 +68,10 @@ public final class FclPickerBackend {
             Object builder = builderClass.getConstructor(Class.forName("android.content.Context")).newInstance(activity);
             builderClass.getDeclaredMethod("setTitle", String.class).invoke(builder, Component.translatable("gui.sparkle_morpher.import.title").getString());
             Class<?> libModeClass = Class.forName("com.tungsten.fcllibrary.browser.options.LibMode");
-            Object fileChooser = Enum.valueOf((Class<Enum>) libModeClass.asSubclass(Enum.class), "FILE_CHOOSER");
+            Object fileChooser = libModeClass.getField("FILE_CHOOSER").get(null);
             builderClass.getDeclaredMethod("setLibMode", libModeClass).invoke(builder, fileChooser);
             Class<?> selectionModeClass = Class.forName("com.tungsten.fcllibrary.browser.options.SelectionMode");
-            Object multipleSelection = Enum.valueOf((Class<Enum>) selectionModeClass.asSubclass(Enum.class), "MULTIPLE_SELECTION");
+            Object multipleSelection = selectionModeClass.getField("MULTIPLE_SELECTION").get(null);
             builderClass.getDeclaredMethod("setSelectionMode", selectionModeClass).invoke(builder, multipleSelection);
 
             ArrayList<String> suffixes = new ArrayList<>();

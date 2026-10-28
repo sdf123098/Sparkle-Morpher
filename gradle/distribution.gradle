@@ -14,4 +14,4 @@ ext.distributionResourceExcludes = { spec -> spec.exclude 'natives/**'; spec.exc
 // Native-only Java sources live under a dedicated source root. CurseForge builds
 // intentionally omit that root and use the matching common/src/curseforge/java variants.
 ext.distributionNativeJavaSourceDir = rootProject.file('common/src/native/java')
-tasks.register('printDistribution') { doLast { println "distribution=${rootProject.ext.distributionVariant}" } }
+tasks.register('printDistribution') { doLast { println "distribution=${selected}" } }

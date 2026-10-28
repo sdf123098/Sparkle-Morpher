@@ -15,8 +15,8 @@ package com.micaftic.morpher.core.zstd;
 
 import java.util.Arrays;
 
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.ARRAY_BYTE_BASE_OFFSET;
 
 final class Histogram
 {
@@ -32,7 +32,7 @@ final class Histogram
         Arrays.fill(counts, 0);
 
         for (int i = 0; i < inputSize; i++) {
-            int symbol = UNSAFE.getByte(inputBase, input) & 0xFF;
+            int symbol = MEMORY.getByte(inputBase, input) & 0xFF;
             input++;
             counts[symbol]++;
         }

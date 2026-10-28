@@ -64,7 +64,7 @@ public class Ride extends LivingEntityFunction {
             if (tagId == null) {
                 return 0;
             }
-            return entityType.builtInRegistryHolder().is(TagKey.create(Registries.ENTITY_TYPE, tagId)) ? 1 : 0;
+            return net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(entityType).is(TagKey.create(Registries.ENTITY_TYPE, tagId)) ? 1 : 0;
         }
         return 0;
     }

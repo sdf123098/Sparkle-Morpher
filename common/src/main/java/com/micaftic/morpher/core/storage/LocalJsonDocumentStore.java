@@ -40,7 +40,7 @@ public final class LocalJsonDocumentStore {
             String text = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
             try (var reader = new JsonReader(new StringReader(text))) {
-                reader.setLenient(false);
+                reader.setStrictness(com.google.gson.Strictness.LEGACY_STRICT);
                 JsonElement root = readValue(reader, 0);
                 if (reader.peek() != JsonToken.END_DOCUMENT)
                     throw new IOException("Local JSON must contain one document");

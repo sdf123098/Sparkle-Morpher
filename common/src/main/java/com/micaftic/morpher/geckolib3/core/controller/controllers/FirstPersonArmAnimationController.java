@@ -55,7 +55,8 @@ public class FirstPersonArmAnimationController {
 
     private static final ProcessorPipeline<PlayerGeoEntity, PlayerModelBundle> processorRegistry = new ProcessorPipeline<>();
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    // The parallel slots intentionally keep the old YSM blending mode.
+    @SuppressWarnings({"rawtypes", "unchecked", "deprecation"})
     private static void registerDefaultProcessors() {
         registerNamedProcessor("misc", null, true, (animationEntryKey, entity) -> new CompositeAnimationController(entity, animationEntryKey, 0.0f, new StopAnimationPredicate()));
         registerParallelProcessor("parallel", (animationEntryKey, entity, linkedAnimationName) -> new CompositeAnimationController(entity, animationEntryKey, 0.0f, linkedAnimationName != null ? new NamedAnimationPredicate(linkedAnimationName) : StopAnimationPredicate.INSTANCE, true));
@@ -68,7 +69,7 @@ public class FirstPersonArmAnimationController {
         ModelProcessor<PlayerGeoEntity, PlayerModelBundle> weapon = new NamedModelProcessor<>(
                 FP_ARM_PREFIX, "weapon", REQUIRED_WEAPON_ANIMATIONS, false,
                 DefaultBoneExpressionProvider.INSTANCE,
-                (animationEntryKey, entity) -> new CompositeAnimationController(entity, animationEntryKey, 0.0f, new FirstPersonWeaponAnimationPredicate()));
+                (animationEntryKey, entity) -> new CompositeAnimationController<>(entity, animationEntryKey, 0.0f, new FirstPersonWeaponAnimationPredicate()));
         processorRegistry.register(weapon);
     }
 
@@ -103,19 +104,19 @@ public class FirstPersonArmAnimationController {
     }
 
     private static void registerMolangProcessor(String slotName, BiFunction<String, PlayerGeoEntity, IAnimationController<PlayerGeoEntity>> controllerFactory) {
-        processorRegistry.register(new ControllerSlotBinder(FP_ARM_PREFIX, slotName, DefaultBoneExpressionProvider.INSTANCE, controllerFactory));
+        processorRegistry.register(new ControllerSlotBinder<>(FP_ARM_PREFIX, slotName, DefaultBoneExpressionProvider.INSTANCE, controllerFactory));
     }
 
     private static void registerNamedProcessor(String slotName, String[] requiredAnimations, boolean checkAnimationEntries, BiFunction<String, PlayerGeoEntity, IAnimationController<PlayerGeoEntity>> controllerFactory) {
-        processorRegistry.register(new NamedModelProcessor(FP_ARM_PREFIX, slotName, requiredAnimations, checkAnimationEntries, DefaultBoneExpressionProvider.INSTANCE, controllerFactory));
+        processorRegistry.register(new NamedModelProcessor<>(FP_ARM_PREFIX, slotName, requiredAnimations, checkAnimationEntries, DefaultBoneExpressionProvider.INSTANCE, controllerFactory));
     }
 
     private static void registerParallelProcessor(String slotName, TriFunction<String, PlayerGeoEntity, String, IAnimationController<PlayerGeoEntity>> controllerFactory) {
-        processorRegistry.register(new ParallelProcessor(FP_ARM_PREFIX, slotName, true, DefaultBoneExpressionProvider.INSTANCE, controllerFactory));
+        processorRegistry.register(new ParallelProcessor<>(FP_ARM_PREFIX, slotName, true, DefaultBoneExpressionProvider.INSTANCE, controllerFactory));
     }
 
     private static void registerArmorProcessor(String category, TriFunction<String, PlayerGeoEntity, EquipmentSlot, IAnimationController<PlayerGeoEntity>> controllerFactory) {
-        processorRegistry.register(new ArmorSlotProcessor(FP_ARM_PREFIX, category, DefaultBoneExpressionProvider.INSTANCE, controllerFactory));
+        processorRegistry.register(new ArmorSlotProcessor<>(FP_ARM_PREFIX, category, DefaultBoneExpressionProvider.INSTANCE, controllerFactory));
     }
 
     private static class DefaultBoneExpressionProvider implements AnimationDataProvider<PlayerModelBundle> {

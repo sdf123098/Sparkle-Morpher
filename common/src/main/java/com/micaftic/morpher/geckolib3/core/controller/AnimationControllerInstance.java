@@ -227,12 +227,12 @@ public class  AnimationControllerInstance {
 
     private void executeRemainingEvents(ExpressionEvaluator<AnimationContext<?>> animationTick, boolean z) {
         this.context.setAnimTime(this.currentAnimation.animationLength / 20.0f);
+        if (this.soundExecutor != null) {
+            this.soundExecutor.finishCycle(this.animatable, this.currentAnimation.animationLength, z);
+        }
         if (this.instructionExecutor != null) {
             this.instructionExecutor.executeRemaining(animationTick, z);
             this.instructionExecutor.reset();
-        }
-        if (this.soundExecutor != null) {
-            this.soundExecutor.reset();
         }
     }
 
