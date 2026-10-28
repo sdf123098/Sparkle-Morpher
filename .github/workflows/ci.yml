@@ -80,7 +80,7 @@ jobs:
       - name: Build, test and audit native and CurseForge variants
         run: bash scripts/ci-build.sh
       - name: Upload both final JARs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: ${{ matrix.branch }}-jars
           path: |
@@ -89,7 +89,7 @@ jobs:
           if-no-files-found: error
       - name: Upload diagnostic logs and both test suites
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: ${{ matrix.branch }}-diagnostics
           path: |
