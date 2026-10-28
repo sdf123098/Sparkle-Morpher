@@ -23,7 +23,10 @@ public final class PeerTlsTransport implements AutoCloseable {
         if(listeners.size()>=2)throw new IOException("Peer listener limit");
         var listener=(SSLServerSocket)context.getServerSocketFactory().createServerSocket();
         try {
-            listener.setEnabledProtocols(new String[]{"TLSv1.3"});listener.setReuseAddress(false);
+            listener.setEnabledProtocols(new String[]{"TLSv1.3"});
+            // Unix needs SO_REUSEADDR to restart during TCP TIME_WAIT. Windows
+            // gives this flag different port-sharing semantics; keep exclusive binding there.
+            listener.setReuseAddress(!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows"));
             listener.bind(new InetSocketAddress(address,port),PeerLimits.HANDSHAKE_COUNT);
             listeners.add(listener);if(closed.get())throw new IOException("Peer transport closed");
             workers.submit(()->accept(listener,handler));return (InetSocketAddress)listener.getLocalSocketAddress();
