@@ -117,7 +117,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
 
     @Override
     public LivingEntityFrameState<T> getPositionTracker() {
-        return (LivingEntityFrameState) super.getPositionTracker();
+        return (LivingEntityFrameState<T>) super.getPositionTracker();
     }
 
     public void setCurrentTexture(String str) {
@@ -231,11 +231,11 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
             }
             AbstractTexture abstractTexture = map.get(this.currentTextureName);
             if (abstractTexture != null) {
-                ((TexturedModelWrapper) getRenderShape()).setTexture(abstractTexture);
+                ((LivingAnimatable<?>.TexturedModelWrapper) getRenderShape()).setTexture(abstractTexture);
                 this.textureIndex = map.getValuesList().indexOf(abstractTexture);
             } else {
                 this.currentTextureName = map.getKeyAt(0);
-                ((TexturedModelWrapper) getRenderShape()).setTexture(map.getValueAt(0));
+                ((LivingAnimatable<?>.TexturedModelWrapper) getRenderShape()).setTexture(map.getValueAt(0));
                 this.textureIndex = 0;
             }
         }
@@ -278,7 +278,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     @NotNull
     public Identifier getTextureLocation() {
         if (isModelReady()) {
-            IResourceLocatable texture = ((TexturedModelWrapper) getRenderShape()).currentTexture;
+            IResourceLocatable texture = ((LivingAnimatable<?>.TexturedModelWrapper) getRenderShape()).currentTexture;
             Identifier location = texture == null ? null : texture.getResourceLocationOrNull();
             if (location != null) {
                 return location;
@@ -344,7 +344,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
             AbstractTexture abstractTexture = animationBundle.getTextures().get(LivingAnimatable.this.currentTextureName);
             this.currentTexture = UploadManager.getOrCreateLocatableWithSize(abstractTexture != null ? abstractTexture : animationBundle.getDefaultTexture(), registerImmediately, textureResolution);
             if (collectAllTextures) {
-                this.allTextures = new ArrayList();
+                this.allTextures = new ArrayList<>();
                 for (AbstractTexture texture : animationBundle.getTextures().values()) {
                     this.allTextures.add(UploadManager.getOrCreateLocatable(texture, false));
                 }

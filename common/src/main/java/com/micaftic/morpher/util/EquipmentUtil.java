@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 
 public class EquipmentUtil {
 
-    private static final Object2ReferenceOpenHashMap<String, EquipmentSlot> SLOT_BY_NAME = new Object2ReferenceOpenHashMap<>((Map) Arrays.stream(EquipmentSlot.values()).collect(Collectors.toMap(equipmentSlot -> equipmentSlot.getName().toLowerCase(Locale.US), equipmentSlot2 -> equipmentSlot2)));
+    private static final Object2ReferenceOpenHashMap<String, EquipmentSlot> SLOT_BY_NAME = new Object2ReferenceOpenHashMap<>(Arrays.stream(EquipmentSlot.values()).collect(Collectors.toMap(equipmentSlot -> equipmentSlot.getName().toLowerCase(Locale.US), equipmentSlot2 -> equipmentSlot2)));
 
     public static Optional<ItemUseAnimation> getUseAnimByName(String str) {
         return Optional.ofNullable(EnumUtils.getEnum(ItemUseAnimation.class, str.toUpperCase(Locale.US)));

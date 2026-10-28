@@ -15,7 +15,7 @@ package com.micaftic.morpher.core.zstd;
 
 
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_SHORT;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 
 final class Util
 {
@@ -108,14 +108,14 @@ final class Util
 
     public static int get24BitLittleEndian(Object inputBase, long inputAddress)
     {
-        return (UNSAFE.getShort(inputBase, inputAddress) & 0xFFFF)
-                | ((UNSAFE.getByte(inputBase, inputAddress + SIZE_OF_SHORT) & 0xFF) << Short.SIZE);
+        return (MEMORY.getShort(inputBase, inputAddress) & 0xFFFF)
+                | ((MEMORY.getByte(inputBase, inputAddress + SIZE_OF_SHORT) & 0xFF) << Short.SIZE);
     }
 
     public static void put24BitLittleEndian(Object outputBase, long outputAddress, int value)
     {
-        UNSAFE.putShort(outputBase, outputAddress, (short) value);
-        UNSAFE.putByte(outputBase, outputAddress + SIZE_OF_SHORT, (byte) (value >>> Short.SIZE));
+        MEMORY.putShort(outputBase, outputAddress, (short) value);
+        MEMORY.putByte(outputBase, outputAddress + SIZE_OF_SHORT, (byte) (value >>> Short.SIZE));
     }
 
     // provides the minimum logSize to safely represent a distribution

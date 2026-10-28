@@ -22,7 +22,7 @@ public interface ILoopType {
             return primitive.getAsBoolean() ? EDefaultLoopTypes.LOOP : EDefaultLoopTypes.PLAY_ONCE;
         }
         if (primitive.isString()) {
-            String string = primitive.toString();
+            String string = primitive.getAsString();
             if ("false".equalsIgnoreCase(string)) {
                 return EDefaultLoopTypes.PLAY_ONCE;
             }

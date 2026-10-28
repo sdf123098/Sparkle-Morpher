@@ -838,31 +838,37 @@ public class YSMFolderDeserializer implements AutoCloseable {
     // ---- 1.2.7 §24.2：以下静态入口已迁至专用解析类，此处保留为兼容 facade（删除留到 1.2.8）。----
 
     /** @deprecated 1.2.7 §24.2：见 {@link YsmTextureParsing#detectFormat(byte[])}。 */
+    @Deprecated
     public static int detectFormat(byte[] data) {
         return YsmTextureParsing.detectFormat(data);
     }
 
     /** @deprecated 1.2.7 §24.2：见 {@link YsmTextureParsing#parseBedrockTexture(byte[], String)}。 */
+    @Deprecated
     public static RawYsmModel.RawTexture parseBedrockTexture(byte[] imageBytes, String name) {
         return YsmTextureParsing.parseBedrockTexture(imageBytes, name);
     }
 
     /** @deprecated 1.2.7 §24.2：见 {@link YsmGeometryParsing#parseBedrockGeometry(byte[], String)}。 */
+    @Deprecated
     public static RawYsmModel.RawGeometry parseBedrockGeometry(byte[] data, String identifier) {
         return YsmGeometryParsing.parseBedrockGeometry(data, identifier);
     }
 
     /** @deprecated 1.2.7 §24.2：见 {@link YsmAnimationParsing#parseAnimationFile(byte[])}。 */
+    @Deprecated
     public static RawYsmModel.RawAnimationFile parseAnimationFile(byte[] data) {
         return YsmAnimationParsing.parseAnimationFile(data);
     }
 
     /** @deprecated 1.2.7 §24.2：见 {@link YsmAnimationParsing#getAnimTypeFromKey(String)}。 */
+    @Deprecated
     public static int getAnimTypeFromKey(String key) {
         return YsmAnimationParsing.getAnimTypeFromKey(key);
     }
 
     /** @deprecated 1.2.7 §24.2：见 {@link YsmAnimationParsing#getAnimKeyFromType(int)}。 */
+    @Deprecated
     public static String getAnimKeyFromType(int type) {
         return YsmAnimationParsing.getAnimKeyFromType(type);
     }

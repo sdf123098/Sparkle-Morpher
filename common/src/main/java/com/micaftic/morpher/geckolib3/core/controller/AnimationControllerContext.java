@@ -82,7 +82,7 @@ public class AnimationControllerContext implements IControllerVariableStorage {
         if (this.captureCount > 0) {
             AnimationContext<?> context = evaluator.entity();
             AnimatableEntity<?> animatableEntity = context.geoInstance();
-            if ((animatableEntity instanceof GeoEntity) && (values = ((GeoEntity) animatableEntity).getRenderLayers()) != null) {
+            if ((animatableEntity instanceof GeoEntity<?>) && (values = ((GeoEntity<?>) animatableEntity).getRenderLayers()) != null) {
                 context.setIsClientSide(true);
                 for (int i = this.captureCount - 1; i >= 0; i--) {
                     Iterator<IValue> it = values.iterator();

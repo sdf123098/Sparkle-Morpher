@@ -30,7 +30,7 @@ public class EquippedEnchantmentLevel extends LivingEntityFunction {
             Identifier id = arguments.getResourceLocation(context, i);
             Enchantment raw = context.entity().entity().level().registryAccess().lookupOrThrow(Registries.ENCHANTMENT).get(id).map(ref -> ref.value()).orElse(null);
             if (id != null && raw != null) {
-                enchantmentLevel += EnchantmentHelper.getItemEnchantmentLevel(Holder.direct(raw), stack);
+                enchantmentLevel += stack.getEnchantmentLevel(Holder.direct(raw));
             }
         }
         return enchantmentLevel;

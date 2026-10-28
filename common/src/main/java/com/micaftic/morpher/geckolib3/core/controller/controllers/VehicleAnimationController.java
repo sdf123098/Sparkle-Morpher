@@ -33,7 +33,8 @@ public class VehicleAnimationController {
 
     private static final ProcessorPipeline<GeckoVehicleEntity, VehicleModelBundle> REGISTRY = new ProcessorPipeline<>();
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    // The parallel slots intentionally keep the old YSM blending mode.
+    @SuppressWarnings({"rawtypes", "unchecked", "deprecation"})
     private static void registerControllers() {
         registerParallelController("pre_parallel", (animationEntryKey, entity, linkedAnimationName) ->
             new CompositeAnimationController(entity, animationEntryKey, 0.0f, linkedAnimationName != null ? new NamedAnimationPredicate(linkedAnimationName) : StopAnimationPredicate.INSTANCE));
