@@ -107,7 +107,6 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
 
     public void renderEntityWithTexture(T t, @Nullable Identifier textureLocation, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource multiBufferSource, int packedLight) {
         Direction bedOrientation;
-        AnimationFrameProfiler.beginRenderFrame(partialTick);
         if (RenderLivingBridge.firePre(t.getEntity(), this, partialTick, poseStack, multiBufferSource, packedLight)) {
             return;
         }
@@ -161,6 +160,7 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             boolean useExtraPlayer = t.isRenderLayersFirst();
             Color color = getRenderColor(t, partialTick, poseStack, multiBufferSource, null, packedLight);
             renderWithBone(animatedGeoModel, t, partialTick, poseStack, multiBufferSource, null, packedLight, packOverlayCoords(entity, getHurtOverlayProgress(entity, partialTick)), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f);
+            com.micaftic.morpher.client.animation.particle.AnimationParticleRuntime.flush(t, event, this.dispatchedMat, poseStack.last().pose());
             if (useExtraPlayer && !entity.isSpectator()) {
                 render(t, partialTick, poseStack, multiBufferSource, packedLight, event, modelData);
             }

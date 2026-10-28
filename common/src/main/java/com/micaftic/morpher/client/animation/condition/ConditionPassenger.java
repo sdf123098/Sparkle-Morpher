@@ -69,6 +69,6 @@ public class ConditionPassenger {
         if (this.tagTest.isEmpty()) {
             return EMPTY;
         }
-        return this.tagTest.stream().filter(tagKey -> entity.getType().builtInRegistryHolder().is(tagKey)).findFirst().map(tagKey2 -> this.tagPre + tagKey2.location()).orElse(EMPTY);
+        return this.tagTest.stream().filter(tagKey -> net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(entity.getType()).is(tagKey)).findFirst().map(tagKey2 -> this.tagPre + tagKey2.location()).orElse(EMPTY);
     }
 }

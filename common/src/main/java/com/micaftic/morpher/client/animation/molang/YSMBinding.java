@@ -263,6 +263,7 @@ public class YSMBinding extends ContextBinding {
         function("second_order", new SecondOrderFunction())
         ;
         function("particle", new Particle(false));
+        function("animation_particle", new AnimationParticleFunction());
         function("abs_particle", new Particle(true));
 
         function("perlin_noise", new PerlinNoise());

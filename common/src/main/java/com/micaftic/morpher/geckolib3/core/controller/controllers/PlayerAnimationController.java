@@ -34,7 +34,8 @@ public class PlayerAnimationController {
 
     public static final String CAP_CONTROLLER_KEY = String.format("%s.%s", PLAYER_PREFIX, "cap");
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    // The parallel slots intentionally keep the old YSM blending mode.
+    @SuppressWarnings({"rawtypes", "unchecked", "deprecation"})
     private static void registerControllers() {
         registerParallelController("pre_parallel", (animationEntryKey, entity, linkedAnimationName) -> new CompositeAnimationController(entity, animationEntryKey, 0.0f, linkedAnimationName != null ? new NamedAnimationPredicate(linkedAnimationName) : StopAnimationPredicate.INSTANCE));
         ParcoolCompat.getControllerFactory().ifPresent(controllerFactory -> {
@@ -87,19 +88,19 @@ public class PlayerAnimationController {
     }
 
     private static void registerSlotController(String slotName, BiFunction<String, CustomPlayerEntity, IAnimationController<CustomPlayerEntity>> controllerFactory) {
-        REGISTRY.register(new ControllerSlotBinder(PLAYER_PREFIX, slotName, PlayerAnimationDataProvider.INSTANCE, controllerFactory));
+        REGISTRY.register(new ControllerSlotBinder<>(PLAYER_PREFIX, slotName, PlayerAnimationDataProvider.INSTANCE, controllerFactory));
     }
 
     private static void registerNamedController(String slotName, String[] requiredAnimations, boolean checkAnimationEntries, BiFunction<String, CustomPlayerEntity, IAnimationController<CustomPlayerEntity>> controllerFactory) {
-        REGISTRY.register(new NamedModelProcessor(PLAYER_PREFIX, slotName, requiredAnimations, checkAnimationEntries, PlayerAnimationDataProvider.INSTANCE, controllerFactory));
+        REGISTRY.register(new NamedModelProcessor<>(PLAYER_PREFIX, slotName, requiredAnimations, checkAnimationEntries, PlayerAnimationDataProvider.INSTANCE, controllerFactory));
     }
 
     private static void registerParallelController(String slotName, TriFunction<String, CustomPlayerEntity, String, IAnimationController<CustomPlayerEntity>> controllerFactory) {
-        REGISTRY.register(new ParallelProcessor(PLAYER_PREFIX, slotName, true, PlayerAnimationDataProvider.INSTANCE, controllerFactory));
+        REGISTRY.register(new ParallelProcessor<>(PLAYER_PREFIX, slotName, true, PlayerAnimationDataProvider.INSTANCE, controllerFactory));
     }
 
     private static void registerArmorController(String category, TriFunction<String, CustomPlayerEntity, EquipmentSlot, IAnimationController<CustomPlayerEntity>> controllerFactory) {
-        REGISTRY.register(new ArmorSlotProcessor(PLAYER_PREFIX, category, PlayerAnimationDataProvider.INSTANCE, controllerFactory));
+        REGISTRY.register(new ArmorSlotProcessor<>(PLAYER_PREFIX, category, PlayerAnimationDataProvider.INSTANCE, controllerFactory));
     }
 
     private static class PlayerAnimationDataProvider implements AnimationDataProvider<PlayerModelBundle> {

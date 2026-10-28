@@ -21,6 +21,7 @@ public class ModScreenEvent {
         receivedScreen = screen;
     }
 
+    @Deprecated // Retained as a binary-compatible entry point for the old screen.
     public static void openScreen(PlayerModelScreen modelScreen) {
         com.micaftic.morpher.util.InputUtil.setScreen(Objects.requireNonNullElseGet(receivedScreen, ModernPlayerModelScreen::downloads));
     }

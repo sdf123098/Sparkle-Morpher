@@ -114,7 +114,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
             if (unknownPadding != 1) throw new RuntimeException("Expected 1");
             RawYsmModel.RawAnimationFile rawAnimationFile = parseAnimations();
 
-            String animKey = YSMFolderDeserializer.getAnimKeyFromType(animationId);
+            String animKey = com.micaftic.morpher.resource.YsmAnimationParsing.getAnimKeyFromType(animationId);
             if (animationId == 5) {
                 RawYsmModel.RawSubEntity arrowEntity = model.projectiles.computeIfAbsent("minecraft:arrow", k -> {
                     RawYsmModel.RawSubEntity newSub = new RawYsmModel.RawSubEntity();
@@ -207,7 +207,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
             if (unknownPadding != 1) throw new RuntimeException("Expected 1");
             RawYsmModel.RawAnimationFile rawAnimationFile = parseAnimations();
 
-            String animKey = YSMFolderDeserializer.getAnimKeyFromType(animationId);
+            String animKey = com.micaftic.morpher.resource.YsmAnimationParsing.getAnimKeyFromType(animationId);
             if (animationId == 5) {
                 RawYsmModel.RawSubEntity arrowEntity = model.projectiles.computeIfAbsent("minecraft:arrow", k -> {
                     RawYsmModel.RawSubEntity newSub = new RawYsmModel.RawSubEntity();
@@ -382,7 +382,7 @@ public class YSMBinaryDeserializer implements AutoCloseable{
 
             RawYsmModel.RawAnimationFile animRef = parseAnimations();
             model.mainEntity.animationFiles.put(
-                    YSMFolderDeserializer.getAnimKeyFromType(type),
+                    com.micaftic.morpher.resource.YsmAnimationParsing.getAnimKeyFromType(type),
                     animRef
             );
             animRef.animType = type;

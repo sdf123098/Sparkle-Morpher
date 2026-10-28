@@ -27,11 +27,9 @@ public class OrderedStringMap<K, V> implements Map<K, V> {
     }
 
     public OrderedStringMap(Object2ObjectArrayMap<K, V> object2ObjectArrayMap) {
-        Object[] array = object2ObjectArrayMap.keySet().toArray(new Object[0]);
-        Object[] array2 = object2ObjectArrayMap.values().toArray(new Object[0]);
-        this.keys = (ObjectList<K>) ObjectLists.unmodifiable(ObjectArrayList.wrap(array));
-        this.valuesList = (ObjectList<V>) ObjectLists.unmodifiable(ObjectArrayList.wrap(array2));
-        this.arrayMap = new Object2ObjectArrayMap<>(array, array2);
+        this.keys = ObjectLists.unmodifiable(new ObjectArrayList<>(object2ObjectArrayMap.keySet()));
+        this.valuesList = ObjectLists.unmodifiable(new ObjectArrayList<>(object2ObjectArrayMap.values()));
+        this.arrayMap = new Object2ObjectArrayMap<>(object2ObjectArrayMap);
         this.hashMap = new Object2ObjectOpenHashMap<>(this.arrayMap);
     }
 

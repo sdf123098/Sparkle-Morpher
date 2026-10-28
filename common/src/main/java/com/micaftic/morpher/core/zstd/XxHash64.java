@@ -17,11 +17,11 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_LONG;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 import static com.micaftic.morpher.core.zstd.Util.checkPositionIndexes;
 import static java.lang.Long.rotateLeft;
 import static java.lang.Math.min;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.ARRAY_BYTE_BASE_OFFSET;
 
 // Forked from https://github.com/airlift/slice
 // This Unsafe-based implementation exists only to serve the Zstd Java implementation,
@@ -107,7 +107,7 @@ final class XxHash64
         if (bufferSize > 0) {
             int available = min(32 - bufferSize, length);
 
-            UNSAFE.copyMemory(base, address, buffer, BUFFER_ADDRESS + bufferSize, available);
+            MEMORY.copyMemory(base, address, buffer, BUFFER_ADDRESS + bufferSize, available);
 
             bufferSize += available;
             address += available;
@@ -126,7 +126,7 @@ final class XxHash64
         }
 
         if (length > 0) {
-            UNSAFE.copyMemory(base, address, buffer, BUFFER_ADDRESS, length);
+            MEMORY.copyMemory(base, address, buffer, BUFFER_ADDRESS, length);
             bufferSize = length;
         }
     }
@@ -135,10 +135,10 @@ final class XxHash64
     {
         int remaining = length;
         while (remaining >= 32) {
-            v1 = mix(v1, UNSAFE.getLong(base, address));
-            v2 = mix(v2, UNSAFE.getLong(base, address + 8));
-            v3 = mix(v3, UNSAFE.getLong(base, address + 16));
-            v4 = mix(v4, UNSAFE.getLong(base, address + 24));
+            v1 = mix(v1, MEMORY.getLong(base, address));
+            v2 = mix(v2, MEMORY.getLong(base, address + 8));
+            v3 = mix(v3, MEMORY.getLong(base, address + 16));
+            v4 = mix(v4, MEMORY.getLong(base, address + 24));
 
             address += 32;
             remaining -= 32;
@@ -201,17 +201,17 @@ final class XxHash64
     private static long updateTail(long hash, Object base, long address, int index, int length)
     {
         while (index <= length - 8) {
-            hash = updateTail(hash, UNSAFE.getLong(base, address + index));
+            hash = updateTail(hash, MEMORY.getLong(base, address + index));
             index += 8;
         }
 
         if (index <= length - 4) {
-            hash = updateTail(hash, UNSAFE.getInt(base, address + index));
+            hash = updateTail(hash, MEMORY.getInt(base, address + index));
             index += 4;
         }
 
         while (index < length) {
-            hash = updateTail(hash, UNSAFE.getByte(base, address + index));
+            hash = updateTail(hash, MEMORY.getByte(base, address + index));
             index++;
         }
 
@@ -229,10 +229,10 @@ final class XxHash64
 
         int remaining = length;
         while (remaining >= 32) {
-            v1 = mix(v1, UNSAFE.getLong(base, address));
-            v2 = mix(v2, UNSAFE.getLong(base, address + 8));
-            v3 = mix(v3, UNSAFE.getLong(base, address + 16));
-            v4 = mix(v4, UNSAFE.getLong(base, address + 24));
+            v1 = mix(v1, MEMORY.getLong(base, address));
+            v2 = mix(v2, MEMORY.getLong(base, address + 8));
+            v3 = mix(v3, MEMORY.getLong(base, address + 16));
+            v4 = mix(v4, MEMORY.getLong(base, address + 24));
 
             address += 32;
             remaining -= 32;

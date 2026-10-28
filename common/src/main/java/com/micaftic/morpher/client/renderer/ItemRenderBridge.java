@@ -20,6 +20,7 @@ public final class ItemRenderBridge {
         if (stack.isEmpty() || collector == null) return;
         ItemStackRenderState renderState = new ItemStackRenderState();
         resolver.updateForLiving(renderState, stack, context, entity);
-        renderState.submit(poseStack, collector, packedLight, OverlayTexture.NO_OVERLAY, entity.getId());
+        // The final argument is an outline color, not the entity/animation seed.
+        renderState.submit(poseStack, collector, packedLight, OverlayTexture.NO_OVERLAY, 0);
     }
 }

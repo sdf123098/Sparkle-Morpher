@@ -15,7 +15,7 @@ package com.micaftic.morpher.core.zstd;
 
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_INT;
 import static com.micaftic.morpher.core.zstd.Constants.SIZE_OF_LONG;
-import static com.micaftic.morpher.core.zstd.UnsafeUtil.UNSAFE;
+import static com.micaftic.morpher.core.zstd.ArrayMemory.MEMORY;
 
 class DoubleFastBlockCompressor
         implements BlockCompressor
@@ -72,7 +72,7 @@ class DoubleFastBlockCompressor
             int shortHash = hash(inputBase, input, shortHashBits, matchSearchLength);
             long shortMatchAddress = baseAddress + shortHashTable[shortHash];
 
-            int longHash = hash8(UNSAFE.getLong(inputBase, input), longHashBits);
+            int longHash = hash8(MEMORY.getLong(inputBase, input), longHashBits);
             long longMatchAddress = baseAddress + longHashTable[longHash];
 
             // update hash tables
@@ -83,7 +83,7 @@ class DoubleFastBlockCompressor
             int matchLength;
             int offset;
 
-            if (offset1 > 0 && UNSAFE.getInt(inputBase, input + 1 - offset1) == UNSAFE.getInt(inputBase, input + 1)) {
+            if (offset1 > 0 && MEMORY.getInt(inputBase, input + 1 - offset1) == MEMORY.getInt(inputBase, input + 1)) {
                 // found a repeated sequence of at least 4 bytes, separated by offset1
                 matchLength = count(inputBase, input + 1 + SIZE_OF_INT, inputEnd, input + 1 + SIZE_OF_INT - offset1) + SIZE_OF_INT;
                 input++;
@@ -91,10 +91,10 @@ class DoubleFastBlockCompressor
             }
             else {
                 // check prefix long match
-                if (longMatchAddress > windowBaseAddress && UNSAFE.getLong(inputBase, longMatchAddress) == UNSAFE.getLong(inputBase, input)) {
+                if (longMatchAddress > windowBaseAddress && MEMORY.getLong(inputBase, longMatchAddress) == MEMORY.getLong(inputBase, input)) {
                     matchLength = count(inputBase, input + SIZE_OF_LONG, inputEnd, longMatchAddress + SIZE_OF_LONG) + SIZE_OF_LONG;
                     offset = (int) (input - longMatchAddress);
-                    while (input > anchor && longMatchAddress > windowBaseAddress && UNSAFE.getByte(inputBase, input - 1) == UNSAFE.getByte(inputBase, longMatchAddress - 1)) {
+                    while (input > anchor && longMatchAddress > windowBaseAddress && MEMORY.getByte(inputBase, input - 1) == MEMORY.getByte(inputBase, longMatchAddress - 1)) {
                         input--;
                         longMatchAddress--;
                         matchLength++;
@@ -102,17 +102,17 @@ class DoubleFastBlockCompressor
                 }
                 else {
                     // check prefix short match
-                    if (shortMatchAddress > windowBaseAddress && UNSAFE.getInt(inputBase, shortMatchAddress) == UNSAFE.getInt(inputBase, input)) {
-                        int nextOffsetHash = hash8(UNSAFE.getLong(inputBase, input + 1), longHashBits);
+                    if (shortMatchAddress > windowBaseAddress && MEMORY.getInt(inputBase, shortMatchAddress) == MEMORY.getInt(inputBase, input)) {
+                        int nextOffsetHash = hash8(MEMORY.getLong(inputBase, input + 1), longHashBits);
                         long nextOffsetMatchAddress = baseAddress + longHashTable[nextOffsetHash];
                         longHashTable[nextOffsetHash] = current + 1;
 
                         // check prefix long +1 match
-                        if (nextOffsetMatchAddress > windowBaseAddress && UNSAFE.getLong(inputBase, nextOffsetMatchAddress) == UNSAFE.getLong(inputBase, input + 1)) {
+                        if (nextOffsetMatchAddress > windowBaseAddress && MEMORY.getLong(inputBase, nextOffsetMatchAddress) == MEMORY.getLong(inputBase, input + 1)) {
                             matchLength = count(inputBase, input + 1 + SIZE_OF_LONG, inputEnd, nextOffsetMatchAddress + SIZE_OF_LONG) + SIZE_OF_LONG;
                             input++;
                             offset = (int) (input - nextOffsetMatchAddress);
-                            while (input > anchor && nextOffsetMatchAddress > windowBaseAddress && UNSAFE.getByte(inputBase, input - 1) == UNSAFE.getByte(inputBase, nextOffsetMatchAddress - 1)) {
+                            while (input > anchor && nextOffsetMatchAddress > windowBaseAddress && MEMORY.getByte(inputBase, input - 1) == MEMORY.getByte(inputBase, nextOffsetMatchAddress - 1)) {
                                 input--;
                                 nextOffsetMatchAddress--;
                                 matchLength++;
@@ -122,7 +122,7 @@ class DoubleFastBlockCompressor
                             // if no long +1 match, explore the short match we found
                             matchLength = count(inputBase, input + SIZE_OF_INT, inputEnd, shortMatchAddress + SIZE_OF_INT) + SIZE_OF_INT;
                             offset = (int) (input - shortMatchAddress);
-                            while (input > anchor && shortMatchAddress > windowBaseAddress && UNSAFE.getByte(inputBase, input - 1) == UNSAFE.getByte(inputBase, shortMatchAddress - 1)) {
+                            while (input > anchor && shortMatchAddress > windowBaseAddress && MEMORY.getByte(inputBase, input - 1) == MEMORY.getByte(inputBase, shortMatchAddress - 1)) {
                                 input--;
                                 shortMatchAddress--;
                                 matchLength++;
@@ -146,13 +146,13 @@ class DoubleFastBlockCompressor
 
             if (input <= inputLimit) {
                 // Fill Table
-                longHashTable[hash8(UNSAFE.getLong(inputBase, baseAddress + current + 2), longHashBits)] = current + 2;
+                longHashTable[hash8(MEMORY.getLong(inputBase, baseAddress + current + 2), longHashBits)] = current + 2;
                 shortHashTable[hash(inputBase, baseAddress + current + 2, shortHashBits, matchSearchLength)] = current + 2;
 
-                longHashTable[hash8(UNSAFE.getLong(inputBase, input - 2), longHashBits)] = (int) (input - 2 - baseAddress);
+                longHashTable[hash8(MEMORY.getLong(inputBase, input - 2), longHashBits)] = (int) (input - 2 - baseAddress);
                 shortHashTable[hash(inputBase, input - 2, shortHashBits, matchSearchLength)] = (int) (input - 2 - baseAddress);
 
-                while (input <= inputLimit && offset2 > 0 && UNSAFE.getInt(inputBase, input) == UNSAFE.getInt(inputBase, input - offset2)) {
+                while (input <= inputLimit && offset2 > 0 && MEMORY.getInt(inputBase, input) == MEMORY.getInt(inputBase, input - offset2)) {
                     int repetitionLength = count(inputBase, input + SIZE_OF_INT, inputEnd, input + SIZE_OF_INT - offset2) + SIZE_OF_INT;
 
                     // swap offset2 <=> offset1
@@ -161,7 +161,7 @@ class DoubleFastBlockCompressor
                     offset1 = temp;
 
                     shortHashTable[hash(inputBase, input, shortHashBits, matchSearchLength)] = (int) (input - baseAddress);
-                    longHashTable[hash8(UNSAFE.getLong(inputBase, input), longHashBits)] = (int) (input - baseAddress);
+                    longHashTable[hash8(MEMORY.getLong(inputBase, input), longHashBits)] = (int) (input - baseAddress);
 
                     output.storeSequence(inputBase, anchor, 0, 0, repetitionLength - MIN_MATCH);
 
@@ -194,7 +194,7 @@ class DoubleFastBlockCompressor
         // first, compare long at a time
         int count = 0;
         while (count < remaining - (SIZE_OF_LONG - 1)) {
-            long diff = UNSAFE.getLong(inputBase, match) ^ UNSAFE.getLong(inputBase, input);
+            long diff = MEMORY.getLong(inputBase, match) ^ MEMORY.getLong(inputBase, input);
             if (diff != 0) {
                 return count + (Long.numberOfTrailingZeros(diff) >> 3);
             }
@@ -204,7 +204,7 @@ class DoubleFastBlockCompressor
             match += SIZE_OF_LONG;
         }
 
-        while (count < remaining && UNSAFE.getByte(inputBase, match) == UNSAFE.getByte(inputBase, input)) {
+        while (count < remaining && MEMORY.getByte(inputBase, match) == MEMORY.getByte(inputBase, input)) {
             count++;
             input++;
             match++;
@@ -217,15 +217,15 @@ class DoubleFastBlockCompressor
     {
         switch (matchSearchLength) {
             case 8:
-                return hash8(UNSAFE.getLong(inputBase, inputAddress), bits);
+                return hash8(MEMORY.getLong(inputBase, inputAddress), bits);
             case 7:
-                return hash7(UNSAFE.getLong(inputBase, inputAddress), bits);
+                return hash7(MEMORY.getLong(inputBase, inputAddress), bits);
             case 6:
-                return hash6(UNSAFE.getLong(inputBase, inputAddress), bits);
+                return hash6(MEMORY.getLong(inputBase, inputAddress), bits);
             case 5:
-                return hash5(UNSAFE.getLong(inputBase, inputAddress), bits);
+                return hash5(MEMORY.getLong(inputBase, inputAddress), bits);
             default:
-                return hash4(UNSAFE.getInt(inputBase, inputAddress), bits);
+                return hash4(MEMORY.getInt(inputBase, inputAddress), bits);
         }
     }
 

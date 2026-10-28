@@ -8,5 +8,5 @@ import net.minecraft.world.entity.Entity;
 
 import java.util.concurrent.TimeUnit;
 public final class AnimatableCacheUtil {
-    public static final Cache<Identifier, Entity> ENTITIES_CACHE = CacheBuilder.newBuilder().expireAfterAccess(5, TimeUnit.MINUTES).build();
+    public static final Cache<Identifier, Entity> ENTITIES_CACHE = CacheBuilder.newBuilder().expireAfterAccess(java.time.Duration.ofMinutes(5)).build();
 }
