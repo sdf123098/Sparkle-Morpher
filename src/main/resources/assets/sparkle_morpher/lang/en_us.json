@@ -1358,5 +1358,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "Cloud sync: Model, texture, and animation synced",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "Cloud sync: Model and texture synced; upgrade the backend to sync animations",
   "gui.sparkle_morpher.cloud_player.publish_failed": "Cloud publish failed: %s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "Cloud query failed: %s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "Cloud query failed: %s",
+  "gui.sparkle_morpher.acceleration.auto": "GPU + SIMD acceleration (Aggressive)",
+  "gui.sparkle_morpher.acceleration.auto.desc": "Uses the established Aggressive policy. Vulkan options remain available below."
 }

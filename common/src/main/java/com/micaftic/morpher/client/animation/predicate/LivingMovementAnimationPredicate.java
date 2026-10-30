@@ -1,6 +1,7 @@
 package com.micaftic.morpher.client.animation.predicate;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
+import com.micaftic.morpher.client.animation.RidingAnimationPlan;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.core.compat.carryon.CarryOnCompat;
 import com.micaftic.morpher.core.compat.swem.SWEMCompat;
@@ -58,13 +59,13 @@ public class LivingMovementAnimationPredicate implements IAnimationPredicate<Liv
             }
         }
         if (vehicle instanceof Pig) {
-            return IAnimationPredicate.playAnimationWithLoop(event, "ride_pig", ILoopType.EDefaultLoopTypes.LOOP);
+            return playPlanned(event, RidingAnimationPlan.Kind.PIG);
         }
         if (vehicle instanceof Saddleable) {
-            return IAnimationPredicate.playAnimationWithLoop(event, "ride", ILoopType.EDefaultLoopTypes.LOOP);
+            return playPlanned(event, RidingAnimationPlan.Kind.STRADDLE);
         }
         if (vehicle instanceof Boat) {
-            return IAnimationPredicate.playAnimationWithLoop(event, "boat", ILoopType.EDefaultLoopTypes.LOOP);
+            return playPlanned(event, RidingAnimationPlan.Kind.BOAT);
         }
         boolean z = (livingEntity instanceof Player var8) && CarryOnCompat.isPlayerCarrying(var8);
         boolean z2 = TouhouLittleMaidCompat.isMaidEntity(livingEntity) && (livingEntity.getVehicle() instanceof Player);
@@ -75,6 +76,15 @@ public class LivingMovementAnimationPredicate implements IAnimationPredicate<Liv
         if (playState != null) {
             return playState;
         }
-        return IAnimationPredicate.playAnimationWithLoop(event, "sit", ILoopType.EDefaultLoopTypes.LOOP);
+        return playPlanned(event, RidingAnimationPlan.Kind.SEATED);
+    }
+
+    private PlayState playPlanned(AnimationEvent<LivingAnimatable<?>> event, RidingAnimationPlan.Kind kind) {
+        var assembly = event.getAnimatable().getModelAssembly();
+        var bundle = assembly == null ? null : assembly.getAnimationBundle();
+        if (bundle == null) return PlayState.STOP;
+        String animation = bundle.getRidingAnimationPlan().selection(kind).animation();
+        return animation == null ? PlayState.STOP
+                : IAnimationPredicate.playAnimationWithLoop(event, animation, ILoopType.EDefaultLoopTypes.LOOP);
     }
 }

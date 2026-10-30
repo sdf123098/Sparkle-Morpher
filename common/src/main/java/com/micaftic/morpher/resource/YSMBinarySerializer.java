@@ -287,14 +287,14 @@ public class YSMBinarySerializer {
 
                 // animations
                 buf.writeVarInt(state.animations.size());
-                for (Map.Entry<String, String> e : state.animations.entrySet()) {
+                for (Map.Entry<String, String> e : state.animations) {
                     buf.writeString(e.getKey());
                     buf.writeString(e.getValue());
                 }
 
                 // transitions
                 buf.writeVarInt(state.transitions.size());
-                for (Map.Entry<String, String> e : state.transitions.entrySet()) {
+                for (Map.Entry<String, String> e : state.transitions) {
                     buf.writeString(e.getKey());
                     buf.writeString(e.getValue());
                 }
