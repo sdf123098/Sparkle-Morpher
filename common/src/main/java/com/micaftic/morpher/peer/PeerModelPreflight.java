@@ -155,7 +155,7 @@ public final class PeerModelPreflight {
                 check(animation.blendWeight);for(var event:animation.timelineEvents)for(var text:event.events)check(text);
                 for(var bone:animation.boneAnimations){frames(bone.rotation);frames(bone.position);frames(bone.scale);}
             }
-            for(var file:controllers)for(var controller:file.controllers.values())for(var state:controller.states){for(var text:state.animations.values())check(text);for(var text:state.transitions.values())check(text);for(var text:state.onEntry)check(text);for(var text:state.onExit)check(text);}
+            for(var file:controllers)for(var controller:file.controllers.values())for(var state:controller.states){for(var entry:state.animations)check(entry.getValue());for(var entry:state.transitions)check(entry.getValue());for(var text:state.onEntry)check(text);for(var text:state.onExit)check(text);}
         }
         void frames(List<RawYsmModel.RawKeyframe> frames)throws IOException {for(var frame:frames){for(var value:frame.preData)check(value);for(var value:frame.postData)check(value);}}
     }

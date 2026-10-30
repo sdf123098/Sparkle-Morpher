@@ -21,7 +21,7 @@ public final class ConfigPolicies {
         return new RenderPolicy(bool(GeneralConfig.DISABLE_SELF_MODEL, false), bool(GeneralConfig.DISABLE_OTHER_MODEL, false),
                 bool(GeneralConfig.DISABLE_SELF_HANDS, false), bool(GeneralConfig.DISABLE_PROJECTILE_MODEL, false),
                 bool(GeneralConfig.DISABLE_VEHICLE_MODEL, false), bool(GeneralConfig.DISABLE_EXTERNAL_FP_ANIM, false),
-                bool(GeneralConfig.USE_COMPATIBILITY_RENDERER, false), bool(GeneralConfig.USE_GPU_RENDERER, true),
+                false, true,
                 bool(GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK, true), bool(GeneralConfig.ANIMATION_DISTANCE_LOD, false));
     }
 
@@ -66,7 +66,7 @@ public final class ConfigPolicies {
                 bool(GeneralConfig.ENABLE_OPENGL_LEGACY_GPU_RENDERER, false),
                 bool(GeneralConfig.DISABLE_RAW_OPENGL_ON_NON_OPENGL, true),
                 bool(GeneralConfig.ENABLE_OPENGL_GUI_BLUR, false),
-                nativeSimdPolicy(value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE)),
+                NativeSimdPolicy.AGGRESSIVE,
                 nativeSimdValidationMode(value(GeneralConfig.NATIVE_SIMD_VALIDATION_MODE, GeneralConfig.NativeSimdValidationMode.OFF)),
                 bool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false),
                 bool(GeneralConfig.NATIVE_SIMD_COMPATIBILITY_LOG, false),
