@@ -50,7 +50,7 @@ public final class Blaze3DModelMeshBuilder {
             );
             boneMatrixBuffer = device.createBuffer(
                     () -> "sparkle_morpher_model_bone_matrices",
-                    GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER | GpuBuffer.USAGE_COPY_DST,
+                    VulkanBoneStorage.bufferUsage(),
                     (long) meshData.boneCount * Blaze3DModelMesh.BONE_MATRIX_BYTES
             );
 

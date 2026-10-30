@@ -848,12 +848,12 @@ public class YSMBinaryDeserializer implements AutoCloseable{
                 // animations
                 int animationsSize = reader.readVarInt();
                 for (int j = 0; j < animationsSize; j++) {
-                    state.animations.put(reader.readString(), reader.readString());
+                    state.animations.add(Map.entry(reader.readString(), reader.readString()));
                 }
                 // transitions
                 int transitionsSize = reader.readVarInt();
                 for (int j = 0; j < transitionsSize; j++) {
-                    state.transitions.put(reader.readString(), reader.readString());
+                    state.transitions.add(Map.entry(reader.readString(), reader.readString()));
                 }
                 // on_entry
                 int onEntryCount = reader.readVarInt();

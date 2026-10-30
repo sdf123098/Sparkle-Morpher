@@ -1,22 +1,22 @@
-#version 330
+#version 430
 
-#moj_import <minecraft:fog.glsl>
-#moj_import <minecraft:dynamictransforms.glsl>
-#moj_import <minecraft:sample_lightmap.glsl>
+#include <minecraft:fog.glsl>
+#include <minecraft:dynamictransforms.glsl>
+#include <minecraft:sample_lightmap.glsl>
 
 uniform sampler2D Sampler0;
 uniform sampler2D Sampler1;
 uniform sampler2D Sampler2;
 
-in float sphericalVertexDistance;
-in float cylindricalVertexDistance;
-in vec4 vertexColor;
-in vec2 texCoord0;
-flat in int packedLight;
-flat in uint cullable;
-flat in float facingSign;
+layout(location = 0) in float sphericalVertexDistance;
+layout(location = 1) in float cylindricalVertexDistance;
+layout(location = 2) in vec4 vertexColor;
+layout(location = 3) in vec2 texCoord0;
+layout(location = 4) flat in int packedLight;
+layout(location = 5) flat in uint cullable;
+layout(location = 6) flat in float facingSign;
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
 
 void main() {
     bool doCull = facingSign >= 0.0;

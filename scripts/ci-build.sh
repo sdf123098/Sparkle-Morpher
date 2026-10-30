@@ -10,6 +10,7 @@ p.write_text(p.read_text().replace('mirrors.cloud.tencent.com/gradle/',
 PY
 chmod +x gradlew
 mkdir -p build/ci-diagnostics
+python3 scripts/test_tweakeroo_freecam.py 2>&1 | tee build/ci-diagnostics/tweakeroo-freecam.log
 args=(--init-script gradle/ci.init.gradle --no-daemon --no-build-cache
       --console=plain --warning-mode fail --stacktrace --max-workers=2)
 

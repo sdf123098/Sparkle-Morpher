@@ -31,6 +31,19 @@ public final class Blaze3DBoneSkinPipeline {
             com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/blaze3d_bone_skin_translucent"),
             TRANSLUCENT_SHADER, new ColorTargetState(BlendFunction.TRANSLUCENT));
 
+    public static final RenderPipeline OUTLINE_PIPELINE = buildPipeline(
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/blaze3d_bone_outline"),
+            com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "core/blaze3d_bone_outline"),
+            ColorTargetState.DEFAULT, true);
+
+    public static final net.minecraft.client.renderer.oit.OitPipelineSet OIT_PIPELINES =
+            net.minecraft.client.renderer.oit.OitPipelineSet.builder("sparkle_morpher_bone_storage",
+                    skinningBase(SHADER, TRANSLUCENT_SHADER))
+                    .withDepthBoundsModifier(b -> b.withLocation(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/bones_oit_depth")))
+                    .withTransmittanceModifier(b -> b.withLocation(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/bones_oit_transmittance")))
+                    .withAccumulateModifier(b -> b.withLocation(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/bones_oit_accumulate")))
+                    .build();
+
     private static final AtomicBoolean pipelinesPrecompiled = new AtomicBoolean(false);
     private static final AtomicBoolean precompileWarned = new AtomicBoolean(false);
 
@@ -57,6 +70,22 @@ public final class Blaze3DBoneSkinPipeline {
 
     private static RenderPipeline buildPipeline(Identifier location, Identifier fragmentShader,
                                                 ColorTargetState colorTargetState) {
+        return buildPipeline(location, fragmentShader, colorTargetState, false);
+    }
+
+    private static RenderPipeline buildPipeline(Identifier location, Identifier fragmentShader,
+                                                ColorTargetState colorTargetState, boolean outline) {
+        return skinningBuilder(location, fragmentShader, colorTargetState, outline).build();
+    }
+
+    private static RenderPipeline.Builder skinningBuilder(Identifier location, Identifier fragmentShader,
+            ColorTargetState colorTargetState, boolean outline) {
+        return skinningBase(location, fragmentShader)
+                .withColorTargetState(colorTargetState)
+                .withDepthStencilState(outline ? java.util.Optional.empty() : java.util.Optional.of(DepthStencilState.DEFAULT));
+    }
+
+    private static RenderPipeline.Builder skinningBase(Identifier location, Identifier fragmentShader) {
         return RenderPipeline
                 .builder(RenderPipelines.MATRICES_FOG_LIGHT_DIR_SNIPPET)
                 .withLocation(location)
@@ -64,7 +93,7 @@ public final class Blaze3DBoneSkinPipeline {
                 .withFragmentShader(fragmentShader)
                 .withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1_SAMPLER2)
                 .withBindGroupLayout(BindGroupLayout.builder()
-                        .withUniform("BoneMatrices", UniformType.TEXEL_BUFFER, GpuFormat.RGBA32_FLOAT)
+                        .withUniform(VulkanBoneStorage.NAME, UniformType.UNIFORM_BUFFER)
                         .build())
                 .withVertexBinding(0, VertexFormat.builder(0)
                         .addAttribute("Position", GpuFormat.RGB32_FLOAT)
@@ -74,10 +103,7 @@ public final class Blaze3DBoneSkinPipeline {
                         .addAttribute("Cullable", GpuFormat.R32_UINT)
                         .build())
                 .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
-                .withCull(false)
-                .withColorTargetState(colorTargetState)
-                .withDepthStencilState(DepthStencilState.DEFAULT)
-                .build();
+                .withCull(false);
     }
 
     private Blaze3DBoneSkinPipeline() {

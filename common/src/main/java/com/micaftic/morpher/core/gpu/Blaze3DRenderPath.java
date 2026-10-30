@@ -42,12 +42,17 @@ public final class Blaze3DRenderPath {
     private static final Vector3f overlayScratch = new Vector3f();
     private static final float[] rootPoseScratch = new float[16];
     private static final float[] rootNormalScratch = new float[9];
+    private static final AtomicBoolean reportedNativeStorageDraw = new AtomicBoolean();
+    private static final AtomicBoolean warnedNativeStorageFallback = new AtomicBoolean();
 
     private Blaze3DRenderPath() {
     }
 
     public static boolean isExperimentalEnabled() {
-        return ConfigPolicies.graphics().blaze3dVulkanGpuRenderer();
+        var graphics = ConfigPolicies.graphics();
+        return graphics.blaze3dVulkanGpuRenderer()
+                && graphics.backendMode() != com.micaftic.morpher.core.render.SmRenderBackendMode.VANILLA_PIPELINE_ONLY
+                && graphics.backendMode() != com.micaftic.morpher.core.render.SmRenderBackendMode.DISABLED_GPU_ACCELERATION;
     }
 
     public static boolean hasStableGraphicsApi() {
@@ -57,6 +62,112 @@ public final class Blaze3DRenderPath {
                 && report.compilePipelinePresent()
                 && report.createRenderPassPresent()
                 && report.drawIndexedPresent();
+    }
+
+    /** Prepare/upload a separate bone snapshot before Minecraft starts executing feature passes. */
+    public static PreparedDraw prepare(GeoModel model, PoseStack.Pose pose, float[] boneParams,
+            float[] stateBuffer, int renderPartMask, int packedLight, int packedOverlay,
+            float r, float g, float b, float a, Identifier texture, boolean translucent,
+            com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.BoneRenderPass bonePass, boolean outline) {
+        if (!isExperimentalEnabled() || model == null || texture == null) return null;
+        VulkanBoneBufferPool.Lease lease = null;
+        try {
+            RenderSystem.assertOnRenderThread();
+            Blaze3DModelMesh mesh = getOrBuildMesh(model);
+            if (mesh == null) return null;
+            ByteBuffer bones = mesh.perFrameBoneBuffer;
+            boolean nativeComputed = computeBoneMatricesNativeVulkan(model, pose, boneParams, packedLight, bones);
+            if (nativeComputed) {
+                com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.computeStateBufferForNative(
+                        model, boneParams, stateBuffer, pose);
+            } else {
+                if (warnedNativeStorageFallback.compareAndSet(false, true)) {
+                    com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM-VULKAN-SSBO] Native SIMD bone computation unavailable; Java bone fallback is active and does not count as a complete SIMD/GPU chain");
+                }
+                if (!Blaze3DBoneMatrices.write(model, pose.pose(), pose.normal(), boneParams, stateBuffer, packedLight, bones)) return null;
+            }
+            if (bonePass != com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.BoneRenderPass.ALL) {
+                for (int i = 0; i < model.bakedBones.size(); i++) {
+                    boolean glow = model.bakedBones.get(i).glow;
+                    if (glow != (bonePass == com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.BoneRenderPass.GLOW)) {
+                        bones.putFloat(i * 144 + 132, 1.0f);
+                    }
+                }
+            }
+            Minecraft mc = Minecraft.getInstance();
+            AbstractTexture modelTexture = mc.getTextureManager().getTexture(texture);
+            var overlayTexture = mc.gameRenderer.overlayTexture();
+            var lightmap = mc.gameRenderer.lightmap();
+            if (modelTexture == null || modelTexture.getTextureView() == null || modelTexture.getSampler() == null
+                    || overlayTexture == null || overlayTexture.getTextureView() == null || lightmap == null) return null;
+            lease = mesh.boneStoragePool.acquire();
+            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(lease.buffer.slice(), bones);
+            return new PreparedDraw(mesh, lease, new Vector4f(r, g, b, a), packedOverlay, modelTexture.getTextureView(), modelTexture.getSampler(),
+                    overlayTexture.getTextureView(), lightmap, renderPartMask,
+                    outline ? Blaze3DBoneSkinPipeline.OUTLINE_PIPELINE : translucent
+                            ? Blaze3DBoneSkinPipeline.TRANSLUCENT_PIPELINE : Blaze3DBoneSkinPipeline.PIPELINE,
+                    RenderSystem.getScissorStateForRenderTypeDraws(), nativeComputed);
+        } catch (Throwable failure) {
+            if (lease != null) lease.retire();
+            com.micaftic.morpher.YesSteveModel.LOGGER.error("[SM-VULKAN-SSBO] prepare failed; native/GPU chain was not accepted", failure);
+            return null;
+        }
+    }
+
+    public static final class PreparedDraw implements AutoCloseable {
+        private final Blaze3DModelMesh mesh;
+        private final VulkanBoneBufferPool.Lease bones;
+        private com.mojang.renderpearl.api.buffers.GpuBufferSlice dynamic;
+        private final Vector4f color;
+        private final int packedOverlay;
+        private final GpuTextureView texture, overlay, lightmap;
+        private final GpuSampler sampler;
+        private final int partMask;
+        private final RenderPipeline pipeline;
+        private final com.mojang.blaze3d.systems.ScissorState scissor;
+        private final boolean nativeComputed;
+
+        private PreparedDraw(Blaze3DModelMesh mesh, VulkanBoneBufferPool.Lease bones,
+                Vector4f color, int packedOverlay, GpuTextureView texture, GpuSampler sampler,
+                GpuTextureView overlay, GpuTextureView lightmap, int partMask, RenderPipeline pipeline,
+                com.mojang.blaze3d.systems.ScissorState scissor, boolean nativeComputed) {
+            this.mesh = mesh; this.bones = bones; this.color = color; this.packedOverlay = packedOverlay; this.texture = texture;
+            this.sampler = sampler; this.overlay = overlay; this.lightmap = lightmap;
+            this.partMask = partMask; this.pipeline = pipeline; this.scissor = scissor; this.nativeComputed = nativeComputed;
+        }
+
+        public void prepareView() {
+            dynamic = RenderSystem.getDynamicUniforms().writeTransform(RenderSystem.getModelViewMatrixCopy(),
+                    color, new Vector3f((float) packedOverlay, 0, 0), IDENTITY_MATRIX);
+        }
+
+        public void drawInto(RenderPass pass, net.minecraft.client.renderer.oit.OitStage stage) {
+            pass.setPipeline(RenderSystem.getCompiledPipeline(stage == null ? pipeline
+                    : Blaze3DBoneSkinPipeline.OIT_PIPELINES.getPipeline(stage)));
+            if (scissor.enabled()) pass.enableScissor(scissor.x(), scissor.y(), scissor.width(), scissor.height());
+            else pass.disableScissor();
+            RenderSystem.bindDefaultUniforms(pass);
+            pass.setUniform("DynamicTransforms", dynamic);
+            pass.setUniform(VulkanBoneStorage.NAME, bones.buffer.slice());
+            var clamp = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST);
+            pass.setUniform("Sampler0", texture, sampler);
+            pass.setUniform("Sampler1", overlay, clamp);
+            pass.setUniform("Sampler2", lightmap, clamp);
+            pass.setVertexBuffer(0, mesh.vertexSlice());
+            pass.setIndexBuffer(mesh.indexBuffer, IndexType.INT);
+            drawMeshParts(pass, mesh, partMask);
+            bones.nativeComputed = nativeComputed;
+            if (partMask != 0) VulkanBoneStorage.drawPhase("part_mask_" + partMask);
+            VulkanBoneStorage.drawPhase(stage != null ? "oit_" + stage : pipeline == Blaze3DBoneSkinPipeline.OUTLINE_PIPELINE ? "outline"
+                    : pipeline == Blaze3DBoneSkinPipeline.TRANSLUCENT_PIPELINE ? "translucent" : "opaque");
+            if (nativeComputed) VulkanBoneStorage.nativeDrawSubmitted();
+            if (nativeComputed && reportedNativeStorageDraw.compareAndSet(false, true)) {
+                com.micaftic.morpher.YesSteveModel.LOGGER.info(
+                        "[SM-VULKAN-SSBO] native SIMD -> storage buffer -> GPU skinning draw submitted; GPU completion and screen pixels require validation");
+            }
+        }
+
+        @Override public void close() { bones.retire(); }
     }
 
     public static boolean tryRender(
@@ -135,7 +246,7 @@ public final class Blaze3DRenderPath {
 
             overlayScratch.set((float) packedOverlay, 0.0f, 0.0f);
             var dynamicTransforms = RenderSystem.getDynamicUniforms().writeTransform(
-                    IDENTITY_MATRIX,
+                    RenderSystem.getModelViewMatrixCopy(),
                     new Vector4f(r, g, b, a),
                     overlayScratch,
                     IDENTITY_MATRIX
@@ -159,7 +270,7 @@ public final class Blaze3DRenderPath {
                 pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
                 RenderSystem.bindDefaultUniforms(pass);
                 pass.setUniform("DynamicTransforms", dynamicTransforms);
-                pass.setUniform("BoneMatrices", mesh.boneMatrixSlice());
+                pass.setUniform(VulkanBoneStorage.NAME, mesh.boneMatrixSlice());
                 pass.setUniform("Sampler0", modelTexture.getTextureView(), modelTexture.getSampler());
                 pass.setUniform("Sampler1", overlayTextureView, clampSampler);
                 pass.setUniform("Sampler2", lightmapTextureView, clampSampler);
