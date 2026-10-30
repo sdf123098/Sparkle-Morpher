@@ -439,7 +439,7 @@ public class ModelRendererBridge {
      * the cost is small relative to the full model. Values written here match
      * calculateBoneMatrixLinear exactly (model-local space, pre-inner-pivot).
      */
-    private static void computeStateBufferForNative(GeoModel mesh, float[] boneParams, float[] stateBuffer, PoseStack.Pose pose) {
+    public static void computeStateBufferForNative(GeoModel mesh, float[] boneParams, float[] stateBuffer, PoseStack.Pose pose) {
         if (mesh.bakedBones == null || mesh.bakedBones.isEmpty() || stateBuffer == null || boneParams == null) return;
         int boneCount = mesh.bakedBones.size();
         if (boneCount == 0) return;

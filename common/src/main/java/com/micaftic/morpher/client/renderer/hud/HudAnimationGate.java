@@ -32,6 +32,11 @@ public final class HudAnimationGate {
     private HudAnimationGate() {
     }
 
+    /** A due HUD sample owns its evaluation even if world rendering consumed this tick. */
+    public static boolean shouldEvaluate(Decision decision, boolean scheduled) {
+        return scheduled || (RenderContext.isOldHud() && decision == Decision.FULL_EVAL);
+    }
+
     public static Decision decide(AnimatableEntity<?> animatable, AnimationEvent<?> event) {
         if (!RenderContext.isOldHud()
                 || animatable.getEntity() != Minecraft.getInstance().player) {

@@ -24,6 +24,7 @@ public final class Blaze3DModelMesh implements AutoCloseable {
     public final GpuBuffer indexBuffer;
     public final GpuBuffer boneMatrixBuffer;
     public final ByteBuffer perFrameBoneBuffer;
+    final VulkanBoneBufferPool boneStoragePool;
     public final int vertexCount;
     public final int indexCount;
     public final int boneCount;
@@ -54,6 +55,7 @@ public final class Blaze3DModelMesh implements AutoCloseable {
         this.vertexCount = vertexCount;
         this.indexCount = indexCount;
         this.boneCount = boneCount;
+        this.boneStoragePool = new VulkanBoneBufferPool((long) boneCount * BONE_MATRIX_BYTES);
         this.partMask1Start = pm1s;
         this.partMask1Count = pm1c;
         this.partMask2Start = pm2s;
@@ -110,6 +112,7 @@ public final class Blaze3DModelMesh implements AutoCloseable {
         vertexBuffer.close();
         indexBuffer.close();
         boneMatrixBuffer.close();
+        boneStoragePool.close();
         MemoryUtil.memFree(perFrameBoneBuffer);
         ResourceLifecycleStats.onDirectBufferFreed(null, (long) boneCount * BONE_MATRIX_BYTES);
         ResourceLifecycleStats.onGpuMeshDisposed(null, this.estimatedBytes);

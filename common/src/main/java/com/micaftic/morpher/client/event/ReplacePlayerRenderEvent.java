@@ -5,6 +5,7 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.client.render.PlayerRenderPolicy;
 import com.micaftic.morpher.core.config.ConfigPolicies;
+import com.micaftic.morpher.core.compat.tweakeroo.TweakerooCompat;
 import com.micaftic.morpher.util.CameraUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -34,6 +35,7 @@ public class ReplacePlayerRenderEvent {
         try {
             cap = PlayerCapability.get(entity).orElse(null);
             if (cap != null) cap.tickModel();
+            boolean spectator = TweakerooCompat.isSpectatorForRendering(entity);
             boolean firstPersonSuppressionSatisfied = cap != null
                     && (!CameraUtil.isFirstPerson(cap)
                         || FirstPersonCompat.isFirstPersonActive()
@@ -45,7 +47,7 @@ public class ReplacePlayerRenderEvent {
                     entity.equals(localPlayer),
                     ConfigPolicies.render().disableSelfModel(),
                     ConfigPolicies.render().disableOtherModel(),
-                    entity.isSpectator(),
+                    spectator,
                     cap != null && cap.isModelActive() && cap.hasRenderableModel(),
                     firstPersonSuppressionSatisfied
             ));
@@ -60,7 +62,7 @@ public class ReplacePlayerRenderEvent {
                 return true;
             }
             if(cap != null) com.micaftic.morpher.client.peer.ClientPeerRuntime.renderState(entity, cap.getModelId(),
-                    ConfigPolicies.render().disableOtherModel() || entity.isSpectator() ? com.micaftic.morpher.peer.PeerObservation.State.HIDDEN
+                    ConfigPolicies.render().disableOtherModel() || spectator ? com.micaftic.morpher.peer.PeerObservation.State.HIDDEN
                             : com.micaftic.morpher.peer.PeerObservation.State.WAITING_RENDER);
             return false;
         } catch (Exception e) {

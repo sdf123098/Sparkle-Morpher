@@ -13,7 +13,8 @@ import java.nio.ByteBuffer;
 public final class NativeSimdGpuCompute {
 
     public static final int BONE_STRIDE_BYTES = 144;
-    public static final int HIDDEN_FLAG_OFFSET = 136;
+    // Native BoneDataOut: transform[16] + normal[16] + packedLight + isHidden.
+    public static final int HIDDEN_FLAG_OFFSET = 132;
     public static final int VULKAN_HIDDEN_FLAG_OFFSET = HIDDEN_FLAG_OFFSET;
 
     private static final int UNWRITTEN_SENTINEL = 0x7FC00001;
