@@ -8,6 +8,11 @@
     "defaultRequire": 1
   },
   "client": [
+    "client.VulkanStorageUsageMixin",
+    "client.VulkanStorageReflectionMixin",
+    "client.VulkanStorageLayoutMixin",
+    "client.VulkanStorageDescriptorMixin",
+    "client.VulkanFeatureRendererMixin",
     "client.PeerRenderFrameMixin",
     "client.LevelRendererAccessor",
     "client.ArrowEntityAccessor",

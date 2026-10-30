@@ -3359,9 +3359,7 @@ public class ModernPlayerModelScreen extends Screen {
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_external_fp_anim", GeneralConfig.DISABLE_EXTERNAL_FP_ANIM));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.shader_glow_compatibility", GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK));
         rows.add(bool(ModelPanelState.SettingGroup.RENDERING, "gui.sparkle_morpher.model_panel.setting.disable_face_culling", GeneralConfig.DISABLE_MODEL_FACE_CULLING));
-        rows.add(rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE));
-        rows.add(nativeSimdPolicyRow(ModelPanelState.SettingGroup.PERFORMANCE));
-        rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));
+        rows.add(javaVectorRendererRow(ModelPanelState.SettingGroup.DEVELOPER));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.blaze3d_vulkan_gpu_renderer", GeneralConfig.ENABLE_BLAZE3D_VULKAN_GPU_RENDERER));
         rows.add(bool(ModelPanelState.SettingGroup.PERFORMANCE, "gui.sparkle_morpher.model_panel.setting.blaze3d_in_pipeline_draw", GeneralConfig.ENABLE_BLAZE3D_IN_PIPELINE_DRAW));
         rows.add(bool(ModelPanelState.SettingGroup.CACHE, "gui.sparkle_morpher.model_panel.setting.lazy_model_loading", GeneralConfig.LAZY_MODEL_LOADING));
@@ -4538,11 +4536,8 @@ public class ModernPlayerModelScreen extends Screen {
 
     private void renderPerformanceReference(GuiGraphicsExtractor g,int mx,int my){
         var c=settingsColumns();int x=c.detailX(),w=c.detailWidth(),y=c.top(),rh=settingRowHeight(),bh=uiButtonHeight();
-        var mode=rendererModeRow(ModelPanelState.SettingGroup.PERFORMANCE).segmented();int controlW=Math.min(280,w*2/3),half=(controlW-4)/2,cx=x+w-controlW-8;
-        drawText(g,Component.literal(auditString("hardcoded_078")),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
-        renderSegmentedOption(g,cx,y+4,half,bh,mode.left(),mode.leftSelected(),mode.leftAction());renderSegmentedOption(g,cx+half+4,y+4,half,bh,mode.right(),!mode.leftSelected(),mode.rightAction());
-        y+=rh;for(var line:wrap(auditString("hardcoded_079"),w-16,2)){drawMuted(g,Component.literal(line),x+8,y+3);y+=font.lineHeight+2;}y+=5;
-        renderSettingRow(g,mx,my,x,y,w,javaVectorRendererRow(ModelPanelState.SettingGroup.PERFORMANCE));y+=rh;
+        drawText(g,Component.translatable("gui.sparkle_morpher.acceleration.auto"),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));
+        y+=rh;for(var line:wrap(Component.translatable("gui.sparkle_morpher.acceleration.auto.desc").getString(),w-16,3)){drawMuted(g,Component.literal(line),x+8,y+3);y+=font.lineHeight+2;}y+=5;
         String[] labels={auditString("hardcoded_080"),auditString("hardcoded_081")};Runnable[] actions={()->selectSettingsPage("cache"),()->openCloudSettings(CloudAccountPage.PERFORMANCE)};
         for(int i=0;i<2;i++){drawText(g,Component.literal(labels[i]),x+8,UiElementLayout.centeredY(y,rh,font.lineHeight));renderTextButton(g,mx,my,x+w-108,y+4,100,bh,Component.literal(auditString("hardcoded_082")),actions[i]);y+=rh;}
         renderTextButton(g,mx,my,x+8,y+4,Math.min(150,w-16),bh,Component.literal(performanceAdvanced?auditString("hardcoded_083"):auditString("hardcoded_084")),()->performanceAdvanced=!performanceAdvanced);y+=rh;

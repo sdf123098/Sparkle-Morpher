@@ -61,6 +61,33 @@ public interface IGeoRenderer<T extends AnimatableEntity<?>> {
             ModelRendererBridge.BoneRenderPass basePass = splitEmissiveBones
                     ? ModelRendererBridge.BoneRenderPass.NON_GLOW
                     : ModelRendererBridge.BoneRenderPass.ALL;
+            if (com.micaftic.morpher.core.gpu.VulkanModelFeatureRenderer.trySubmit(
+                    collector, renderType, poseStack.last(), model.getGeoModel(), matrixData, absPivotData,
+                    i2, i3, f2, f3, f4, f5, textureLocation, basePass)) {
+                if (splitEmissiveBones) {
+                    RenderType emissiveType = RenderTypes.entityTranslucentEmissive(textureLocation);
+                    if (!com.micaftic.morpher.core.gpu.VulkanModelFeatureRenderer.trySubmit(
+                            collector, emissiveType, poseStack.last(), model.getGeoModel(), matrixData, absPivotData,
+                            i2, i3, f2, f3, f4, f5, textureLocation, ModelRendererBridge.BoneRenderPass.GLOW)) {
+                        collector.submitCustomGeometry(poseStack, emissiveType, (pose, buffer) ->
+                                renderSubmittedGeometry(collector, buffer, pose, model, matrixData, absPivotData,
+                                        i, i2, i3, f2, f3, f4, f5, textureLocation, previewMode, extraPlayerMode,
+                                        worldRenderMode, false, ModelRendererBridge.BoneRenderPass.GLOW));
+                    }
+                }
+                if (!renderType.isOutline() && animatable.getEntity() instanceof net.minecraft.world.entity.Entity entity
+                        && entity.isCurrentlyGlowing()) {
+                    renderType.outline().ifPresent(outline -> {
+                        int color = entity.getTeamColor();
+                        com.micaftic.morpher.core.gpu.VulkanModelFeatureRenderer.trySubmit(
+                                collector, outline, poseStack.last(), model.getGeoModel(), matrixData, absPivotData,
+                                i2, i3, ((color >> 16) & 255) / 255f, ((color >> 8) & 255) / 255f,
+                                (color & 255) / 255f, 1f, textureLocation, ModelRendererBridge.BoneRenderPass.ALL);
+                    });
+                }
+                setCurrentModelRenderCycle(EModelRenderCycle.REPEATED);
+                return;
+            }
             // 1.2.5 §20 Level A：启用时把 GPU 蒙皮绘制登记为延迟绘制，由模组自己的 framegraph pass
             // 在正确时机执行。默认关闭（系统属性门控），关闭时 tryDefer 恒 false，走原提交路径。
             if (basePass == ModelRendererBridge.BoneRenderPass.ALL

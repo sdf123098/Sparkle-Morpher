@@ -2,6 +2,7 @@ package com.micaftic.morpher.util;
 
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.client.render.RenderContext;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
@@ -26,6 +27,11 @@ public final class CameraUtil {
     }
 
     private static boolean hasCameraContext() {
+        // GUI/PIP work can run while world or optional first-person flags are set.
+        // These previews always need the complete model, including its head.
+        if (RenderContext.isAnyPreview() || RenderContext.isPaperDoll()) {
+            return false;
+        }
         return ModelPreviewRenderer.isWorldRender() || ModelPreviewRenderer.isFirstPerson();
     }
 

@@ -11,6 +11,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NativeSimdGpuComputeTest {
 
     @Test
+    void checksNativeHiddenFieldInsteadOfZeroedPadding() {
+        ByteBuffer buffer = ByteBuffer.allocateDirect(144).order(ByteOrder.nativeOrder());
+        NativeSimdGpuCompute.markUnwritten(buffer, 1);
+        // BoneDataOut has 32 floats, packedLight at 128, isHidden at 132, then padding.
+        buffer.putInt(136, 0);
+        assertFalse(NativeSimdGpuCompute.hasCompleteWrite(buffer, 1));
+        buffer.putInt(132, 1);
+        assertTrue(NativeSimdGpuCompute.hasCompleteWrite(buffer, 1));
+    }
+
+    @Test
+    void validatesVulkanHiddenFieldAtNativeAbiOffset() {
+        ByteBuffer buffer = ByteBuffer.allocateDirect(144).order(ByteOrder.nativeOrder());
+        NativeSimdGpuCompute.markVulkanUnwritten(buffer, 1);
+        buffer.putFloat(136, 0f);
+        assertFalse(NativeSimdGpuCompute.hasCompleteVulkanWrite(buffer, 1));
+        buffer.putFloat(132, 1f);
+        assertTrue(NativeSimdGpuCompute.hasCompleteVulkanWrite(buffer, 1));
+    }
+
+    @Test
     void rejectsBufferWhenNativeWritesNothing() {
         ByteBuffer buffer = ByteBuffer.allocateDirect(NativeSimdGpuCompute.BONE_STRIDE_BYTES)
                 .order(ByteOrder.nativeOrder());

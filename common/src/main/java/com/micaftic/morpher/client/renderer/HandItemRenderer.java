@@ -83,6 +83,13 @@ public class HandItemRenderer {
         RenderType renderType = RenderTypes.entityTranslucent(Identifier);
         float[] boneParams = model.getMatrixData().clone();
         float[] absPivotData = model.getAbsPivotData().clone();
+        if (com.micaftic.morpher.core.gpu.VulkanModelFeatureRenderer.trySubmit(
+                collector, renderType, poseStack.last(), model.getGeoModel(), boneParams, absPivotData,
+                packedLight, OverlayTexture.NO_OVERLAY, 1f, 1f, 1f, 1f, Identifier,
+                ModelRendererBridge.BoneRenderPass.ALL, renderPartMask)) {
+            poseStack.popPose();
+            return true;
+        }
         collector.submitCustomGeometry(poseStack, renderType, (pose, buffer) -> {
             boolean previousFirstPersonMode = ModelPreviewRenderer.isFirstPerson();
             ModelPreviewRenderer.setFirstPersonMode(true);

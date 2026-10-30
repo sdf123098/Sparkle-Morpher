@@ -6,6 +6,7 @@ import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.render.RenderContext;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.util.CameraUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -48,6 +49,13 @@ public final class HudPoseCache {
                 || RenderContext.isGuiPreview()
                 || RenderContext.isModelPreview()
                 || !(animatable instanceof LivingAnimatable<?> living)) {
+            return;
+        }
+        // First-person body mods render a world pose with camera-only visibility
+        // expressions (hidden/scaled head bones). The packed arrays include those
+        // results; clearing allHeadBone alone cannot turn it into a full HUD pose.
+        if (CameraUtil.isFirstPerson(animatable)) {
+            invalidate();
             return;
         }
         AnimatedGeoModel currentModel = animatable.getCurrentModel();
