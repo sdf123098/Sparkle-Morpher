@@ -50,6 +50,8 @@ public class PlayerModelBundle {
 
     private final boolean fallFlyingPitchHandledByAnimation;
 
+    private final com.micaftic.morpher.client.animation.RidingAnimationPlan ridingAnimationPlan;
+
     private final Consumer<CustomPlayerEntity> playerControllerInstaller;
 
     private final Consumer<PlayerGeoEntity> armControllerInstaller;
@@ -82,6 +84,11 @@ public class PlayerModelBundle {
         this.semanticSkeleton = semanticSkeleton;
         this.handLocatorProfile = handLocatorProfile;
         this.fallFlyingPitchHandledByAnimation = detectsFallFlyingRootRotation(mainModel, mainAnimations);
+        this.ridingAnimationPlan = com.micaftic.morpher.client.animation.RidingAnimationPlan.analyze(action -> {
+            Animation animation = mainAnimations.get(action);
+            return animation != null ? animation
+                    : com.micaftic.morpher.client.animation.BedrockAnimationMapping.findByAction(mainAnimations, action);
+        });
         this.playerControllerInstaller = UnifiedPlayerActionController.buildControllers(this, modelResourceBundle);
         this.armControllerInstaller = FirstPersonArmAnimationController.buildControllers(this, modelResourceBundle);
         this.maidControllerInstaller = actionProfile == ModelActionProfile.VANILLA_HUMANOID ? null : TouhouLittleMaidClientCompat.buildControllers(this, modelResourceBundle);
@@ -155,6 +162,10 @@ public class PlayerModelBundle {
 
     public boolean isFallFlyingPitchHandledByAnimation() {
         return this.fallFlyingPitchHandledByAnimation;
+    }
+
+    public com.micaftic.morpher.client.animation.RidingAnimationPlan getRidingAnimationPlan() {
+        return this.ridingAnimationPlan;
     }
 
     private static boolean detectsFallFlyingRootRotation(GeoModel model, Object2ReferenceMap<String, Animation> animations) {

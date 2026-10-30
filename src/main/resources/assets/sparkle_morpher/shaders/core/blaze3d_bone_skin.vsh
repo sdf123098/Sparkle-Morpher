@@ -1,4 +1,4 @@
-#version 330
+#version 430
 
 #moj_import <minecraft:light.glsl>
 #moj_import <minecraft:fog.glsl>
@@ -11,7 +11,9 @@ in vec4 Normal;
 in uint BoneId;
 in uint Cullable;
 
-uniform samplerBuffer BoneMatrices;
+layout(std430) readonly buffer SpmBoneStorage {
+    vec4 spmBoneData[];
+};
 
 out float sphericalVertexDistance;
 out float cylindricalVertexDistance;
@@ -24,16 +26,16 @@ flat out float facingSign;
 mat4 readBoneMatrix(int bone, int baseTexel) {
     int offset = bone * 9 + baseTexel;
     return mat4(
-        texelFetch(BoneMatrices, offset),
-        texelFetch(BoneMatrices, offset + 1),
-        texelFetch(BoneMatrices, offset + 2),
-        texelFetch(BoneMatrices, offset + 3)
+        spmBoneData[offset],
+        spmBoneData[offset + 1],
+        spmBoneData[offset + 2],
+        spmBoneData[offset + 3]
     );
 }
 
 void main() {
     int bone = int(BoneId);
-    vec4 meta = texelFetch(BoneMatrices, bone * 9 + 8);
+    vec4 meta = spmBoneData[bone * 9 + 8];
     if (meta.y > 0.5) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         sphericalVertexDistance = 0.0;
@@ -48,8 +50,8 @@ void main() {
 
     mat4 boneTransform = readBoneMatrix(bone, 0);
     mat4 normalTransform = readBoneMatrix(bone, 4);
-    vec4 eyePos = boneTransform * vec4(Position, 1.0);
-    vec3 normal = normalize((normalTransform * vec4(Normal.xyz, 0.0)).xyz);
+    vec4 eyePos = ModelViewMat * boneTransform * vec4(Position, 1.0);
+    vec3 normal = normalize(mat3(ModelViewMat) * (normalTransform * vec4(Normal.xyz, 0.0)).xyz);
 
     gl_Position = ProjMat * eyePos;
     sphericalVertexDistance = fog_spherical_distance(eyePos.xyz);

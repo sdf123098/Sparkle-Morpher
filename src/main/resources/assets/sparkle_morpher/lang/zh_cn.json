@@ -1358,5 +1358,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "Cloud 同步：模型、贴图与动作已同步",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "Cloud 同步：模型与贴图已同步；升级后端后可同步动作",
   "gui.sparkle_morpher.cloud_player.publish_failed": "Cloud 发布失败：%s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "Cloud 查询失败：%s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "Cloud 查询失败：%s",
+  "gui.sparkle_morpher.acceleration.auto": "GPU＋SIMD 加速（激进策略）",
+  "gui.sparkle_morpher.acceleration.auto.desc": "固定使用原本的激进策略。Vulkan 相关设置保留在下方。"
 }

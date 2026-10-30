@@ -8,6 +8,11 @@
     "defaultRequire": 1
   },
   "client": [
+    "client.VulkanStorageUsageMixin",
+    "client.VulkanStorageReflectionMixin",
+    "client.VulkanStorageLayoutMixin",
+    "client.VulkanStorageDescriptorMixin",
+    "client.VulkanFeatureRendererMixin",
     "client.PeerRenderFrameMixin",
     "client.GpuDeviceAccessor",
     "client.LevelRendererAccessor",
@@ -29,7 +34,10 @@
     "client.WingsLayerMixin",
     "client.WorldRendererMixin",
     "client.SystemFontManagerMixin",
-    "client.PictureInPictureRendererMixin"
+    "client.PictureInPictureRendererMixin",
+    "client.VulkanSpriteAnimationUniformMixin",
+    "client.GameRendererGlobalsAccessor",
+    "client.VulkanAtlasUploadUniformMixin"
   ],
   "mixins": [
     "AbstractArrowEntityMixin",
