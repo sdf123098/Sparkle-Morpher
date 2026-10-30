@@ -504,10 +504,10 @@ public class YSMFolderDeserializer implements AutoCloseable {
                     if (sObj.has("animations") && sObj.get("animations").isJsonArray()) {
                         for (JsonElement ae : sObj.getAsJsonArray("animations")) {
                             if (ae.isJsonPrimitive()) {
-                                state.animations.put(YsmJsonSupport.getJsonString(ae), "");
+                                state.animations.add(Map.entry(YsmJsonSupport.getJsonString(ae), ""));
                             } else if (ae.isJsonObject()) {
                                 for (Map.Entry<String, JsonElement> objEntry : ae.getAsJsonObject().entrySet()) {
-                                    state.animations.put(objEntry.getKey(), YsmJsonSupport.getJsonString(objEntry.getValue()));
+                                    state.animations.add(Map.entry(objEntry.getKey(), YsmJsonSupport.getJsonString(objEntry.getValue())));
                                 }
                             }
                         }
@@ -517,7 +517,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                         for (JsonElement te : sObj.getAsJsonArray("transitions")) {
                             if (te.isJsonObject()) {
                                 for (Map.Entry<String, JsonElement> objEntry : te.getAsJsonObject().entrySet()) {
-                                    state.transitions.put(objEntry.getKey(), YsmJsonSupport.getJsonString(objEntry.getValue()));
+                                    state.transitions.add(Map.entry(objEntry.getKey(), YsmJsonSupport.getJsonString(objEntry.getValue())));
                                 }
                             }
                         }

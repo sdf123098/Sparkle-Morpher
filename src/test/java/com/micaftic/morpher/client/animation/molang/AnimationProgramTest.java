@@ -62,7 +62,7 @@ class AnimationProgramTest {
         var mapped = AnimationMapper.buildAnimations(file, false);
         var rawController = new RawYsmModel.RawAnimationController();
         rawController.animationName = "controller"; rawController.initialState = "default";
-        var state = new RawYsmModel.RawControllerState(); state.name = "default"; state.animations.put(name, ""); rawController.states.add(state);
+        var state = new RawYsmModel.RawControllerState(); state.name = "default"; state.animations.add(Map.entry(name, "")); rawController.states.add(state);
         return new Fixture(Map.of("main", new AnimationFile(mapped)),
                 new ArrayList<>(List.of(new AnimationControllerFile(AnimationMapper.buildControllers(Map.of("controller", rawController), false)))), mapped.get(name));
     }

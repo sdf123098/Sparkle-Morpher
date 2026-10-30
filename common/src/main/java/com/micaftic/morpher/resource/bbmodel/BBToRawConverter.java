@@ -1061,10 +1061,10 @@ public class BBToRawConverter {
         RawYsmModel.RawControllerState rs = new RawYsmModel.RawControllerState();
         rs.name = bb.name;
         for (String anim : bb.animations) {
-            // 杩欓噷 key/value 閮界敤寮曠敤鏈韩鈥斺€斿叿浣撶粦瀹氫緷璧栬繍琛屾椂鐨?animation 鍚嶈В鏋?            rs.animations.put(anim, anim);
+            // 杩欓噷 key/value 閮界敤寮曠敤鏈韩鈥斺€斿叿浣撶粦瀹氫緷璧栬繍琛屾椂鐨?animation 鍚嶈В鏋?            rs.animations.add(Map.entry(anim, anim));
         }
         for (BBAnimationController.BBControllerTransition tr : bb.transitions) {
-            rs.transitions.put(tr.target, tr.condition);
+            rs.transitions.add(Map.entry(tr.target, tr.condition));
         }
         rs.onEntry.addAll(bb.on_entry);
         rs.onExit.addAll(bb.on_exit);
