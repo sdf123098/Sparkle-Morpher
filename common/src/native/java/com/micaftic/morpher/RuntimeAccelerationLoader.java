@@ -22,6 +22,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 
 public final class RuntimeAccelerationLoader {
     private static final int EXPECTED_NATIVE_ABI_VERSION = 3;
@@ -60,6 +61,20 @@ public final class RuntimeAccelerationLoader {
     }
 
     public static void init() throws IOException {
+        loaded = false;
+        try {
+            initializeNative();
+        } catch (IOException | RuntimeException e) {
+            // Acceleration is optional. In particular, a locked/unwritable cache
+            // must not prevent configuration registration and Java rendering.
+            YesSteveModel.LOGGER.warn("Native acceleration initialization failed; continuing with Java rendering", e);
+            setUnsatisfiedRuntimeError(e.toString());
+        } finally {
+            available = true;
+        }
+    }
+
+    private static void initializeNative() throws IOException {
         if (PlatformAPI.isServer()) {
             available = true;
             loaded = false;
@@ -76,7 +91,6 @@ public final class RuntimeAccelerationLoader {
             if (verifyOverrideNative(override) && loadNativeLib(override)) {
                 loaded = true;
             }
-            available = true;
             return;
         }
 
@@ -84,7 +98,6 @@ public final class RuntimeAccelerationLoader {
         if (path != null && loadNativeLib(path)) {
             loaded = true;
         }
-        available = true;
     }
 
     /**
@@ -148,7 +161,13 @@ public final class RuntimeAccelerationLoader {
             return null;
         }
 
-        Path targetFile = ensureDirectory(storageDir).resolve(platform.fileName).toAbsolutePath().normalize();
+        // A loaded Windows DLL cannot be replaced. Different platforms/builds
+        // therefore get different immutable cache locations; leave legacy flat
+        // caches alone because another running instance may still be using them.
+        storageDir = ensureDirectory(storageDir).resolve(platform.resDir)
+                .resolve(artifact.sha256().toLowerCase(Locale.ROOT));
+        Files.createDirectories(storageDir);
+        Path targetFile = storageDir.resolve(platform.fileName).toAbsolutePath().normalize();
 
         // 已安装且 digest 匹配 → 直接复用（不重写、不联网）。
         if (Files.isRegularFile(targetFile) && NativeArtifactVerifier.verify(targetFile, artifact)) {
@@ -180,7 +199,7 @@ public final class RuntimeAccelerationLoader {
         }
 
         // 原子安装（§11.2）：临时文件 + 原子替换，杜绝半截文件。
-        installAtomically(storageDir, targetFile, data);
+        targetFile = installAtomically(storageDir, targetFile, data, artifact);
         return targetFile.toString();
     }
 
@@ -207,14 +226,31 @@ public final class RuntimeAccelerationLoader {
         }
     }
 
-    private static void installAtomically(Path storageDir, Path targetFile, byte[] data) throws IOException {
+    private static Path installAtomically(Path storageDir, Path targetFile, byte[] data, NativeArtifact artifact) throws IOException {
         Path tmp = Files.createTempFile(storageDir, targetFile.getFileName().toString(), ".tmp");
         try {
             Files.write(tmp, data);
-            AtomicFileMover.moveWithRetry(tmp, targetFile);
-        } catch (IOException e) {
+            try {
+                AtomicFileMover.moveWithRetry(tmp, targetFile);
+                return targetFile;
+            } catch (IOException e) {
+                // Another process may have installed and loaded the same bytes
+                // since our first check. Reuse that verified DLL without writing.
+                if (NativeArtifactVerifier.verify(targetFile, artifact)) {
+                    return targetFile;
+                }
+                // A corrupt cache entry can itself be locked. Install this
+                // process's trusted bytes at a fresh path instead of replacing it.
+                Path privateDir = Files.createTempDirectory(storageDir, "instance-");
+                Path privateFile = privateDir.resolve(targetFile.getFileName());
+                privateDir.toFile().deleteOnExit();
+                privateFile.toFile().deleteOnExit();
+                AtomicFileMover.moveWithRetry(tmp, privateFile);
+                YesSteveModel.LOGGER.warn("Native cache entry could not be replaced; using isolated native {}", privateFile);
+                return privateFile;
+            }
+        } finally {
             Files.deleteIfExists(tmp);
-            throw e;
         }
     }
 

@@ -26,8 +26,8 @@ public final class ConfigPolicies {
                 bool(GeneralConfig.DISABLE_PROJECTILE_MODEL, false),
                 bool(GeneralConfig.DISABLE_VEHICLE_MODEL, false),
                 bool(GeneralConfig.DISABLE_EXTERNAL_FP_ANIM, false),
-                bool(GeneralConfig.USE_COMPATIBILITY_RENDERER, false),
-                bool(GeneralConfig.USE_GPU_RENDERER, true),
+                false,
+                true,
                 bool(GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK, true),
                 bool(GeneralConfig.ANIMATION_DISTANCE_LOD, false));
     }
@@ -81,7 +81,7 @@ public final class ConfigPolicies {
 
     public static GraphicsPolicy graphics() {
         return new GraphicsPolicy(
-                nativeSimdPolicy(value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE)),
+                NativeSimdPolicy.AGGRESSIVE,
                 bool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false));
     }
 

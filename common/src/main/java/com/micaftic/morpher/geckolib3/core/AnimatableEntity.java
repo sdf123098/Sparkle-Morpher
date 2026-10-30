@@ -408,6 +408,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
             boolean z2 = (this.isTickTriggered && !this.hasUpdatedThisTick) || this.wasAnimationActiveLastTick || z;
             boolean z3 = (!z || (this.seekTime == 0.0f && !this.hasUpdatedThisTick)) && this.isTickTriggered && !this.hasUpdatedThisTick;
             HudAnimationGate.Decision hudDecision = HudAnimationGate.decide(this, event);
+            z2 = HudAnimationGate.shouldEvaluate(hudDecision, z2);
             if (hudDecision == HudAnimationGate.Decision.REUSE_WORLD_POSE && HudPoseCache.applyTo(this)) {
                 // World poses may carry first-person camera-only head hiding.
                 resetHeadTracking(false);
