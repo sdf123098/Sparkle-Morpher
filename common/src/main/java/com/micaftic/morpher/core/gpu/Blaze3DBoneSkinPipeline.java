@@ -37,7 +37,8 @@ public final class Blaze3DBoneSkinPipeline {
             ColorTargetState.DEFAULT, true);
 
     public static final net.minecraft.client.renderer.oit.OitPipelineSet OIT_PIPELINES =
-            net.minecraft.client.renderer.oit.OitPipelineSet.builder("sparkle_morpher_bone_storage",
+            net.minecraft.client.renderer.oit.OitPipelineSet.builder(
+                    com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "bone_storage"),
                     skinningBase(SHADER, TRANSLUCENT_SHADER))
                     .withDepthBoundsModifier(b -> b.withLocation(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/bones_oit_depth")))
                     .withTransmittanceModifier(b -> b.withLocation(com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("sparkle_morpher", "pipeline/bones_oit_transmittance")))
