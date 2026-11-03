@@ -1,0 +1,77 @@
+{
+  "formatVersion": 1,
+  "temporaryOwnedUpstreamNamespaceClasses": {
+    "fa1.21.1": [],
+    "fa26.1.2": ["com/mojang/blaze3d/vertex/BufferUploader.class"],
+    "fa26.2": [
+      "com/mojang/blaze3d/vertex/BufferUploader.class",
+      "net/minecraft/client/renderer/MultiBufferSource.class",
+      "net/minecraft/client/renderer/MultiBufferSource$BufferSource.class"
+    ],
+    "fa26.3": [
+      "com/mojang/blaze3d/vertex/BufferUploader.class",
+      "net/minecraft/client/renderer/MultiBufferSource.class",
+      "net/minecraft/client/renderer/MultiBufferSource$BufferSource.class"
+    ],
+    "neo1.21.1": [],
+    "neo26.1.2": [],
+    "neo26.2": [],
+    "neo26.3": []
+  },
+  "registeredThirdPartyNamespaceClasses": {
+    "fa26.2": {
+      "coordinate": "curse.maven:forge-config-api-port-547434",
+      "versionProperty": "forge_config_api_port_curse_file_id",
+      "distribution": "included in both native and CurseForge final JARs",
+      "classes": [
+        "net/minecraftforge/client/extensions/IForgeGuiGraphicsExtractor.class",
+        "net/minecraftforge/fml/config/ModConfig.class",
+        "net/minecraftforge/fml/config/ModConfig$Type.class"
+      ]
+    },
+    "fa26.3": {
+      "coordinate": "curse.maven:forge-config-api-port-547434",
+      "versionProperty": "forge_config_api_port_curse_file_id",
+      "distribution": "included in both native and CurseForge final JARs",
+      "classes": [
+        "net/minecraftforge/client/extensions/IForgeGuiGraphicsExtractor.class",
+        "net/minecraftforge/fml/config/ModConfig.class",
+        "net/minecraftforge/fml/config/ModConfig$Type.class"
+      ]
+    }
+  },
+  "registeredEmbeddedLibraries": {
+    "fa1.21.1": {
+      "patterns": ["ImageStream--SNAPSHOT\\.jar$", "architectury-fabric-13\\.0\\.8\\.jar$", "forge-config-api-port-v21\\.1\\.6-1\\.21\\.1-Fabric\\.jar$"],
+      "coordinates": ["com.github.TartaricAlkaline:ImageStream", "dev.architectury:architectury-fabric", "maven.modrinth:forge-config-api-port"]
+    },
+    "fa26.1.2": {
+      "patterns": ["ImageStream--SNAPSHOT\\.jar$", "forge-config-api-port-.*\\.jar$"],
+      "coordinates": ["com.github.TartaricAlkaline:ImageStream", "maven.modrinth:forge-config-api-port"]
+    },
+    "fa26.2": {
+      "patterns": ["ImageStream--SNAPSHOT\\.jar$", "forge-config-api-port-547434-.*\\.jar$", "sparkle-morpher-caustica-compat-.*\\.jar$"],
+      "coordinates": ["com.github.TartaricAlkaline:ImageStream", "curse.maven:forge-config-api-port-547434", ":caustica-compat"]
+    },
+    "fa26.3": {
+      "patterns": ["ImageStream--SNAPSHOT\\.jar$", "forge-config-api-port-547434-.*\\.jar$", "sparkle-morpher-caustica-compat-.*\\.jar$"],
+      "coordinates": ["com.github.TartaricAlkaline:ImageStream", "curse.maven:forge-config-api-port-547434", ":caustica-compat"]
+    },
+    "neo1.21.1": {
+      "patterns": ["ImageStream--SNAPSHOT\\.jar$"],
+      "coordinates": ["com.github.TartaricAlkaline:ImageStream"]
+    },
+    "neo26.1.2": {
+      "patterns": ["ImageStream--SNAPSHOT\\.jar$"],
+      "coordinates": ["com.github.TartaricAlkaline:ImageStream"]
+    },
+    "neo26.2": {
+      "patterns": ["ImageStream--SNAPSHOT\\.jar$"],
+      "coordinates": ["com.github.TartaricAlkaline:ImageStream"]
+    },
+    "neo26.3": {
+      "patterns": ["ImageStream--SNAPSHOT\\.jar$"],
+      "coordinates": ["com.github.TartaricAlkaline:ImageStream"]
+    }
+  }
+}
