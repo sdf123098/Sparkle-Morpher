@@ -365,6 +365,7 @@ public final class CloudClientRuntime {
 
     private static void closeState(RuntimeState previous) {
         invalidateDisplay();
+        CloudThumbnailService.clear();
         previous.assetMaterialization().close();
         previous.http().cancelDisplayRequests();
         previous.assetCatalog().clear();
