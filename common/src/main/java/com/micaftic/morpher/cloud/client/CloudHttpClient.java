@@ -348,6 +348,27 @@ public final class CloudHttpClient {
                 .header("Accept", "application/octet-stream").GET().build(), boundedBinaryHandler(maximumBytes)), generation);
     }
 
+    /**
+     * Anonymous, immutable card image from the public asset route.
+     *
+     * <p>The credential is deliberately absent: the public route only serves
+     * PUBLIC revisions, so a 404 there means "not public or not ready" and must
+     * never be treated as an authentication failure. Only the exact thumbnail
+     * suffix is accepted, keeping this transport off every other endpoint.</p>
+     */
+    public CompletableFuture<HttpResponse<byte[]>> getPublicThumbnail(String path, long maximumBytes) {
+        if (path == null || !path.startsWith("/v1/public/assets/") || !path.endsWith("/thumbnail")
+                || path.contains("..") || path.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("Invalid public thumbnail path");
+        }
+        HttpRequest request = HttpRequest.newBuilder(instance.apiUri(path))
+                .timeout(REQUEST_TIMEOUT)
+                .header("Accept", "image/png")
+                .GET()
+                .build();
+        return trackDisplay(sendAsync(request, boundedBinaryHandler(maximumBytes)));
+    }
+
     static HttpResponse.BodyHandler<byte[]> boundedBinaryHandler(long maximumBytes) {
         if (maximumBytes < 1 || maximumBytes > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Invalid binary byte budget");
