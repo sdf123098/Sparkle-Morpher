@@ -40,4 +40,12 @@ class CloudAssetIdentityTest {
         assertFalse(CloudAssetIdentity.isRuntimeModelId("hero"));
         assertFalse(CloudAssetIdentity.isRuntimeModelId("cloud_not-a-hash"));
     }
+
+    @Test
+    void pathLikeAssetIdStillProducesAFileSystemSafeRuntimeId() {
+        String assetId = "gooner/actual gooner shit/笙黑 26 3 28";
+        CloudAssetIdentity identity = new CloudAssetIdentity("official", "catalog", assetId, "2", HASH);
+        assertEquals(assetId, identity.assetId());
+        assertTrue(identity.runtimeModelId().matches("cloud_[0-9a-f]{64}"));
+    }
 }
