@@ -131,3 +131,6 @@ common/logs/
 __pycache__/
 *.pyc.xdg/
 token/
+
+# codegraph 本地索引（数据库不入库）
+.codegraph/
