@@ -537,6 +537,8 @@
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Перевірка підтримки Vulkan",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "Завантаження моделей на вимогу",
   "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Прискорення кешу Cloud CDN",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache": "Дисковий кеш Cloud",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "Розмір дискового кешу",
   "message.sparkle_morpher.privacy_mode.enabled": "Режим приватності увімкнено. Синхронізацію моделей із сервером і весь трафік Sparkle Morpher від клієнта до сервера заблоковано.",
   "message.sparkle_morpher.privacy_mode.reconnect": "Режим приватності діятиме, доки ви не від’єднаєтеся. Повторно підключіться, щоб відновити синхронізацію з сервером.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "Завантажується при першому використанні",
