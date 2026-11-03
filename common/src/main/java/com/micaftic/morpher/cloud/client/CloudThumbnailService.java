@@ -80,24 +80,50 @@ public final class CloudThumbnailService {
 
     private static void fetch(CloudClientRuntime.RuntimeState runtime, CloudAssetSummary entry) {
         CloudAssetRef ref = entry.ref();
+        CloudDiskCache disk = runtime.diskCache();
+        String key = CloudDiskCache.thumbnailKey(entry.thumbnail());
+        if (disk != null) {
+            byte[] stored = disk.readThumbnail(key);
+            if (stored != null) {
+                OuterFileTexture cached = byteArrayTexture(stored);
+                if (cached != null) {
+                    ACTIVE.decrementAndGet();
+                    IN_FLIGHT.remove(ref);
+                    FAILED_UNTIL.remove(ref);
+                    synchronized (LOCK) { READY.put(ref, cached); }
+                    return;
+                }
+                disk.remove(key);
+            }
+        }
         var request = runtime.http().getPublicThumbnail(entry.thumbnail(), CloudThumbnailPolicy.MAX_BYTES);
         request.whenComplete((response, failure) -> {
             ACTIVE.decrementAndGet();
             IN_FLIGHT.remove(ref);
-            OuterFileTexture texture = textureOf(response, failure);
+            byte[] bytes = response == null || failure != null || response.statusCode() != 200
+                    ? null : response.body();
+            OuterFileTexture texture = byteArrayTexture(bytes);
             if (texture == null) {
                 FAILED_UNTIL.put(ref, System.currentTimeMillis() + RETRY_MILLIS);
                 return;
             }
             FAILED_UNTIL.remove(ref);
             synchronized (LOCK) { READY.put(ref, texture); }
+            if (disk != null) {
+                // A card image is immutable, so a stored copy is always the exact same pixels.
+                com.micaftic.morpher.util.SmExecutors.submit(
+                        com.micaftic.morpher.util.SmExecutors.Pool.MODEL_IO, () -> disk.writeThumbnail(key, bytes));
+            }
         });
     }
 
     /** A missing, anonymous or malformed image is a silent placeholder, never an error. */
     private static OuterFileTexture textureOf(HttpResponse<byte[]> response, Throwable failure) {
         if (failure != null || response == null || response.statusCode() != 200) return null;
-        byte[] bytes = response.body();
+        return byteArrayTexture(response.body());
+    }
+
+    private static OuterFileTexture byteArrayTexture(byte[] bytes) {
         if (bytes == null || bytes.length == 0 || bytes.length > CloudThumbnailPolicy.MAX_BYTES) return null;
         if (!CloudThumbnailPolicy.isThumbnailPng(bytes)) return null;
         try {

@@ -537,6 +537,8 @@
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Probe kemampuan Vulkan",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "Pemuatan model sesuai permintaan",
   "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Akselerasi cache CDN Cloud",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache": "Cache disk Cloud",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "Ukuran cache disk",
   "message.sparkle_morpher.privacy_mode.enabled": "Mode privasi aktif. Sinkronisasi model server dan semua lalu lintas klien-ke-server Sparkle Morpher diblokir.",
   "message.sparkle_morpher.privacy_mode.reconnect": "Mode privasi akan tetap aktif hingga Anda terputus. Sambungkan kembali untuk melanjutkan sinkronisasi server.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "Dimuat saat pertama kali digunakan",

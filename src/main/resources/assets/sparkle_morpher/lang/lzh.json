@@ -505,6 +505,8 @@
   "gui.sparkle_morpher.model_panel.setting.loading_state_disabled": "禁讀態",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "需而讀模",
   "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "雲端 CDN 緩存加速",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache": "雲端盤儲",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "儲量",
   "message.sparkle_morpher.privacy_mode.enabled": "私隱式已啟：伺服端模同，及 Sparkle Morpher 客端上行之訊，皆阻。",
   "message.sparkle_morpher.privacy_mode.reconnect": "私隱式恆啟於此連；復連乃復伺服端同。",
   "gui.sparkle_morpher.model_panel.model.on_demand": "初用則讀",

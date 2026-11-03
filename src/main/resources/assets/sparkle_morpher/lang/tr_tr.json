@@ -537,6 +537,8 @@
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Vulkan yetenek yoklaması",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "Talep üzerine model yükleme",
   "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Cloud CDN önbellek hızlandırması",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache": "Cloud disk önbelleği",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "Disk önbelleği boyutu",
   "message.sparkle_morpher.privacy_mode.enabled": "Gizlilik modu etkin. Sunucu model senkronizasyonu ve tüm Sparkle Morpher istemciden sunucuya trafiği engellenir.",
   "message.sparkle_morpher.privacy_mode.reconnect": "Gizlilik modu bağlantınızı kesene kadar etkin kalır. Sunucu senkronizasyonunu sürdürmek için yeniden bağlanın.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "İlk kullanıldığında yüklenir",
