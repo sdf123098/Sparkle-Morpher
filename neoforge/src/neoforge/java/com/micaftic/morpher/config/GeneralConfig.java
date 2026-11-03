@@ -1,0 +1,294 @@
+package com.micaftic.morpher.config;
+
+import com.micaftic.morpher.core.render.SmRenderBackendMode;
+import net.neoforged.neoforge.common.ModConfigSpec;
+
+public class GeneralConfig {
+
+    public static ModConfigSpec.BooleanValue DISCLAIMER_SHOW;
+
+    public static ModConfigSpec.BooleanValue PRINT_ANIMATION_ROULETTE_MSG;
+
+    public static ModConfigSpec.BooleanValue DISABLE_SELF_MODEL;
+
+    public static ModConfigSpec.BooleanValue DISABLE_OTHER_MODEL;
+
+    public static ModConfigSpec.BooleanValue DISABLE_SELF_HANDS;
+
+    public static ModConfigSpec.BooleanValue DISABLE_PROJECTILE_MODEL;
+
+    public static ModConfigSpec.BooleanValue DISABLE_VEHICLE_MODEL;
+
+    public static ModConfigSpec.BooleanValue DISABLE_EXTERNAL_FP_ANIM;
+
+    public static ModConfigSpec.BooleanValue USE_COMPATIBILITY_RENDERER;
+
+    public static ModConfigSpec.DoubleValue SOUND_VOLUME;
+
+    public static ModConfigSpec.BooleanValue SHOW_MODEL_ID_FIRST;
+    public static ModConfigSpec.EnumValue<ModelPickerStyle> MODEL_PICKER_STYLE;
+
+    public static ModConfigSpec.BooleanValue SOPHISTICATEDBACKPACK;
+
+    public static ModConfigSpec.BooleanValue PARCOOL;
+
+    public static ModConfigSpec.BooleanValue USE_GPU_RENDERER;
+
+    public static ModConfigSpec.EnumValue<NativeSimdPolicy> NATIVE_SIMD_POLICY;
+
+    public static ModConfigSpec.EnumValue<NativeSimdValidationMode> NATIVE_SIMD_VALIDATION_MODE;
+
+    public static ModConfigSpec.BooleanValue NATIVE_SIMD_COMPATIBILITY_LOG;
+
+    public static ModConfigSpec.BooleanValue EXPERIMENTAL_JAVA_VECTOR_RENDERER;
+
+    public static ModConfigSpec.EnumValue<SmRenderBackendMode> GRAPHICS_BACKEND_MODE;
+
+    public static ModConfigSpec.BooleanValue DISABLE_RAW_OPENGL_ON_NON_OPENGL;
+
+    public static ModConfigSpec.BooleanValue ENABLE_OPENGL_LEGACY_GPU_RENDERER;
+
+    public static ModConfigSpec.BooleanValue ENABLE_OPENGL_GUI_BLUR;
+
+    public static ModConfigSpec.BooleanValue MODEL_MEMORY_PROFILER;
+
+    public static ModConfigSpec.BooleanValue MODEL_IMPORT_PERFORMANCE_LOG;
+
+    public static ModConfigSpec.BooleanValue ANIMATION_FRAME_PROFILER;
+
+    public static ModConfigSpec.BooleanValue ANIMATION_DEBUG_LOG;
+
+    public static ModConfigSpec.BooleanValue FIRST_PERSON_RENDER_DIAGNOSTICS;
+
+    public static ModConfigSpec.BooleanValue DEVELOPER_STATE_WRITEBACK;
+
+    public static ModConfigSpec.BooleanValue ANIMATION_ROULETTE_DEBUG_LOG;
+
+    public static ModConfigSpec.BooleanValue INPUT_STATE_DEBUG_LOG;
+
+    public static ModConfigSpec.BooleanValue EXPERIMENTAL_FALLBACK_ELYTRA_WITHOUT_LOCATOR;
+
+    public static ModConfigSpec.BooleanValue EXPERIMENTAL_ENABLE_ELYTRA_FOR_DEFAULT_AND_MISC_MODELS;
+
+    public static ModConfigSpec.BooleanValue WARN_REPEATED_ANIMATION_EVALUATION;
+
+    public static ModConfigSpec.BooleanValue RESOURCE_STATION_MONITOR_LOG;
+
+    public static ModConfigSpec.BooleanValue NETWORK_ONLINE_DEBUG_LOG;
+
+    public static ModConfigSpec.BooleanValue GPU_DEBUG_LOG;
+
+    public static ModConfigSpec.BooleanValue GPU_DEBUG_VERBOSE_LOG;
+
+    public static ModConfigSpec.BooleanValue ENABLE_WORLD_RENDERER_HOOK;
+
+    public static ModConfigSpec.IntValue MAX_CACHED_GPU_MODELS;
+
+    public static ModConfigSpec.BooleanValue LAZY_MODEL_LOADING;
+
+    public static ModConfigSpec.BooleanValue CLOUD_CDN_CACHE;
+    public static ModConfigSpec.BooleanValue CLOUD_DISK_CACHE;
+    public static ModConfigSpec.IntValue CLOUD_DISK_CACHE_MEGABYTES;
+
+    public static ModConfigSpec.EnumValue<com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset> CLOUD_PERFORMANCE_PRESET;
+    public static ModConfigSpec.IntValue CLOUD_UPLOAD_CONCURRENCY;
+    public static ModConfigSpec.IntValue CLOUD_PROCESSING_CONCURRENCY;
+
+    public static ModConfigSpec.BooleanValue PRIVACY_MODE;
+    public static net.neoforged.neoforge.common.ModConfigSpec.EnumValue<com.micaftic.morpher.core.network.NetworkPreset> NETWORK_PRESET;
+    public static net.neoforged.neoforge.common.ModConfigSpec.ConfigValue<String> PEER_LISTENERS;
+    public static net.neoforged.neoforge.common.ModConfigSpec.ConfigValue<String> PEER_ENTRANCES;
+
+    public static ModConfigSpec.IntValue MAX_RESIDENT_CPU_MODELS;
+
+    public static ModConfigSpec.IntValue UNUSED_MODEL_TTL_SECONDS;
+
+    public static ModConfigSpec.IntValue AUDIO_CACHE_MAX_BYTES;
+
+    public static ModConfigSpec.BooleanValue DISABLE_MODEL_GLOW_IN_SHADERPACK;
+    public static ModConfigSpec.BooleanValue DISABLE_MODEL_FACE_CULLING;
+
+    public static ModConfigSpec.BooleanValue ANIMATION_DISTANCE_LOD;
+
+    public static ModConfigSpec.EnumValue<RouletteContentMode> ROULETTE_CONTENT_MODE;
+
+    public enum RouletteContentMode {
+        ORIGINAL,
+        CUSTOM
+    }
+
+    /**
+     * Native SIMD renderer policy (NATIVE_SIMD_26X_AGGRESSIVE_ROLLOUT_PLAN Phase 3).
+     * OFF       - always Java fallback when the GPU path is not used (kill switch).
+     * SAFE      - current 26.x conservative gates (troubleshooting / rollback).
+     * AGGRESSIVE - prefer Native SIMD whenever the native runtime is loaded and the
+     *             compatibility renderer is disabled, except documented unsafe cases.
+     *             Intended release default.
+     */
+    public enum NativeSimdPolicy {
+        OFF,
+        SAFE,
+        AGGRESSIVE
+    }
+
+    /**
+     * Validation diagnostics comparing Java and native model state without changing
+     * the rendered path (Phase 2). Used to hunt mismatches around the AGGRESSIVE flip.
+     * OFF             - no comparison.
+     * LOG_MISMATCH    - render normally, log a compact mismatch summary.
+     * STRICT_FALLBACK - disable Native SIMD for the session when mismatches occur.
+     * CRASH_TEST      - development only; throws on mismatch.
+     */
+    /**
+     * 模型选择页的展示偏好默认值（可用模型页工具栏按钮当场覆盖，覆盖后不再回读本项）。
+     * AUTO  - 列表区面积够就画 3D 卡片、不够自动回退图标+文字网格（默认）。
+     * CARDS - 强制卡片目录；面积不足时放宽到 1×1 并改用滚动，仅在完全放不下时回退。
+     * LIST  - 强制经典图标+文字网格（低配 / 怀旧）。
+     */
+    public enum ModelPickerStyle {
+        AUTO,
+        CARDS,
+        LIST
+    }
+    public enum NativeSimdValidationMode {
+        OFF,
+        LOG_MISMATCH,
+        STRICT_FALLBACK,
+        CRASH_TEST
+    }
+
+    public static boolean safeGet(ModConfigSpec.BooleanValue value) {
+        return safeGet(value, false);
+    }
+
+    public static boolean safeGet(ModConfigSpec.BooleanValue value, boolean fallback) {
+        try { return value == null ? fallback : value.get(); } catch (IllegalStateException e) { return fallback; }
+    }
+
+    public static <T extends Enum<T>> T safeGet(ModConfigSpec.EnumValue<T> value, T fallback) {
+        try { return value == null ? fallback : value.get(); } catch (IllegalStateException e) { return fallback; }
+    }
+
+    public static ModConfigSpec buildSpec() {
+        ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
+        defineGeneral(builder);
+        ExtraPlayerRenderConfig.define(builder);
+        return builder.build();
+    }
+
+    public static void defineGeneral(ModConfigSpec.Builder builder) {
+        builder.push("general");
+        builder.comment("Whether to display disclaimer GUI");
+        DISCLAIMER_SHOW = builder.define("DisclaimerShow", false);
+        builder.comment("Whether to print animation roulette play message");
+        PRINT_ANIMATION_ROULETTE_MSG = builder.define("PrintAnimationRouletteMsg", false);
+        builder.comment("Prevents rendering of self player's model");
+        DISABLE_SELF_MODEL = builder.define("DisableSelfModel", false);
+        builder.comment("Prevents rendering of other player's model");
+        DISABLE_OTHER_MODEL = builder.define("DisableOtherModel", false);
+        builder.comment("Prevents rendering of self player's hand");
+        DISABLE_SELF_HANDS = builder.define("DisableSelfHands", false);
+        builder.comment("Prevents rendering of projectile model");
+        DISABLE_PROJECTILE_MODEL = builder.define("DisableProjectileModel", false);
+        builder.comment("Prevents rendering of vehicle model");
+        DISABLE_VEHICLE_MODEL = builder.define("DisableVehicleModel", false);
+        builder.comment("Disable first person animation from other mods.");
+        DISABLE_EXTERNAL_FP_ANIM = builder.define("DisableExternalFirstPersonAnim", false);
+        builder.comment("If rendering errors occur, try turning on this.");
+        USE_COMPATIBILITY_RENDERER = builder.define("UseCompatibilityRenderer", false);
+        builder.comment("Legacy direct OpenGL GPU renderer master switch. This remains off by default and is additionally gated by GraphicsBackendMode and EnableOpenGlLegacyGpuRenderer.");
+        USE_GPU_RENDERER = builder.define("UseGpuRenderer", true);
+        GRAPHICS_BACKEND_MODE = builder.comment("Graphics backend policy. AUTO uses Minecraft's detected device, VANILLA_PIPELINE_ONLY disables raw OpenGL paths, OPENGL_LEGACY_COMPAT permits legacy OpenGL acceleration only on OpenGL, DISABLED_GPU_ACCELERATION disables raw OpenGL acceleration.")
+                .defineEnum("GraphicsBackendMode", SmRenderBackendMode.AUTO);
+        DISABLE_RAW_OPENGL_ON_NON_OPENGL = builder.comment("Prevent raw OpenGL probes/renderers when Minecraft is not using an OpenGL backend.")
+                .define("DisableRawOpenGlOnNonOpenGl", true);
+        ENABLE_OPENGL_LEGACY_GPU_RENDERER = builder.comment("Use the raw OpenGL model renderer when the detected backend is OpenGL and UseGpuRenderer is enabled. Native SIMD computes the per-frame GPU bone buffer; Java remains the failure fallback.")
+                .define("EnableOpenGlLegacyGpuRenderer", true);
+        ENABLE_OPENGL_GUI_BLUR = builder.comment("Allow raw OpenGL GUI blur/shader effects on OpenGL. Disabled by default for Vulkan compatibility.")
+                .define("EnableOpenGlGuiBlur", false);
+        builder.comment("Native SIMD renderer policy. AGGRESSIVE prefers the OpenYSM native renderer whenever the native runtime is loaded and the compatibility renderer is disabled (intended default). SAFE keeps the conservative 26.x gates. OFF always uses the Java fallback. SAFE and OFF are retained as kill switches.");
+        NATIVE_SIMD_POLICY = builder.defineEnum("NativeSimdPolicy", NativeSimdPolicy.AGGRESSIVE);
+        builder.comment("Compare Java and native model state to hunt mismatches without changing the rendered path. OFF disables. LOG_MISMATCH logs a compact summary. STRICT_FALLBACK disables Native SIMD for the session on mismatch. CRASH_TEST throws on mismatch (development only).");
+        NATIVE_SIMD_VALIDATION_MODE = builder.defineEnum("NativeSimdValidationMode", NativeSimdValidationMode.OFF);
+        builder.comment("Render ysmGlow bones with normal entity lighting while a shader pack is active.");
+        DISABLE_MODEL_GLOW_IN_SHADERPACK = builder.define("DisableModelGlowInShaderpack", true);
+        builder.comment("Disable the per-cube face cull baked into models. Turn this on if a model loses faces/parts at certain angles. Changing it reloads models.");
+        DISABLE_MODEL_FACE_CULLING = builder.define("DisableModelFaceCulling", false);
+        ROULETTE_CONTENT_MODE = builder.defineEnum("RouletteContentMode", RouletteContentMode.ORIGINAL);
+        builder.comment("The amount of volume when the animation is played.");
+        SOUND_VOLUME = builder.defineInRange("SoundVolume", 100.0d, 0.0d, 100.0d);
+        builder.comment("Whether to display model ID first in the model selection screen, instead of the model name filled in by the model author.");
+        SHOW_MODEL_ID_FIRST = builder.define("ShowModelIdFirst", false);
+        builder.comment("Default presentation of the model selection grid. AUTO shows 3D cards when the list area is big enough and falls back to the classic icon+text grid otherwise. CARDS forces the card catalog (falls back only when not even one readable card fits). LIST forces the classic grid.");
+        MODEL_PICKER_STYLE = builder.defineEnum("ModelPickerStyle", ModelPickerStyle.AUTO);
+        builder.pop();
+        builder.push("Integration");
+        SOPHISTICATEDBACKPACK = builder.define("SophisticatedBackpack", true);
+        PARCOOL = builder.define("Parcool", true);
+        builder.pop();
+        builder.push("ExperimentalTesting");
+        builder.comment("Log model loading memory checkpoints. Intended for diagnostics only.");
+        MODEL_MEMORY_PROFILER = builder.define("ModelMemoryProfiler", false);
+        builder.comment("Print [SM][Perf] timing logs for model import, upload, and reload checkpoints. Intended for diagnostics only.");
+        MODEL_IMPORT_PERFORMANCE_LOG = builder.define("ModelImportPerformanceLog", false);
+        builder.comment("Collect animation timing/evaluation diagnostics. Intended for diagnostics only.");
+        ANIMATION_FRAME_PROFILER = builder.define("AnimationFrameProfiler", false);
+        builder.comment("Print one [SM-ANIM] line for each animation evaluation when AnimationFrameProfiler is enabled.");
+        ANIMATION_DEBUG_LOG = builder.define("AnimationDebugLog", false);
+        builder.comment("Print [FP-COMPAT] first-person arm render decisions (FP-COMPAT-PUNCHY-001). Logs on state change plus a 5s heartbeat. Client-side only.");
+        FIRST_PERSON_RENDER_DIAGNOSTICS = builder.define("FirstPersonRenderDiagnostics", false);
+        builder.comment("Allow panel-state writeback in the developer group. Default off; enabling it lets a model author reproduce a captured panel state. Client-side only.");
+        DEVELOPER_STATE_WRITEBACK = builder.define("DeveloperStateWriteback", false);
+        builder.comment("Print [SM-ROULETTE] diagnostics for animation roulette clicks, server resolution, and client playback resolution. Default off.");
+        ANIMATION_ROULETTE_DEBUG_LOG = builder.define("AnimationRouletteDebugLog", false);
+        builder.comment("Print [SM-INPUT] diagnostics for attack/use mouse clicks, key state, vanilla swing/use state, and local animation pulses.");
+        INPUT_STATE_DEBUG_LOG = builder.define("InputStateDebugLog", false);
+        builder.comment("Allow fallback elytra rendering for models without ElytraLocator. Experimental and may not align perfectly.");
+        EXPERIMENTAL_FALLBACK_ELYTRA_WITHOUT_LOCATOR = builder.define("ExperimentalFallbackElytraWithoutLocator", false);
+        builder.comment("Re-enable elytra rendering for default and misc built-in models, plus models whose ElytraLocator is nested under an Elytra display bone.");
+        EXPERIMENTAL_ENABLE_ELYTRA_FOR_DEFAULT_AND_MISC_MODELS = builder.define("ExperimentalEnableElytraForDefaultAndMiscModels", false);
+        builder.comment("Warn when the same entity evaluates animation more than once in the same render frame.");
+        WARN_REPEATED_ANIMATION_EVALUATION = builder.define("WarnRepeatedAnimationEvaluation", true);
+        builder.comment("Reduce animation update rates for distant entities. Disabled by default for smoother animation.");
+        ANIMATION_DISTANCE_LOD = builder.define("AnimationDistanceLod", false);
+        builder.comment("Use the incubating Java Vector API for part of the Java fallback renderer. Experimental and default off; if the module is unavailable, Sparkle Morpher automatically falls back to scalar Java math.");
+        EXPERIMENTAL_JAVA_VECTOR_RENDERER = builder.define("ExperimentalJavaVectorRenderer", false);
+        builder.comment("Print [SM-NATIVE-COMPAT] diagnostics when a model uses Native SIMD compatibility culling safeguards. Intended for model troubleshooting only.");
+        NATIVE_SIMD_COMPATIBILITY_LOG = builder.define("NativeSimdCompatibilityLog", false);
+        builder.comment("Enable world renderer matrix capture hook for GPU renderer. Disable if another renderer conflicts with the hook.");
+        ENABLE_WORLD_RENDERER_HOOK = builder.define("EnableWorldRendererHook", true);
+        builder.comment("Print detailed [SM-RESOURCE] logs for resource station listing, HTTP, preview, and download diagnostics.");
+        RESOURCE_STATION_MONITOR_LOG = builder.define("ResourceStationMonitorLog", false);
+        builder.comment("Print detailed client/server online model sync diagnostics. Default off.");
+        NETWORK_ONLINE_DEBUG_LOG = builder.define("NetworkOnlineDebugLog", false);
+        builder.comment("Print [SM-GPU] diagnostics for GPU renderer path selection, mesh build, draw counts, and GL errors. Intended for diagnostics only.");
+        GPU_DEBUG_LOG = builder.define("GpuDebugLog", false);
+        builder.comment("Print verbose per-draw [SM-GPU] diagnostics. Requires GpuDebugLog and may be noisy.");
+        GPU_DEBUG_VERBOSE_LOG = builder.define("GpuDebugVerboseLog", false);
+        builder.comment("Maximum client models allowed to keep GPU/native render caches. 0 disables LRU unloading.");
+        MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 0, 0, 512);
+        builder.comment("Load local and cached server models only when they are first rendered or selected.");
+        LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
+        builder.comment("Use the public CDN-cached content route for Cloud assets explicitly marked PUBLIC.");
+        CLOUD_CDN_CACHE = builder.define("CloudCdnCache", true);
+        builder.comment("Keep downloaded Cloud assets in a local cache so a reopened model needs no network request. Only the dedicated cloud-cache directory is written.");
+        CLOUD_DISK_CACHE = builder.define("CloudDiskCache", true);
+        builder.comment("Size limit of the Cloud disk cache in megabytes. Model bytes and card images share this budget; the least recently used entries are evicted first.");
+        CLOUD_DISK_CACHE_MEGABYTES = builder.defineInRange("CloudDiskCacheMegabytes", 512, 64, 8192);
+        builder.comment("Use local models only and block all Sparkle Morpher client-to-server traffic.");
+        PRIVACY_MODE = builder.define("PrivacyMode", false);
+        CLOUD_PERFORMANCE_PRESET = builder.comment("Client-side SPM Cloud performance preset. UNLIMITED adds no client concurrency cap; server limits still apply.").defineEnum("CloudPerformancePreset", com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.UNLIMITED);
+        CLOUD_UPLOAD_CONCURRENCY = builder.comment("Concurrent Cloud uploads in CUSTOM mode. 0 means unlimited.").defineInRange("CloudUploadConcurrency", 0, 0, 64);
+        CLOUD_PROCESSING_CONCURRENCY = builder.comment("Concurrent Cloud model imports in CUSTOM mode. 0 means unlimited.").defineInRange("CloudProcessingConcurrency", 0, 0, 64);
+        NETWORK_PRESET = builder.comment("Network permissions and ready model source priority. AUTO preserves automatic LAN and existing Cloud. Credentials are retained.").defineEnum("NetworkPreset", com.micaftic.morpher.core.network.NetworkPreset.AUTO);
+        PEER_LISTENERS = builder.comment("Explicit model TCP listeners, at most two local wildcard/loopback host:port entries separated by commas. IPv6 uses brackets.").define("PeerModelListeners", "0.0.0.0:26437");
+        PEER_ENTRANCES = builder.comment("Explicit advertised model TCP endpoints, separated by commas. Sakura model mapping is independent of the Minecraft game mapping. No invitation secrets are saved.").define("PeerModelEntrances", "");
+        builder.comment("Maximum models whose CPU geometry and animation data stay resident. Idle models reload from their source when used again.");
+        MAX_RESIDENT_CPU_MODELS = builder.defineInRange("MaxResidentCpuModels", 64, 1, 512);
+        builder.comment("Minimum idle time before an unused client model GPU/native cache can be unloaded by LRU.");
+        UNUSED_MODEL_TTL_SECONDS = builder.defineInRange("UnusedModelTtlSeconds", 300, 30, 86400);
+        builder.comment("Maximum decoded audio cache bytes across all client models. 0 disables decoded audio caching.");
+        AUDIO_CACHE_MAX_BYTES = builder.defineInRange("AudioCacheMaxBytes", 64 * 1024 * 1024, 0, 512 * 1024 * 1024);
+        builder.pop();
+    }
+}

@@ -1,0 +1,58 @@
+package com.micaftic.morpher.mixin.plugin;
+
+import com.micaftic.morpher.util.obfuscate.Keep;
+import org.objectweb.asm.tree.ClassNode;
+import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
+import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
+
+import java.util.List;
+import java.util.Set;
+
+public class MixinTweaker implements IMixinConfigPlugin {
+
+    @Keep
+    public void onLoad(String str) {
+    }
+
+    @Keep
+    public String getRefMapperConfig() {
+        return null;
+    }
+
+    @Keep
+    public boolean shouldApplyMixin(String str, String str2) {
+        if (net.neoforged.fml.loading.FMLEnvironment.getDist() != net.neoforged.api.distmarker.Dist.CLIENT) return false;
+        String simpleName = str2 == null ? "" : str2.substring(str2.lastIndexOf('.') + 1);
+        if (isTouhouLittleMaidCompatMixin(simpleName) && !isTouhouLittleMaidPresent()) {
+            System.out.println("[Sparkle Morpher] TouhouLittleMaid not installed, skipping compat mixin: " + str2);
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isTouhouLittleMaidCompatMixin(String simpleName) {
+        return "TouhouLittleMaidYsmCompatMixin".equals(simpleName);
+    }
+
+    private static boolean isTouhouLittleMaidPresent() {
+        return MixinTweaker.class.getClassLoader().getResource(
+                "com/github/tartaricacid/touhoulittlemaid/entity/passive/EntityMaid.class") != null;
+    }
+
+    @Keep
+    public void acceptTargets(Set<String> set, Set<String> set2) {
+    }
+
+    @Keep
+    public List<String> getMixins() {
+        return null;
+    }
+
+    @Keep
+    public void preApply(String str, ClassNode classNode, String str2, IMixinInfo iMixinInfo) {
+    }
+
+    @Keep
+    public void postApply(String str, ClassNode classNode, String str2, IMixinInfo iMixinInfo) {
+    }
+}

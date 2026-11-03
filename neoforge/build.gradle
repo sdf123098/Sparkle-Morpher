@@ -1,0 +1,212 @@
+plugins {
+    id "java"
+    id "net.neoforged.moddev" version "2.0.141"
+}
+
+apply from: rootProject.file('gradle/verify-native-abi.gradle')
+
+group = mod_group_id
+version = mod_version
+
+apply from: rootProject.file('gradle/distribution.gradle')
+
+// JVM tests use heap-backed JOML operations and need no internal Unsafe access.
+allprojects {
+    tasks.withType(Test).configureEach {
+        systemProperty 'joml.nounsafe', 'true'
+    }
+}
+def isCurseForgeDist = rootProject.ext.isCurseForgeDist
+
+base {
+    archivesName = "sparkle-morpher-${project.version}-neo26.1.x"
+}
+
+tasks.named("jar") {
+    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo26.1.x")
+}
+
+repositories {
+    maven { url = "https://jitpack.io" }
+    mavenCentral()
+
+    def projectLocalMaven = maven {
+        name = "Project Local Maven"
+        url = uri("local-maven")
+    }
+    remove(projectLocalMaven)
+    add(0, projectLocalMaven)
+
+    maven {
+        name = "BMCLAPI Minecraft Libraries"
+        url = "https://bmclapi2.bangbang93.com/maven"
+    }
+    maven {
+        name = "Aliyun Public"
+        url = "https://maven.aliyun.com/repository/public"
+    }
+    maven {
+        name = "Aliyun Central"
+        url = "https://maven.aliyun.com/repository/central"
+    }
+}
+
+["BMCLAPI Minecraft Libraries", "Aliyun Central", "Aliyun Public", "Project Local Maven"].each { repoName ->
+    def repo = repositories.findByName(repoName)
+    if (repo != null) {
+        repositories.remove(repo)
+        repositories.add(0, repo)
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    withSourcesJar()
+}
+
+neoForge {
+    enable {
+        version = neo_version
+        disableRecompilation = true
+    }
+
+    runs {
+        client {
+            client()
+            systemProperty "neoforge.enabledGameTestNamespaces", mod_id
+        }
+
+        server {
+            server()
+            systemProperty "neoforge.enabledGameTestNamespaces", mod_id
+            programArgument "--nogui"
+        }
+
+        data {
+            data()
+            programArguments.addAll "--mod", mod_id, "--all", "--output", file("src/generated/resources").absolutePath, "--existing", file("src/main/resources").absolutePath
+        }
+    }
+
+    mods {
+        yes_steve_model {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+// merged-layout: 共享层在仓库根的 ../common。本模块 src/main/resources 只保留
+// loader 专属资源 + 与 fabric 内容不同的少量覆盖资源。
+sourceSets.main.resources {
+    srcDir "src/generated/resources"
+    srcDir rootProject.file('../common/src/main/resources')
+    exclude 'native/**'
+}
+sourceSets.main.java {
+    srcDir rootProject.file('../common/src/main/java')
+    srcDir "src/neoforge/java"
+    if (!isCurseForgeDist) {
+        srcDir rootProject.ext.distributionNativeJavaSourceDir
+    }
+
+sourceSets.test.java {
+    srcDir rootProject.file('../common/src/test/java')
+}
+}
+
+if (isCurseForgeDist) {
+    tasks.named('compileJava', JavaCompile) {
+        source = files(
+                fileTree(rootProject.file('../common/src/main/java')),
+                fileTree('src/neoforge/java'),
+                fileTree('src/curseforge/java')
+        )
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+    options.encoding = "UTF-8"
+    options.compilerArgs.addAll([
+                '-Xlint:deprecation', '-Xlint:unchecked',
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            "--add-modules", "jdk.incubator.vector",
+            "-Xmaxerrs", "10000",
+            "-Xmaxwarns", "10000"
+    ])
+}
+
+processResources {
+    filteringCharset = 'UTF-8'
+    def replaceProperties = [
+            minecraft_version: minecraft_version,
+            neo_version      : neo_version,
+            mod_id           : mod_id,
+            mod_name         : mod_name,
+            mod_license      : mod_license,
+            mod_version      : mod_version,
+            mod_authors      : mod_authors,
+            mod_description  : mod_description
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(["META-INF/neoforge.mods.toml"]) {
+        expand replaceProperties
+    }
+
+    from(rootProject.file("LICENSE")) {
+        rename { "LICENSE" }
+    }
+
+    if (isCurseForgeDist) {
+        rootProject.ext.distributionResourceExcludes(delegate)
+    }
+}
+
+
+dependencies {
+    // zstd-jni dependency removed: project now uses YSM native �?pure-Java ZstdUtil �?raw-frame fallback chain.
+    implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+    jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+
+    // R0: JVM 单测（JUnit 5），测试代码在 src/test/java。
+    // moddev 将 MC 依赖链剥离出 test 运行时：neoforge + minecraft-dependencies（gson/joml/fastutil 等库）
+    // + moddev 生成的 MC 类 jar（接口签名引用 MC 类需要）。
+    testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    // Tests also resolve loader annotations referenced by the main classes.
+    testCompileOnly files(sourceSets.main.compileClasspath)
+    testImplementation "net.neoforged:neoforge:$neo_version"
+    testImplementation "net.neoforged:minecraft-dependencies:$minecraft_version"
+    testRuntimeOnly files(fileTree("build/moddev/artifacts") {
+        include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
+    })
+    // MC classes are also needed on the test compile classpath so render-context
+    // tests can reference types such as net.minecraft.world.entity.Entity.
+    testCompileOnly files(fileTree("build/moddev/artifacts") {
+        include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
+    })
+}
+
+test {
+    useJUnitPlatform()
+    // Patched MC chat/enums consult FMLLoader even in plain JVM tests.
+    // Use the game's resolved runtime so loader versions follow NeoForge.
+    classpath += sourceSets.main.runtimeClasspath
+}
+
+tasks.register("printRepositories") {
+    doLast {
+        repositories.eachWithIndex { repo, index ->
+            println "${index}: ${repo.name} -> ${repo.hasProperty('url') ? repo.url : ''}"
+        }
+    }
+}
+
+apply from: rootProject.file('gradle/verify-distribution.gradle')

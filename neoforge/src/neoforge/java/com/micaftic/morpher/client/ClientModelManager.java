@@ -1,0 +1,2184 @@
+package com.micaftic.morpher.client;
+
+import com.micaftic.morpher.RuntimeAccelerationLoader;
+import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
+import com.micaftic.morpher.client.entity.EntityRenderCache;
+import com.micaftic.morpher.client.gui.IGuiWidget;
+import com.micaftic.morpher.client.gui.GuiWidgetRegistry;
+import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
+import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.client.model.ModelAssemblyFactory;
+import com.micaftic.morpher.core.gpu.GpuRenderPath;
+import com.micaftic.morpher.core.model.ModelRef;
+import com.micaftic.morpher.core.model.ModelSourceType;
+import com.micaftic.morpher.core.model.ModelRetention;
+import com.micaftic.morpher.core.model.selection.EntityModelResolver;
+import com.micaftic.morpher.core.model.selection.ModelRevisionGuard;
+import com.micaftic.morpher.core.model.selection.ModelSelectionState;
+import com.micaftic.morpher.core.model.lifecycle.GpuCacheTrimCoordinator;
+import com.micaftic.morpher.core.model.lifecycle.KeyedRequestLeaseRegistry;
+import com.micaftic.morpher.core.model.lifecycle.ModelScanRevision;
+import com.micaftic.morpher.core.storage.LocalModelImportStore;
+import com.micaftic.morpher.core.storage.ImportCommitFlow;
+import com.micaftic.morpher.client.model.ModelResourceBundle;
+import com.micaftic.morpher.client.model.PlayerModelBundle;
+import com.micaftic.morpher.client.model.ProjectileModelBundle;
+import com.micaftic.morpher.client.model.VehicleModelBundle;
+import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.client.upload.IResourceLocatable;
+import com.micaftic.morpher.client.upload.UploadManager;
+import com.micaftic.morpher.core.config.ConfigPolicies;
+import com.micaftic.morpher.core.model.catalog.LocalModelCatalog;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
+import com.micaftic.morpher.resource.YSMBinaryDeserializer;
+import com.micaftic.morpher.resource.bundle.ClientModelBundleAssembler;
+import com.micaftic.morpher.resource.YSMFolderDeserializer;
+import com.micaftic.morpher.resource.gltf.GltfLoader;
+import com.micaftic.morpher.resource.gltf.GltfModel;
+import com.micaftic.morpher.model.format.ModelMetadata;
+import com.micaftic.morpher.resource.models.Metadata;
+import com.micaftic.morpher.resource.models.ModelPackData;
+import com.micaftic.morpher.resource.pojo.RawYsmModel;
+import com.micaftic.morpher.util.DigestUtil;
+import com.micaftic.morpher.util.FileTypeUtil;
+import com.micaftic.morpher.util.InputUtil;
+import com.micaftic.morpher.util.LocalModelSelectionStore;
+import com.micaftic.morpher.util.ModelMemoryProfiler;
+import com.micaftic.morpher.util.ResourceLifecycleStats;
+import com.micaftic.morpher.util.YSMThreadPool;
+import com.micaftic.morpher.util.data.OrderedStringMap;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.mojang.blaze3d.systems.RenderSystem;
+import io.netty.buffer.Unpooled;
+import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
+import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
+import net.minecraft.client.Minecraft;
+import com.micaftic.morpher.mixin.client.MinecraftAccessor;
+import java.util.concurrent.Executor;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.player.Player;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
+import org.jetbrains.annotations.Nullable;
+import com.micaftic.morpher.core.security.YSMByteBuf;
+import com.micaftic.morpher.core.security.YSMClientCache;
+import com.micaftic.morpher.core.security.YsmCrypt;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+@OnlyIn(Dist.CLIENT)
+public class ClientModelManager {
+
+
+    private static final int MODEL_PARSE_THREAD_COUNT = 2;
+    private static final int MODEL_PARSE_QUEUE_CAPACITY = 8;
+    private static final int MODEL_PARSE_MEMORY_BUDGET_MIB = 256;
+    private static final Object MODEL_RUNTIME_STOP_LOCK = new Object();
+    private static final AtomicInteger MODEL_PARSE_THREAD_IDS = new AtomicInteger(1);
+    private static final Semaphore MODEL_PARSE_SLOTS = new Semaphore(MODEL_PARSE_THREAD_COUNT + MODEL_PARSE_QUEUE_CAPACITY, true);
+    private static final Semaphore MODEL_PARSE_MEMORY = new Semaphore(MODEL_PARSE_MEMORY_BUDGET_MIB, true);
+    private static final com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission MODEL_DECODE_ADMISSION =
+            new com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission();
+    static final AtomicInteger MODEL_TASK_GENERATION = new AtomicInteger(0);
+    private static final ThreadPoolExecutor modelTaskDispatcher = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(256), r -> {
+        Thread t = new Thread(r, "SM-Model-Dispatch");
+        t.setDaemon(true);
+        return t;
+    });
+    private static final ThreadPoolExecutor modelPhraseExecutor = new ThreadPoolExecutor(MODEL_PARSE_THREAD_COUNT, MODEL_PARSE_THREAD_COUNT, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(MODEL_PARSE_QUEUE_CAPACITY),
+            r -> {
+                Thread t = new Thread(r, "SM-Model-Parse-" + MODEL_PARSE_THREAD_IDS.getAndIncrement());
+                t.setDaemon(true);
+                return t;
+            }
+    );
+
+    static void submitModelTask(Runnable task) {
+        submitModelTask(task, () -> { });
+    }
+
+    static void submitModelTask(Runnable task, Runnable onDiscard) {
+        int generation = MODEL_TASK_GENERATION.get();
+        java.util.concurrent.atomic.AtomicBoolean discardSettled = new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable settleDiscard = () -> {
+            if (discardSettled.compareAndSet(false, true)) onDiscard.run();
+        };
+        try {
+            modelTaskDispatcher.execute(() -> {
+            boolean acquired = false;
+            try {
+                MODEL_PARSE_SLOTS.acquire();
+                acquired = true;
+                if (generation != MODEL_TASK_GENERATION.get()) {
+                    settleDiscard.run();
+                    return;
+                }
+                modelPhraseExecutor.execute(() -> {
+                    try {
+                        if (generation == MODEL_TASK_GENERATION.get()) {
+                            MODEL_DECODE_ADMISSION.run(() -> {
+                                if (generation == MODEL_TASK_GENERATION.get()) task.run();
+                                else settleDiscard.run();
+                            });
+                        } else {
+                            settleDiscard.run();
+                        }
+                    } finally {
+                        MODEL_PARSE_SLOTS.release();
+                    }
+                });
+                acquired = false;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                settleDiscard.run();
+            } catch (RejectedExecutionException e) {
+                YesSteveModel.LOGGER.warn("[SM] Model parser rejected a queued task", e);
+                settleDiscard.run();
+            } finally {
+                if (acquired) {
+                    MODEL_PARSE_SLOTS.release();
+                }
+            }
+            });
+        } catch (RejectedExecutionException e) {
+            YesSteveModel.LOGGER.warn("[SM] Model task dispatcher rejected a queued task", e);
+            settleDiscard.run();
+        }
+    }
+
+    private static final long MAX_LOCAL_MODEL_FILE_BYTES = LocalModelCatalog.DEFAULT_MAX_FILE_BYTES;
+static final java.security.SecureRandom SECURE_RANDOM = new java.security.SecureRandom();
+    private static volatile ModelAssembly localModelContext;
+    private static volatile Runnable pendingModelCallback;
+    private static IResourceLocatable defaultTexture;
+    private static volatile boolean defaultModelLoadAttempted;
+
+    private static final ClientModelResidency RESIDENCY = new ClientModelResidency();
+    private static volatile Map<String, ModelPackData> modelPackMap = new Object2ReferenceOpenHashMap<>();
+
+
+    static final Map<String, File> cachedModelFiles = new ConcurrentHashMap<>();
+
+    private static final KeyedRequestLeaseRegistry<String> localImportRequests = new KeyedRequestLeaseRegistry<>();
+    private static final ConcurrentHashMap<String, LocalModelCatalog.Entry> lazyModelSources = new ConcurrentHashMap<>();
+    private static final CloudModelLoadCoordinator<Component> CLOUD_IMPORTS = new CloudModelLoadCoordinator<>();
+    private static final CloudMemorySourceBudget CLOUD_SOURCE_BUDGET = new CloudMemorySourceBudget(CloudMemorySourceBudget.DEFAULT_TOTAL_BYTES);
+    static { com.micaftic.morpher.cloud.client.CloudClientRuntime.setDisplayReset(ClientModelManager::clearCloudRuntime); }
+
+    public static boolean hasCloudMemorySource(String id) {
+        var source = lazyModelSources.get(id);
+        return source != null && source.sourceType == ModelSourceType.CLOUD && source.memoryBytes != null;
+    }
+
+    public static boolean isCloudRuntimeResident(String id) {
+        var assembly = RESIDENCY.assemblies().get(id);
+        return assembly != null && assembly.getPresentationCapabilities().runtimeResident();
+    }
+
+    /** ACL is rechecked even on L0/L1 hits; only missing bytes trigger a content download. */
+    public static void ensureCloudRuntime(String id, String fileName, java.util.function.BooleanSupplier current,
+            java.util.function.Supplier<java.util.concurrent.CompletableFuture<com.micaftic.morpher.cloud.client.CloudAssetClient.MemoryAsset>> request,
+            java.util.function.Supplier<java.util.concurrent.CompletableFuture<Boolean>> authorize,
+            Consumer<Component> callback, boolean preview) {
+        long epoch = com.micaftic.morpher.cloud.client.CloudClientRuntime.displayGeneration();
+        java.util.function.BooleanSupplier live = () -> epoch == com.micaftic.morpher.cloud.client.CloudClientRuntime.displayGeneration()
+                && com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() && current.getAsBoolean();
+        if (!live.getAsBoolean()) { callback.accept(Component.literal("Cloud request superseded")); return; }
+        boolean cached = isCloudRuntimeResident(id) || hasCloudMemorySource(id) || CLOUD_IMPORTS.contains(id);
+        CLOUD_SOURCE_BUDGET.accessed(id, cached);
+        var bytes = CloudRuntimeReuse.materialize(live,
+                () -> isCloudRuntimeResident(id) || hasCloudMemorySource(id) || CLOUD_IMPORTS.contains(id), request, authorize);
+        bytes.whenComplete((asset, failure) -> Minecraft.getInstance().execute(() -> {
+            if (!live.getAsBoolean()) { callback.accept(Component.literal("Cloud request superseded")); return; }
+            if (failure != null) {
+                releaseCloudModel(id);
+                callback.accept(Component.translatable("gui.sparkle_morpher.cloud.asset_download_failed", failure.getMessage()));
+                return;
+            }
+            importMemoryModel(id, fileName, asset.bytes(), live, callback, preview);
+        }));
+    }
+
+    public static CloudMemorySourceBudget.Stats cloudMemoryStats() { return CLOUD_SOURCE_BUDGET.stats(); }
+
+    private static boolean cloudSourcePinned(String id) {
+        return isCloudRuntimeResident(id) || RESIDENCY.consumerCount(id) > 0 || CLOUD_IMPORTS.contains(id)
+                || sameRuntimeModelId(id, MODEL_SELECTION.selectedModelId())
+                || sameRuntimeModelId(id, MODEL_SELECTION.localOnlyModelId());
+    }
+
+    private static void evictCloudSource(String id, LocalModelCatalog.Entry source) {
+        lazyModelSources.remove(id, source);
+        var assembly = RESIDENCY.assemblies().get(id);
+        if (assembly instanceof LazyModelAssembly) {
+            var map = new Object2ReferenceOpenHashMap<String, ModelAssembly>(RESIDENCY.assemblies());
+            map.remove(id); RESIDENCY.publishAssemblies(map); releaseModelAssembly(id, assembly);
+        }
+    }
+
+    public static void releaseCloudModel(String id) {
+        synchronized (MODEL_RUNTIME_STOP_LOCK) {
+            CLOUD_IMPORTS.cancel(id, Component.literal("Cloud display access revoked"));
+            CLOUD_SOURCE_BUDGET.remove(id); lazyModelSources.remove(id);
+            RESIDENCY.revoke(id); RESIDENCY.cpuReloads().invalidate(id);
+            var map = new Object2ReferenceOpenHashMap<String, ModelAssembly>(RESIDENCY.assemblies());
+            var old = map.remove(id); RESIDENCY.publishAssemblies(map);
+            if (old != null) releaseModelAssembly(id, old);
+            MODEL_LIBRARY.remove(id);
+        }
+    }
+
+    public static void clearCloudRuntime() {
+        synchronized (MODEL_RUNTIME_STOP_LOCK) {
+            CLOUD_IMPORTS.cancelAll(Component.literal("Cloud runtime changed"));
+            CLOUD_SOURCE_BUDGET.clear();
+            Set<String> ids = new HashSet<>(lazyModelSources.keySet());
+            ids.addAll(RESIDENCY.assemblies().keySet());
+            ids.stream().filter(com.micaftic.morpher.core.model.CloudAssetIdentity::isRuntimeModelId).forEach(ClientModelManager::releaseCloudModel);
+        }
+    }
+    private static final com.micaftic.morpher.core.model.lifecycle.ModelReloadBackoff<String> MODEL_RELOAD_BACKOFF =
+            new com.micaftic.morpher.core.model.lifecycle.ModelReloadBackoff<>();
+
+
+
+
+    // ---- 模型处理失败日志去重 ----
+    // 同一模型短时间反复失败（如损坏模型被反复重载）时只打印首条完整堆栈，
+    // 之后每 100 次输出一次计数摘要，避免日志刷屏；模型成功处理后清除计数。
+    private static final ConcurrentHashMap<String, long[]> MODEL_PROCESS_FAILURES = new ConcurrentHashMap<>();
+    /**
+     * R6：实体模型决策器（候选优先级 + revision 竞态防护）。
+     * 选择变化（rememberSelectedModel）推进 revision，作废在途异步结果；
+     * 异步模型加载完成时以 shouldApply(generation) 校验再 apply。
+     */
+    public static final EntityModelResolver MODEL_RESOLVER = new EntityModelResolver(new ModelRevisionGuard());
+    /**
+     * R7.3：模型选择状态（selected / localOnly 双轨），从本类 4 个 volatile 字段抽取。
+     */
+    public static final ModelSelectionState MODEL_SELECTION = new ModelSelectionState();
+    /**
+     * R7.1：本地模型导入持久化（原子写 + 路径沙箱 + sibling 清理），
+     * 从 ClientModelManager 抽取为独立可测组件。
+     */
+    private static final LocalModelImportStore LOCAL_IMPORT_STORE = new LocalModelImportStore(ModelStoragePaths.custom());
+    private static final LocalModelCatalog LOCAL_MODEL_CATALOG = new LocalModelCatalog();
+    public static final com.micaftic.morpher.core.model.catalog.LocalModelLibrary MODEL_LIBRARY =
+            new com.micaftic.morpher.core.model.catalog.LocalModelLibrary(ModelStoragePaths.cache().resolve("peer/local-origins.sha256"));
+    private static final java.util.concurrent.ThreadPoolExecutor PEER_PARSER = new java.util.concurrent.ThreadPoolExecutor(1,1,0,java.util.concurrent.TimeUnit.SECONDS,
+            new java.util.concurrent.ArrayBlockingQueue<>(8),task->{var thread=new Thread(task,"SPM-Peer-Parser");thread.setDaemon(true);return thread;});
+    private static void submitPeerModelTask(Runnable work,Runnable rejected){try{PEER_PARSER.execute(work);}catch(java.util.concurrent.RejectedExecutionException full){rejected.run();}}
+    private record PeerImportWaiter(java.util.function.BooleanSupplier current, Consumer<Component> completion,Consumer<com.micaftic.morpher.peer.PeerFailure> diagnosis) {}
+    private static final ConcurrentHashMap<String, CopyOnWriteArrayList<PeerImportWaiter>> PEER_IMPORTS = new ConcurrentHashMap<>();
+    private static final long MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS = 5L * 60L * 1000L;
+
+    private static final ModelScanRevision LOCAL_MODEL_SCAN_REVISION = new ModelScanRevision();
+    private static final ConcurrentLinkedQueue<PendingModelPublication> pendingModelQueue = new ConcurrentLinkedQueue<>();
+    private record PendingModelPublication(ModelAssembly assembly, String modelId, long scanRevision,
+            @Nullable LocalModelCatalog.Entry source, @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease,
+            long cloudGeneration) {
+        private PendingModelPublication(ModelAssembly assembly, String modelId, long scanRevision,
+                @Nullable LocalModelCatalog.Entry source, @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) {
+            this(assembly, modelId, scanRevision, source, requestLease,
+                    com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId)
+                            ? com.micaftic.morpher.cloud.client.CloudClientRuntime.displayGeneration() : -1L);
+        }
+    }
+    private static final Set<String> localOnlyModelIds = ConcurrentHashMap.newKeySet();
+    private static final ConcurrentHashMap<String, Path> localModelSourcePaths = new ConcurrentHashMap<>();
+    public static void loadDefaultModel() {
+        if (localModelContext != null || defaultModelLoadAttempted) {
+            return;
+        }
+        defaultModelLoadAttempted = true;
+        YesSteveModel.LOGGER.info("[SM] Loading builtin default model...");
+        try {
+            String resourcePath = "/assets/sparkle_morpher/builtin/default";
+            // 生产环境（jar / NeoForge 模块类加载器）下对"目录"做 getResource 经常解析不到
+            // （目录不是可枚举的 classpath 条目），因此改为探测目录内的真实文件 ysm.json，
+            // 再从它的 URL 推导出目录路径。
+            String probeFile = "/ysm.json";
+            URL probeUrl = YesSteveModel.class.getResource(resourcePath + probeFile);
+            if (probeUrl == null) {
+                YesSteveModel.LOGGER.warn("[SM] Builtin default model not found in classpath: " + resourcePath
+                        + " (client will rely on local models)");
+                return;
+            }
+            URI uri = probeUrl.toURI();
+            if ("union".equals(uri.getScheme())) {
+                // NeoForge 模块类加载器（HMCL 外部启动，jar 放 mods/）返回 union: URL：
+                // union:/path/to/sparkle-morpher-*.jar%23<idx>!/assets/.../ysm.json
+                // 将其转换为标准 jar:file: URL，后续统一走 jar 分支处理。
+                String urlStr = probeUrl.toString();
+                String inner = urlStr.substring("union:".length());
+                int bang = inner.indexOf('!');
+                if (bang <= 0) {
+                    YesSteveModel.LOGGER.warn("[SM] Malformed union URL: " + probeUrl
+                            + " (client will rely on local models)");
+                    return;
+                }
+                String filePart = inner.substring(0, bang).replaceAll("%23\\d+$", "");
+                uri = URI.create("jar:file:" + filePart + inner.substring(bang));
+            }
+            Path defaultPath;
+            FileSystem jarFs = null;
+            if ("jar".equals(uri.getScheme())) {
+                // jar:file:/.../sparkle-morpher-*.jar!/assets/.../default/ysm.json -> 去掉文件名得到目录 URI
+                URI dirUri = URI.create(uri.toString().substring(0, uri.toString().length() - probeFile.length()));
+                try {
+                    jarFs = FileSystems.getFileSystem(dirUri);
+                } catch (FileSystemNotFoundException e) {
+                    jarFs = FileSystems.newFileSystem(dirUri, Collections.emptyMap());
+                }
+                defaultPath = jarFs.getPath(resourcePath);
+            } else if ("file".equals(uri.getScheme())) {
+                defaultPath = Paths.get(uri).getParent();
+            } else {
+                YesSteveModel.LOGGER.warn("[SM] Unsupported builtin default model resource URL scheme: " + probeUrl
+                        + " (client will rely on local models)");
+                return;
+            }
+
+            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(defaultPath)) {
+                RawYsmModel rawModel = deserializer.deserialize();
+
+                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, "default");
+
+
+                onModelDataReceived(parsedBundle, "default", true, false);
+                YesSteveModel.LOGGER.info("[SM] Successfully pushed Default Model to render queue.");
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[SM] Failed to dispatch Default Model", e);
+            }
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.error("[SM] Failed to load builtin default model", e);
+        }
+    }
+
+
+    static void parseAndLoadModel(byte[] decompressed, String modelId, boolean isAuth) {
+        parseAndLoadModel(decompressed, modelId, isAuth, null);
+    }
+
+    private static void parseAndLoadModel(byte[] decompressed, String modelId, boolean isAuth,
+                                          @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) {
+        modelId = LocalModelCatalog.canonicalKey(modelId);
+        int memoryPermits = Math.max(1, Math.min(MODEL_PARSE_MEMORY_BUDGET_MIB,
+                (decompressed.length + 1024 * 1024 - 1) / (1024 * 1024)));
+        try {
+            MODEL_PARSE_MEMORY.acquire(memoryPermits);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        try {
+            if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
+//            if (true) return;
+            // IR
+
+            ModelMemoryProfiler.logBytes("binary-parse-start", modelId, decompressed);
+            try (YSMBinaryDeserializer deserializer = new YSMBinaryDeserializer(decompressed, 32)) {
+                RawYsmModel rawModel = deserializer.deserializeKeepOpen();
+                YSMByteBuf reader = deserializer.getReader();
+
+                // Read version number
+                rawModel.footer.version = reader.readVarInt(); // 65535 or 32
+
+                rawModel.footer.unkInt1 = reader.readVarInt(); // Analyze
+                if (rawModel.footer.unkInt1 != 0) {
+                    rawModel.footer.rand = reader.readString();
+                }
+
+                rawModel.footer.time = reader.readVarLong();
+
+                if (rawModel.footer.unkInt1 != 0) {
+                    rawModel.footer.extra = reader.readString();
+                    rawModel.footer.unkInt2 = reader.readVarInt();
+                }
+
+                // Assemble to client model
+                ModelMemoryProfiler.log("client-map-start", modelId);
+                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
+                ModelMemoryProfiler.log("client-map-finished", modelId);
+                if (requestLease == null || RESIDENCY.cpuReloads().isCurrent(requestLease)) {
+                    onModelDataReceived(parsedBundle, modelId, false, isAuth, requestLease);
+                }
+            }
+        } catch (Exception e) {
+            YesSteveModel.LOGGER.error("[SM] Failed to parse and load model: " + modelId, e);
+        } finally {
+            MODEL_PARSE_MEMORY.release(memoryPermits);
+        }
+    }
+
+    private static OrderedStringMap<String, OuterFileTexture> toOrderedTextureMap(Map<String, OuterFileTexture> textures) {
+        if (textures == null || textures.isEmpty()) {
+            return new OrderedStringMap<>(new String[0], new OuterFileTexture[0]);
+        }
+        return new OrderedStringMap<>(
+                textures.keySet().toArray(new String[0]),
+                textures.values().toArray(new OuterFileTexture[0])
+        );
+    }
+
+
+
+    
+    public static Map<String, ModelAssembly> getModelAssemblyMap() {
+        return RESIDENCY.assemblies();
+    }
+
+    public static Map<String, ModelPackData> getModelPackMap() {
+        return modelPackMap;
+    }
+
+    public static Optional<ModelAssembly> getModelContext(String str) {
+        String modelKey = LocalModelCatalog.canonicalKey(str);
+        ModelAssembly assembly = RESIDENCY.assemblies().get(modelKey);
+        if (assembly instanceof LazyModelAssembly) {
+            scheduleCachedModelReload(modelKey);
+            return Optional.empty();
+        }
+        if (assembly != null) {
+            touchModel(modelKey);
+        }
+        if ((assembly == null && lazyModelSources.containsKey(modelKey))
+                || (assembly != null && !assembly.getPresentationCapabilities().runtimeResident())) {
+           scheduleCachedModelReload(modelKey);
+           return Optional.empty();
+       }
+       return Optional.ofNullable(assembly);
+    }
+
+    public static boolean isModelLoadPending(String modelId) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey == null) {
+            return false;
+        }
+        if (RESIDENCY.cpuReloads().isInFlight(modelKey)) {
+            return true;
+        }
+        ModelAssembly assembly = RESIDENCY.assemblies().get(modelKey);
+        return lazyModelSources.containsKey(modelKey)
+                && (assembly == null || assembly instanceof LazyModelAssembly || !assembly.getPresentationCapabilities().runtimeResident());
+    }
+
+    private static void scheduleCachedModelReload(String modelId) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey == null) return;
+        LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
+        if (source == null || !MODEL_RELOAD_BACKOFF.allows(modelKey, source, System.nanoTime() / 1_000_000L)) return;
+        KeyedRequestLeaseRegistry.Lease<String> requestLease = RESIDENCY.cpuReloads().begin(modelKey);
+        if (requestLease == null) return;
+        if (lazyModelSources.get(modelKey) != source) {
+            RESIDENCY.cpuReloads().complete(requestLease);
+            return;
+        }
+        if (source.sourceType == ModelSourceType.CLOUD) {
+            importMemoryModel(modelKey, source.memoryFormat, source.memoryBytes,
+                    () -> lazyModelSources.get(modelKey) == source,
+                    ignored -> finishCachedModelReload(requestLease, source), false);
+            return;
+        }
+        if (source.sourceType == ModelSourceType.PEER) {
+            var peerSource = MODEL_LIBRARY.source(modelKey);
+            if (peerSource == null) { RESIDENCY.cpuReloads().complete(requestLease); return; }
+            loadPeerModel(peerSource.peerIdentity(), peerSource.verifiedAsset(),
+                    () -> RESIDENCY.cpuReloads().isCurrent(requestLease) && MODEL_LIBRARY.source(modelKey) == peerSource,
+                    ignored -> finishCachedModelReload(requestLease, source));
+            return;
+        }
+        submitModelTask(() -> {
+            try {
+                if (!RESIDENCY.cpuReloads().isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
+                if (source.remote) {
+                    if (source.cacheKey == null) return;
+                    byte[] fileBytes = Files.readAllBytes(source.path);
+                    byte[] decompressed = YsmCrypt.readInPlace(fileBytes, source.cacheKey);
+                    if (!RESIDENCY.cpuReloads().isCurrent(requestLease) || lazyModelSources.get(modelKey) != source) return;
+                    parseAndLoadModel(decompressed, modelKey, source.auth, requestLease);
+                } else {
+                    loadLocalModelSource(modelKey, source, -1L, requestLease);
+                }
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[SM] Failed to reload resident model: {}", modelKey, e);
+            } finally {
+                // Keep this request in flight until its publication is accepted or discarded.
+                finishCachedModelReload(requestLease, source);
+            }
+        }, () -> finishCachedModelReload(requestLease, source));
+    }
+
+    private static void finishCachedModelReload(KeyedRequestLeaseRegistry.Lease<String> requestLease,
+                                                LocalModelCatalog.Entry source) {
+        Runnable settle = () -> {
+            try {
+                flushPendingModels();
+            } finally {
+                // Parsing can consume an exception internally. Judge the accepted publication,
+                // and never let an obsolete completion penalize a replacement request/source.
+                if (RESIDENCY.cpuReloads().isCurrent(requestLease)
+                        && lazyModelSources.get(requestLease.key()) == source) {
+                    ModelAssembly assembly = RESIDENCY.assemblies().get(requestLease.key());
+                    if (assembly != null && !(assembly instanceof LazyModelAssembly)
+                            && assembly.getPresentationCapabilities().runtimeResident()) {
+                        MODEL_RELOAD_BACKOFF.clear(requestLease.key());
+                    } else {
+                        MODEL_RELOAD_BACKOFF.failed(requestLease.key(), source, System.nanoTime() / 1_000_000L);
+                    }
+                }
+                RESIDENCY.cpuReloads().complete(requestLease);
+            }
+        };
+        if (RenderSystem.isOnRenderThread()) settle.run();
+        else Minecraft.getInstance().execute(settle);
+    }
+
+    public static Set<String> getAvailableModelIds() {
+        LinkedHashSet<String> ids = new LinkedHashSet<>(RESIDENCY.assemblies().keySet());
+        ids.addAll(lazyModelSources.keySet());
+        ids.removeIf(MODEL_LIBRARY::isPeer);
+        return Collections.unmodifiableSet(ids);
+    }
+
+    /**
+     * Display name for a model that exists only in the lazy catalog (not yet fully loaded).
+     * Prefer sniffed/cached metadata name, then {@link ModelMetadata} metadata, else {@code null}.
+     */
+    @Nullable
+    public static String getLazyModelDisplayName(String modelId) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey == null) return null;
+        LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
+        if (source == null) return null;
+        if (StringUtils.isNotBlank(source.displayName)) {
+            return source.displayName;
+        }
+        String fromInfo = LocalModelCatalog.displayNameFromInfo(source.modelInfo);
+        if (StringUtils.isNotBlank(fromInfo)) {
+            source.displayName = fromInfo;
+            return fromInfo;
+        }
+        return null;
+    }
+
+    static void registerRemoteLazySource(String modelId, Path path, byte[] key, boolean isAuth) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey == null || path == null || key == null) return;
+        RESIDENCY.cpuReloads().invalidate(modelKey);
+        // 服务器已公布同名模型，本次会话中它不再是“仅本地”模型。
+        localOnlyModelIds.remove(modelKey);
+        localModelSourcePaths.remove(modelKey);
+        LocalModelCatalog.Entry previous = lazyModelSources.get(modelKey);
+        ModelMetadata modelInfo = previous == null ? null : previous.modelInfo;
+        String prevName = previous == null ? null : previous.displayName;
+        if (prevName == null) {
+            prevName = LocalModelCatalog.displayNameFromInfo(modelInfo);
+        }
+        lazyModelSources.put(modelKey, new LocalModelCatalog.Entry(path, key, true, isAuth, 0L, modelInfo, prevName));
+        try { MODEL_LIBRARY.imported(modelKey, path, ModelSourceType.LEGACY_SERVER); }
+        catch (IOException provenanceFailure) { YesSteveModel.LOGGER.warn("[SM][Peer] Legacy source is restricted from sharing"); }
+    }
+
+    public static boolean canUploadToServer() {
+        return com.micaftic.morpher.client.upload.CloudUploadRuntime.isConfigured();
+    }
+
+    public static boolean isAuthModel(String modelId) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey == null) return false;
+        LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
+        return source != null && source.auth;
+    }
+
+    public static boolean isLocalOnlyModel(String modelId) {
+        return modelId != null && localOnlyModelIds.contains(LocalModelCatalog.canonicalKey(modelId));
+    }
+public static Optional<Path> getLocalModelSourcePath(String modelId) {
+        if (modelId == null || modelId.isBlank()) {
+            return Optional.empty();
+        }
+        Path path = localModelSourcePaths.get(LocalModelCatalog.canonicalKey(modelId));
+        if (path == null || !Files.exists(path)) {
+            return Optional.empty();
+        }
+        return Optional.of(path);
+    }
+
+    public static Map<String, Path> snapshotLocalCustomSources() {
+        LinkedHashMap<String, Path> out = new LinkedHashMap<>();
+        for (String id : localOnlyModelIds) {
+            Path p = localModelSourcePaths.get(id);
+            if (p != null && Files.exists(p)) {
+                out.put(id, p);
+            }
+        }
+        return Collections.unmodifiableMap(out);
+    }
+
+    public static boolean isSelectedLocalOnlyModel(String modelId) {
+        return modelId != null && sameRuntimeModelId(modelId, MODEL_SELECTION.selectedModelId()) && isLocalOnlyModel(modelId);
+    }
+
+    public static void rememberSelectedModel(String modelId, String textureId) {
+        if (!Objects.equals(LocalModelCatalog.canonicalKey(modelId),
+                LocalModelCatalog.canonicalKey(MODEL_SELECTION.selectedModelId()))) {
+            MODEL_RELOAD_BACKOFF.clear(LocalModelCatalog.canonicalKey(modelId));
+        }
+        // R6：选择变化推进 revision——作废所有在途异步模型结果（竞态防护）
+        MODEL_RESOLVER.request();
+        // R7.3：双轨选择状态（selected / localOnly）集中到 ModelSelectionState
+        MODEL_SELECTION.remember(modelId, textureId, isLocalOnlyModel(modelId),
+                sameRuntimeModelId(modelId, MODEL_SELECTION.localOnlyModelId()));
+        // 持久化模型选择到本地文件，以便在无模组服务器上自动恢复
+        LocalModelSelectionStore.save(modelId, textureId);
+    }
+
+    /**
+     * 恢复本地玩家之前选择的模型。
+     * <p>
+     * 优先从内存中恢复，如果内存中的选择在断开 YSM 服务器后可能已不可用，
+     * 则从本地文件恢复持久化的选择。
+     */
+    public static void restorePersistedModelSelection() {
+        // 1. 先尝试内存中的选择
+        String modelId = MODEL_SELECTION.selectedModelId();
+        String textureId = MODEL_SELECTION.selectedTextureId();
+
+        // 2. 如果内存中的选择不是仅本地模型（在断开YSM服务器后可能已不可用），尝试从文件恢复
+        if (modelId == null || (!isLocalOnlyModel(modelId) && !containsRuntimeModel(modelId))) {
+            Pair<String, String> persisted = LocalModelSelectionStore.load();
+            if (persisted != null) {
+                modelId = persisted.getLeft();
+                textureId = persisted.getRight();
+            }
+        }
+
+        // 3. 没有有效选择则跳过
+        if (modelId == null || modelId.equals("default") || modelId.isBlank()) {
+            return;
+        }
+
+        // 4. 模型必须仍在本地缓存中可用
+        if (!isLocalOnlyModel(modelId) && !containsRuntimeModel(modelId)) {
+            return;
+        }
+
+        // 目录已经确认该模型可用，先恢复内存选择状态，避免同步完成时读取到 null。
+        rememberSelectedModel(modelId, textureId);
+
+        // 5. 拷贝为 final 变量供 lambda 使用
+        final String finalModelId = modelId;
+        final String finalTextureId = textureId;
+
+        // 6. 在渲染线程上应用
+        ((Executor) Minecraft.getInstance()).execute(() -> {
+            // 再次检查，防止在 execute 延迟期间选择已改变
+            if (!sameRuntimeModelId(finalModelId, MODEL_SELECTION.selectedModelId()) && !isLocalOnlyModel(finalModelId) && !containsRuntimeModel(finalModelId)) {
+                // 内存中的选择已经变了，且持久化的模型也不再可用，放弃恢复
+                return;
+            }
+            LocalPlayer player = Minecraft.getInstance().player;
+            if (player == null) {
+                return;
+            }
+            PlayerCapability.get(player).ifPresent(cap -> {
+                if (!finalModelId.equals(cap.getModelId())) {
+                    cap.initModelWithTexture(finalModelId, finalTextureId);
+                  var selectedLocalSource = ClientModelManager.MODEL_LIBRARY.source(finalModelId);
+                  if (selectedLocalSource != null && selectedLocalSource.type() == com.micaftic.morpher.core.model.ModelSourceType.LOCAL) cap.setForceDisabled(false);
+                }
+            });
+        });
+    }
+
+    /**
+     * 在无模组服务器（vanilla server）上，通过 tick 事件持续检测并恢复持久化的模型选择。
+     * <p>
+     * 当玩家加入 vanilla 服务器时，模型会被重置为 default。
+     * 此方法在每个 tick 中检查：如果当前模型是 default 且有持久化的选择，
+     * 则自动恢复之前的模型。
+     */
+    public static void restorePersistedModelSelectionOnVanillaServer() {
+        // Cloud 联机也先恢复本地选择；发布端自行检查模型所属 Cloud。
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) {
+            return;
+        }
+        PlayerCapability.get(player).ifPresent(cap -> {
+            // 只在模型被重置为 default 时触发恢复
+            if (!"default".equals(cap.getModelId())) {
+                return;
+            }
+            Pair<String, String> persisted = LocalModelSelectionStore.load();
+            if (persisted == null) {
+                return;
+            }
+            String modelId = persisted.getLeft();
+            String textureId = persisted.getRight();
+            // 模型必须在本地缓存中可用
+            if (!isLocalOnlyModel(modelId) && !containsRuntimeModel(modelId)) {
+                return;
+            }
+            cap.initModelWithTexture(modelId, textureId);
+                  var selectedLocalSource = ClientModelManager.MODEL_LIBRARY.source(modelId);
+                  if (selectedLocalSource != null && selectedLocalSource.type() == com.micaftic.morpher.core.model.ModelSourceType.LOCAL) cap.setForceDisabled(false);
+            MODEL_SELECTION.rememberPlain(modelId, textureId);
+        });
+    }
+
+    /**
+     * @deprecated 使用 {@link #restorePersistedModelSelection()} 替代
+     */
+    @Deprecated
+    public static void restoreSelectedLocalOnlyModel() {
+        restorePersistedModelSelection();
+    }
+
+    public static void onUploadedModelAvailable(String modelId) {
+        if (modelId == null || modelId.isBlank()) {
+            return;
+        }
+        onUploadedModelImported(modelId);
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) {
+            PlayerCapability.get(player).ifPresent(cap -> {
+                if (sameRuntimeModelId(modelId, cap.getModelId())) {
+                    String textureId = cap.getCurrentTextureName();
+                    rememberSelectedModel(modelId, textureId);
+                    com.micaftic.morpher.cloud.client.CloudPlayerModelSync.publishCurrentSelection();
+                }
+            });
+        }
+    }
+
+    public static void onUploadedModelImported(String modelId) {
+        if (modelId == null || modelId.isBlank()) {
+            return;
+        }
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        localOnlyModelIds.remove(modelKey);
+        localModelSourcePaths.remove(modelKey);
+        RESIDENCY.cpuReloads().invalidate(modelKey);
+    }
+
+
+
+    public static void removeLocalModels(Collection<String> modelIds) {
+        if (modelIds == null || modelIds.isEmpty()) {
+            return;
+        }
+        ((Executor) Minecraft.getInstance()).execute(() -> {
+            Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(RESIDENCY.assemblies());
+            ArrayList<ModelAssembly> removed = new ArrayList<>();
+            for (String modelId : modelIds) {
+                String modelKey = LocalModelCatalog.canonicalKey(modelId);
+                localOnlyModelIds.remove(modelKey);
+                localModelSourcePaths.remove(modelKey);
+                if (MODEL_LIBRARY.isPeer(modelKey)) continue;
+                MODEL_LIBRARY.remove(modelKey);
+                lazyModelSources.computeIfPresent(modelKey, (key, source) -> source.remote ? source : null);
+                RESIDENCY.cpuReloads().invalidate(modelKey);
+                if (sameRuntimeModelId(modelId, MODEL_SELECTION.localOnlyModelId())) {
+                    MODEL_SELECTION.clearLocalOnly();
+                }
+                if (sameRuntimeModelId(modelId, MODEL_SELECTION.selectedModelId())) {
+                    MODEL_SELECTION.clear();
+                }
+                RESIDENCY.lastUsedAt().remove(modelKey);
+                RESIDENCY.gpuTrim().clear(modelKey);
+                ModelAssembly assembly = map.remove(modelKey);
+                if (assembly != null) {
+                    removed.add(assembly);
+                }
+            }
+            RESIDENCY.publishAssemblies(map);
+            for (ModelAssembly assembly : removed) {
+                releaseModelAssembly(assembly);
+            }
+            if (!removed.isEmpty()) {
+                forEachGuiWidget(guiWidget -> guiWidget.onModelsLoaded(map));
+            }
+        });
+    }
+
+    public static void importLocalModel(String modelId, String fileName, byte[] data, @Nullable Consumer<Component> callback) {
+        importLocalModel(modelId, fileName, data, () -> true, callback);
+    }
+
+    public static void importLocalModel(String modelId, String fileName, byte[] data,
+                                        java.util.function.BooleanSupplier current, @Nullable Consumer<Component> callback) {
+        if (com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId)) {
+            if (callback != null) callback.accept(Component.translatable("gui.sparkle_morpher.import.error.invalid_model_id_or_hash"));
+            return;
+        }
+        importModelIntoStore(modelId, fileName, data, LOCAL_IMPORT_STORE, current, callback);
+    }
+
+    /** Memory-only preview load: callers retain the screen/runtime lease; no file is written or player selection changed. */
+    public static void loadCloudPreviewInMemory(String modelId, String fileName, byte[] data,
+            java.util.function.BooleanSupplier current, Consumer<Component> callback) {
+        if (!com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId))
+            throw new IllegalArgumentException("Preview requires a Cloud runtime identity");
+        importMemoryModel(modelId, fileName, data, current, callback, true);
+    }
+
+    /** Temporary public repository card: no local import or Cloud provenance registration. */
+    public static void loadResourcePreviewInMemory(String modelId, String fileName, byte[] data,
+            java.util.function.BooleanSupplier current, Consumer<Component> callback) {
+        if (!com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId))
+            throw new IllegalArgumentException("Preview requires a private runtime identity");
+        importMemoryModel(modelId, fileName, data, current, callback, true, true);
+    }
+
+    private static void importModelIntoStore(String modelId, String fileName, byte[] data,
+            LocalModelImportStore store, java.util.function.BooleanSupplier current, @Nullable Consumer<Component> callback) {
+        final String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        com.micaftic.morpher.core.model.lifecycle.LocalImportCompletion completion =
+                new com.micaftic.morpher.core.model.lifecycle.LocalImportCompletion(callback,
+                (Executor) Minecraft.getInstance(),
+                failure -> YesSteveModel.LOGGER.error("[SM] Local import completion callback failed for {}", modelKey, failure));
+        final KeyedRequestLeaseRegistry.Lease<String> importLease;
+        final int importGeneration;
+        synchronized (MODEL_RUNTIME_STOP_LOCK) {
+            if(store==LOCAL_IMPORT_STORE) LOCAL_MODEL_SCAN_REVISION.invalidate();
+            if (modelKey == null) {
+                importLease = null;
+            } else {
+                RESIDENCY.cpuReloads().invalidate(modelKey);
+                localImportRequests.invalidate(modelKey);
+                importLease = localImportRequests.begin(modelKey);
+            }
+            importGeneration = MODEL_TASK_GENERATION.get();
+        }
+        byte[] importData = data;
+        submitImportTask(com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId), () -> {
+            Component error = null;
+            try {
+                if (!current.getAsBoolean()) throw new IOException("Import request superseded");
+                ModelMemoryProfiler.logBytes("local-import-read", modelKey, importData);
+                try (LocalModelImportStore.PreparedImport prepared = store.prepare(modelKey, fileName, importData)) {
+                    if (prepared == null) throw new IOException("Failed to prepare local import");
+                    ImportCommitFlow.Outcome<LocalModelImportStore.CommitResult> outcome;
+                    outcome = com.micaftic.morpher.core.importing.ImportCoordinator.importPrepared(
+                            prepared,
+                            () -> com.micaftic.morpher.core.importing.ImportCoordinator.parsePickedBytes(
+                                    fileName, importData, () -> parseImportModel(fileName, importData)),
+                            rawModel -> {
+                                ModelMemoryProfiler.log("local-import-parsed", modelKey);
+                                ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelKey);
+                                ModelMemoryProfiler.log("local-import-mapped", modelKey);
+                                return ModelAssemblyFactory.buildAssembly(parsedBundle, false, false);
+                            },
+                            gltfResult -> buildGltfAssembly(gltfResult.model(), modelKey),
+                            candidate -> {
+                                synchronized (MODEL_RUNTIME_STOP_LOCK) {
+                                    return com.micaftic.morpher.core.importing.ImportCoordinator.commitBuiltCandidate(
+                                            candidate,
+                                            () -> current.getAsBoolean() && importGeneration == MODEL_TASK_GENERATION.get()
+                                                    && (importLease == null || localImportRequests.isCurrent(importLease)),
+                                            prepared::commit,
+                                            (assembly, committed) -> publishImportedAssembly(
+                                                    modelKey, assembly, committed.persistedPath(), com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId)),
+                                            assembly -> releaseModelAssembly(modelKey, assembly));
+                                }
+                            });
+                    if (outcome.state() == ImportCommitFlow.State.SUPERSEDED_BEFORE_COMMIT) {
+                        error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
+                                "Import superseded by a newer request");
+                    } else if (outcome.state() == ImportCommitFlow.State.FAILED_BEFORE_COMMIT) {
+                        throw outcome.failure();
+                    } else {
+                        LocalModelImportStore.CommitResult commit = outcome.committedSource();
+                        if (!commit.cleanupPending().isEmpty()) {
+                            YesSteveModel.LOGGER.warn("[SM] Import committed with {} stale sibling file(s) awaiting cleanup: {}",
+                                    commit.cleanupPending().size(), commit.cleanupPending());
+                        }
+                        if (outcome.state() == ImportCommitFlow.State.SOURCE_COMMITTED_PENDING_PUBLICATION) {
+                            YesSteveModel.LOGGER.error("[SM] Import source committed but runtime publication failed; scheduling catalog recovery",
+                                    outcome.failure());
+                            try {
+                                reloadLocalModels(null);
+                            } catch (RuntimeException recoveryFailure) {
+                                YesSteveModel.LOGGER.error("[SM] Failed to schedule recovery for committed import {}", modelKey, recoveryFailure);
+                            }
+                        }
+                    }
+                }
+                ((Executor) Minecraft.getInstance()).execute(ClientModelManager::flushPendingModels);
+                if (error == null) YesSteveModel.LOGGER.info("[SM] Imported local model: {}", modelKey);
+            } catch (OutOfMemoryError exhausted) {
+                // Complete the request even if a model expands beyond its source-size
+                // estimate, so optional preview queues never retain a failed worker forever.
+                YesSteveModel.LOGGER.error("[SM] Model import exhausted available heap: {}", modelKey);
+                error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", "Not enough free heap to decode this model");
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[SM] Failed to import local model: {}", modelKey, e);
+                error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            } finally {
+                if (importLease != null) localImportRequests.complete(importLease);
+            }
+            completion.complete(error);
+        }, () -> {
+            if (importLease != null) localImportRequests.complete(importLease);
+            completion.complete(Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
+                    "Import task was cancelled before execution"));
+        });
+    }
+
+    /**
+     * Applies verified Cloud display bytes without creating, replacing or caching any model file.
+     * Ownership of {@code data} transfers to the runtime, which retains it for lazily rebuilt
+     * residents until the entry is replaced or the client stops.
+     */
+    public static void importCloudModelInMemory(String modelId, String fileName, byte[] data,
+                                                @Nullable Consumer<Component> callback) {
+        if (!com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId)) {
+            if (callback != null) callback.accept(Component.translatable("gui.sparkle_morpher.import.error.invalid_model_id_or_hash"));
+            return;
+        }
+        importMemoryModel(modelId, fileName, data, callback);
+    }
+
+    public static void importCloudModelInMemory(String modelId, String fileName, byte[] data,
+            java.util.function.BooleanSupplier current, @Nullable Consumer<Component> callback) {
+        importMemoryModel(modelId, fileName, data, current, callback, false);
+    }
+
+    private static void importMemoryModel(String modelId, String fileName, byte[] data,
+                                          @Nullable Consumer<Component> callback) {
+        importMemoryModel(modelId, fileName, data, () -> true, callback, false);
+    }
+
+    private static void submitImportTask(boolean cloud, Runnable task, Runnable onCancelled) {
+        if (!cloud) { submitModelTask(task, onCancelled); return; }
+        com.micaftic.morpher.cloud.client.CloudClientPerformance.process(() -> {
+            var done = new java.util.concurrent.CompletableFuture<Void>();
+            submitModelTask(() -> {
+                try { task.run(); } finally { done.complete(null); }
+            }, () -> {
+                try { onCancelled.run(); } finally { done.complete(null); }
+            });
+            return done;
+        }).whenComplete((ignored, failure) -> { if (failure != null) onCancelled.run(); });
+    }
+
+    private static void importMemoryModel(String modelId, String fileName, byte[] data,
+                                          java.util.function.BooleanSupplier current,
+                                          @Nullable Consumer<Component> callback, boolean preview) {
+        importMemoryModel(modelId, fileName, data, current, callback, preview, false);
+    }
+
+    private static void importMemoryModel(String modelId, String fileName, byte[] data,
+                                          java.util.function.BooleanSupplier current,
+                                          @Nullable Consumer<Component> callback, boolean preview, boolean resourcePreview) {
+        final String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        Component cancelled = Component.literal("Cloud import superseded");
+        long cloudGeneration = com.micaftic.morpher.cloud.client.CloudClientRuntime.displayGeneration();
+        int importGeneration = MODEL_TASK_GENERATION.get();
+        java.util.function.BooleanSupplier waiterCurrent = () -> current.getAsBoolean()
+                && com.micaftic.morpher.cloud.client.CloudHttpClient.currentDisplayBytes(data)
+                && importGeneration == MODEL_TASK_GENERATION.get()
+                && cloudGeneration == com.micaftic.morpher.cloud.client.CloudClientRuntime.displayGeneration();
+        var completion = new com.micaftic.morpher.core.model.lifecycle.LocalImportCompletion(
+                callback == null ? null : error -> callback.accept(waiterCurrent.getAsBoolean() ? error : cancelled),
+                (Executor) Minecraft.getInstance(), failure -> YesSteveModel.LOGGER.error("[SM] Cloud completion failed", failure));
+        final CloudModelLoadCoordinator.Ticket<Component> ticket;
+        final byte[] importData;
+        synchronized (MODEL_RUNTIME_STOP_LOCK) {
+            if (modelKey == null || !com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelKey)
+                    || !waiterCurrent.getAsBoolean()) { completion.complete(cancelled); return; }
+            if (isCloudRuntimeResident(modelKey)) { touchModel(modelKey); completion.complete(null); return; }
+            ticket = CLOUD_IMPORTS.join(modelKey, waiterCurrent, completion::complete);
+            if (ticket == null) return;
+            var source = lazyModelSources.get(modelKey);
+            importData = source != null && source.memoryBytes != null ? source.memoryBytes : data;
+            RESIDENCY.cpuReloads().invalidate(modelKey);
+        }
+        java.util.function.BooleanSupplier live = () -> CLOUD_IMPORTS.isCurrent(ticket);
+        submitImportTask(true, () -> {
+            ModelAssembly candidate = null;
+            try {
+                if (!live.getAsBoolean()) throw new IOException("Cloud import superseded");
+                if (importData == null || importData.length > CloudMemorySourceBudget.MAX_ASSET_BYTES)
+                    throw new IOException("Cloud model source is missing or exceeds its memory budget");
+                if (fileName == null || fileName.isBlank()) throw new IOException("Cloud model format is missing");
+                if (preview && !com.micaftic.morpher.core.model.lifecycle.ModelDecodeAdmission.previewFits(importData.length))
+                    throw new IOException("Not enough free heap for this model preview");
+                if (!resourcePreview) CLOUD_SOURCE_BUDGET.parsed();
+                String sha = DigestUtil.sha256Hex(importData);
+                var parsed = com.micaftic.morpher.core.importing.ImportCoordinator.parsePickedBytes(
+                        fileName, importData, () -> parseImportModel(fileName, importData));
+                candidate = com.micaftic.morpher.core.importing.ImportCoordinator.buildCandidate(parsed,
+                        raw -> ModelAssemblyFactory.buildAssembly(ClientModelBundleAssembler.buildParsedBundle(raw, modelKey), false, false),
+                        gltf -> buildGltfAssembly(gltf.model(), modelKey));
+                ModelAssembly ready = candidate;
+                Minecraft.getInstance().execute(() -> {
+                    Component error = cancelled;
+                    synchronized (MODEL_RUNTIME_STOP_LOCK) {
+                        if (live.getAsBoolean()) {
+                            try {
+                                publishMemoryAssembly(modelKey, ready, importData, fileName, sha, ModelSourceType.CLOUD, resourcePreview);
+                                flushPendingModels();
+                                error = null;
+                            } catch (RuntimeException failure) {
+                                releaseModelAssembly(modelKey, ready);
+                                error = Component.literal("Cloud publication failed: " + failure.getMessage());
+                            }
+                        } else releaseModelAssembly(modelKey, ready);
+                        CLOUD_IMPORTS.finish(ticket, error, cancelled);
+                    }
+                });
+                candidate = null;
+            } catch (Exception | OutOfMemoryError failure) {
+                if (candidate != null) releaseModelAssembly(modelKey, candidate);
+                Component error = Component.translatable("gui.sparkle_morpher.import.error.local_import_failed",
+                        failure instanceof OutOfMemoryError ? "Not enough free heap to decode this model" : String.valueOf(failure.getMessage()));
+                CLOUD_IMPORTS.finish(ticket, error, cancelled);
+            }
+        }, () -> CLOUD_IMPORTS.finish(ticket, cancelled, cancelled));
+    }
+
+    /** Publishes verified Peer resources without importing them into custom/auth/Cloud storage. */
+    public static void loadPeerModel(com.micaftic.morpher.peer.PeerModelIdentity identity,
+            com.micaftic.morpher.peer.PeerAssetStore.Verified asset,
+            java.util.function.BooleanSupplier current, Consumer<Component> completion) {
+        loadPeerModel(identity,asset,current,completion,ignored->{});
+    }
+    public static void loadPeerModel(com.micaftic.morpher.peer.PeerModelIdentity identity,
+            com.micaftic.morpher.peer.PeerAssetStore.Verified asset,java.util.function.BooleanSupplier current,
+            Consumer<Component> completion,Consumer<com.micaftic.morpher.peer.PeerFailure> diagnosis) {
+        final String id = identity.runtimeModelId();
+        final int generation = MODEL_TASK_GENERATION.get();
+        if(!current.getAsBoolean()) { completion.accept(Component.literal("Peer task superseded")); return; }
+        ModelAssembly resident = RESIDENCY.assemblies().get(id);
+        if(MODEL_LIBRARY.isPeer(id) && resident != null && resident.isRuntimeResident()) {
+            touchModel(id); completion.accept(null); return;
+        }
+        var waiter = new PeerImportWaiter(current, completion,diagnosis);
+        var existing = PEER_IMPORTS.get(id);
+        if(existing != null) {
+            if(existing.size() >= com.micaftic.morpher.peer.PeerLimits.CAPACITY_CEILING) completion.accept(Component.literal("Peer parser busy"));
+            else existing.add(waiter);
+            return;
+        }
+        var batch = new CopyOnWriteArrayList<PeerImportWaiter>(); batch.add(waiter);
+        var raced=PEER_IMPORTS.putIfAbsent(id,batch);if(raced!=null){if(raced.size()<com.micaftic.morpher.peer.PeerLimits.CAPACITY_CEILING)raced.add(waiter);else completion.accept(Component.literal("Peer parser busy"));return;}
+        java.util.function.BooleanSupplier live = () -> generation == MODEL_TASK_GENERATION.get() && PEER_IMPORTS.get(id) == batch
+                && batch.stream().anyMatch(w -> w.current.getAsBoolean());
+        submitPeerModelTask(() -> {
+            ModelAssembly candidate = null;
+            String stage = "VERIFY";
+            com.micaftic.morpher.peer.PeerResidentReservation reservation=null;
+            try (var scope = new com.micaftic.morpher.peer.PeerDecodeScope()) {
+                if (!live.getAsBoolean()) throw new IOException("Peer task superseded");
+                com.micaftic.morpher.peer.PeerAssetStore.verify(asset, live);
+                com.micaftic.morpher.peer.PeerModelPreflight.validate(identity, asset);
+                stage = "IMPORT";
+                Path path = asset.entrypoint();
+                if (isGltfFileName(path.toString())) {
+                    var parsed = GltfLoader.loadWithManifest(path).model();
+                    com.micaftic.morpher.peer.PeerModelPreflight.validateGltf(parsed);
+                    reservation=com.micaftic.morpher.peer.PeerResidentReservation.gltf(parsed,asset.manifest().totalBytes());
+                    candidate = buildGltfAssembly(parsed, id);
+                } else {
+                    RawYsmModel raw;
+                    if (identity.importerProfile().equals("ysm-directory-v1")) {
+                        try (YSMFolderDeserializer decoder = new YSMFolderDeserializer(asset.root())) { raw = decoder.deserialize(); }
+                    } else { com.micaftic.morpher.peer.PeerDecodeScope.allocate(Files.size(path));raw = parseImportModel(path.getFileName().toString(), Files.readAllBytes(path)); }
+                    com.micaftic.morpher.peer.PeerModelPreflight.validateParsed(raw);
+                    reservation=com.micaftic.morpher.peer.PeerResidentReservation.raw(raw,asset.manifest().totalBytes());
+                    candidate = ModelAssemblyFactory.buildAssembly(ClientModelBundleAssembler.buildParsedBundle(raw, id), false, false);
+                }
+                candidate.ownPeerReservation(reservation);reservation=null;
+                ModelAssembly ready = candidate; candidate = null;
+                Minecraft.getInstance().execute(() -> {
+                    try {
+                        if (!live.getAsBoolean()) throw new IOException("Peer task superseded");
+                        MODEL_LIBRARY.peer(identity, asset);
+                        lazyModelSources.put(id, new LocalModelCatalog.Entry(asset.entrypoint(), null, false, false, 0L,
+                                ready.getModelData(), null, ModelSourceType.PEER));
+                        var map = new Object2ReferenceOpenHashMap<String, ModelAssembly>(RESIDENCY.assemblies());
+                        ModelAssembly old = map.put(id, ready); RESIDENCY.publishAssemblies(map);
+                        touchModel(id); RESIDENCY.gpuTrim().clear(id); ResourceLifecycleStats.onModelAssemblyLoaded(id);
+                        if (old != null && old != ready) releaseModelAssembly(id, old);
+                        finishPeerImport(id, batch, null);
+                        forEachGuiWidget(widget -> widget.onModelsUpdated(map));
+                    } catch (Exception failure) {
+                        if(RESIDENCY.assemblies().get(id) != ready) releaseModelAssembly(id, ready);
+                        finishPeerImport(id, batch, Component.literal("Peer model publication cancelled"));
+                    }
+                });
+            } catch (Exception failure) {
+                if(reservation!=null)reservation.close();
+                if (candidate != null) releaseModelAssembly(id, candidate);
+                var classified=com.micaftic.morpher.peer.PeerFailure.classify(com.micaftic.morpher.peer.PeerFailure.Stage.valueOf(stage),failure);
+                var detailed=new com.micaftic.morpher.peer.PeerFailure(com.micaftic.morpher.peer.PeerFailure.Stage.valueOf(stage),classified.code());
+                String reason = detailed.getMessage();
+                YesSteveModel.LOGGER.warn("[SM][Peer] root={} import rejected at {}", identity.contentRoot().sha256(), reason);
+                Minecraft.getInstance().execute(() -> finishPeerImport(id, batch, Component.literal("Peer model rejected: " + reason),detailed));
+            }
+        }, () -> Minecraft.getInstance().execute(() -> finishPeerImport(id, batch, Component.literal("Peer parser busy"))));
+    }
+
+    private static void finishPeerImport(String id, CopyOnWriteArrayList<PeerImportWaiter> batch, Component error) {finishPeerImport(id,batch,error,null);}
+    private static void finishPeerImport(String id,CopyOnWriteArrayList<PeerImportWaiter> batch,Component error,com.micaftic.morpher.peer.PeerFailure reason) {
+        if(!PEER_IMPORTS.remove(id, batch)) return;
+        for(var waiter : batch) {
+            try {if(reason!=null&&waiter.current.getAsBoolean())waiter.diagnosis.accept(reason); waiter.completion.accept(waiter.current.getAsBoolean() ? error : Component.literal("Peer task superseded")); }
+            catch(RuntimeException callbackFailure) { YesSteveModel.LOGGER.warn("[SM][Peer] Import completion failed: {}", callbackFailure.getClass().getSimpleName()); }
+        }
+    }
+
+    public static long localSourceRevision(String id) {
+        var entry = lazyModelSources.get(LocalModelCatalog.canonicalKey(id)); return entry == null ? 0L : entry.fingerprint;
+    }
+    public static void releasePeerModel(String id) {
+        com.micaftic.morpher.client.peer.PeerMotionSync.forget(id);
+        var batch = PEER_IMPORTS.get(id); if(batch != null) finishPeerImport(id, batch, Component.literal("Peer task cancelled"));
+        if (!MODEL_LIBRARY.isPeer(id)) return;
+        RESIDENCY.cpuReloads().invalidate(id); lazyModelSources.remove(id); MODEL_LIBRARY.remove(id);
+        ModelAssembly assembly = RESIDENCY.assemblies().get(id);
+        if (assembly == null) return;
+        if (!RESIDENCY.deferWhileConsumed(id, () -> retirePeerModelAssembly(id, assembly)))
+            retirePeerModelAssembly(id, assembly);
+    }
+
+    private static void retirePeerModelAssembly(String id, ModelAssembly assembly) {
+        var map = new Object2ReferenceOpenHashMap<String, ModelAssembly>(RESIDENCY.assemblies());
+        if (map.get(id) != assembly) return;
+        map.remove(id); RESIDENCY.publishAssemblies(map);
+        RESIDENCY.lastUsedAt().remove(id); RESIDENCY.gpuTrim().clear(id);
+        releaseModelAssembly(id, assembly);
+    }
+
+    /** Main-thread scoped teardown. Local and Cloud models retain their existing residency. */
+    public static void releasePeerModels() {
+        PEER_IMPORTS.forEach((id, batch) -> finishPeerImport(id, batch, Component.literal("Peer task cancelled")));
+        var map = new Object2ReferenceOpenHashMap<String, ModelAssembly>(RESIDENCY.assemblies());
+        var removed = new ArrayList<Pair<String, ModelAssembly>>();
+        for (var source : MODEL_LIBRARY.snapshot().values()) if (source.type() == ModelSourceType.PEER) {
+            String id = source.runtimeId(); com.micaftic.morpher.client.peer.PeerMotionSync.forget(id); RESIDENCY.cpuReloads().invalidate(id); lazyModelSources.remove(id);
+            ModelAssembly assembly = map.get(id);
+            if (assembly == null) continue;
+            if (RESIDENCY.deferWhileConsumed(id, () -> retirePeerModelAssembly(id, assembly))) continue;
+            map.remove(id); removed.add(Pair.of(id, assembly));
+            RESIDENCY.lastUsedAt().remove(id); RESIDENCY.gpuTrim().clear(id);
+        }
+        MODEL_LIBRARY.removePeer(); RESIDENCY.publishAssemblies(map);
+        removed.forEach(pair -> releaseModelAssembly(pair.getLeft(), pair.getRight()));
+    }
+
+    public static RuntimeModelLease acquireRuntimeModelLease(String modelId) {
+        return RESIDENCY.acquire(modelId);
+    }
+
+    public static void reloadLocalModels(@Nullable Consumer<Component> callback) {
+        reloadLocalModels(callback, true);
+    }
+
+    /** Refreshes upload sources without parsing every local model. */
+    public static void reloadLocalModelsForUpload(@Nullable Consumer<Component> callback) {
+        reloadLocalModels(callback, true, false);
+    }
+
+    public static void reloadLocalModels(@Nullable Consumer<Component> callback, boolean restoreSelection) {
+        reloadLocalModels(callback, restoreSelection, true);
+    }
+
+    private static void reloadLocalModels(@Nullable Consumer<Component> callback,
+                                          boolean restoreSelection,
+                                          boolean loadAllModels) {
+        MODEL_RELOAD_BACKOFF.clearAll();
+        long scanRevision = LOCAL_MODEL_SCAN_REVISION.begin();
+        submitModelTask(() -> {
+            Component error = null;
+            try {
+                LinkedHashMap<String, LocalModelCatalog.Entry> catalog = new LinkedHashMap<>();
+                LinkedHashMap<String, Path> customSources = new LinkedHashMap<>();
+                // Legacy Cloud copies are never restored or migrated: presence on disk
+                // does not imply a current grant, and display must stay memory-only.
+                scanLocalModelSources(ModelStoragePaths.built(), false, catalog, customSources);
+                scanLocalModelSources(ModelStoragePaths.custom(), false, catalog, customSources);
+                scanLocalModelSources(ModelStoragePaths.auth(), true, catalog, customSources);
+                if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) {
+                    finishSupersededModelScan(callback);
+                    return;
+                }
+                if (!areScanSourcesCurrent(scanRevision, catalog)) {
+                    LOCAL_MODEL_SCAN_REVISION.invalidate();
+                    finishSupersededModelScan(callback);
+                    return;
+                }
+                LocalModelCatalog.Diff candidateDiff = LocalModelCatalog.diff(lazyModelSources, catalog);
+                Set<String> staleIds = new HashSet<>(candidateDiff.staleIds());
+                List<String> failedModelIds = new ArrayList<>();
+                if (loadAllModels && !isLazyModelLoading()) {
+                    for (Map.Entry<String, LocalModelCatalog.Entry> entry : catalog.entrySet()) {
+                        if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) break;
+                        // Cloud revisions are indexed on refresh but materialized only when selected/used.
+                        if (com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(entry.getKey())) continue;
+                        if (!isScanSourceCurrent(scanRevision, entry.getValue())) continue;
+                        ModelAssembly current = RESIDENCY.assemblies().get(entry.getKey());
+                        if (staleIds.contains(entry.getKey()) || current == null || !current.getPresentationCapabilities().runtimeResident()) {
+                            try {
+                                loadLocalModelSource(entry.getKey(), entry.getValue(), scanRevision);
+                            } catch (Exception e) {
+                                failedModelIds.add(entry.getKey());
+                                YesSteveModel.LOGGER.warn("[SM] Failed to reload local model {}, keeping previous assembly", entry.getKey(), e);
+                            }
+                        }
+                    }
+                }
+                if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) {
+                    finishSupersededModelScan(callback);
+                    return;
+                }
+                if (!areScanSourcesCurrent(scanRevision, catalog)) {
+                    LOCAL_MODEL_SCAN_REVISION.invalidate();
+                    finishSupersededModelScan(callback);
+                    return;
+                }
+                if (!failedModelIds.isEmpty()) {
+                    error = Component.translatable("gui.sparkle_morpher.import.error.local_reload_failed", String.join(", ", failedModelIds));
+                }
+                Component result = error;
+                ((Executor) Minecraft.getInstance()).execute(() -> {
+                    if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) {
+                        flushPendingModels();
+                        if (callback != null) callback.accept(supersededModelScanResult());
+                        return;
+                    }
+                    if (!areScanSourcesCurrent(scanRevision, catalog)) {
+                        LOCAL_MODEL_SCAN_REVISION.invalidate();
+                        flushPendingModels();
+                        if (callback != null) callback.accept(supersededModelScanResult());
+                        return;
+                    }
+                    boolean finalized = LOCAL_MODEL_SCAN_REVISION.runIfCurrent(scanRevision, () -> {
+                        localModelSourcePaths.clear();
+                        localModelSourcePaths.putAll(customSources);
+                        LocalModelCatalog.Diff diff = applyLocalModelCatalog(catalog);
+                        for (String staleId : diff.staleIds()) RESIDENCY.cpuReloads().invalidate(staleId);
+                        flushPendingModels();
+                        finalizeLocalModelCatalog(diff);
+                        ClientRenderCompatibilityRegistry.flush();
+                        forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(RESIDENCY.assemblies()));
+                        if (restoreSelection) restorePersistedModelSelection();
+                        if (callback != null) callback.accept(result);
+                    });
+                    if (!finalized) {
+                        flushPendingModels();
+                        if (callback != null) callback.accept(supersededModelScanResult());
+                    }
+                });
+            } catch (Exception e) {
+                YesSteveModel.LOGGER.error("[SM] Failed to reload local model folders", e);
+                error = Component.translatable("gui.sparkle_morpher.import.error.local_reload_failed", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+                Component result = error;
+                ((Executor) Minecraft.getInstance()).execute(() -> {
+                    if (callback != null) callback.accept(
+                            LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision) ? result : supersededModelScanResult());
+                });
+            }
+        });
+    }
+
+    private static void finishSupersededModelScan(@Nullable Consumer<Component> callback) {
+        ((Executor) Minecraft.getInstance()).execute(() -> {
+            flushPendingModels();
+            if (callback != null) callback.accept(supersededModelScanResult());
+        });
+    }
+
+    private static Component supersededModelScanResult() {
+        return Component.literal("Local model scan superseded by a newer request");
+    }
+
+    public static ModelAssembly getLocalModelContext() {
+        runPendingModelCallback();
+        flushPendingModels();
+
+        ModelAssembly model = localModelContext;
+        if (model != null) {
+            touchAssembly(model);
+            return model;
+        }
+
+        // 鐟欙箑褰傛０鍕鏉?        loadDefaultModel();
+        model = localModelContext;
+        if (model != null) {
+            touchAssembly(model);
+            return model;
+        }
+
+        Map<String, ModelAssembly> reg = RESIDENCY.assemblies();
+        if (reg != null && !reg.isEmpty()) {
+            model = reg.get("default");
+            if (model == null) {
+                for (ModelAssembly v : reg.values()) {
+                    if (v != null) {
+                        model = v;
+                        break;
+                    }
+                }
+            }
+            if (model != null) {
+                localModelContext = model;
+                touchAssembly(model);
+                return model;
+            }
+        }
+        return null;
+    }
+
+    public static Identifier getDefaultTexture() {
+        return defaultTexture.getResourceLocation().get();
+    }
+
+    // R7 剩余：GUI observers 迁至 GuiWidgetRegistry（注册/遍历委托）
+
+    public static <T extends IGuiWidget> T registerGuiWidget(T t) {
+        return GuiWidgetRegistry.register(t);
+    }
+
+    public static void unregisterGuiWidget(IGuiWidget guiWidget) {
+        GuiWidgetRegistry.unregister(guiWidget);
+    }
+
+    private static void forEachGuiWidget(Consumer<IGuiWidget> consumer) {
+        GuiWidgetRegistry.forEach(consumer);
+    }
+
+
+    
+    public static void reloadLocalModelsAfterPrivacyMode() {
+
+        ((Executor) Minecraft.getInstance()).execute(() -> {
+            forEachGuiWidget(IGuiWidget::onLocalModelsReloadBegin);
+        });
+        reloadLocalModels(error -> {
+            restorePersistedModelSelection();
+            forEachGuiWidget(guiWidget -> {
+                guiWidget.onModelsLoaded(RESIDENCY.assemblies());
+                guiWidget.onLocalModelsReloadComplete();
+            });
+        });
+    }
+
+    public static boolean isAllowUpload() {
+        return com.micaftic.morpher.client.upload.CloudUploadRuntime.isConfigured();
+    }
+
+    public static boolean isOysmServer() {
+        return com.micaftic.morpher.client.upload.CloudUploadRuntime.isConfigured();
+    }
+
+    // R7 剩余：Legacy sync 状态机/握手协议迁至 LegacyModelSyncClient（startSync 委托）
+
+
+
+
+
+
+
+    static void onModelDataReceived(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) throws Exception {
+        onModelDataReceived(parsedBundle, modelId, isPrimary, isAuth, null);
+    }
+
+    private static void onModelDataReceived(@Nullable ClientModelInfo parsedBundle, String modelId,
+                                            boolean isPrimary, boolean isAuth,
+                                            @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
+        if (isPrimary) {
+            pendingModelCallback = () -> {
+                processModelData(parsedBundle, modelId, true, false);
+            };
+        } else {
+            localOnlyModelIds.remove(LocalModelCatalog.canonicalKey(modelId));
+            runPendingModelCallback();
+            processModelData(parsedBundle, modelId, false, isAuth, -1L, null, requestLease);
+        }
+    }
+
+    private static RawYsmModel parseImportModel(String fileName, byte[] data) throws Exception {
+        return com.micaftic.morpher.resource.MemoryModelParser.parseLegacy(data, fileName);
+    }
+
+    public static boolean isGltfFileName(@Nullable String fileName) {
+        return com.micaftic.morpher.resource.MemoryModelParser.isGltf(fileName);
+    }
+
+    /**
+     * Publishes a verified in-memory assembly. Never touches {@link LocalModelImportStore}
+     * and never records a source path; the digest keeps Peer sharing blocked for copied bytes.
+     */
+    private static void publishMemoryAssembly(String modelId, ModelAssembly runtimeModel, byte[] sourceBytes,
+                                              String fileName, String contentSha256,
+                                              ModelSourceType sourceType) {
+        publishMemoryAssembly(modelId, runtimeModel, sourceBytes, fileName, contentSha256, sourceType, false);
+    }
+
+    private static void publishMemoryAssembly(String modelId, ModelAssembly runtimeModel, byte[] sourceBytes,
+                                              String fileName, String contentSha256,
+                                              ModelSourceType sourceType, boolean resourcePreview) {
+        CloudMemoryPublication.publish(modelId, runtimeModel, sourceBytes, fileName, contentSha256, MODEL_LIBRARY,
+                (id, source) -> {
+                    if (CLOUD_SOURCE_BUDGET.retain(id, source, ClientModelManager::cloudSourcePinned, ClientModelManager::evictCloudSource))
+                        lazyModelSources.put(id, source);
+                    YesSteveModel.LOGGER.debug("[SM][CloudMemory] {}", CLOUD_SOURCE_BUDGET.stats());
+                }, ready -> pendingModelQueue.add(new PendingModelPublication(ready, modelId, -1L, null, null)),
+                failure -> YesSteveModel.LOGGER.warn("[SM][Peer] Cloud source provenance unavailable; sharing disabled for this source"),
+                resourcePreview ? CloudMemoryPublication.Origin.RESOURCE_PREVIEW : CloudMemoryPublication.Origin.CLOUD);
+        touchModel(modelId);
+        ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
+        try {
+            runPendingModelCallback();
+        } catch (RuntimeException callbackFailure) {
+            YesSteveModel.LOGGER.error("[SM] Pending model callback failed after memory publication for {}", modelId, callbackFailure);
+        }
+    }
+
+    private static void publishImportedAssembly(String modelId, ModelAssembly runtimeModel, Path persisted,
+                                                boolean cloudImport) throws IOException {
+        // Provenance sidecar failure blocks Peer sharing, never the existing import/publication.
+        try { MODEL_LIBRARY.imported(modelId, persisted, ModelSourceType.LOCAL); }
+        catch (IOException provenanceFailure) { YesSteveModel.LOGGER.warn("[SM][Peer] Source provenance unavailable; sharing disabled for this source"); }
+        long fingerprint = LocalModelCatalog.fingerprint(persisted);
+        LocalModelCatalog.Entry sourceEntry = new LocalModelCatalog.Entry(
+                persisted, null, false, false, fingerprint, null, null,
+                com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(modelId)?ModelSourceType.CLOUD:ModelSourceType.LOCAL);
+        if (!cloudImport) localOnlyModelIds.add(modelId);
+        touchModel(modelId);
+        ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
+        if (!cloudImport) localModelSourcePaths.put(modelId, persisted.toAbsolutePath().normalize());
+        lazyModelSources.put(modelId, sourceEntry);
+        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, -1L, null, null));
+        try {
+            runPendingModelCallback();
+        } catch (RuntimeException callbackFailure) {
+            YesSteveModel.LOGGER.error("[SM] Pending model callback failed after import publication for {}", modelId, callbackFailure);
+        }
+    }
+
+    private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth) throws Exception {
+        loadLocalGltfModel(modelId, source, isAuth, -1L, null, null);
+    }
+
+    private static void loadLocalGltfModel(String modelId, Path source, boolean isAuth,
+                                           long scanRevision, @Nullable LocalModelCatalog.Entry sourceEntry,
+                                           @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
+        if (scanRevision >= 0L && !LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return;
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
+        com.micaftic.morpher.core.importing.ParsedImport parsedImport =
+                com.micaftic.morpher.core.importing.ImportCoordinator.parseLocalGltf(source);
+        com.micaftic.morpher.resource.gltf.GltfLoadResult parsed =
+                ((com.micaftic.morpher.core.importing.ParsedImport.GltfPayload) parsedImport.payload()).result();
+        ModelAssembly runtimeModel = com.micaftic.morpher.core.importing.ImportCoordinator.buildCandidate(parsedImport,
+                rawModel -> { throw new IllegalStateException("Local glTF source produced a legacy payload"); },
+                gltfResult -> buildGltfAssembly(gltfResult.model(), modelId));
+        if (scanRevision >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)
+                || sourceEntry == null || parsed.sourceFingerprint() != sourceEntry.fingerprint)) {
+            releaseModelAssembly(modelId, runtimeModel);
+            return;
+        }
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) {
+            releaseModelAssembly(modelId, runtimeModel);
+            return;
+        }
+        if (scanRevision < 0L) {
+            localOnlyModelIds.add(modelId);
+            touchModel(modelId);
+        }
+        pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, scanRevision, sourceEntry, requestLease));
+    }
+
+    private static ModelAssembly buildGltfAssembly(GltfModel model, String modelId) {
+        List<AbstractTexture> imageTextures = new ArrayList<>(model.images().size());
+        for (GltfModel.Image image : model.images()) {
+            imageTextures.add(image.data().length == 0 ? null : new OuterFileTexture(image.data(), modelId));
+        }
+        return ModelAssembly.forGltf(model, imageTextures);
+    }
+
+    private static void scanLocalModelSources(Path baseDir, boolean isAuth,
+                                              Map<String, LocalModelCatalog.Entry> catalog,
+                                              Map<String, Path> customSources) throws IOException {
+        LocalModelCatalog.ScanResult result = LOCAL_MODEL_CATALOG.scan(baseDir, isAuth,
+                YSMFolderDeserializer::isModelFolder, lazyModelSources, catalog);
+        if (!samePath(baseDir, ModelStoragePaths.custom())) {
+            return;
+        }
+        customSources.putAll(result.sources());
+    }
+
+    private static boolean isScanSourceCurrent(long scanRevision, LocalModelCatalog.Entry source) {
+        if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision) || source == null || source.remote
+                || source.path == null) return false;
+        try {
+            return LocalModelCatalog.fingerprint(source.path) == source.fingerprint;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static boolean areScanSourcesCurrent(long scanRevision, Map<String, LocalModelCatalog.Entry> catalog) {
+        if (!LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision)) return false;
+        for (LocalModelCatalog.Entry source : catalog.values()) {
+            if (!isScanSourceCurrent(scanRevision, source)) return false;
+        }
+        return LOCAL_MODEL_SCAN_REVISION.isCurrent(scanRevision);
+    }
+
+    private static LocalModelCatalog.Diff applyLocalModelCatalog(Map<String, LocalModelCatalog.Entry> catalog) {
+        LocalModelCatalog.Diff diff = LocalModelCatalog.diff(lazyModelSources, catalog);
+        Set<String> validIds = new HashSet<>(catalog.keySet());
+
+        MODEL_LIBRARY.refreshLocal(catalog);
+        lazyModelSources.entrySet().removeIf(entry -> !entry.getValue().remote && entry.getValue().sourceType == ModelSourceType.LOCAL);
+        lazyModelSources.putAll(diff.catalog());
+        localOnlyModelIds.clear();
+        for (String id : validIds) {
+            if (!com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(id)) localOnlyModelIds.add(id);
+        }
+        return diff;
+    }
+
+    private static void finalizeLocalModelCatalog(LocalModelCatalog.Diff diff) {
+        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(RESIDENCY.assemblies());
+        ArrayList<Pair<String, ModelAssembly>> removedAssemblies = new ArrayList<>();
+        for (String staleId : diff.staleIds()) {
+            if (!diff.isRemoved(staleId)) {
+                continue;
+            }
+            ModelAssembly stale = map.remove(staleId);
+            if (stale != null) {
+                removedAssemblies.add(Pair.of(staleId, stale));
+                if (localModelContext == stale) {
+                    localModelContext = null;
+                    defaultModelLoadAttempted = false;
+                }
+            }
+            RESIDENCY.lastUsedAt().remove(staleId);
+            RESIDENCY.gpuTrim().clear(staleId);
+        }
+        if (removedAssemblies.isEmpty()) {
+            return;
+        }
+        RESIDENCY.publishAssemblies(map);
+        for (Pair<String, ModelAssembly> pair : removedAssemblies) {
+            releaseModelAssembly(pair.getLeft(), pair.getRight());
+        }
+    }
+
+    private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source) throws Exception {
+        loadLocalModelSource(modelId, source, -1L, null);
+    }
+
+    private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source, long scanRevision) throws Exception {
+        loadLocalModelSource(modelId, source, scanRevision, null);
+    }
+
+    private static void loadLocalModelSource(String modelId, LocalModelCatalog.Entry source, long scanRevision,
+                                             @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
+        if (source.remote) return;
+        if (source.isMemory()) {
+            loadMemoryModelSource(modelId, source, requestLease);
+            return;
+        }
+        if (scanRevision >= 0L && !isScanSourceCurrent(scanRevision, source)) return;
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
+        if (!Files.isDirectory(source.path) && isGltfFileName(source.path.getFileName().toString())) {
+            loadLocalGltfModel(modelId, source.path, source.auth, scanRevision, source, requestLease);
+            return;
+        }
+        RawYsmModel rawModel;
+        if (Files.isDirectory(source.path)) {
+            try (YSMFolderDeserializer deserializer = new YSMFolderDeserializer(source.path)) {
+                rawModel = deserializer.deserialize();
+            }
+        } else {
+            long size = Files.size(source.path);
+            if (size > MAX_LOCAL_MODEL_FILE_BYTES) {
+                throw new IOException("Local model file too large (" + size + " bytes), skipped: " + source.path);            }
+            byte[] data = Files.readAllBytes(source.path);
+            rawModel = parseImportModel(source.path.getFileName().toString(), data);
+        }
+        if (scanRevision >= 0L && !isScanSourceCurrent(scanRevision, source)) return;
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
+        loadLocalModel(modelId, rawModel, source.auth, scanRevision, source, requestLease);
+    }
+
+    /** Rebuilds a trimmed Cloud resident from the bytes retained by its memory catalog entry. */
+    private static void loadMemoryModelSource(String modelId, LocalModelCatalog.Entry source,
+                                              @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
+        byte[] data = source.memoryBytes;
+        if (data == null) {
+            throw new IOException("Cloud model bytes are no longer resident; the model must be received again");
+        }
+        String fileName = source.memoryFormat == null ? "" : source.memoryFormat;
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
+        if (com.micaftic.morpher.resource.MemoryModelParser.isGltf(fileName)) {
+            com.micaftic.morpher.resource.gltf.GltfLoadResult parsed = GltfLoader.loadWithManifest(data, null, fileName);
+            if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
+            if (lazyModelSources.get(modelId) != source) return;
+            pendingModelQueue.add(new PendingModelPublication(buildGltfAssembly(parsed.model(), modelId),
+                    modelId, -1L, null, requestLease));
+            return;
+        }
+        RawYsmModel rawModel = parseImportModel(fileName, data);
+        if (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease)) return;
+        if (lazyModelSources.get(modelId) != source) return;
+        boolean rebuilt = processModelData(ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId),
+                modelId, false, source.auth, -1L, null, requestLease);
+        if (!rebuilt) {
+            throw new IllegalStateException("Failed to rebuild Cloud memory model");
+        }
+    }
+
+    private static void loadLocalModel(String modelId, RawYsmModel rawModel, boolean isAuth,
+                                       long scanRevision, @Nullable LocalModelCatalog.Entry source,
+                                       @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) throws Exception {
+        modelId = LocalModelCatalog.canonicalKey(modelId);
+        if (modelId == null || modelId.isBlank()
+                || (scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source)))
+                || (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease))) {
+            return;
+        }
+        ClientModelInfo parsedBundle = ClientModelBundleAssembler.buildParsedBundle(rawModel, modelId);
+        if (scanRevision < 0L) {
+            localOnlyModelIds.add(modelId);
+            touchModel(modelId);
+            runPendingModelCallback();
+        }
+        if (!processModelData(parsedBundle, modelId, false, isAuth, scanRevision, source, requestLease)) {
+            if (scanRevision < 0L && !lazyModelSources.containsKey(modelId)) {
+                localOnlyModelIds.remove(modelId);
+            }
+            throw new IllegalStateException("Failed to build local model");
+        }
+    }
+
+    private static boolean containsRuntimeModel(String modelId) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        return modelKey != null && (RESIDENCY.assemblies().containsKey(modelKey) || lazyModelSources.containsKey(modelKey));
+    }
+
+    private static boolean sameRuntimeModelId(String first, String second) {
+        return Objects.equals(LocalModelCatalog.canonicalKey(first), LocalModelCatalog.canonicalKey(second));
+    }
+
+    private static boolean samePath(Path a, Path b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return a.toAbsolutePath().normalize().equals(b.toAbsolutePath().normalize());
+    }
+
+    public static void runPendingModelCallback() {
+        Runnable runnable = pendingModelCallback;
+        if (runnable != null) {
+            synchronized (runnable) {
+                Runnable runnable2 = pendingModelCallback;
+                if (runnable2 != null) {
+                    runnable2.run();
+                    pendingModelCallback = null;
+                }
+            }
+        }
+    }
+
+    private static void logModelProcessFailure(@Nullable String modelId, Throwable error) {
+        String key = modelId == null ? "(unknown)" : modelId;
+        long now = System.currentTimeMillis();
+        long[] state = MODEL_PROCESS_FAILURES.computeIfAbsent(key, k -> new long[2]);
+        long count;
+        synchronized (state) {
+            if (state[1] != 0L && now - state[1] > MODEL_PROCESS_FAILURE_SUPPRESS_MILLIS) {
+                state[0] = 0L; // 时间窗口过期：重新计数并允许再次打印完整堆栈
+            }
+            state[1] = now;
+            count = ++state[0];
+        }
+        if (count == 1) {
+            YesSteveModel.LOGGER.error("Failed to process model: {}", key, error);
+        } else if (count % 100 == 0) {
+            YesSteveModel.LOGGER.error("Failed to process model: {} - repeated {} times since first failure, stack trace suppressed", key, count);
+        }
+    }
+
+    public static boolean processModelData(@Nullable ClientModelInfo parsedBundle, String modelId, boolean isPrimary, boolean isAuth) {
+        return processModelData(parsedBundle, modelId, isPrimary, isAuth, -1L, null, null);
+    }
+
+    private static boolean processModelData(@Nullable ClientModelInfo parsedBundle, String modelId,
+                                            boolean isPrimary, boolean isAuth, long scanRevision,
+                                            @Nullable LocalModelCatalog.Entry source,
+                                            @Nullable KeyedRequestLeaseRegistry.Lease<String> requestLease) {
+        modelId = LocalModelCatalog.canonicalKey(modelId);
+        if (parsedBundle != null) {
+            try {
+                ModelMemoryProfiler.log("assembly-build-start", modelId);
+                ModelAssembly runtimeModel = ModelAssemblyFactory.buildAssembly(parsedBundle, isPrimary, isAuth);
+                if ((scanRevision >= 0L && (source == null || !isScanSourceCurrent(scanRevision, source)))
+                        || (requestLease != null && !RESIDENCY.cpuReloads().isCurrent(requestLease))) {
+                    releaseModelAssembly(modelId, runtimeModel);
+                    return false;
+                }
+                if (modelId != null) {
+                    MODEL_PROCESS_FAILURES.remove(modelId);
+                }
+                ModelMemoryProfiler.log("assembly-build-finished", modelId);
+                ResourceLifecycleStats.onModelAssemblyLoaded(modelId);
+                pendingModelQueue.add(new PendingModelPublication(runtimeModel, modelId, scanRevision, source, requestLease));
+                if (scanRevision < 0L) touchModel(modelId);
+                if (isPrimary) {
+                    localModelContext = runtimeModel;
+
+                    ((Executor) Minecraft.getInstance()).execute(() -> {
+                        defaultTexture = UploadManager.getOrCreateLocatable(runtimeModel.getAnimationBundle().getTextures().getValueAt(0), true);
+                    });
+                    return true;
+                }
+            } catch (Exception e) {
+                if (isPrimary) throw e;
+                logModelProcessFailure(modelId, e);
+                return false;
+            }
+        }
+        return parsedBundle != null;
+    }
+
+
+
+
+
+
+    public static void flushPendingModels() {
+        if (pendingModelQueue.isEmpty())
+            return;
+
+        Object2ReferenceOpenHashMap<String, ModelAssembly> object2ReferenceOpenHashMap = new Object2ReferenceOpenHashMap<>(RESIDENCY.assemblies());
+        while (true) {
+            PendingModelPublication pending = pendingModelQueue.poll();
+            if (pending != null) {
+                String modelKey = LocalModelCatalog.canonicalKey(pending.modelId());
+                if ((pending.cloudGeneration() >= 0L && pending.cloudGeneration()
+                        != com.micaftic.morpher.cloud.client.CloudClientRuntime.displayGeneration())
+                        || (pending.scanRevision() >= 0L && (!LOCAL_MODEL_SCAN_REVISION.isCurrent(pending.scanRevision())
+                        || !isScanSourceCurrent(pending.scanRevision(), pending.source())))
+                        || (pending.requestLease() != null && !RESIDENCY.cpuReloads().isCurrent(pending.requestLease()))) {
+                    releaseModelAssembly(modelKey, pending.assembly());
+                    continue;
+                }
+                ModelAssembly previous = object2ReferenceOpenHashMap.put(modelKey, pending.assembly());
+                LocalModelCatalog.Entry source = lazyModelSources.get(modelKey);
+                if (source != null && !(pending.assembly() instanceof LazyModelAssembly)) {
+                    source.modelInfo = pending.assembly().getModelData();
+                    if (source.modelInfo != null) {
+                        String name = LocalModelCatalog.displayNameFromInfo(source.modelInfo);
+                        if (StringUtils.isNotBlank(name)) {
+                            source.displayName = name;
+                        }
+                    }
+                }
+                touchModel(modelKey);
+                RESIDENCY.gpuTrim().clear(modelKey);
+                if (previous == localModelContext) {
+                    localModelContext = pending.assembly();
+                }
+                if (previous != null && previous != pending.assembly()) {
+                    releaseModelAssembly(modelKey, previous);
+                }
+           } else {
+               RESIDENCY.publishAssemblies(object2ReferenceOpenHashMap);
+                trimUnusedCpuModels();
+               forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(object2ReferenceOpenHashMap));
+               return;
+           }
+       }
+   }
+
+    /** Invalidates queued model work and releases runtime assemblies while the render context is still alive. */
+    public static void onClientStopping() {
+        synchronized (MODEL_RUNTIME_STOP_LOCK) {
+            MODEL_TASK_GENERATION.incrementAndGet();
+            LOCAL_MODEL_SCAN_REVISION.invalidate();
+            RESIDENCY.cpuReloads().clearAll();
+            MODEL_RELOAD_BACKOFF.clearAll();
+            localImportRequests.clearAll();
+            RESIDENCY.gpuTrim().clearAll();
+
+            Set<ModelAssembly> assemblies = Collections.newSetFromMap(new IdentityHashMap<>());
+            PendingModelPublication pending;
+            while ((pending = pendingModelQueue.poll()) != null) assemblies.add(pending.assembly());
+            assemblies.addAll(RESIDENCY.assemblies().values());
+            assemblies.addAll(RESIDENCY.deferredReleases());
+            RESIDENCY.deferredReleases().clear();
+            RESIDENCY.publishAssemblies(Object2ReferenceMaps.emptyMap());
+            localModelContext = null;
+            pendingModelCallback = null;
+            RESIDENCY.lastUsedAt().clear();
+            localOnlyModelIds.clear();
+            localModelSourcePaths.clear();
+            lazyModelSources.clear();
+            CLOUD_SOURCE_BUDGET.clear();
+            CLOUD_IMPORTS.cancelAll(Component.literal("Client stopping"));
+            assemblies.forEach(ClientModelManager::releaseModelAssembly);
+        }
+    }
+
+    private static void releaseModelAssembly(ModelAssembly assembly) {
+        releaseModelAssembly(null, assembly);
+    }
+
+    private static void releaseModelAssembly(String modelId, ModelAssembly assembly) {
+        if (assembly == null || assembly instanceof LazyModelAssembly) {
+            return;
+        }
+        if (!RenderSystem.isOnRenderThread()) {
+            ((Executor) Minecraft.getInstance()).execute(() -> releaseModelAssembly(modelId, assembly));
+            return;
+        }
+        synchronized (assembly) {
+        if (EntityRenderCache.isModelAssemblyInUse(assembly)) {
+            RESIDENCY.deferredReleases().add(assembly);
+            return;
+        }
+        RESIDENCY.deferredReleases().remove(assembly);
+        ResourceLifecycleStats.onModelAssemblyEvicted(modelId);
+        // R10.4：资源释放收拢到装配自身（纹理 + audio + GPU/native + runtime），
+        // GC Cleaner 仅作兜底，正常路径走确定性 close()。
+        assembly.close();
+        ModelMemoryProfiler.log("assembly-released", modelId);
+        }
+    }
+
+    public static void trimUnusedGpuCaches() {
+        updateModelLoadingMode();
+        drainDeferredAssemblyReleases();
+        // R10.2：孤儿 GPU mesh 兜底回收（owner 弱引用失效/异常替换路径残留），渲染线程执行。
+        GpuRenderPath.sweepOrphanedMeshes("periodic trim");
+        long checkNow = System.currentTimeMillis();
+        if (!RESIDENCY.shouldTrimAt(checkNow)) return;
+        trimUnusedCpuModels();
+        int maxCachedGpuModels = ConfigPolicies.memory().maxCachedGpuModels();
+        if (maxCachedGpuModels <= 0) {
+           return;
+       }
+       Minecraft minecraft = Minecraft.getInstance();
+        long residentGpuModels = RESIDENCY.assemblies().values().stream()
+                .filter(Objects::nonNull)
+                .filter(assembly -> assembly.getPresentationCapabilities().gpuTrimAvailable())
+                .count();
+        if (residentGpuModels <= maxCachedGpuModels) {
+           return;
+       }
+        long now = System.currentTimeMillis();
+        long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
+        Set<String> protectedModels = collectProtectedModelIds(minecraft);
+       RESIDENCY.assemblies().entrySet().stream()
+                .filter(entry -> entry.getValue() != null && entry.getValue().getPresentationCapabilities().runtimeResident())
+               .filter(entry -> canTrimGpuCache(entry.getKey(), entry.getValue(), protectedModels, now, ttlMillis))
+               .sorted(Comparator.comparingLong(entry -> RESIDENCY.lastUsedAt().getOrDefault(entry.getKey(), 0L)))
+                .limit(Math.max(1L, residentGpuModels - maxCachedGpuModels))
+               .forEach(entry -> trimGpuCache(entry.getKey(), entry.getValue()));
+    }
+
+    private static void trimUnusedCpuModels() {
+        if (!isLazyModelLoading()) return;
+        Minecraft minecraft = Minecraft.getInstance();
+        if (RESIDENCY.assemblies().isEmpty()) return;
+        long now = System.currentTimeMillis();
+        long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
+        Set<String> protectedModels = collectProtectedModelIds(minecraft);
+        List<Map.Entry<String, ModelAssembly>> residents = RESIDENCY.assemblies().entrySet().stream()
+                .filter(entry -> entry.getValue() != null && entry.getValue().getPresentationCapabilities().runtimeResident())
+                .filter(entry -> !"default".equals(entry.getKey()) && (lazyModelSources.containsKey(entry.getKey())
+                        || com.micaftic.morpher.core.model.CloudAssetIdentity.isRuntimeModelId(entry.getKey())))
+                .filter(entry -> !EntityRenderCache.isModelAssemblyInUse(entry.getValue()))
+                .toList();
+        long idleCount = residents.stream()
+                .filter(entry -> !protectedModels.contains(entry.getKey()))
+                .filter(entry -> now - RESIDENCY.lastUsedAt().getOrDefault(entry.getKey(), now) >= ttlMillis)
+                .count();
+        long overLimit = Math.max(0, residents.size() - ConfigPolicies.memory().maxResidentCpuModels());
+        long trimCount = Math.max(idleCount, overLimit);
+        if (trimCount <= 0) return;
+        List<Map.Entry<String, ModelAssembly>> victims = residents.stream()
+                .filter(entry -> !protectedModels.contains(entry.getKey()))
+                .filter(entry -> {
+                    long idleMillis = now - RESIDENCY.lastUsedAt().getOrDefault(entry.getKey(), now);
+                    return idleMillis >= ttlMillis || (overLimit > 0 && idleMillis >= 1_000L);
+                })
+                .sorted(Comparator.comparingLong(entry -> RESIDENCY.lastUsedAt().getOrDefault(entry.getKey(), 0L)))
+                .limit(trimCount)
+                .toList();
+        if (victims.isEmpty()) return;
+
+        Object2ReferenceOpenHashMap<String, ModelAssembly> map = new Object2ReferenceOpenHashMap<>(RESIDENCY.assemblies());
+        ArrayList<Pair<String, ModelAssembly>> released = new ArrayList<>();
+        for (Map.Entry<String, ModelAssembly> entry : victims) {
+            LocalModelCatalog.Entry source = lazyModelSources.get(entry.getKey());
+            if (source == null) {
+                map.remove(entry.getKey()); released.add(Pair.of(entry.getKey(), entry.getValue())); continue;
+            }
+            source.modelInfo = entry.getValue().getModelData();
+            if (source.modelInfo == null) continue;
+            String name = LocalModelCatalog.displayNameFromInfo(source.modelInfo);
+            if (StringUtils.isNotBlank(name)) {
+                source.displayName = name;
+            }
+            map.put(entry.getKey(), new LazyModelAssembly(entry.getKey(), source));
+            RESIDENCY.gpuTrim().clear(entry.getKey());
+            released.add(Pair.of(entry.getKey(), entry.getValue()));
+        }
+        if (released.isEmpty()) return;
+        RESIDENCY.publishAssemblies(map);
+        forEachGuiWidget(guiWidget -> guiWidget.onModelsUpdated(map));
+        released.forEach(pair -> releaseModelAssembly(pair.getLeft(), pair.getRight()));
+    }
+
+    private static void unloadModelRuntime(String modelId, ModelAssembly assembly) {
+        if (assembly == null || !assembly.getPresentationCapabilities().runtimeResident()) return;
+        if (!RenderSystem.isOnRenderThread()) {
+            ((Executor) Minecraft.getInstance()).execute(() -> unloadModelRuntime(modelId, assembly));
+            return;
+        }
+        synchronized (assembly) {
+        if (EntityRenderCache.isModelAssemblyInUse(assembly)) return;
+        // R10.4：完整确定性释放收拢到装配自身（保留装配外壳供懒加载重建）。
+        assembly.close();
+        RESIDENCY.gpuTrim().clear(modelId);
+        ModelMemoryProfiler.log("cpu-model-unloaded", modelId);
+        }
+    }
+
+    private static boolean canTrimGpuCache(String modelId, ModelAssembly assembly, Set<String> protectedModels, long now, long ttlMillis) {
+        modelId = LocalModelCatalog.canonicalKey(modelId);
+        if (modelId == null || assembly == null || !assembly.getPresentationCapabilities().gpuTrimAvailable()
+                || "default".equals(modelId) || protectedModels.contains(modelId)
+                || EntityRenderCache.isModelAssemblyInUse(assembly)
+                || RESIDENCY.gpuTrim().isTrimmed(modelId, assembly)) {
+            return false;
+        }
+        long lastUsed = RESIDENCY.lastUsedAt().getOrDefault(modelId, 0L);
+        return lastUsed > 0L && now - lastUsed >= ttlMillis;
+    }
+
+    private static Set<String> collectProtectedModelIds(Minecraft minecraft) {
+        Set<String> protectedModels = new HashSet<>();
+        protectedModels.add("default");
+        protectedModels.addAll(RESIDENCY.consumedModelIds());
+        if (localModelContext != null) {
+            for (Map.Entry<String, ModelAssembly> entry : RESIDENCY.assemblies().entrySet()) {
+                if (entry.getValue() == localModelContext) {
+                    protectedModels.add(entry.getKey());
+                    touchModel(entry.getKey());
+                    break;
+                }
+            }
+        }
+        if (MODEL_SELECTION.selectedModelId() != null && !MODEL_SELECTION.selectedModelId().isBlank()) {
+            protectedModels.add(LocalModelCatalog.canonicalKey(MODEL_SELECTION.selectedModelId()));
+            touchModel(MODEL_SELECTION.selectedModelId());
+        }
+        if (minecraft.level != null) {
+            for (Player player : minecraft.level.players()) {
+                PlayerCapability.get(player).ifPresent(cap -> {
+                    String modelId = cap.getModelId();
+                    if (modelId != null && !modelId.isBlank()) {
+                        protectedModels.add(LocalModelCatalog.canonicalKey(modelId));
+                        touchModel(modelId);
+                    }
+                });
+            }
+        }
+        return protectedModels;
+    }
+
+    private static void drainDeferredAssemblyReleases() {
+        if (RESIDENCY.deferredReleases().isEmpty()) return;
+        for (ModelAssembly assembly : new ArrayList<>(RESIDENCY.deferredReleases())) {
+            if (!EntityRenderCache.isModelAssemblyInUse(assembly)
+                    && RESIDENCY.deferredReleases().remove(assembly)) {
+                releaseModelAssembly(assembly);
+            }
+        }
+    }
+
+    private static void trimGpuCache(String modelId, ModelAssembly assembly) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey == null || assembly == null) return;
+        RESIDENCY.gpuTrim().request(modelKey, assembly, RenderSystem::isOnRenderThread,
+                Minecraft.getInstance()::execute,
+                candidate -> {
+                    Minecraft minecraft = Minecraft.getInstance();
+                    long now = System.currentTimeMillis();
+                    long ttlMillis = ConfigPolicies.memory().unusedModelTtlSeconds() * 1000L;
+                    Set<String> protectedModels = collectProtectedModelIds(minecraft);
+                    return RESIDENCY.assemblies().get(modelKey) == candidate && candidate.getPresentationCapabilities().gpuTrimAvailable()
+                            && canTrimGpuCache(modelKey, candidate, protectedModels, now, ttlMillis);
+                }, candidate -> {
+            // R10.4：仅释放 GPU mesh（native 缓存保留，模型可立即重渲染），收拢到装配自身。
+                    candidate.releaseGpuMeshes();
+                    ModelMemoryProfiler.log("gpu-cache-trimmed liveMeshes=" + ResourceLifecycleStats.gpuMeshLiveCount()
+                            + " liveBytes=" + ResourceLifecycleStats.gpuMeshLiveBytesEstimate(), modelKey);
+                });
+    }
+
+    private static void touchModel(String modelId) {
+        CLOUD_SOURCE_BUDGET.touch(modelId);
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        if (modelKey != null && !modelKey.isBlank()) {
+            RESIDENCY.lastUsedAt().put(modelKey, System.currentTimeMillis());
+            RESIDENCY.gpuTrim().clear(modelKey);
+        }
+    }
+
+    static boolean isLazyModelLoading() {
+        return ConfigPolicies.memory().lazyModelLoading();
+    }
+
+    public static void updateModelLoadingMode() {
+        boolean enabled = isLazyModelLoading();
+        Boolean previous = RESIDENCY.updateLazyLoadingMode(enabled);
+        if (previous != null && previous == enabled) return;
+        if (previous == null || enabled) return;
+
+        for (String modelId : new ArrayList<>(lazyModelSources.keySet())) {
+            ModelAssembly assembly = RESIDENCY.assemblies().get(modelId);
+            if (assembly == null || !assembly.getPresentationCapabilities().runtimeResident()) {
+                scheduleCachedModelReload(modelId);
+            }
+        }
+    }
+
+    public static void markModelUsed(String modelId) {
+        touchModel(modelId);
+    }
+
+    public static boolean isGpuCacheTrimmed(String modelId) {
+        String modelKey = LocalModelCatalog.canonicalKey(modelId);
+        return modelKey != null && RESIDENCY.gpuTrim().isTrimmed(modelKey);
+    }
+
+    private static void touchAssembly(ModelAssembly assembly) {
+        if (assembly == null) {
+            return;
+        }
+        for (Map.Entry<String, ModelAssembly> entry : RESIDENCY.assemblies().entrySet()) {
+            if (entry.getValue() == assembly) {
+                touchModel(entry.getKey());
+                return;
+            }
+        }
+    }
+
+    private static final class LazyModelAssembly extends ModelAssembly {
+        private final String modelId;
+        private final LocalModelCatalog.Entry source;
+        private final ModelDisplayAssets displayAssets;
+        private final ModelResourceBundle metadataResources;
+
+        private LazyModelAssembly(String modelId, LocalModelCatalog.Entry source) {
+            super(null, Map.of(), Map.of(), createLazyResourceBundle(), source.modelInfo,
+                    new ModelDisplayAssets(source.modelInfo.getModelProperties().getDefaultTexture(),
+                            source.auth, Map.of(), Map.of()), List.of());
+            this.modelId = modelId;
+            this.source = source;
+            this.displayAssets = super.getTextureRegistry();
+            this.metadataResources = super.getExpressionCache();
+        }
+
+        private static ModelResourceBundle createLazyResourceBundle() {
+            return new ModelResourceBundle(Map.of(), new Object2ReferenceOpenHashMap<>(),
+                    new Object2ReferenceOpenHashMap<>(), Map.of());
+        }
+
+        @Nullable
+        private ModelAssembly loadedAssembly() {
+            ModelAssembly current = RESIDENCY.assemblies().get(modelId);
+            return current != null && current != this && !(current instanceof LazyModelAssembly)
+                    && current.getPresentationCapabilities().runtimeResident() ? current : null;
+        }
+
+        @Nullable
+        private ModelAssembly requestAndGetFallback() {
+            scheduleCachedModelReload(modelId);
+            ModelAssembly loaded = loadedAssembly();
+            return loaded == null ? localModelContext : loaded;
+        }
+
+        @Override
+        public PlayerModelBundle getAnimationBundle() {
+            ModelAssembly assembly = requestAndGetFallback();
+            return assembly == null ? null : assembly.getAnimationBundle();
+        }
+
+        @Override
+        public ModelResourceBundle getExpressionCache() {
+            ModelAssembly assembly = loadedAssembly();
+            return assembly == null ? metadataResources : assembly.getExpressionCache();
+        }
+
+        @Override
+        public Map<Identifier, ProjectileModelBundle> getProjectileModels() {
+            ModelAssembly assembly = requestAndGetFallback();
+            return assembly == null ? Map.of() : assembly.getProjectileModels();
+        }
+
+        @Override
+        public Map<Identifier, VehicleModelBundle> getVehicleModels() {
+            ModelAssembly assembly = requestAndGetFallback();
+            return assembly == null ? Map.of() : assembly.getVehicleModels();
+        }
+
+        @Override
+        public ModelMetadata getModelData() {
+            ModelAssembly assembly = loadedAssembly();
+            return assembly == null ? source.modelInfo : assembly.getModelData();
+        }
+
+        @Override
+        public ModelDisplayAssets getTextureRegistry() {
+            ModelAssembly assembly = loadedAssembly();
+            return assembly == null ? displayAssets : assembly.getTextureRegistry();
+        }
+
+        @Override
+        public List<AbstractTexture> getTextures() {
+            ModelAssembly assembly = loadedAssembly();
+            return assembly == null ? List.of() : assembly.getTextures();
+        }
+    }
+
+    public static int getPendingModelCount() {
+        return pendingModelQueue.size();
+    }
+
+    
+
+}

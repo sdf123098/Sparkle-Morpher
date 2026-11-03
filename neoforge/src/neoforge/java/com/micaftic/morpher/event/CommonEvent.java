@@ -1,0 +1,28 @@
+package com.micaftic.morpher.event;
+
+import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidCompat;
+import com.micaftic.morpher.client.LocalModelBootstrap;
+import com.micaftic.morpher.core.architectury.event.events.common.LifecycleEvent;
+
+public final class CommonEvent {
+
+    private CommonEvent() {
+    }
+
+    public static Object nativeInit() {
+        LocalModelBootstrap.initialize();
+        return null;
+    }
+
+    public static void register() {
+        LifecycleEvent.SETUP.register(() -> {
+            if (!YesSteveModel.isAvailable()) {
+                YesSteveModel.LOGGER.error(YesSteveModel.getErrorMessage());
+                return;
+            }
+
+            nativeInit();
+        });
+    }
+}
