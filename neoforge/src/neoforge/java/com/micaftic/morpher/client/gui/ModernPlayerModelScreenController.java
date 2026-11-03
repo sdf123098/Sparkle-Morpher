@@ -1,0 +1,1144 @@
+package com.micaftic.morpher.client.gui;
+
+import com.micaftic.morpher.cloud.client.CloudAssetPage;
+import com.micaftic.morpher.cloud.client.CloudAssetClient;
+import com.micaftic.morpher.cloud.client.CloudAssetSummary;
+import com.micaftic.morpher.cloud.client.CloudAssetImportName;
+import com.micaftic.morpher.core.model.CloudAssetIdentity;
+import com.micaftic.morpher.core.model.lifecycle.ScreenGenerationGate;
+import com.micaftic.morpher.core.model.lifecycle.ScreenRequestToken;
+import com.micaftic.morpher.cloud.client.CloudClientRuntime;
+import com.micaftic.morpher.cloud.client.CloudModelSelectionStore;
+import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.PrivacyMode;
+import com.micaftic.morpher.client.gui.resource.ModelRepoClient;
+import com.micaftic.morpher.client.gui.resource.ModelRepoEntry;
+import com.micaftic.morpher.client.gui.resource.download.DownloadQueue;
+import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
+import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.client.upload.IResourceLocatable;
+import com.micaftic.morpher.client.upload.picker.FilePickerCoordinator;
+import com.micaftic.morpher.client.upload.ModelUploadSession;
+import com.micaftic.morpher.client.upload.UploadManager;
+import com.micaftic.morpher.config.GeneralConfig;
+
+import com.micaftic.morpher.core.vector.VectorApiCapability;
+import com.micaftic.morpher.core.storage.ModelStoragePaths;
+import com.micaftic.morpher.util.LocalStarModelsStore;
+import com.micaftic.morpher.util.SmExecutors;
+
+import com.micaftic.morpher.util.ModelIdUtil;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+
+/**
+ * 1.2.7 §24.7：从 {@code ModernPlayerModelScreen} 外提的「模型面板服务层」。
+ *
+ * <p>路线图要求 Screen 不再直接操作整个底层系统，而是走
+ * {@code Screen → Service/Controller → 底层系统}。本类即那一层 Service：所有对
+ * {@code ModelRepoClient} / {@code ResourceDownloadManager} / {@code ModelUploadSession} /
+ * {@code ModelImportFilePicker} / {@code UploadManager} / {@code ClientModelManager} /
+ * {@code ModelPanelFileActions} 以及配置读写的调用都收敛在这里。</p>
+ *
+ * <p><b>行为等价（§4.2 Facade First）</b>：本类只做搬运，不改变任何分支/文案/时序。
+ * Screen 的对外可见行为、GUI 布局与文案一律不变；旧方法保留为薄委托，未拆完的部分
+ * 见 {@code ModernPlayerModelScreen} 内注释。</p>
+ */
+public final class ModernPlayerModelScreenController {
+
+    /** Screen 侧回调：Service 不直接持有 Screen 实例，只通过该接口回报。 */
+    public interface Host {
+        /** 普通状态栏消息（底部 footer）。 */
+        void postStatus(Component component, ChatFormatting color);
+
+        /** 资源站专用状态栏消息（与 {@link #postStatus} 同一槽位，但允许被普通消息覆盖）。 */
+        void postResourceStatus(Component component, ChatFormatting color);
+
+        /** 请求 Screen 重建控件（原 {@code init()}）。 */
+        void requestRerender();
+    }
+
+    /** 一次导入动作的结果（Screen 据此设置文案，文案仍留在 Screen 侧）。 */
+    public enum ApplyResult {
+        /** 已提交外部目标选择；Cloud 确认后才算应用成功。 */
+        REQUESTED_TARGET,
+        /** 应用到了本地玩家（直接 capability 或发包）。 */
+        APPLIED_TO_PLAYER,
+        /** 本地玩家不在线。 */
+        NO_PLAYER,
+        /** 玩家 capability 缺失。 */
+        NO_CAPABILITY
+    }
+
+    /** 下载队列行的只读视图（Screen 不再直接持有 {@code ResourceDownloadManager.TaskSnapshot}）。 */
+    public record TaskView(String name, float progress, int color) {
+    }
+
+    private static final ExecutorService RESOURCE_EXECUTOR = SmExecutors.pool(SmExecutors.Pool.MODEL_IO);
+
+    private final ModelPanelState state;
+    private final Host host;
+
+    private ResourceStationConfig.State resourceConfig;
+    private final java.util.function.ToIntFunction<List<ModelRepoEntry>> resourceEnqueue;
+    private final List<ModelRepoEntry> resourceEntries = new ArrayList<>();
+    private final Set<String> selectedResourceUrls = new LinkedHashSet<>();
+    private final Queue<FilePickerCoordinator.PickedFile> pendingImports = new ArrayDeque<>();
+    private final ScreenGenerationGate screenGeneration = new ScreenGenerationGate();
+
+    public ModernPlayerModelScreenController(ModelPanelState state, Host host) {
+        this(state, host, ResourceStationConfig.load(), null);
+    }
+
+    ModernPlayerModelScreenController(ModelPanelState state, Host host, ResourceStationConfig.State config,
+                                     java.util.function.ToIntFunction<List<ModelRepoEntry>> enqueue) {
+        this.state = state;
+        this.host = host;
+        this.resourceConfig = config;
+        this.resourceEnqueue = enqueue == null ? entries -> DownloadQueue.enqueueAll(entries, this.resourceConfig) : enqueue;
+    }
+
+    // ================================================================
+    // 资源站：站点配置（持久化读写）
+    // ================================================================
+
+    public ResourceStationConfig.State config() {
+        return this.resourceConfig;
+    }
+
+    public List<String> siteUrls() {
+        return this.resourceConfig.urls();
+    }
+
+    public String selectedSite() {
+        return this.resourceConfig.selectedUrl();
+    }
+
+    public boolean mainlandChinaMode() {
+        return this.resourceConfig.preferGithubAccelerator();
+    }
+
+    public int timeoutMs() {
+        return this.resourceConfig.timeoutMs();
+    }
+
+    public int maxDownloadBytes() {
+        return this.resourceConfig.maxDownloadBytes();
+    }
+
+    public List<String> githubAccelerators() {
+        return this.resourceConfig.githubAccelerators();
+    }
+
+    /** 选中站点并落盘（原 {@code selectSite}）。 */
+    public void selectSite(String url) {
+        this.resourceConfig = new ResourceStationConfig.State(this.resourceConfig.urls(), url, this.resourceConfig.timeoutMs(), this.resourceConfig.maxDownloadBytes(), this.resourceConfig.preferGithubAccelerator(), this.resourceConfig.githubAccelerators());
+        ResourceStationConfig.save(this.resourceConfig);
+    }
+
+    /** 新增站点并落盘；返回是否真的写入了（空串直接忽略）。 */
+    public boolean addSite(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        List<String> urls = new ArrayList<>(this.resourceConfig.urls());
+        if (!urls.contains(url)) {
+            urls.add(0, url);
+        }
+        this.resourceConfig = new ResourceStationConfig.State(urls, url, this.resourceConfig.timeoutMs(), this.resourceConfig.maxDownloadBytes(), this.resourceConfig.preferGithubAccelerator(), this.resourceConfig.githubAccelerators());
+        ResourceStationConfig.save(this.resourceConfig);
+        return true;
+    }
+
+    /**
+     * 删除站点并落盘。
+     *
+     * @return 删除后生效的站点 url；无法删除（仅剩一个或不存在）时返回 {@code null}。
+     */
+    public String removeSite(String url) {
+        List<String> urls = new ArrayList<>(this.resourceConfig.urls());
+        if (urls.size() <= 1 || !urls.remove(url)) {
+            return null;
+        }
+        String selected = urls.get(0);
+        this.resourceConfig = new ResourceStationConfig.State(urls, selected, this.resourceConfig.timeoutMs(), this.resourceConfig.maxDownloadBytes(), this.resourceConfig.preferGithubAccelerator(), this.resourceConfig.githubAccelerators());
+        ResourceStationConfig.save(this.resourceConfig);
+        return selected;
+    }
+
+    /** 切换大陆模式并落盘。 */
+    public void toggleMainlandChinaMode() {
+        this.resourceConfig = new ResourceStationConfig.State(this.resourceConfig.urls(),this.resourceConfig.selectedUrl(),this.resourceConfig.timeoutMs(),this.resourceConfig.maxDownloadBytes(),!this.resourceConfig.preferGithubAccelerator(),this.resourceConfig.githubAccelerators());
+        ResourceStationConfig.save(this.resourceConfig);
+    }
+
+    // ================================================================
+    // 资源站：列表拉取（网络）与筛选
+    // ================================================================
+
+    /**
+     * 拉取资源列表（原 {@code refreshResources}）。
+     *
+     * <p>异步 + 超时 + 代际/请求号双重失效检查，行为与拆分前逐行等价。</p>
+     */
+    public void refreshResources(boolean manual) {
+        closeResourcePreviews();
+        clearResourceSelection();
+        int requestId = ++this.state.resourceRequestId;
+        long generation = this.screenGeneration.capture();
+        ResourceStationConfig.State config = this.resourceConfig;
+        this.state.resourceLoading = true;
+        this.state.resourceLoaded = false;
+        this.state.resourceScroll = 0;
+        this.state.selectedResourceUrl = "";
+        this.resourceEntries.clear();
+        if (this.state.activeTab == ModelPanelState.Tab.RESOURCE) {
+            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.model_panel.resource_loading"), ChatFormatting.YELLOW);
+        }
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return ModelRepoClient.list(config.selectedUrl(), config);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }, RESOURCE_EXECUTOR).orTimeout(Math.max(15_000L, config.timeoutMs() * 3L), TimeUnit.MILLISECONDS).whenComplete((result, error) ->
+                ((Executor) Minecraft.getInstance()).execute(() -> {
+                    if (!new ScreenRequestToken(requestId, generation).isCurrent(this.state.resourceRequestId, this.screenGeneration.capture())) {
+                        return;
+                    }
+                    this.state.resourceLoading = false;
+                    if (error != null) {
+                        if (this.state.activeTab == ModelPanelState.Tab.RESOURCE) {
+                            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.model_panel.resource_load_failed", rootMessage(error)), ChatFormatting.RED);
+                        }
+                    } else {
+                        this.resourceEntries.clear();
+                        this.resourceEntries.addAll(result);
+                        this.resourceEntries.sort(Comparator.comparing(e -> e.name().toLowerCase(Locale.ROOT)));
+                        this.state.resourceLoaded = true;
+                        if (this.state.activeTab == ModelPanelState.Tab.RESOURCE) {
+                            this.host.postResourceStatus(Component.translatable("gui.sparkle_morpher.model_panel.resource_loaded", result.size()), manual ? ChatFormatting.GREEN : ChatFormatting.GRAY);
+                            this.host.requestRerender();
+                        }
+                    }
+                }));
+    }
+
+    /** 按搜索词过滤已拉取条目（原 {@code filteredResources}）。 */
+    public List<ModelRepoEntry> filteredResources() {
+        String query = this.state.resourceSearchText.trim().toLowerCase(Locale.ROOT);
+        if (query.isBlank()) {
+            return new ArrayList<>(this.resourceEntries);
+        }
+        List<ModelRepoEntry> out = new ArrayList<>();
+        for (ModelRepoEntry entry : this.resourceEntries) {
+            String text = entry.name() + " "
+                    + ModelRepoClient.safeModelId(entry) + " "
+                    + entry.fileName() + " "
+                    + entry.description() + " "
+                    + entry.author() + " "
+                    + entry.tags() + " "
+                    + entry.url() + " "
+                    + entry.githubOwner() + " "
+                    + entry.githubRepo() + " "
+                    + entry.githubBranch() + " "
+                    + entry.githubPath();
+            if (text.toLowerCase(Locale.ROOT).contains(query)) {
+                out.add(entry);
+            }
+        }
+        return out;
+    }
+
+    /** 当前选中的资源条目（原 {@code selectedResource}）。 */
+    public ModelRepoEntry selectedResource() {
+        return this.resourceEntries.stream().filter(e -> e.url().equals(this.state.selectedResourceUrl)).findFirst().orElse(null);
+    }
+
+    public int resourceEntryCount() {
+        return this.resourceEntries.size();
+    }
+
+    /** 单击资源行（原 {@code clickResource}）。 */
+    public void clickResource(ModelRepoEntry entry) {
+        if (this.state.resourceMultiSelectMode) {
+            if (!this.selectedResourceUrls.add(entry.url())) {
+                this.selectedResourceUrls.remove(entry.url());
+            }
+            return;
+        }
+        this.state.selectedResourceUrl = entry.url();
+    }
+
+    /** Preview focus is independent from the checked download set. */
+    public void focusResource(ModelRepoEntry entry) {
+        this.state.selectedResourceUrl = entry.url();
+    }
+
+    public boolean isResourceSelected(ModelRepoEntry entry) {
+        return this.state.resourceMultiSelectMode ? this.selectedResourceUrls.contains(entry.url())
+                : entry.url().equals(this.state.selectedResourceUrl);
+    }
+
+    /** 切换资源多选模式（原 {@code toggleResourceMultiSelect}）。 */
+    public void toggleResourceMultiSelect() {
+        if (!this.state.resourceMultiSelectMode && !this.state.selectedResourceUrl.isBlank()) {
+            this.selectedResourceUrls.add(this.state.selectedResourceUrl);
+        }
+        this.state.resourceMultiSelectMode = !this.state.resourceMultiSelectMode;
+        if (!this.state.resourceMultiSelectMode) {
+            this.selectedResourceUrls.clear();
+            this.state.selectedResourceUrl = "";
+        }
+    }
+
+    // ================================================================
+    // 资源站：下载队列
+    // ================================================================
+
+    /** 入队单个资源；返回是否入队成功（原 {@code enqueueResource} 的判定部分）。 */
+    public boolean enqueueResource(ModelRepoEntry entry) {
+        return DownloadQueue.enqueue(entry, this.resourceConfig);
+    }
+
+    /** Only an explicit selection may enter the download queue. */
+    public int enqueueSelectedResources() {
+        List<ModelRepoEntry> selected = this.resourceEntries.stream().filter(this::isResourceSelected).toList();
+        return selected.isEmpty() ? 0 : this.resourceEnqueue.applyAsInt(selected);
+    }
+
+    public int resourceSelectionCount() {
+        return (int) this.resourceEntries.stream().filter(this::isResourceSelected).count();
+    }
+
+    public void selectVisibleResources(java.util.Collection<ModelRepoEntry> entries) {
+        if (!this.state.resourceMultiSelectMode) toggleResourceMultiSelect();
+        entries.forEach(entry -> this.selectedResourceUrls.add(entry.url()));
+    }
+
+    public void clearResourceSelection() {
+        this.selectedResourceUrls.clear();
+        this.state.selectedResourceUrl = "";
+    }
+
+    public void toggleResourceSelection(ModelRepoEntry entry) {
+        if (!this.state.resourceMultiSelectMode) toggleResourceMultiSelect();
+        if (!this.selectedResourceUrls.add(entry.url())) this.selectedResourceUrls.remove(entry.url());
+    }
+
+    public void cancelDownload(DownloadQueue.TaskSnapshot task) { DownloadQueue.cancel(task); }
+    public void cancelAllDownloads() { DownloadQueue.cancelAll(); }
+
+    public boolean isQueued(ModelRepoEntry entry) {
+        return DownloadQueue.isQueued(entry);
+    }
+
+    /** 驱动下载队列。 */
+    public void tickDownloads() {
+        DownloadQueue.tick();
+    }
+
+    public void clearFinishedDownloads() {
+        DownloadQueue.clearFinished();
+    }
+
+    public void cancelCurrentDownload() {
+        DownloadQueue.cancelCurrent();
+    }
+
+    /** 队列视图：未完成在前、已完成最多 8 条（顺序与原渲染代码一致）。 */
+    public List<TaskView> queueRows() {
+        DownloadQueue.Snapshot snapshot = DownloadQueue.snapshot();
+        List<TaskView> rows = new ArrayList<>();
+        for (DownloadQueue.TaskSnapshot task : snapshot.unfinishedTasks()) {
+            rows.add(toView(task));
+        }
+        for (DownloadQueue.TaskSnapshot task : snapshot.finishedTasks().stream().limit(8).toList()) {
+            rows.add(toView(task));
+        }
+        return rows;
+    }
+
+    /** One queue snapshot for a complete RESOURCE right-pane render. */
+    public DownloadQueuePanel.View queuePanelView() {
+        return DownloadQueuePanel.snapshot(DownloadQueue.snapshot());
+    }
+
+    public Component queueStatus() {
+        return DownloadQueue.snapshot().status();
+    }
+
+    public ChatFormatting queueStatusColor() {
+        return DownloadQueue.snapshot().statusColor();
+    }
+
+    private static TaskView toView(DownloadQueue.TaskSnapshot task) {
+        return new TaskView(task.name(), task.progress(), taskStateColor(task.state()));
+    }
+
+    /** 任务状态 → 进度条颜色（原 Screen 内 {@code stateColor}，数值不变）。 */
+    private static int taskStateColor(DownloadQueue.TaskState state) {
+        return switch (state) {
+            case DONE -> 0xFF4CAF50;
+            case FAILED -> 0xFFD23232;
+            case CANCELLED -> 0xFF8F8F8F;
+            default -> 0xFFE05252;
+        };
+    }
+
+    // ================================================================
+    // 导入：文件选择 / 拖放 / 本地导入 / 服务器上传
+    // ================================================================
+
+    /** 标记当前代际失效（原 {@code removed()} 中的 {@code screenGeneration++}）。 */
+    public void invalidateGeneration() {
+        this.screenGeneration.invalidate();
+        closeCloudPreviews();
+        closeResourcePreviews();
+    }
+
+    public int generation() {
+        return (int) this.screenGeneration.capture();
+    }
+
+    /** 取消系统文件选择框（原 {@code removed()} 中的 cancelPicking）。 */
+    public void cancelPicking() {
+        FilePickerCoordinator.cancelPicking();
+    }
+
+    /** 打开 .ysm 文件选择框；返回错误（无错误返回 null）。 */
+    public Component pickYsmFile() {
+        return FilePickerCoordinator.pickYsmFile();
+    }
+
+    /** 轮询已完成的选择 + 错误，并推进队列（原 {@code pollImports}）。 */
+    public void pollImports() {
+        FilePickerCoordinator.PickedFile picked;
+        while ((picked = FilePickerCoordinator.pollCompleted()) != null) {
+            this.pendingImports.add(picked);
+        }
+        Component pickerError = FilePickerCoordinator.consumeLastError();
+        if (!pickerError.getString().isEmpty()) {
+            this.host.postStatus(pickerError, ChatFormatting.RED);
+        }
+        startNextImportIfIdle();
+    }
+
+    /** 处理拖放的单个路径（原 {@code enqueueImportPath}）。 */
+    public void enqueueImportPath(Path path) {
+        try {
+            if (Files.isDirectory(path)) {
+                this.pendingImports.add(FilePickerCoordinator.packDirectory(path));
+            } else if (FilePickerCoordinator.isImportFileName(path.getFileName().toString())) {
+                this.pendingImports.add(new FilePickerCoordinator.PickedFile(path.getFileName().toString(), Files.readAllBytes(path)));
+            }
+        } catch (IOException e) {
+            this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.error.read_file", e.getMessage()), ChatFormatting.RED);
+        }
+    }
+
+    /** 空闲时推进下一个导入（原 {@code startNextImportIfIdle}）。 */
+    public void startNextImportIfIdle() {
+        if (this.screenGeneration.importInProgress()) {
+            return;
+        }
+        FilePickerCoordinator.PickedFile file = this.pendingImports.poll();
+        if (file == null) {
+            return;
+        }
+        String fileName = file.fileName() == null ? "imported.bin" : file.fileName();
+        String modelId = stripImportExtension(ModelIdUtil.normalizeImportModelId(fileName));
+        if (modelId.isBlank()) {
+            this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.error.model_id_from_filename", fileName), ChatFormatting.RED);
+            return;
+        }
+        if (!this.screenGeneration.beginImport()) return;
+        long generation = this.screenGeneration.capture();
+        if (generation < 0L) return;
+        this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_importing", modelId), ChatFormatting.YELLOW);
+        ClientModelManager.importLocalModel(modelId, fileName, file.data(), error -> {
+            this.screenGeneration.completeImport(generation, () -> {
+                if (error != null) {
+                    this.host.postStatus(error, ChatFormatting.RED);
+                    return;
+                }
+                this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.state.local_imported_as", modelId), ChatFormatting.GREEN);
+            });
+        });
+    }
+
+    public boolean localImportInProgress() {
+        return this.screenGeneration.importInProgress();
+    }
+
+    // ---- 上传会话只读视图（Screen 不再直接引用 ModelUploadSession） ----
+
+    public boolean uploadSessionActive() {
+        return ModelUploadSession.getInstance() != null;
+    }
+
+    public Component uploadSessionMessage() {
+        ModelUploadSession session = ModelUploadSession.getInstance();
+        return session == null ? Component.empty() : session.getMessage();
+    }
+
+    public float uploadSessionProgress() {
+        ModelUploadSession session = ModelUploadSession.getInstance();
+        return session == null ? 0f : session.getProgress();
+    }
+
+    public boolean uploadSessionFailed() {
+        ModelUploadSession session = ModelUploadSession.getInstance();
+        return session != null && session.getState() == ModelUploadSession.State.FAILED;
+    }
+
+    public String uploadSessionBytesText() {
+        ModelUploadSession session = ModelUploadSession.getInstance();
+        if (session == null) {
+            return "";
+        }
+        return ModelUploadSession.formatBytes(session.getSentBytes()) + " / " + ModelUploadSession.formatBytes(session.getTotalBytes());
+    }
+
+    /** 资源条目大小文案（原 {@code resourceDetail} 中的 formatBytes 调用）。 */
+    public String formatBytes(long bytes) {
+        return ModelUploadSession.formatBytes((int) Math.min(Integer.MAX_VALUE, bytes));
+    }
+
+    // ================================================================
+    // 模型目录：目录操作 / 重载 / 选择记忆
+    // ================================================================
+
+    public Component deleteModels(Collection<String> modelIds) {
+        return ModelPanelFileActions.deleteModels(modelIds);
+    }
+
+    public Component moveModels(Collection<String> modelIds, String category) {
+        return ModelPanelFileActions.moveModels(modelIds, category);
+    }
+
+    public Component createCategory(String category) {
+        return ModelPanelFileActions.createCategory(category);
+    }
+
+    public Component deleteCategory(String category, boolean deleteModels) {
+        return ModelPanelFileActions.deleteCategory(category, deleteModels);
+    }
+
+    public List<String> listCategories() {
+        return ModelPanelFileActions.listCategories();
+    }
+
+    public void reloadLocalModels(Consumer<Component> callback) {
+        long generation = this.screenGeneration.capture();
+        ClientModelManager.reloadLocalModels(error ->
+                this.screenGeneration.completeIfCurrent(generation, () -> callback.accept(error)));
+    }
+
+    /** 打开本地模型目录，并按原行为回写 GRAY/RED 状态栏文案。 */
+    public void openModelFolder() {
+        try {
+            Files.createDirectories(ModelStoragePaths.custom());
+            net.minecraft.Util.getPlatform().openFile(ModelStoragePaths.custom().toFile());
+            this.host.postStatus(Component.literal(ModelStoragePaths.custom().toString()), ChatFormatting.GRAY);
+        } catch (IOException e) {
+            this.host.postStatus(Component.translatable("gui.sparkle_morpher.import.error.open_folder", e.getMessage()), ChatFormatting.RED);
+        }
+    }
+
+    public boolean isAllowUpload() {
+        return ClientModelManager.isAllowUpload();
+    }
+
+    public boolean isOysmServer() {
+        return ClientModelManager.isOysmServer();
+    }
+
+    // ================================================================
+    // 模型目录：只读查询（Screen 侧列表/预览用）
+    // ================================================================
+
+    public Set<String> modelPackPaths() {
+        return ClientModelManager.getModelPackMap().keySet();
+    }
+
+    /** 模型包条目（含封面贴图）；不存在返回 null。 */
+    public com.micaftic.morpher.resource.models.ModelPackData modelPack(String modelId) {
+        return ClientModelManager.getModelPackMap().get(modelId);
+    }
+
+    public Set<String> availableModelIds() {
+        return ClientModelManager.getAvailableModelIds().stream()
+                .filter(modelId -> !CloudAssetIdentity.isRuntimeModelId(modelId))
+                .filter(modelId -> com.micaftic.morpher.client.LocalDisplayPreferences.snapshot().visible(modelId))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    public int availableModelCount() {
+        return availableModelIds().size();
+    }
+
+    public Map<String, ModelAssembly> modelAssemblyMap() {
+        return ClientModelManager.getModelAssemblyMap().entrySet().stream()
+                .filter(entry -> !CloudAssetIdentity.isRuntimeModelId(entry.getKey()))
+                .filter(entry -> com.micaftic.morpher.client.LocalDisplayPreferences.snapshot().visible(entry.getKey()))
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public Optional<ModelAssembly> lookupAssembly(String modelId) {
+        return ClientModelManager.getModelContext(modelId);
+    }
+
+    public ModelAssembly assemblyOrNull(String modelId) {
+        return ClientModelManager.getModelContext(modelId).orElse(null);
+    }
+
+    public boolean isAuthModel(String modelId) {
+        return ClientModelManager.isAuthModel(modelId);
+    }
+
+    public String lazyModelDisplayName(String modelId) {
+        return ClientModelManager.getLazyModelDisplayName(modelId);
+    }
+
+    public boolean isLocalOnlyModel(String modelId) {
+        return !CloudAssetIdentity.isRuntimeModelId(modelId) && ClientModelManager.isLocalOnlyModel(modelId);
+    }
+public boolean cloudAvailable() { return CloudClientRuntime.state(state.selectedCloudInstanceId) != null; }
+    public String cloudInstanceId() { return state.selectedCloudInstanceId; }
+    public CompletableFuture<CloudAssetPage> listCloudAssets(String scope, String query, String cursor, int limit) {
+        if (!cloudAvailable()) return CompletableFuture.failedFuture(new IllegalStateException("Cloud is not connected"));
+        String instanceId = cloudInstanceId();
+        var runtime = CloudClientRuntime.state(instanceId);
+        return runtime.assets().listPage(scope, query, cursor, limit).thenApply(page -> {
+            for (CloudAssetSummary entry : page.entries()) runtime.assetCatalog().upsert(entry);
+            if (CloudClientRuntime.state(instanceId) == runtime) refreshCloudSelectionMetadata(instanceId, page.entries());
+            return page;
+        });
+    }
+
+    public CompletableFuture<CloudAssetSummary> setCloudVisibility(CloudAssetSummary summary, String visibility) {
+        String instanceId = cloudInstanceId();
+        var runtime = CloudClientRuntime.state(instanceId);
+        if (runtime == null) return CompletableFuture.failedFuture(new IllegalStateException("Cloud is not connected"));
+        return runtime.assets().setVisibility(summary.ref().assetId(), visibility).thenApply(updated -> {
+            runtime.assetCatalog().upsert(updated);
+            if (CloudClientRuntime.state(instanceId) == runtime) refreshCloudSelectionMetadata(instanceId, List.of(updated));
+            return updated;
+        });
+    }
+
+    public List<CloudAssetSummary> recentCloudAssets() {
+        try { return cloudAvailable() ? CloudModelSelectionStore.recent(cloudInstanceId()) : List.of(); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); return List.of(); }
+    }
+    public List<CloudAssetSummary> favoriteCloudAssets() {
+        try { return cloudAvailable() ? CloudModelSelectionStore.favorites(cloudInstanceId()) : List.of(); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); return List.of(); }
+    }
+    public boolean isCloudFavorite(CloudAssetSummary summary) {
+        try { return cloudAvailable() && CloudModelSelectionStore.isFavorite(cloudInstanceId(), summary.ref().assetId()); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); return false; }
+    }
+    public boolean toggleCloudFavorite(CloudAssetSummary summary) {
+        if (!cloudAvailable()) return false;
+        return CloudModelSelectionStore.toggleFavorite(cloudInstanceId(), summary);
+    }
+    public void markCloudApplied(CloudAssetSummary summary) {
+        try { if (cloudAvailable()) CloudModelSelectionStore.recordApplied(cloudInstanceId(), summary); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); }
+    }
+    public String cloudModelId(CloudAssetSummary summary) {
+        CloudClientRuntime.RuntimeState runtime = CloudClientRuntime.state(state.selectedCloudInstanceId);
+        if (runtime == null) throw new IllegalStateException("Cloud runtime is not configured");
+        return cloudIdentity(runtime, summary).runtimeModelId();
+    }
+    private final java.util.LinkedHashMap<String, OuterFileTexture> resourcePreviews = new java.util.LinkedHashMap<>();
+    private record ResourcePreviewRequest(ModelRepoEntry entry, boolean modelAllowed, int authorization) {
+        String key() { return entry.url() + "|" + (modelAllowed ? authorization : "cover"); }
+    }
+    private com.micaftic.morpher.client.gui.resource.station.ResourcePreviewQueue<ResourcePreviewRequest> resourcePreviewQueue;
+    private final java.util.Set<String> resourcePreviewFailures = new java.util.HashSet<>();
+    private final java.util.Set<String> resourceCoverFailures = new java.util.HashSet<>();
+    private final java.util.Map<String, String> resourcePreviewDesired = new java.util.HashMap<>();
+    private final java.util.Set<String> resourceModelPreviewAllowed = new java.util.HashSet<>();
+    private java.util.List<ModelRepoEntry> resourcePreviewVisible = java.util.List.of();
+    private com.micaftic.morpher.client.gui.resource.station.ResourcePreviewBudget resourcePreviewBudget =
+            new com.micaftic.morpher.client.gui.resource.station.ResourcePreviewBudget(64L * 1024 * 1024);
+    private volatile int resourcePreviewEpoch;
+    private int resourcePreviewAuthorization;
+    private final String resourcePreviewOwner = java.util.UUID.randomUUID().toString();
+    private final java.util.Map<String, com.micaftic.morpher.client.RuntimeModelLease> resourcePreviewModels = new java.util.HashMap<>();
+    private final java.util.Set<String> resourcePreviewModelsReady = new java.util.HashSet<>();
+
+    public String resourcePreviewModelId(ModelRepoEntry entry) {
+        var lease = resourcePreviewModels.get(entry.url());
+        return lease != null && lease.isValid() && resourcePreviewModelsReady.contains(entry.url()) ? lease.runtimeModelId() : "";
+    }
+
+    private String resourcePreviewRuntimeId(ModelRepoEntry entry) {
+        return new com.micaftic.morpher.core.model.CloudAssetIdentity("resource-station", resourcePreviewOwner,
+                "card", "preview", com.micaftic.morpher.util.DigestUtil.sha256Hex(entry.url().getBytes(java.nio.charset.StandardCharsets.UTF_8))).runtimeModelId();
+    }
+    private String resourcePreviewScope = "";
+
+    public OuterFileTexture resourcePreview(ModelRepoEntry entry) { return resourcePreviews.get(entry.url()); }
+    public boolean resourcePreviewFailed(ModelRepoEntry entry) {
+        return resourcePreviewFailures.contains(resourcePreviewDesired.get(entry.url()));
+    }
+    public boolean resourcePreviewLoading(ModelRepoEntry entry) {
+        return resourcePreviewDesired.containsKey(entry.url()) && !resourcePreviewModelsReady.contains(entry.url())
+                && !resourcePreviewFailed(entry);
+    }
+
+    public void requestResourcePreviews(java.util.Collection<ModelRepoEntry> entries) {
+        requestResourcePreviews(entries, null);
+    }
+
+    public void requestResourcePreviews(java.util.Collection<ModelRepoEntry> entries, ModelRepoEntry focused) {
+        // Keep the current page and an off-page detail preview in one lease scope.
+        // Focusing a card already on this page must not restart its downloads.
+        var visible = new java.util.LinkedHashMap<String, ModelRepoEntry>();
+        entries.forEach(entry -> visible.put(entry.url(), entry));
+        if (focused != null) visible.putIfAbsent(focused.url(), focused);
+        updateResourcePreviewScope("catalog:" + visible.keySet(), visible.values());
+    }
+
+    public void requestResourceDetailPreview(ModelRepoEntry entry) {
+        if (entry == null) { pauseResourcePreviews(); return; }
+        String scope = "detail:" + entry.url();
+        if (!scope.equals(resourcePreviewScope)) {
+            updateResourcePreviewScope(scope, java.util.List.of(entry));
+        }
+    }
+
+    private void updateResourcePreviewScope(String scope, java.util.Collection<ModelRepoEntry> entries) {
+        if (!scope.equals(resourcePreviewScope)) {
+            pauseResourcePreviews();
+            resourcePreviewScope = scope;
+            resourcePreviewVisible = java.util.List.copyOf(entries);
+            resourcePreviewAuthorization++;
+            resourcePreviewBudget = new com.micaftic.morpher.client.gui.resource.station.ResourcePreviewBudget(64L * 1024 * 1024);
+            entries.forEach(entry -> resourceModelPreviewAllowed.add(entry.url()));
+        }
+        updateResourcePreviewQueue();
+    }
+
+    /** Retry visible 3D cards with a fresh, bounded transfer allowance. */
+    public void previewVisibleResources(java.util.Collection<ModelRepoEntry> entries) {
+        resourcePreviewAuthorization++;
+        resourcePreviewBudget = new com.micaftic.morpher.client.gui.resource.station.ResourcePreviewBudget(64L * 1024 * 1024);
+        for (var entry : entries) resourceModelPreviewAllowed.add(entry.url());
+        updateResourcePreviewQueue();
+    }
+
+    public void pauseResourcePreviews() {
+        resourcePreviewEpoch++;
+        resourcePreviewDesired.clear();
+        resourceModelPreviewAllowed.clear();
+        resourcePreviewVisible = java.util.List.of();
+        resourcePreviewScope = "";
+        if (resourcePreviewQueue != null) resourcePreviewQueue.pause();
+        var released = java.util.List.copyOf(resourcePreviewModels.values());
+        resourcePreviewModels.clear();
+        resourcePreviewModelsReady.clear();
+        for (var lease : released) {
+            lease.close();
+            ClientModelManager.releaseCloudModel(lease.runtimeModelId());
+        }
+    }
+
+    private void updateResourcePreviewQueue() {
+        var expired = resourcePreviewModels.entrySet().stream().filter(entry -> !entry.getValue().isValid())
+                .map(java.util.Map.Entry::getKey).toList();
+        if (!expired.isEmpty()) {
+            expired.forEach(url -> { resourcePreviewModels.remove(url); resourcePreviewModelsReady.remove(url); });
+            resourcePreviewAuthorization++;
+        }
+        var requests = resourcePreviewVisible.stream().filter(entry -> !resourcePreviewModelsReady.contains(entry.url()))
+                .filter(entry -> resourceModelPreviewAllowed.contains(entry.url())
+                        || (entry.previewUrl() != null && !entry.previewUrl().isBlank()))
+                .map(entry -> new ResourcePreviewRequest(entry, resourceModelPreviewAllowed.contains(entry.url()), resourcePreviewAuthorization))
+                .toList();
+        resourcePreviewDesired.clear();
+        requests.forEach(request -> resourcePreviewDesired.put(request.entry().url(), request.key()));
+        if (resourcePreviewQueue == null) resourcePreviewQueue =
+                new com.micaftic.morpher.client.gui.resource.station.ResourcePreviewQueue<>(ResourcePreviewRequest::key, this::loadResourcePreview);
+        resourcePreviewQueue.update(requests);
+    }
+
+    private CompletableFuture<Void> loadResourcePreview(ResourcePreviewRequest request,
+            com.micaftic.morpher.client.gui.resource.station.DownloadCancellation cancellation) {
+        var entry = request.entry();
+        if (resourcePreviewModelsReady.contains(entry.url()) || resourcePreviewFailures.contains(request.key()))
+            return CompletableFuture.completedFuture(null);
+        int epoch = resourcePreviewEpoch;
+        var config = resourceConfig;
+        var budget = resourcePreviewBudget;
+        boolean skipCover = resourceCoverFailures.contains(entry.url()) || resourcePreviews.containsKey(entry.url());
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        Runnable worker = () -> {
+            byte[] image = null, modelSource = null;
+            boolean coverFailed = false;
+            try {
+                cancellation.checkCancelled();
+                if (budget.exhausted()) throw new java.util.concurrent.CancellationException("Preview page transfer limit");
+                var listener = budget.listener(cancellation);
+                if (!skipCover && entry.previewUrl() != null && !entry.previewUrl().isBlank()) {
+                    try { image = com.micaftic.morpher.client.gui.resource.station.EmbeddedModelPreview.normalizeImage(
+                            ModelRepoClient.downloadPreview(entry, config, listener)); }
+                    catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
+                    catch (Exception unavailable) { coverFailed = true; }
+                    if (image == null) coverFailed = true;
+                }
+                cancellation.checkCancelled();
+                if (request.modelAllowed()) modelSource = ModelRepoClient.downloadPreviewModel(entry, config, listener);
+                cancellation.checkCancelled();
+            } catch (Exception unavailable) { modelSource = null; }
+            final byte[] bytes = image, modelBytes = modelSource;
+            final boolean missingCover = coverFailed;
+            Minecraft.getInstance().execute(() -> {
+                try {
+                    if (epoch != resourcePreviewEpoch || cancellation.isCancelled()
+                            || !request.key().equals(resourcePreviewDesired.get(entry.url()))) {
+                        if (epoch == resourcePreviewEpoch && request.key().equals(resourcePreviewDesired.get(entry.url())))
+                            resourcePreviewFailures.add(request.key());
+                        result.complete(null); return;
+                    }
+                    if (missingCover) resourceCoverFailures.add(entry.url());
+                    if (bytes != null && !resourcePreviews.containsKey(entry.url())) {
+                        while (resourcePreviews.size() >= 48) {
+                            var it = resourcePreviews.values().iterator(); it.next().close(); it.remove();
+                        }
+                        resourcePreviews.put(entry.url(), new OuterFileTexture(bytes));
+                    }
+                    if (modelBytes == null) {
+                        resourcePreviewFailures.add(request.key());
+                        result.complete(null); return;
+                    }
+                    String runtimeId = resourcePreviewRuntimeId(entry);
+                    var lease = ClientModelManager.acquireRuntimeModelLease(runtimeId);
+                    resourcePreviewModels.put(entry.url(), lease);
+                    ClientModelManager.loadResourcePreviewInMemory(runtimeId, entry.fileName(), modelBytes,
+                            () -> epoch == resourcePreviewEpoch && !cancellation.isCancelled() && lease.isValid(), error -> {
+                        if (epoch == resourcePreviewEpoch && lease.isValid()) {
+                            if (error == null) resourcePreviewModelsReady.add(entry.url());
+                            else {
+                                resourcePreviewFailures.add(request.key());
+                                resourcePreviewModels.remove(entry.url(), lease);
+                                lease.close();
+                                ClientModelManager.releaseCloudModel(runtimeId);
+                            }
+                        }
+                        result.complete(null);
+                    });
+                } catch (Throwable error) { result.completeExceptionally(error); }
+            });
+        };
+        try { SmExecutors.pool(SmExecutors.Pool.DOWNLOAD_IO).execute(worker); }
+        catch (java.util.concurrent.RejectedExecutionException busy) {
+            resourcePreviewFailures.add(request.key());
+            result.complete(null);
+        }
+        return result;
+    }
+
+    private void closeResourcePreviews() {
+        pauseResourcePreviews();
+        if (resourcePreviewQueue != null) resourcePreviewQueue.close();
+        resourcePreviewQueue = null;
+        resourcePreviews.values().forEach(OuterFileTexture::close);
+        resourcePreviews.clear();
+        resourcePreviewFailures.clear();
+        resourceCoverFailures.clear();
+    }
+    public java.util.List<com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskSnapshot> downloadTasks(){var snapshot=DownloadQueue.snapshot();var result=new ArrayList<com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskSnapshot>(snapshot.unfinishedTasks());result.addAll(snapshot.finishedTasks());return result;}
+    public void retryDownload(com.micaftic.morpher.client.gui.resource.download.DownloadQueue.TaskSnapshot task){DownloadQueue.retry(task);}
+
+    private com.micaftic.morpher.cloud.client.CloudPreviewQueue<CloudAssetSummary> previewQueue;
+    private CloudClientRuntime.RuntimeState previewRuntime;
+    private final java.util.Map<String,String> previewFailures=new java.util.concurrent.ConcurrentHashMap<>();
+    public Component cloudPreviewError(CloudAssetSummary entry){
+        if(!cloudAvailable())return null;
+        String failure=previewFailures.get(cloudModelId(entry));
+        return failure==null?null:Component.translatable("gui.sparkle_morpher.cloud.asset_download_failed",failure);
+    }
+
+    public void requestCloudPreviews(java.util.Collection<CloudAssetSummary> visible) {
+        var runtime = CloudClientRuntime.state(cloudInstanceId());
+        if (previewQueue == null || previewRuntime != runtime) {
+            closeCloudPreviews();
+            previewRuntime = runtime;
+            previewQueue = new com.micaftic.morpher.cloud.client.CloudPreviewQueue<>(2, this::loadCloudPreview);
+        }
+        if (runtime != null) previewQueue.update(visible);
+    }
+
+    public void retryCloudPreviews() { previewFailures.clear(); if (previewQueue != null) previewQueue.retry(); }
+    private void closeCloudPreviews() {
+        if (previewQueue != null) previewQueue.close();
+        previewQueue = null; previewRuntime = null; previewFailures.clear();
+    }
+    private CompletableFuture<?> loadCloudPreview(CloudAssetSummary summary) {
+        var expected = previewRuntime;
+        long generation = screenGeneration.capture();
+        String instanceId = cloudInstanceId();
+        java.util.function.BooleanSupplier current = () -> screenGeneration.isCurrent(generation)
+                && CloudClientRuntime.state(instanceId) == expected && previewRuntime == expected;
+        if (expected == null || !current.getAsBoolean()) return CompletableFuture.completedFuture(null);
+        String modelId = cloudModelId(summary);
+        expected.assetCatalog().upsert(summary);
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        ClientModelManager.ensureCloudRuntime(modelId, CloudAssetImportName.fileName(summary), current,
+                () -> expected.assetMaterialization().ensure(summary.ref()),
+                () -> expected.assets().authorizeDisplay(summary.ref()), error -> {
+                    if (error != null) result.completeExceptionally(new IllegalStateException(error.getString()));
+                    else result.complete(null);
+                }, true);
+        return result.whenComplete((ignored,error)->{
+            if(current.getAsBoolean()){
+                if(error==null)previewFailures.remove(modelId);else previewFailures.put(modelId,rootMessage(error));
+            }
+        });
+    }
+
+    private long cloudApplyRequest;
+    public void importCloudAsset(CloudAssetSummary summary, Consumer<Component> callback) {
+        long request = ++cloudApplyRequest;
+        long generation = this.screenGeneration.capture();
+        String instanceId = cloudInstanceId();
+        CloudClientRuntime.RuntimeState expectedRuntime = CloudClientRuntime.state(instanceId);
+        if (expectedRuntime == null) { callback.accept(Component.translatable("gui.sparkle_morpher.cloud.disconnected")); return; }
+        String modelId = cloudIdentity(expectedRuntime, summary).runtimeModelId();
+        expectedRuntime.assetCatalog().upsert(summary);
+        boolean previouslyApplied = false;
+        try { previouslyApplied = CloudModelSelectionStore.recent(instanceId).stream().anyMatch(entry -> entry.ref().equals(summary.ref())); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); }
+        boolean restore = previouslyApplied;
+        ClientModelManager.ensureCloudRuntime(modelId, CloudAssetImportName.fileName(summary),
+                () -> request == cloudApplyRequest && screenGeneration.isCurrent(generation) && CloudClientRuntime.state(instanceId) == expectedRuntime
+                        && !expectedRuntime.assetMaterialization().isClosed(),
+                () -> restore ? expectedRuntime.assetMaterialization().ensurePreviouslyApplied(summary.ref())
+                        : expectedRuntime.assetMaterialization().ensure(summary.ref()),
+                () -> expectedRuntime.assets().authorizeDisplay(summary.ref()), callback, false);
+    }
+    private static CloudAssetIdentity cloudIdentity(CloudClientRuntime.RuntimeState runtime, CloudAssetSummary summary) {
+        return new CloudAssetIdentity(runtime.instance().instanceId(), "catalog", summary.ref().assetId(),
+                Long.toString(summary.ref().revision()), summary.ref().rawSha256());
+    }
+    public void markModelUsed(String modelId) {
+        ClientModelManager.markModelUsed(modelId);
+    }
+
+    public boolean isGpuCacheTrimmed(String modelId) {
+        return ClientModelManager.isGpuCacheTrimmed(modelId);
+    }
+
+    public void rememberSelectedModel(String modelId, String textureId) {
+        ClientModelManager.rememberSelectedModel(modelId, textureId);
+    }
+
+    // ================================================================
+    // 应用选择：写玩家选择 / 发包切换模型
+    // ================================================================
+
+    /**
+     * 应用模型 + 贴图（原 {@code applyModelAndTexture}），结果由 Screen 决定文案。
+     *
+     * @param selectionTarget     外部选择回调（女仆 / NPC 面板），可为 null
+     * @param rememberPlayerSelection 是否写入玩家自己的模型选择
+     */
+    public ApplyResult applyModel(String modelId, String textureId, BiConsumer<String, String> selectionTarget, boolean rememberPlayerSelection) {
+        if (selectionTarget != null) {
+            if (rememberPlayerSelection) {
+                ClientModelManager.rememberSelectedModel(modelId, textureId);
+            }
+            selectionTarget.accept(modelId, textureId);
+            return ApplyResult.REQUESTED_TARGET;
+        }
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) {
+            return ApplyResult.NO_PLAYER;
+        }
+        Optional<PlayerCapability> capability = PlayerCapability.get(player);
+        if (capability.isEmpty()) {
+            return ApplyResult.NO_CAPABILITY;
+        }
+        capability.ifPresent(cap -> {
+            if (rememberPlayerSelection) {
+                ClientModelManager.rememberSelectedModel(modelId, textureId);
+            }
+            cap.initModelWithTexture(modelId, textureId);
+                  var selectedLocalSource = ClientModelManager.MODEL_LIBRARY.source(modelId);
+                  if (selectedLocalSource != null && selectedLocalSource.type() == com.micaftic.morpher.core.model.ModelSourceType.LOCAL) cap.setForceDisabled(false);
+        });
+        com.micaftic.morpher.cloud.client.CloudPlayerModelSync.publishCurrentSelection();
+        return ApplyResult.APPLIED_TO_PLAYER;
+    }
+
+    /** 切换收藏（原 {@code toggleSelectedStar}）；无法操作时返回 false。 */
+    public boolean toggleStar(String modelId) {
+        if (modelId == null || modelId.isBlank() || Minecraft.getInstance().player == null) {
+            return false;
+        }
+        return LocalStarModelsStore.toggle(modelId);
+    }
+
+    // ================================================================
+    // 贴图资源：GPU 上传定位（原 Screen 内直接调用 UploadManager）
+    // ================================================================
+
+    /** 取出贴图可用的资源位置；无法定位时返回 null。 */
+    public ResourceLocation textureLocation(AbstractTexture texture, int fallbackWidth) {
+        IResourceLocatable locatable = UploadManager.getOrCreateLocatable(texture, true);
+        if (locatable == null && texture instanceof OuterFileTexture) {
+            locatable = UploadManager.getOrCreateLocatableWithSize(texture, true, Math.max(64, fallbackWidth));
+        }
+        return locatable == null ? null : locatable.getResourceLocationOrNull();
+    }
+
+    // ================================================================
+    // 配置读写：设置页里的「业务性」变更
+    // ================================================================
+
+    public boolean privacyModeConfigured() {
+        return PrivacyMode.isConfigured();
+    }
+
+    public void togglePrivacyMode() {
+        boolean enabled = !PrivacyMode.isConfigured();
+        GeneralConfig.PRIVACY_MODE.set(enabled);
+        GeneralConfig.PRIVACY_MODE.save();
+        PrivacyMode.onConfigChanged(enabled);
+    }
+
+    public boolean javaVectorRendererEnabled() {
+        return safeBool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER);
+    }
+
+    public void toggleJavaVectorRenderer() {
+        boolean next = !safeBool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER);
+        GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER.set(next);
+        GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER.save();
+        VectorApiCapability.warnIfRequested(next);
+    }
+
+    public GeneralConfig.NativeSimdPolicy nativeSimdPolicy() {
+        return GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE);
+    }
+
+    public void cycleNativeSimdPolicy() {
+        GeneralConfig.NativeSimdPolicy current = nativeSimdPolicy();
+        GeneralConfig.NativeSimdPolicy next = switch (current) {
+            case OFF -> GeneralConfig.NativeSimdPolicy.SAFE;
+            case SAFE -> GeneralConfig.NativeSimdPolicy.AGGRESSIVE;
+            case AGGRESSIVE -> GeneralConfig.NativeSimdPolicy.OFF;
+        };
+        GeneralConfig.NATIVE_SIMD_POLICY.set(next);
+        GeneralConfig.NATIVE_SIMD_POLICY.save();
+
+    }
+
+
+
+
+
+
+
+    public boolean gpuRendererSelected() {
+        boolean gpu = safeBool(GeneralConfig.USE_GPU_RENDERER);
+        boolean compatibility = safeBool(GeneralConfig.USE_COMPATIBILITY_RENDERER);
+        if (gpu == compatibility) {
+            setRendererMode(gpu);
+            compatibility = !gpu;
+        }
+        return gpu && !compatibility;
+    }
+
+    public void setRendererMode(boolean useGpuRenderer) {
+        GeneralConfig.USE_COMPATIBILITY_RENDERER.set(!useGpuRenderer);
+        GeneralConfig.USE_COMPATIBILITY_RENDERER.save();
+        GeneralConfig.USE_GPU_RENDERER.set(useGpuRenderer);
+        GeneralConfig.USE_GPU_RENDERER.save();
+    }
+
+    // ================================================================
+    // 内部工具（从 Screen 搬运，逻辑不变）
+    // ================================================================
+
+    private static boolean safeBool(ModConfigSpec.BooleanValue value) {
+        try {
+            return value.get();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** 去掉导入文件名末尾的模型扩展名（原 Screen 内 {@code stripImportExtension}）。 */
+    static String stripImportExtension(String fileName) {
+        String lower = fileName.toLowerCase(Locale.ROOT);
+        for (String extension : new String[]{".ysm", ".zip", ".bbmodel", ".gltf", ".glb"}) {
+            if (lower.endsWith(extension)) {
+                return fileName.substring(0, fileName.length() - extension.length());
+            }
+        }
+        return fileName;
+    }
+
+    /** 取异常根因消息（原 Screen 内 {@code rootMessage}）。 */
+    static String rootMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
+
+    private String cloudStoreFailure = "";
+    private void reportCloudStoreFailure(RuntimeException error) {
+        String message = rootMessage(error);
+        if (message.equals(cloudStoreFailure)) return;
+        cloudStoreFailure = message;
+        com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM] Cloud favorites could not be saved or loaded", error);
+        long generation = this.screenGeneration.capture();
+        Minecraft.getInstance().execute(() -> this.screenGeneration.completeIfCurrent(generation,
+                () -> this.host.postStatus(Component.translatable("gui.sparkle_morpher.model_panel.cloud.favorite_failed", message), ChatFormatting.RED)));
+    }
+    private void refreshCloudSelectionMetadata(String instanceId, List<CloudAssetSummary> entries) {
+        try { CloudModelSelectionStore.refreshSummaries(instanceId, entries); }
+        catch (RuntimeException error) { reportCloudStoreFailure(error); }
+    }
+    public void setCloudFavorites(List<CloudAssetSummary> entries, boolean favorite) {
+        if (!cloudAvailable()) throw new IllegalStateException("Cloud is not connected");
+        CloudModelSelectionStore.setFavorites(cloudInstanceId(), entries, favorite);
+    }
+
+}

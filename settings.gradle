@@ -9,5 +9,4 @@ pluginManagement {
 
 rootProject.name = 'sparkle_morpher'
 
-include 'common'
 include 'fabric'

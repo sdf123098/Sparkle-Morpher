@@ -1,0 +1,39 @@
+# Run / IDE 运行产物
+run/
+.vscode/
+
+# Build
+build/
+dist/
+out/
+
+# Gradle
+.gradle/
+!gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.eclipse/
+.settings/
+.classpath
+.project
+
+# CodeGraph
+.codegraph/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# 根目录构建产物 jar（gradle/wrapper/gradle-wrapper.jar 除外）
+/*.jar
+
+*.class
+
+# 运行时日志（游戏/测试产生，勿入库）
+logs/
+common/logs/

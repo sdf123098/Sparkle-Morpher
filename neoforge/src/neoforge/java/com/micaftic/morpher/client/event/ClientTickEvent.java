@@ -1,0 +1,86 @@
+package com.micaftic.morpher.client.event;
+
+import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.audio.ObjectPool;
+import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.diagnostics.FirstPersonRenderDiagnostics;
+import com.micaftic.morpher.client.compat.ClientRenderCompatibilityRegistry;
+import com.micaftic.morpher.client.gui.resource.download.DownloadQueue;
+import com.micaftic.morpher.client.input.InputStateKey;
+import com.micaftic.morpher.client.upload.UploadManager;
+import com.micaftic.morpher.cloud.client.CloudClientRuntime;
+import com.micaftic.morpher.client.gui.CloudManagementScreen;
+import com.micaftic.morpher.cloud.client.CloudMinecraftEntityProviders;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+
+@EventBusSubscriber(modid = YesSteveModel.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)
+public final class ClientTickEvent {
+
+    private static int tickCount;
+
+    private static int refreshRate = 60;
+
+    private static final int REFRESH_RATE_UPDATE_INTERVAL_TICKS = 20;
+
+    private static final int OBJECT_POOL_CLEANUP_INTERVAL_TICKS = 10;
+
+    private ClientTickEvent() {
+    }
+
+    @SubscribeEvent
+    public static void onTick(net.neoforged.neoforge.client.event.ClientTickEvent.Pre event) {
+        Minecraft client = Minecraft.getInstance();
+        if (!YesSteveModel.isAvailable()) {
+            return;
+        }
+        tickCount++;
+        InputStateKey.tick();
+        if (!client.isPaused()) com.micaftic.morpher.client.animation.molang.AnimationProgramRuntime.tickInputs();
+        com.micaftic.morpher.client.peer.ClientNetworkPreferences.refresh();
+        com.micaftic.morpher.client.peer.ClientPeerRuntime.tick();
+        CloudMinecraftEntityProviders.tick();
+        com.micaftic.morpher.cloud.client.CloudPlayerModelSync.tick();
+        com.micaftic.morpher.cloud.client.CloudEntityModelSync.tick();
+        com.micaftic.morpher.cloud.client.CloudVehicleModelSync.tick();
+        com.micaftic.morpher.cloud.client.CloudEntityMotionSync.tick();
+        com.micaftic.morpher.cloud.client.CloudProjectileModelSync.tick();
+        CloudClientRuntime.drainClientTasks();
+        if (tickCount % 20 == 0) CloudManagementScreen.tickConnections();
+        UploadManager.processPendingUploads();
+        ClientRenderCompatibilityRegistry.tick();
+        DownloadQueue.tick();
+        ClientModelManager.flushPendingModels();
+
+        runScheduledModelCacheTrim(tickCount, ClientModelManager::trimUnusedGpuCaches);
+        if (tickCount % OBJECT_POOL_CLEANUP_INTERVAL_TICKS == 0) {
+            ObjectPool.cleanup();
+        }
+        if (tickCount % REFRESH_RATE_UPDATE_INTERVAL_TICKS == 0) {
+            refreshRate = client.getWindow().getRefreshRate();
+        }
+        LocalPlayer localPlayer = client.player;
+        if (localPlayer != null) {
+            PlayerCapability.get(localPlayer).ifPresent(cap -> cap.tickAnimations());
+            com.micaftic.morpher.cloud.client.CloudPlayerMotionSync.tickOwner();
+        }
+        FirstPersonRenderDiagnostics.tick(client);
+        ClientModelManager.restorePersistedModelSelectionOnVanillaServer();
+    }
+
+    public static int getTickCount() {
+        return tickCount;
+    }
+
+    public static int getRefreshRate() {
+        return refreshRate;
+    }
+
+    static void runScheduledModelCacheTrim(int tick, Runnable trim) {
+        if ((tick & 63) == 0) trim.run();
+    }
+}

@@ -1,0 +1,61 @@
+package com.micaftic.morpher.core.config;
+
+import com.micaftic.morpher.config.GeneralConfig;
+import com.micaftic.morpher.core.render.NativeSimdPolicy;
+import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.util.List;
+
+/** Stable policy boundary over legacy NeoForge ConfigSpec values. */
+public final class ConfigPolicies {
+    private ConfigPolicies() { }
+    public static Snapshot snapshot() { return new Snapshot(render(), memory(), diagnostics(), privacy()); }
+    public static RenderPolicy render() { return new RenderPolicy(bool(GeneralConfig.DISABLE_SELF_MODEL, false), bool(GeneralConfig.DISABLE_OTHER_MODEL, false), bool(GeneralConfig.DISABLE_SELF_HANDS, false), bool(GeneralConfig.DISABLE_PROJECTILE_MODEL, false), bool(GeneralConfig.DISABLE_VEHICLE_MODEL, false), bool(GeneralConfig.DISABLE_EXTERNAL_FP_ANIM, false), false, true, bool(GeneralConfig.DISABLE_MODEL_GLOW_IN_SHADERPACK, true), bool(GeneralConfig.ANIMATION_DISTANCE_LOD, false)); }
+    /** Face-cull escape hatch; default false keeps upstream bake semantics. */
+    public static boolean disableModelFaceCulling() {
+        return bool(GeneralConfig.DISABLE_MODEL_FACE_CULLING, false);
+    }
+
+    /** Developer-options panel-state writeback gate; default false keeps state immutable from the UI. */
+    public static boolean developerStateWriteback() {
+        return bool(GeneralConfig.DEVELOPER_STATE_WRITEBACK, false);
+    }
+    /**
+     * Model picker presentation default. The model screen seeds its per-session style from this
+     * once and afterwards remembers the user's in-screen override.
+     */
+    public static GeneralConfig.ModelPickerStyle modelPickerStyle() {
+        GeneralConfig.ModelPickerStyle style = value(GeneralConfig.MODEL_PICKER_STYLE, GeneralConfig.ModelPickerStyle.AUTO);
+        return style == null ? GeneralConfig.ModelPickerStyle.AUTO : style;
+    }
+
+    public static MemoryPolicy memory() { return new MemoryPolicy(integer(GeneralConfig.AUDIO_CACHE_MAX_BYTES, 64 * 1024 * 1024), integer(GeneralConfig.MAX_CACHED_GPU_MODELS, 24), bool(GeneralConfig.LAZY_MODEL_LOADING, true), integer(GeneralConfig.MAX_RESIDENT_CPU_MODELS, 64), integer(GeneralConfig.UNUSED_MODEL_TTL_SECONDS, 300)); }
+    public static DiagnosticsPolicy diagnostics() { return new DiagnosticsPolicy(bool(GeneralConfig.ANIMATION_FRAME_PROFILER, false), bool(GeneralConfig.ANIMATION_DEBUG_LOG, false), bool(GeneralConfig.WARN_REPEATED_ANIMATION_EVALUATION, true), bool(GeneralConfig.RESOURCE_STATION_MONITOR_LOG, false), bool(GeneralConfig.NETWORK_ONLINE_DEBUG_LOG, false), bool(GeneralConfig.MODEL_MEMORY_PROFILER, false), bool(GeneralConfig.MODEL_IMPORT_PERFORMANCE_LOG, false), bool(GeneralConfig.INPUT_STATE_DEBUG_LOG, false)); }
+    public static PrivacyPolicy privacy() { return new PrivacyPolicy(bool(GeneralConfig.PRIVACY_MODE, false)); }
+    public static GraphicsPolicy graphics() { return new GraphicsPolicy(NativeSimdPolicy.AGGRESSIVE, bool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false)); }
+    public static AudioPolicy audio() { return new AudioPolicy(decimal(GeneralConfig.SOUND_VOLUME, 100.0)); }
+    public static FeaturePolicy features() { return new FeaturePolicy(false, false, false, true, bool(GeneralConfig.ANIMATION_ROULETTE_DEBUG_LOG, false)); }
+    private static NativeSimdPolicy nativeSimdPolicy(GeneralConfig.NativeSimdPolicy value) { return value == null ? NativeSimdPolicy.AGGRESSIVE : NativeSimdPolicy.valueOf(value.name()); }
+    private static boolean bool(ModConfigSpec.BooleanValue value, boolean fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
+    private static int integer(ModConfigSpec.IntValue value, int fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
+    private static double decimal(ModConfigSpec.DoubleValue value, double fallback) { try { return value == null ? fallback : value.get(); } catch (Exception ignored) { return fallback; } }
+    private static <T> T value(ModConfigSpec.ConfigValue<T> value, T fallback) { try { T result = value == null ? null : value.get(); return result == null ? fallback : result; } catch (Exception ignored) { return fallback; } }
+    /** [FP-COMPAT] first-person arm diagnostics; default false keeps release builds silent. */
+    public static boolean firstPersonRenderDiagnostics() {
+        return bool(GeneralConfig.FIRST_PERSON_RENDER_DIAGNOSTICS, false);
+    }
+
+    /** [FP-COMPAT] substitute SPM's arm inside Punchy!'s render pass; default false until visually verified. */
+    public static boolean punchyArmBridge() {
+        return bool(GeneralConfig.FIRST_PERSON_PUNCHY_ARM_BRIDGE, false);
+    }
+
+    public record Snapshot(RenderPolicy render, MemoryPolicy memory, DiagnosticsPolicy diagnostics, PrivacyPolicy privacy) { }
+    public record RenderPolicy(boolean disableSelfModel, boolean disableOtherModel, boolean disableSelfHands, boolean disableProjectileModel, boolean disableVehicleModel, boolean disableExternalFirstPersonAnimation, boolean useCompatibilityRenderer, boolean useGpuRenderer, boolean disableModelGlowInShaderpack, boolean animationDistanceLod) { }
+    public record MemoryPolicy(int audioCacheMaxBytes, int maxCachedGpuModels, boolean lazyModelLoading, int maxResidentCpuModels, int unusedModelTtlSeconds) { }
+    public record DiagnosticsPolicy(boolean animationFrameProfiler, boolean animationDebugLog, boolean warnRepeatedAnimationEvaluation, boolean resourceStationMonitorLog, boolean networkOnlineDebugLog, boolean modelMemoryProfiler, boolean modelImportPerformanceLog, boolean inputStateDebugLog) { }
+    public record PrivacyPolicy(boolean enabled) { }
+    public record GraphicsPolicy(NativeSimdPolicy nativeSimdPolicy, boolean experimentalJavaVectorRenderer) { }
+    public record AudioPolicy(double soundVolumePercent) { }
+    public record FeaturePolicy(boolean experimentalFallbackElytraWithoutLocator, boolean experimentalEnableElytraForDefaultAndMiscModels, boolean vulkanExperimentalCapabilityProbe, boolean worldRendererHook, boolean animationRouletteDebugLog) { }
+}

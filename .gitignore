@@ -121,3 +121,13 @@ __pycache__/
 
 # 独立站点仓库（内嵌 Git，勿纳入模组仓库）
 site/micaftic-labs/
+
+# merged-layout: neoforge 是嵌套的独立 Gradle 构建
+neoforge/local-maven/
+neoforge/runs/
+neoforge/logs/
+neoforge/common/logs/
+common/logs/
+__pycache__/
+*.pyc.xdg/
+token/

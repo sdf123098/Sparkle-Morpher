@@ -1,6 +1,27 @@
 plugins {
     id 'com.gradleup.shadow'
 }
+sourceSets {
+    main {
+        java {
+            srcDir rootProject.file('common/src/main/java')
+            if (!rootProject.ext.isCurseForgeDist) {
+                srcDir rootProject.ext.distributionNativeJavaSourceDir
+            }
+        }
+        resources {
+            srcDir rootProject.file('common/src/main/resources')
+            exclude 'native/**'
+        }
+    }
+    // R0: JVM 单测挂靠 fabric 模块，测试代码随核心代码放 common/src/test/java
+    test {
+        java {
+            srcDir rootProject.file('common/src/test/java')
+        }
+    }
+}
+
 
 loom {
     accessWidenerPath = file('src/main/resources/sparkle_morpher.accesswidener')
@@ -14,13 +35,6 @@ architectury {
 }
 
 configurations {
-    common {
-        canBeResolved = true
-        canBeConsumed = false
-    }
-    compileClasspath.extendsFrom common
-    runtimeClasspath.extendsFrom common
-    developmentFabric.extendsFrom common
 
     // Files in this configuration will be bundled into your mod using the Shadow plugin.
     // Don't use the `shadow` configuration from the plugin itself as it's meant for excluding files.
@@ -31,6 +45,8 @@ configurations {
 }
 
 dependencies {
+    // @ExpectPlatform 注解来源（原由 architectury 插件间接提供，删 common 模块后需显式声明）
+    compileOnly "dev.architectury:architectury-injectables:1.0.10"
     // Loom 1.14 + JDK21 源码重映射（Mercury）需要 javax.annotation；缺失会导致
     // cardinal-components 等依赖的 sources 重映射报 Pb(347) 并在配置阶段失败。
     implementation 'com.google.code.findbugs:jsr305:3.0.2'
@@ -58,8 +74,6 @@ dependencies {
 
     modCompileOnly "com.terraformersmc:modmenu:$rootProject.modmenu_version"
 
-    common(project(path: ':common', configuration: 'namedElements')) { transitive = false }
-    shadowBundle project(path: ':common', configuration: 'transformProductionFabric')
 }
 
 processResources {
@@ -69,8 +83,6 @@ processResources {
     filesMatching('fabric.mod.json') {
         expand version: resourceModVersion
     }
-
-    from(project(':common').sourceSets.main.resources)
     from(rootProject.file('LICENSE.txt')) {
         rename { 'LICENSE' }
     }

@@ -1,0 +1,104 @@
+# SparkleMorpher 1.2.2 §10 CI / Regression Gate
+# 同一份模板同步到六分支（作为 §4.6 同步清单的一部分维护）。
+# 每分支独立 job：common tests（含依赖方向边界测试）→ compile → build → artifact smoke。
+name: CI
+
+on:
+  push:
+    branches: [main, fa26.1.2, fa26.2, neo1.21.1, neo26.1.2, neo26.2]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
+
+concurrency:
+  group: ci-${{ github.ref_name }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'push' || matrix.branch == github.ref_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: main
+            java: '21'
+            gradle_task: ':fabric:build'
+            jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa1.21.1.jar'
+            mod_meta: 'fabric.mod.json'
+          - branch: fa26.1.2
+            java: '25'
+            gradle_task: ':fabric:build'
+            jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa26.1.x.jar'
+            mod_meta: 'fabric.mod.json'
+          - branch: fa26.2
+            java: '25'
+            gradle_task: ':fabric:build'
+            jar_glob: 'fabric/build/libs/sparkle-morpher-*-fa26.2.jar'
+            mod_meta: 'fabric.mod.json'
+          - branch: neo1.21.1
+            java: '21'
+            gradle_task: ':build'
+            jar_glob: 'build/libs/sparkle-morpher-*-neo1.21.1.jar'
+            mod_meta: 'META-INF/neoforge.mods.toml'
+          - branch: neo26.1.2
+            java: '25'
+            gradle_task: ':build'
+            jar_glob: 'build/libs/sparkle-morpher-*-neo26.1.x.jar'
+            mod_meta: 'META-INF/neoforge.mods.toml'
+          - branch: neo26.2
+            java: '25'
+            gradle_task: ':build'
+            jar_glob: 'build/libs/sparkle-morpher-*-neo26.2.jar'
+            mod_meta: 'META-INF/neoforge.mods.toml'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref_name || matrix.branch }}
+          fetch-depth: 1
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: gradle
+
+      - name: Grant gradlew executable bit
+        run: chmod +x gradlew
+
+      - name: Build (${{ matrix.gradle_task }}) — common tests + compile + build
+        run: ./gradlew ${{ matrix.gradle_task }} --no-daemon --console=plain
+        env:
+          CI: 'true'
+
+      - name: Artifact smoke — jar exists and contains expected entries
+        shell: bash
+        run: |
+          set -eu
+          JAR=$(ls ${{ matrix.jar_glob }} 2>/dev/null | head -1)
+          test -n "$JAR" || { echo "::error::no jar matched ${{ matrix.jar_glob }}"; exit 1; }
+          echo "smoke jar: $JAR"
+          unzip -l "$JAR" | grep -q 'com/micaftic/morpher/YesSteveModel.class' \
+            || { echo "::error::missing YesSteveModel.class in $JAR"; exit 1; }
+          unzip -l "$JAR" | grep -q '${{ matrix.mod_meta }}' \
+            || { echo "::error::missing ${{ matrix.mod_meta }} in $JAR"; exit 1; }
+          unzip -l "$JAR" | grep -q 'natives/windows-x64/ysm-core.dll' \
+            || { echo "::error::missing natives in $JAR"; exit 1; }
+          unzip -l "$JAR" | grep -q 'native-manifest.json' \
+            || { echo "::error::missing native-manifest.json in $JAR"; exit 1; }
+          echo "smoke OK"
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.branch }}-jars
+          path: |
+            ${{ matrix.jar_glob }}
+            **/build/test-results/test/TEST-*.xml
+          if-no-files-found: ignore
