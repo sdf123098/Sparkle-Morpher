@@ -7,7 +7,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CloudThumbnailPolicyTest {
@@ -65,15 +64,15 @@ class CloudThumbnailPolicyTest {
         assertEquals("", unknownStatus.thumbnailStatus());
         assertFalse(absolute.thumbnailReady());
         assertFalse(unknownStatus.thumbnailReady());
-        assertNull(REF.thumbnailPath("PRIVATE"));
-        assertNull(REF.thumbnailPath(null));
     }
 
     @Test
-    void thumbnailPathMirrorsTheAssetIdentityEncoding() {
-        CloudAssetRef ref = new CloudAssetRef("gooner/actual gooner shit/笙黑 26 3 28", 3, "b".repeat(64));
-        assertEquals("/v1/public/assets/gooner%2Factual%20gooner%20shit%2F%E7%AC%99%E9%BB%91%2026%203%2028"
-                + "/revisions/3/thumbnail", ref.thumbnailPath("PUBLIC"));
+    void anEncodedServerSuppliedPathSurvivesTheCatalogRoundTrip() {
+        CloudAssetSummary encoded = summary("/v1/public/assets/gooner%2Factual%20gooner%20shit%2F%E7%AC%99%E9%BB%91%2026%203%2028"
+                + "/revisions/3/thumbnail", "ready", "PUBLIC");
+        assertTrue(encoded.thumbnailReady());
+        assertTrue(CloudThumbnailPolicy.usesThumbnail(encoded));
+        assertEquals(List.of(), CloudThumbnailPolicy.legacyPreviews(List.of(encoded)));
     }
 
     @Test
