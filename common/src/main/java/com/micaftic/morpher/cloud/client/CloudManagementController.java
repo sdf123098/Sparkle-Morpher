@@ -5,6 +5,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import com.micaftic.morpher.util.LocalModelSelectionStore;
+import org.apache.commons.lang3.tuple.Pair;
 
 /**
  * UI-neutral management facade for instance, scope, target and ACL screens.
@@ -15,6 +17,7 @@ public final class CloudManagementController {
     private final CloudConnectionController connection;
     private final Path cacheRoot;
     private final String clientVersion;
+    private final java.util.function.Supplier<Pair<String, String>> savedSelection;
     private final CloudRequestGeneration requestGeneration = new CloudRequestGeneration();
     private volatile List<CloudScopeClient.CloudScope> scopes = List.of();
     private volatile List<CloudScopeClient.CloudTarget> targets = List.of();
@@ -29,15 +32,31 @@ public final class CloudManagementController {
             Path cacheRoot,
             String clientVersion
     ) {
+        this(registry, connection, cacheRoot, clientVersion, LocalModelSelectionStore::load);
+    }
+
+    CloudManagementController(
+            CloudInstanceRegistry registry,
+            CloudConnectionController connection,
+            Path cacheRoot,
+            String clientVersion,
+            java.util.function.Supplier<Pair<String, String>> savedSelection
+    ) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.connection = Objects.requireNonNull(connection, "connection");
         this.cacheRoot = Objects.requireNonNull(cacheRoot, "cacheRoot");
         if (clientVersion == null || clientVersion.isBlank()) throw new IllegalArgumentException("clientVersion must not be blank");
         this.clientVersion = clientVersion;
+        this.savedSelection = Objects.requireNonNull(savedSelection, "savedSelection");
     }
 
     public void loadInstances() throws IOException {
         registry.load();
+        var saved = savedSelection.get();
+        if (saved != null) {
+            CloudSelectedModelRecovery.preferredInstanceId(saved.getLeft(), registry.profiles())
+                    .ifPresent(registry::select);
+        }
         registry.selected().ifPresent(connection::select);
     }
 

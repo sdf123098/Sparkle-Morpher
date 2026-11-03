@@ -13,7 +13,7 @@ public record CloudAssetIdentity(String instance, String tenant, String assetId,
     public CloudAssetIdentity {
         instance = segment(instance, "instance");
         tenant = segment(tenant, "tenant");
-        assetId = segment(assetId, "assetId");
+        assetId = assetId(assetId);
         revision = segment(revision, "revision");
         contentHash = Objects.requireNonNull(contentHash, "contentHash").trim().toLowerCase(Locale.ROOT);
         if (!contentHash.matches("[0-9a-f]{64}")) {
@@ -53,6 +53,16 @@ public record CloudAssetIdentity(String instance, String tenant, String assetId,
         String normalized = Objects.requireNonNull(value, name).trim();
         if (normalized.isEmpty() || normalized.indexOf(':') >= 0 || normalized.indexOf('/') >= 0) {
             throw new IllegalArgumentException(name + " must be a non-empty path-safe segment");
+        }
+        return normalized;
+    }
+
+    private static String assetId(String value) {
+        String normalized = Objects.requireNonNull(value, "assetId").trim();
+        if (normalized.isEmpty() || normalized.indexOf(':') >= 0
+                || normalized.getBytes(StandardCharsets.UTF_8).length > 128
+                || normalized.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("assetId must be non-empty, colon-free and at most 128 UTF-8 bytes");
         }
         return normalized;
     }

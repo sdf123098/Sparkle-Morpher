@@ -74,6 +74,8 @@ public class GeneralConfig {
 
     public static ForgeConfigSpec.BooleanValue LAZY_MODEL_LOADING;
 
+    public static ForgeConfigSpec.BooleanValue CLOUD_CDN_CACHE;
+
     public static ForgeConfigSpec.EnumValue<com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset> CLOUD_PERFORMANCE_PRESET;
     public static ForgeConfigSpec.IntValue CLOUD_UPLOAD_CONCURRENCY;
     public static ForgeConfigSpec.IntValue CLOUD_PROCESSING_CONCURRENCY;
@@ -225,6 +227,8 @@ public class GeneralConfig {
 	       MAX_CACHED_GPU_MODELS = builder.defineInRange("MaxCachedGpuModels", 24, 0, 512);
         builder.comment("Load local and cached server models only when they are first rendered or selected.");
         LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
+        builder.comment("Use the public CDN-cached content route for Cloud assets explicitly marked PUBLIC.");
+        CLOUD_CDN_CACHE = builder.define("CloudCdnCache", true);
         builder.comment("Use local models only and block all Sparkle Morpher client-to-server traffic.");
         PRIVACY_MODE = builder.define("PrivacyMode", false);
         CLOUD_PERFORMANCE_PRESET = builder.comment("Client-side SPM Cloud performance preset. UNLIMITED adds no client concurrency cap; server limits still apply.").defineEnum("CloudPerformancePreset", com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.UNLIMITED);

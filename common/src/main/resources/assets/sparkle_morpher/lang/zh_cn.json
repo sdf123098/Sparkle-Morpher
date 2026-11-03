@@ -516,6 +516,7 @@
   "gui.sparkle_morpher.model_panel.setting.input_debug_log": "输入调试日志",
   "gui.sparkle_morpher.model_panel.setting.loading_state_disabled": "禁用加载状态",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "按需加载模型",
+  "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Cloud CDN 缓存加速",
   "message.sparkle_morpher.privacy_mode.enabled": "隐私模式已开启：已阻止服务端模型同步以及 Sparkle Morpher 的全部客户端上行数据。",
   "message.sparkle_morpher.privacy_mode.reconnect": "隐私模式将在本次连接中保持开启；重新连接后才会恢复服务端同步。",
   "gui.sparkle_morpher.model_panel.model.on_demand": "首次使用时加载",

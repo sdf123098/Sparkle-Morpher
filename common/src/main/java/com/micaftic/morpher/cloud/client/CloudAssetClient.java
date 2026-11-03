@@ -131,9 +131,14 @@ public final class CloudAssetClient {
      */
     public CompletableFuture<MemoryAsset> downloadForDisplay(CloudAssetRef ref, String exactCatalogFormat,
                                                              long maximumBytes) {
+        return downloadForDisplay(ref, exactCatalogFormat, null, maximumBytes);
+    }
+
+    public CompletableFuture<MemoryAsset> downloadForDisplay(CloudAssetRef ref, String exactCatalogFormat,
+                                                             String visibility, long maximumBytes) {
         java.util.Objects.requireNonNull(ref, "ref");
         DISPLAY_DOWNLOADS.incrementAndGet();
-        var request = http.getBoundedBytes(ref.contentPath(), maximumBytes);
+        var request = http.getBoundedBytes(ref.contentPath(visibility, CloudCdnPolicy.enabled()), maximumBytes);
         var verified = request.thenApply(response -> {
             if (response.statusCode() == 206) {
                 throw new CloudHttpException(206,
