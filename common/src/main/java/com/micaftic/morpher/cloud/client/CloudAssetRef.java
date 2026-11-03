@@ -34,12 +34,6 @@ public record CloudAssetRef(String assetId, long revision, String rawSha256) {
         return prefix + pathSegment() + "/revisions/" + revision + "/content";
     }
 
-    /** Anonymous immutable thumbnail route; {@code null} for anything that is not PUBLIC. */
-    public String thumbnailPath(String visibility) {
-        if (!"PUBLIC".equals(visibility)) return null;
-        return "/v1/public/assets/" + pathSegment() + "/revisions/" + revision + "/thumbnail";
-    }
-
     private String pathSegment() {
         return URLEncoder.encode(assetId, StandardCharsets.UTF_8).replace("+", "%20").replace(".", "%2E");
     }
