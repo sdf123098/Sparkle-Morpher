@@ -537,6 +537,8 @@
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Sonde des capacités Vulkan",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "Chargement des modèles à la demande",
   "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Accélération du cache CDN Cloud",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache": "Cache disque Cloud",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "Taille du cache disque",
   "message.sparkle_morpher.privacy_mode.enabled": "Mode privé activé. La synchronisation des modèles avec le serveur et tout le trafic client-serveur de Sparkle Morpher sont bloqués.",
   "message.sparkle_morpher.privacy_mode.reconnect": "Le mode privé restera actif jusqu'à votre déconnexion. Reconnectez-vous pour reprendre la synchronisation avec le serveur.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "Chargé à la première utilisation",

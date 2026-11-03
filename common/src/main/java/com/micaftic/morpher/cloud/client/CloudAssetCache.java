@@ -6,7 +6,13 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Objects;
 
-/** Verifies Cloud display bytes against the trusted exact revision without touching the filesystem. */
+/**
+ * Verifies Cloud display bytes against the trusted exact revision.
+ *
+ * <p>Hashing here stays pure: this class never chooses a storage location. Only
+ * {@link CloudDiskCache} may write display bytes, and it re-derives the same
+ * digest as the file name so a cached blob is self-verifying.</p>
+ */
 public final class CloudAssetCache {
 
     static String verify(CloudAssetRef ref, byte[] bytes) {

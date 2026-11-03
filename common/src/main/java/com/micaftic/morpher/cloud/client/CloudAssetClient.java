@@ -19,14 +19,28 @@ public final class CloudAssetClient {
 
     private static final java.util.concurrent.atomic.AtomicLong DISPLAY_DOWNLOADS = new java.util.concurrent.atomic.AtomicLong();
     public static long displayDownloadCount() { return DISPLAY_DOWNLOADS.get(); }
+    /** Every display format a cached object may be replayed as; the bytes alone cannot tell. */
+    private static final java.util.Set<String> DISPLAY_FORMATS = java.util.Set.of("ysm", "zip", "bbmodel", "gltf", "glb");
     private final CloudHttpClient http;
+    /** Optional content-addressed store; {@code null} keeps the pure memory-only behaviour. */
+    private final CloudDiskCache diskCache;
+    private final java.util.concurrent.ConcurrentMap<CloudAssetRef, CompletableFuture<Boolean>> displayAccess =
+            new java.util.concurrent.ConcurrentHashMap<>();
     private final CloudCatalogPageCache pages = new CloudCatalogPageCache();
     private volatile boolean publicBrowseRequiresSearch;
     public void clearPageCache() { pages.clear(); }
 
     public CloudAssetClient(CloudHttpClient http) {
-        this.http = java.util.Objects.requireNonNull(http, "http");
+        this(http, null);
     }
+
+    public CloudAssetClient(CloudHttpClient http, CloudDiskCache diskCache) {
+        this.http = java.util.Objects.requireNonNull(http, "http");
+        this.diskCache = diskCache;
+    }
+
+    /** True when this client may serve an already downloaded revision without a request. */
+    public boolean cachesDownloads() { return diskCache != null; }
 
     public CompletableFuture<List<CloudAssetSummary>> list() {
         return listPage("accessible", "", null, 80).thenApply(CloudAssetPage::entries);
@@ -128,6 +142,11 @@ public final class CloudAssetClient {
     /**
      * Downloads one exact revision into memory under a hard budget and verifies its SHA-256
      * before any parser sees it. A 206 response is rejected because it is not the complete object.
+     *
+     * <p>With a {@link CloudDiskCache} attached the revision is served from disk once it has been
+     * fetched before; because those bytes never reach the server, the display access for that one
+     * revision is revalidated once per runtime before they are handed out, and a refusal drops the
+     * cached blob so a revoked revision can never be replayed.</p>
      */
     public CompletableFuture<MemoryAsset> downloadForDisplay(CloudAssetRef ref, String exactCatalogFormat,
                                                              long maximumBytes) {
@@ -138,6 +157,22 @@ public final class CloudAssetClient {
                                                              String visibility, long maximumBytes) {
         java.util.Objects.requireNonNull(ref, "ref");
         DISPLAY_DOWNLOADS.incrementAndGet();
+        String format = normalizedFormat(exactCatalogFormat);
+        byte[] cached = cachedObject(ref, format, maximumBytes);
+        if (cached != null) {
+            return authorizeDisplayOnce(ref).thenApply(allowed -> {
+                if (!Boolean.TRUE.equals(allowed)) {
+                    diskCache.remove(ref.rawSha256());
+                    throw new SecurityException("Cloud display access denied");
+                }
+                return new MemoryAsset(cached, format);
+            });
+        }
+        return downloadUncached(ref, exactCatalogFormat, visibility, maximumBytes);
+    }
+
+    private CompletableFuture<MemoryAsset> downloadUncached(CloudAssetRef ref, String exactCatalogFormat,
+                                                            String visibility, long maximumBytes) {
         var request = http.getBoundedBytes(ref.contentPath(visibility, CloudCdnPolicy.enabled()), maximumBytes);
         var verified = request.thenApply(response -> {
             if (response.statusCode() == 206) {
@@ -153,7 +188,7 @@ public final class CloudAssetClient {
                         "Cloud display revision is unavailable");
             }
             String format = response.headers().firstValue("x-asset-format").orElse(exactCatalogFormat);
-            if (format == null || !java.util.Set.of("ysm", "zip", "bbmodel", "gltf", "glb").contains(format)) {
+            if (format == null || !DISPLAY_FORMATS.contains(format)) {
                 throw new IllegalArgumentException("Exact Cloud revision parser format is unavailable");
             }
             byte[] bytes = response.body();
@@ -167,10 +202,53 @@ public final class CloudAssetClient {
                         com.micaftic.morpher.core.api.network.state.CloudErrorCode.ASSET_HASH_MISMATCH,
                         "Cloud asset SHA-256 does not match its trusted reference");
             }
+            if (diskCache != null) {
+                // Written on the completion thread, not the render thread, and before the bytes are
+                // handed out: reopening the model immediately afterwards must already hit the cache.
+                diskCache.writeObject(ref.rawSha256(), bytes);
+            }
             return new MemoryAsset(bytes, format);
         });
         verified.whenComplete((ignored, failure) -> { if (verified.isCancelled()) request.cancel(true); });
         return verified;
+    }
+
+    /**
+     * Cached bytes for an exact revision, or {@code null} when the store cannot prove them.
+     * The stored format is not recoverable from model bytes, so a call without a catalog format
+     * deliberately falls through to the network.
+     */
+    private byte[] cachedObject(CloudAssetRef ref, String format, long maximumBytes) {
+        if (diskCache == null || format == null) return null;
+        byte[] bytes = diskCache.readObject(ref.rawSha256());
+        if (bytes == null) return null;
+        if (bytes.length > maximumBytes || !CloudAssetCache.sha256(bytes).equals(ref.rawSha256())) {
+            diskCache.remove(ref.rawSha256());
+            return null;
+        }
+        return bytes;
+    }
+
+    private static String normalizedFormat(String format) {
+        if (format == null) return null;
+        String normalized = format.trim().toLowerCase(java.util.Locale.ROOT);
+        return DISPLAY_FORMATS.contains(normalized) ? normalized : null;
+    }
+
+    /**
+     * One access check per revision per runtime, for bytes that never travel over the network.
+     * Only an explicit grant is remembered; any failure is forgotten so a later attempt re-asks.
+     */
+    private CompletableFuture<Boolean> authorizeDisplayOnce(CloudAssetRef ref) {
+        CompletableFuture<Boolean> remembered = displayAccess.get(ref);
+        if (remembered != null) return remembered;
+        CompletableFuture<Boolean> granted = authorizeDisplay(ref);
+        CompletableFuture<Boolean> existing = displayAccess.putIfAbsent(ref, granted);
+        if (existing != null) return existing;
+        granted.whenComplete((allowed, failure) -> {
+            if (failure != null || !Boolean.TRUE.equals(allowed)) displayAccess.remove(ref, granted);
+        });
+        return granted;
     }
 
     public String instanceId() { return http.instance().instanceId(); }
