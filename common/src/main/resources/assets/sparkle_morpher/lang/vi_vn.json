@@ -536,6 +536,7 @@
   "gui.sparkle_morpher.model_panel.setting.opengl_gui_blur": "Làm mờ GUI OpenGL",
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Dò khả năng Vulkan",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "Tải mô hình theo yêu cầu",
+  "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Tăng tốc bộ nhớ đệm Cloud CDN",
   "message.sparkle_morpher.privacy_mode.enabled": "Đã bật chế độ riêng tư. Đồng bộ mô hình máy chủ và mọi lưu lượng từ máy khách tới máy chủ của Sparkle Morpher đều bị chặn.",
   "message.sparkle_morpher.privacy_mode.reconnect": "Chế độ riêng tư sẽ duy trì cho đến khi bạn ngắt kết nối. Kết nối lại để tiếp tục đồng bộ máy chủ.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "Tải khi dùng lần đầu",
