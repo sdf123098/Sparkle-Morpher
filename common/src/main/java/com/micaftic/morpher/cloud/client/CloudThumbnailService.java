@@ -5,7 +5,6 @@ import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.core.network.NetworkAccess;
 
-import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -118,11 +117,6 @@ public final class CloudThumbnailService {
     }
 
     /** A missing, anonymous or malformed image is a silent placeholder, never an error. */
-    private static OuterFileTexture textureOf(HttpResponse<byte[]> response, Throwable failure) {
-        if (failure != null || response == null || response.statusCode() != 200) return null;
-        return byteArrayTexture(response.body());
-    }
-
     private static OuterFileTexture byteArrayTexture(byte[] bytes) {
         if (bytes == null || bytes.length == 0 || bytes.length > CloudThumbnailPolicy.MAX_BYTES) return null;
         if (!CloudThumbnailPolicy.isThumbnailPng(bytes)) return null;
