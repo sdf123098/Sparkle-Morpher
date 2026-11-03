@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, fa26.1.2, fa26.2, fa26.3, neo1.21.1, neo26.1.2, neo26.2, neo26.3]
+    branches: [main]
   pull_request:
-    branches: [main, fa26.1.2, fa26.2, fa26.3, neo1.21.1, neo26.1.2, neo26.2, neo26.3]
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '17 2 * * *'
@@ -40,8 +40,10 @@ jobs:
           if event in ('push', 'pull_request'):
               branch = os.environ['BASE_REF'] if event == 'pull_request' else os.environ['REF_NAME']
               rows = [r for r in rows if r['branch'] == branch]
-              assert len(rows) == 1, f'Unregistered build branch: {branch}'
-              rows[0]['ref'] = os.environ['COMMIT']
+              # merged-layout: one branch yields BOTH loader rows (fabric + neoforge)
+              assert rows, f'Unregistered build branch: {branch}'
+              for row in rows:
+                  row['ref'] = os.environ['COMMIT']
           else:
               for row in rows:
                   row['ref'] = row['branch']
@@ -51,7 +53,7 @@ jobs:
 
   build:
     needs: plan
-    name: ${{ matrix.branch }}
+    name: ${{ matrix.diagnostic_branch }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -64,7 +66,9 @@ jobs:
       COMPILE_TASK: ${{ matrix.compile_task }}
       DIAGNOSTIC_BRANCH: ${{ matrix.diagnostic_branch }}
       JAR_GLOB: ${{ matrix.jar_glob }}
+      CURSEFORGE_GLOB: ${{ matrix.curseforge_glob }}
       MOD_META: ${{ matrix.mod_meta }}
+      BUILD_ROOT: ${{ matrix.build_root }}
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -82,7 +86,7 @@ jobs:
       - name: Upload both final JARs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
-          name: ${{ matrix.branch }}-jars
+          name: ${{ matrix.diagnostic_branch }}-jars
           path: |
             ${{ matrix.jar_glob }}
             ${{ matrix.curseforge_glob }}
@@ -91,9 +95,9 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node 24
         with:
-          name: ${{ matrix.branch }}-diagnostics
+          name: ${{ matrix.diagnostic_branch }}-diagnostics
           path: |
-            build/ci-diagnostics/
+            ${{ matrix.build_root }}/build/ci-diagnostics/
             **/build/test-results/test/TEST-*.xml
             **/build/reports/tests/test/
           if-no-files-found: warn
