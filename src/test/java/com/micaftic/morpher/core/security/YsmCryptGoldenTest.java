@@ -98,8 +98,9 @@ class YsmCryptGoldenTest {
     private static final long[] GOLDEN_HASHES_2_1_1 = {-7081843962873028L, 524069205966456912L};
     private static final long[] GOLDEN_HASHES_2_2_0 = {3536502446835589754L, 3378917116431209566L};
     private static final long[] GOLDEN_HASHES_2_3_0 = {8017587047878280630L, -6117626668314282104L};
+    private static final long[] GOLDEN_HASHES_2_3_2 = {-1788900518770611946L, 467703558811033957L};
     /** Current release identity; older vectors remain explicitly covered. */
-    private static final long[] GOLDEN_HASHES = {-1788900518770611946L, 467703558811033957L};
+    private static final long[] GOLDEN_HASHES = {-3693679304372290086L, 4905206600768916004L};
 
     @Test
     void packetEncrypt_goldenBytes() throws Exception {
@@ -120,7 +121,9 @@ class YsmCryptGoldenTest {
                 "sparkle_morpher:model_cache\nmodVersion=2.2.0"), "2.2.0 identity must remain readable");
         assertArrayEquals(GOLDEN_HASHES_2_3_0, ModelCacheKeyDerivation.hashes("model-abc", SERVER_KEY,
                 "sparkle_morpher:model_cache\nmodVersion=2.3.0"), "2.3.0 identity must remain readable");
-        org.junit.jupiter.api.Assertions.assertEquals("sparkle_morpher:model_cache\nmodVersion=2.3.2",YsmCrypt.getModelCacheIdentity());
+        assertArrayEquals(GOLDEN_HASHES_2_3_2, ModelCacheKeyDerivation.hashes("model-abc", SERVER_KEY,
+                "sparkle_morpher:model_cache\nmodVersion=2.3.2"), "2.3.2 identity must remain readable");
+        org.junit.jupiter.api.Assertions.assertEquals("sparkle_morpher:model_cache\nmodVersion=2.3.3",YsmCrypt.getModelCacheIdentity());
         long[] hashes = YsmCrypt.calculateModelHashes("model-abc", SERVER_KEY);
         assertArrayEquals(GOLDEN_HASHES, hashes, "model hashes 必须与 golden 向量一致");
     }

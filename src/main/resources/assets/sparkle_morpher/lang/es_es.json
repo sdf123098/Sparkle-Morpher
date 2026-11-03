@@ -536,6 +536,7 @@
   "gui.sparkle_morpher.model_panel.setting.opengl_gui_blur": "Desenfoque de GUI OpenGL",
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Sondeo de capacidades de Vulkan",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "Carga de modelos bajo demanda",
+  "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Aceleración de caché CDN de Cloud",
   "message.sparkle_morpher.privacy_mode.enabled": "Modo privacidad activado. La sincronización de modelos con el servidor y todo el tráfico de cliente a servidor de Sparkle Morpher están bloqueados.",
   "message.sparkle_morpher.privacy_mode.reconnect": "El modo privacidad permanecerá activo hasta que te desconectes. Vuelve a conectarte para reanudar la sincronización con el servidor.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "Se carga al usarse por primera vez",

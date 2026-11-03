@@ -50,4 +50,44 @@ class CloudColdStartRecoveryTest {
             assertEquals(Set.of("local_model_selection.json","cloud_model_selection.json"),new HashSet<>(Files.list(root).map(p->p.getFileName().toString()).toList()));
         } finally {ModelStoragePaths.withRoot(null);server.stop(0);}
     }
+
+    @Test void previouslyAppliedPublicAssetUsesItsSavedVisibilityForCdnRecovery() throws Exception {
+        byte[] bytes = "public-cold-start".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        var asset = new CloudAssetSummary(new CloudAssetRef("folder/笙黑 +100%", 4, CloudAssetCache.sha256(bytes)),
+                "public skin", "ysm", bytes.length, "PUBLIC");
+        new CloudModelSelectionStore.Index(root.resolve("cloud_model_selection.json")).recordApplied("community", asset);
+        var publicRequests = new AtomicInteger();
+        var authenticatedRequests = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            String rawPath = exchange.getRequestURI().getRawPath();
+            if (rawPath.startsWith("/v1/public/assets/")) {
+                publicRequests.incrementAndGet();
+                assertEquals("/v1/public/assets/folder%2F%E7%AC%99%E9%BB%91%20%2B100%25/revisions/4/content", rawPath);
+                exchange.sendResponseHeaders(200, bytes.length);
+                exchange.getResponseBody().write(bytes);
+            } else {
+                authenticatedRequests.incrementAndGet();
+                exchange.sendResponseHeaders(500, -1);
+            }
+            exchange.close();
+        });
+        server.start();
+        ModelStoragePaths.withRoot(root);
+        try (var delegate = HttpClient.newHttpClient()) {
+            var client = new CloudAssetClient(new CloudHttpClient(
+                    CloudInstanceConfig.v1("community", URI.create("https://cloud.example.test")),
+                    new CloudPlayerPresenceClientTest.LoopbackClient(delegate,
+                            URI.create("http://127.0.0.1:" + server.getAddress().getPort())), "session"));
+            var recovered = CloudClientRuntime.RuntimeState.downloadCatalogAsset(
+                    client, new CloudAssetCatalogStore(), () -> 1024, asset.ref()).get(10, TimeUnit.SECONDS);
+            assertArrayEquals(bytes, recovered.bytes());
+            assertEquals("ysm", recovered.format());
+            assertEquals(1, publicRequests.get());
+            assertEquals(0, authenticatedRequests.get());
+        } finally {
+            ModelStoragePaths.withRoot(null);
+            server.stop(0);
+        }
+    }
 }

@@ -525,6 +525,7 @@
   "gui.sparkle_morpher.model_panel.setting.input_debug_log": "Input debug log",
   "gui.sparkle_morpher.model_panel.setting.loading_state_disabled": "Loading state disabled",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "On-demand model loading",
+  "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Cloud CDN cache acceleration",
   "message.sparkle_morpher.privacy_mode.enabled": "Privacy mode enabled. Server model sync and all Sparkle Morpher client-to-server traffic are blocked.",
   "message.sparkle_morpher.privacy_mode.reconnect": "Privacy mode will stay active until you disconnect. Reconnect to resume server sync.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "Loads when first used",
@@ -1341,7 +1342,8 @@
   "gui.sparkle_morpher.audit.delete_title": "Delete %s local model(s)?",
   "gui.sparkle_morpher.audit.delete_body": "Only the selected local models will be deleted. This cannot be undone.\n%s",
   "gui.sparkle_morpher.audit.upload_footer": "%s selected · %s · %s",
-  "gui.sparkle_morpher.roulette.title": "Action Wheel",
+  "gui.sparkle_morpher.roulette.title": "Action Wheel"
+,
   "gui.sparkle_morpher.cloud_player.waiting_world": "Cloud sync: Waiting to enter a world",
   "gui.sparkle_morpher.cloud_player.login_required": "Cloud sync: Log in to your Cloud account first",
   "gui.sparkle_morpher.cloud_player.checking_identity": "Cloud sync: Checking the current game identity",
