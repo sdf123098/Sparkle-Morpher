@@ -551,6 +551,8 @@
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Vulkan 能力探測",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "按需載入模型",
   "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Cloud CDN 快取加速",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache": "Cloud 磁碟快取",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "磁碟快取容量",
   "message.sparkle_morpher.privacy_mode.enabled": "隱私模式已開啟：已封鎖伺服器模型同步以及 Sparkle Morpher 的全部客戶端上行資料。",
   "message.sparkle_morpher.privacy_mode.reconnect": "隱私模式將在本次連線中保持開啟；重新連線後才會恢復伺服器同步。",
   "gui.sparkle_morpher.model_panel.model.on_demand": "首次使用時載入",

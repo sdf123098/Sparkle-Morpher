@@ -15,7 +15,9 @@ import java.util.function.Predicate;
  * revision share one asynchronous download, while a failed request is removed
  * so a later appearance update can retry it. The supplied downloader is
  * expected to perform network I/O off the client thread and returns verified
- * bytes only; display materialization never writes a file.</p>
+ * bytes only; display materialization writes no model file of its own and never
+ * exposes a cache path to a parser. The only display bytes that may reach the
+ * disk are the ones {@link CloudDiskCache} stores, keyed by their own SHA-256.</p>
  */
 public final class CloudAssetMaterializationCoordinator implements AutoCloseable {
     private volatile boolean closed;

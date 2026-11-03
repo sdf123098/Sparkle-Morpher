@@ -537,6 +537,8 @@
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Vulkan 기능 탐지",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "온디맨드 모델 로딩",
   "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Cloud CDN 캐시 가속",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache": "Cloud 디스크 캐시",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "디스크 캐시 용량",
   "message.sparkle_morpher.privacy_mode.enabled": "개인정보 보호 모드가 활성화되었습니다. 서버 모델 동기화 및 모든 Sparkle Morpher 클라이언트-서버 통신이 차단됩니다.",
   "message.sparkle_morpher.privacy_mode.reconnect": "개인정보 보호 모드는 연결을 끊을 때까지 유지됩니다. 다시 연결하면 서버 동기화가 재개됩니다.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "처음 사용할 때 로드",
