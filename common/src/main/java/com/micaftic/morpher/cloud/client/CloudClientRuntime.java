@@ -82,7 +82,9 @@ public final class CloudClientRuntime {
         if (previous != null) closeState(previous);
 
         CloudHttpClient http = new CloudAuthClient(new CloudHttpClient(instance)).authenticated(session);
-        CloudAssetClient assets = new CloudAssetClient(http);
+        // The dedicated cloud-cache directory is the only place display bytes may reach the disk.
+        CloudDiskCache diskCache = CloudDiskCache.fromConfig(cacheRoot);
+        CloudAssetClient assets = new CloudAssetClient(http, diskCache);
         CloudAppearanceStore appearances = new CloudAppearanceStore();
         CloudAnimationStore animations = new CloudAnimationStore();
         CloudEntityBindingResolver bindingResolver = new CloudEntityBindingResolver();
@@ -120,7 +122,8 @@ public final class CloudClientRuntime {
                 bindingResolver,
                 entityCoordinator,
                 realtime,
-                cacheRoot.toAbsolutePath().normalize());
+                cacheRoot.toAbsolutePath().normalize(),
+                diskCache);
         INSTANCES.put(instance.instanceId(), next);
         if (current == null || current.instance().instanceId().equals(instance.instanceId())) current = next;
 
@@ -394,6 +397,7 @@ public final class CloudClientRuntime {
         private final CloudScopeLifecycle scopeLifecycle;
         private final CloudEntityObservationCoordinator observations;
         private final Path cacheRoot;
+        private final CloudDiskCache diskCache;
         private volatile CloudInstanceInfo instanceInfo;
 
         private RuntimeState(
@@ -409,7 +413,8 @@ public final class CloudClientRuntime {
                 CloudEntityBindingResolver bindingResolver,
                 CloudEntityClientCoordinator entityCoordinator,
                 CloudRealtimeClient realtime,
-                Path cacheRoot
+                Path cacheRoot,
+                CloudDiskCache diskCache
         ) {
             this.instance = instance;
             this.session = session;
@@ -430,6 +435,7 @@ public final class CloudClientRuntime {
             this.scopeLifecycle = new CloudScopeLifecycle(scopes, realtime, appearances, animations);
             this.observations = new CloudEntityObservationCoordinator(scopes, bindingResolver);
             this.cacheRoot = cacheRoot;
+            this.diskCache = diskCache;
         }
 
         public CloudInstanceConfig instance() { return instance; }
@@ -449,6 +455,8 @@ public final class CloudClientRuntime {
         public CloudScopeLifecycle scopeLifecycle() { return scopeLifecycle; }
         public CloudEntityObservationCoordinator observations() { return observations; }
         public Path cacheRoot() { return cacheRoot; }
+        /** The dedicated display cache, or {@code null} when it is switched off. */
+        public CloudDiskCache diskCache() { return diskCache; }
         public CloudInstanceInfo instanceInfo() { return instanceInfo; }
 
         /** One display asset never exceeds the client ceiling or the current server limit. */

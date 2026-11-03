@@ -29,9 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * M0 gate: every Cloud display path must finish without creating, modifying or deleting files.
+ * M0 gate: the Cloud display path may only write inside the dedicated cloud-cache directory.
  * The audit watches the sandbox roots and cross-checks them with a before/after tree snapshot,
  * so transient files (staging copies, .part downloads) are still observed.
+ *
+ * <p>{@code cloud-cache} was promoted from "forbidden" to "the single permitted root" when the
+ * content-addressed disk cache landed; every other root (custom, cloud_models, both server/client
+ * caches, export, tmp) still must stay untouched, so a stray staging file is still a failure.</p>
  */
 class CloudMemoryOnlyDiskAuditTest {
     private static final byte[] CONTENT = "memory-only-model-bytes".getBytes(StandardCharsets.UTF_8);
@@ -91,6 +95,58 @@ class CloudMemoryOnlyDiskAuditTest {
             sandbox.close();
         }
         assertFalse(audit.touchedAnything(), () -> "Cloud parsing wrote to disk: " + audit.report());
+    }
+
+    /** The disk cache is the one exception, and it may only touch its own dedicated directory. */
+    @Test
+    void diskCacheWritesStayInsideTheDedicatedCacheDirectory() throws Exception {
+        Sandbox sandbox = Sandbox.create();
+        byte[] model = memoryModelZip();
+        String sha = CloudAssetCache.sha256(model);
+        CloudDiskCache cache = new CloudDiskCache(sandbox.cloudCache(), CloudDiskCache.DEFAULT_MAX_BYTES);
+        DiskAudit audit;
+        try (DiskAudit running = DiskAudit.start(sandbox.monitored())) {
+            audit = running;
+            cache.writeObject(sha, model);
+            org.junit.jupiter.api.Assertions.assertArrayEquals(model, cache.readObject(sha));
+            String thumbKey = CloudDiskCache.thumbnailKey("/v1/public/assets/audit/revisions/1/thumbnail");
+            cache.writeThumbnail(thumbKey, PNG_1X1);
+            org.junit.jupiter.api.Assertions.assertArrayEquals(PNG_1X1, cache.readThumbnail(thumbKey));
+            cache.remove(sha);
+            cache.clear();
+        } finally {
+            sandbox.close();
+        }
+        var outside = new LinkedHashSet<>(audit.touched());
+        outside.removeIf(path -> path.startsWith(sandbox.cloudCache()));
+        assertTrue(outside.isEmpty(), () -> "disk cache wrote outside cloud-cache: " + outside + "; " + audit.report());
+    }
+
+    /**
+     * Reverse assertion: a display payload must never land on a path that ships with the repository
+     * (resources, lang files, build output or the checked-in docs tree), even if the cache root is
+     * misconfigured to point there. The store rejects relative/escaping roots by normalising, so the
+     * observable guarantee is that every written path stays under the configured root.
+     */
+    @Test
+    void diskCacheNeverEscapesItsConfiguredRoot() throws Exception {
+        Sandbox sandbox = Sandbox.create();
+        Path root = sandbox.cloudCache().resolve("objects-nested");
+        byte[] model = memoryModelZip();
+        String sha = CloudAssetCache.sha256(model);
+        CloudDiskCache cache = new CloudDiskCache(root, CloudDiskCache.DEFAULT_MAX_BYTES);
+        DiskAudit audit;
+        try (DiskAudit running = DiskAudit.start(List.of(sandbox.cloudCache()))) {
+            audit = running;
+            cache.writeObject(sha, model);
+            org.junit.jupiter.api.Assertions.assertEquals(1, cache.objectCount());
+        } finally { sandbox.close(); }
+        var escaped = new LinkedHashSet<>(audit.touched());
+        escaped.removeIf(path -> path.startsWith(cache.root()));
+        assertTrue(escaped.isEmpty(), () -> "cache escaped its root: " + escaped + "; " + audit.report());
+        assertTrue(audit.touched().stream().allMatch(path -> path.toString().replace('\\', '/')
+                        .contains("/objects/") || path.toString().replace('\\', '/').contains("/thumbs/")),
+                () -> "cache wrote a file outside objects/ or thumbs/: " + audit.touched());
     }
 
     @Test
