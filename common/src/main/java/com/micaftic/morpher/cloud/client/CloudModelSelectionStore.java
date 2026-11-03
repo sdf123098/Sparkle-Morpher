@@ -168,11 +168,16 @@ public final class CloudModelSelectionStore {
         JsonObject out = new JsonObject();
         out.addProperty("asset_id", asset.ref().assetId()); out.addProperty("revision", asset.ref().revision()); out.addProperty("raw_sha256", asset.ref().rawSha256());
         out.addProperty("name", asset.name()); out.addProperty("format", asset.format()); out.addProperty("byte_length", asset.byteLength()); out.addProperty("visibility", asset.visibility());
-        out.addProperty("favorite", favorite); out.addProperty("last_used_at", used); return out;
+        out.addProperty("favorite", favorite); out.addProperty("last_used_at", used);
+        // The optional card image is a relative public route; it is re-validated when loaded.
+        if (!asset.thumbnail().isEmpty()) out.addProperty("thumbnail", asset.thumbnail());
+        if (!asset.thumbnailStatus().isEmpty()) out.addProperty("thumbnail_status", asset.thumbnailStatus());
+        return out;
     }
     private static CloudAssetSummary fromJson(JsonObject item) {
         return new CloudAssetSummary(new CloudAssetRef(text(item, "asset_id"), item.get("revision").getAsLong(), text(item, "raw_sha256")),
-                text(item, "name"), text(item, "format"), item.get("byte_length").getAsLong(), item.has("visibility") ? text(item, "visibility") : "PRIVATE");
+                text(item, "name"), text(item, "format"), item.get("byte_length").getAsLong(), item.has("visibility") ? text(item, "visibility") : "PRIVATE",
+                "", false, text(item, "thumbnail"), text(item, "thumbnail_status"));
     }
     private static String text(JsonObject item, String key) { try { return item.has(key) && !item.get(key).isJsonNull() ? item.get(key).getAsString() : ""; } catch (RuntimeException ignored) { return ""; } }
 }
