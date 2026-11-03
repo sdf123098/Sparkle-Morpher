@@ -1,6 +1,6 @@
 [
   {
-    "branch": "main",
+    "branch": "1.21.1",
     "diagnostic_branch": "fa1.21.1",
     "java": "21.0.12",
     "build_root": "fabric",
@@ -11,7 +11,7 @@
     "curseforge_glob": "fabric/build/libs/sparkle-morpher-*-fa1.21.1-curseforge.jar"
   },
   {
-    "branch": "main",
+    "branch": "1.21.1",
     "diagnostic_branch": "neo1.21.1",
     "java": "21.0.12",
     "build_root": "neoforge",
