@@ -146,6 +146,66 @@ class CloudMemoryAssetDownloadTest {
     }
 
     @Test
+    void publicVisibilityUsesOnlyTheCdnPathWhilePrivateAndUnknownUseTheAuthenticatedPath() throws Exception {
+        byte[] content = "public-model".getBytes(StandardCharsets.UTF_8);
+        String assetId = "folder/笙黑 +100%";
+        CloudAssetRef ref = new CloudAssetRef(assetId, 1, CloudAssetCache.sha256(content));
+        AtomicInteger publicRequests = new AtomicInteger();
+        AtomicInteger authenticatedRequests = new AtomicInteger();
+        java.util.List<String> rawPaths = new java.util.concurrent.CopyOnWriteArrayList<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            rawPaths.add(exchange.getRequestURI().getRawPath());
+            boolean publicPath = exchange.getRequestURI().getRawPath().startsWith("/v1/public/assets/");
+            (publicPath ? publicRequests : authenticatedRequests).incrementAndGet();
+            exchange.sendResponseHeaders(200, content.length);
+            exchange.getResponseBody().write(content);
+            exchange.close();
+        });
+        server.start(); servers.add(server);
+        HttpClient delegate = HttpClient.newHttpClient(); delegates.add(delegate);
+        CloudInstanceConfig instance = CloudInstanceConfig.v1("official", URI.create("https://cloud.example.test"));
+        CloudAssetClient client = new CloudAssetClient(new CloudHttpClient(instance,
+                new CloudPlayerPresenceClientTest.LoopbackClient(delegate,
+                        URI.create("http://127.0.0.1:" + server.getAddress().getPort())), "session"));
+
+        assertArrayEquals(content, client.downloadForDisplay(ref, "ysm", "PUBLIC", 1024).get(10, TimeUnit.SECONDS).bytes());
+        assertArrayEquals(content, client.downloadForDisplay(ref, "ysm", "PRIVATE", 1024).get(10, TimeUnit.SECONDS).bytes());
+        assertArrayEquals(content, client.downloadForDisplay(ref, "ysm", null, 1024).get(10, TimeUnit.SECONDS).bytes());
+
+        assertEquals(1, publicRequests.get());
+        assertEquals(2, authenticatedRequests.get());
+        assertEquals("/v1/public/assets/folder%2F%E7%AC%99%E9%BB%91%20%2B100%25/revisions/1/content", rawPaths.getFirst());
+    }
+
+    @Test
+    void publicNotFoundDoesNotFallBackToTheAuthenticatedPath() throws Exception {
+        byte[] content = "missing-public".getBytes(StandardCharsets.UTF_8);
+        CloudAssetRef ref = new CloudAssetRef("mem", 1, CloudAssetCache.sha256(content));
+        AtomicInteger publicRequests = new AtomicInteger();
+        AtomicInteger authenticatedRequests = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            if (exchange.getRequestURI().getRawPath().startsWith("/v1/public/")) publicRequests.incrementAndGet();
+            else authenticatedRequests.incrementAndGet();
+            exchange.sendResponseHeaders(404, -1); exchange.close();
+        });
+        server.start(); servers.add(server);
+        HttpClient delegate = HttpClient.newHttpClient(); delegates.add(delegate);
+        CloudInstanceConfig instance = CloudInstanceConfig.v1("official", URI.create("https://cloud.example.test"));
+        CloudAssetClient client = new CloudAssetClient(new CloudHttpClient(instance,
+                new CloudPlayerPresenceClientTest.LoopbackClient(delegate,
+                        URI.create("http://127.0.0.1:" + server.getAddress().getPort())), "session"));
+
+        Throwable error = assertThrows(java.util.concurrent.ExecutionException.class,
+                () -> client.downloadForDisplay(ref, "ysm", "PUBLIC", 1024).get(10, TimeUnit.SECONDS)).getCause();
+        assertInstanceOf(CloudHttpException.class, error);
+        assertEquals(404, ((CloudHttpException) error).statusCode());
+        assertEquals(1, publicRequests.get());
+        assertEquals(0, authenticatedRequests.get());
+    }
+
+    @Test
     void hashMismatchAndUnknownFormatNeverReachTheParser() throws Exception {
         byte[] content = "model".getBytes(StandardCharsets.UTF_8);
         CloudAssetRef wrongHash = new CloudAssetRef("mem", 1, "0".repeat(64));

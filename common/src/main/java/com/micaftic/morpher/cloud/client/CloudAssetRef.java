@@ -14,8 +14,8 @@ public record CloudAssetRef(String assetId, long revision, String rawSha256) {
         assetId = Objects.requireNonNull(assetId, "assetId");
         rawSha256 = Objects.requireNonNull(rawSha256, "rawSha256").trim().toLowerCase(java.util.Locale.ROOT);
         if (assetId.isBlank() || assetId.getBytes(StandardCharsets.UTF_8).length > 128
-                || assetId.chars().anyMatch(c -> Character.isISOControl(c) || "\\/:*?\"<>|".indexOf(c) >= 0)) {
-            throw new IllegalArgumentException("assetId must be a non-empty safe identifier of at most 128 UTF-8 bytes");
+                || assetId.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("assetId must be a non-empty identifier of at most 128 UTF-8 bytes without control characters");
         }
         if (revision <= 0) {
             throw new IllegalArgumentException("revision must be positive");
@@ -26,8 +26,13 @@ public record CloudAssetRef(String assetId, long revision, String rawSha256) {
     }
 
     public String contentPath() {
+        return contentPath(null, false);
+    }
+
+    public String contentPath(String visibility, boolean cdnEnabled) {
         String segment = URLEncoder.encode(assetId, StandardCharsets.UTF_8).replace("+", "%20").replace(".", "%2E");
-        return "/v1/assets/" + segment + "/revisions/" + revision + "/content";
+        String prefix = cdnEnabled && "PUBLIC".equals(visibility) ? "/v1/public/assets/" : "/v1/assets/";
+        return prefix + segment + "/revisions/" + revision + "/content";
     }
 }
 

@@ -324,7 +324,7 @@ public final class CloudClientRuntime {
         if (summary == null || !summary.ref().equals(ref)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Cloud asset revision is not in the current catalog"));
         }
-        return state.downloadDisplayAsset(ref, summary.format());
+        return state.downloadDisplayAsset(summary);
     }
 
     /** Ensures a catalog-approved asset revision is downloaded exactly once per runtime. */
@@ -461,13 +461,19 @@ public final class CloudClientRuntime {
             return assets.downloadForDisplay(ref, fallbackFormat, displayAssetBudget());
         }
 
+        CompletableFuture<CloudAssetClient.MemoryAsset> downloadDisplayAsset(CloudAssetSummary summary) {
+            Objects.requireNonNull(summary, "summary");
+            return assets.downloadForDisplay(summary.ref(), summary.format(), summary.visibility(), displayAssetBudget());
+        }
+
         static CompletableFuture<CloudAssetClient.MemoryAsset> downloadCatalogAsset(
                 CloudAssetClient assets, CloudAssetCatalogStore catalog, LongSupplier budget, CloudAssetRef ref) {
             CloudAssetSummary summary = catalog.get(ref.assetId());
-            String format = summary != null && summary.ref().equals(ref) ? summary.format() : null;
-            if (format == null) format = CloudSelectedModelRecovery.savedFormat(
-                    ref, CloudModelSelectionStore.recent(assets.instanceId()));
-            return assets.downloadForDisplay(ref, format, budget.getAsLong());
+            CloudAssetSummary exact = summary != null && summary.ref().equals(ref) ? summary
+                    : CloudModelSelectionStore.recent(assets.instanceId()).stream()
+                            .filter(saved -> saved.ref().equals(ref)).findFirst().orElse(null);
+            return assets.downloadForDisplay(ref, exact == null ? null : exact.format(),
+                    exact == null ? null : exact.visibility(), budget.getAsLong());
         }
 
         private ModelUploadTransport uploadTransport() {

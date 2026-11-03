@@ -8,7 +8,10 @@ import net.minecraft.client.Minecraft;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /** Restores a selected Cloud model when its local import is missing on world re-entry. */
 final class CloudSelectedModelRecovery {
@@ -16,8 +19,16 @@ final class CloudSelectedModelRecovery {
     private static boolean inFlight;
     private static long nextAttemptAt;
     private static long requestGeneration;
+    private static String lastSavedModelId;
+    private static String terminalPublicModelId;
 
-    static void reset() { requestGeneration++; inFlight = false; nextAttemptAt = 0; }
+    static void reset() {
+        requestGeneration++;
+        inFlight = false;
+        nextAttemptAt = 0;
+        lastSavedModelId = null;
+        terminalPublicModelId = null;
+    }
 
     private CloudSelectedModelRecovery() {}
 
@@ -31,6 +42,14 @@ final class CloudSelectedModelRecovery {
         Pair<String, String> saved = LocalModelSelectionStore.load();
         if (saved == null || !CloudAssetIdentity.isRuntimeModelId(saved.getLeft())) return;
         String modelId = saved.getLeft();
+        if (!Objects.equals(lastSavedModelId, modelId)) {
+            lastSavedModelId = modelId;
+            terminalPublicModelId = null;
+        }
+        if (modelId.equals(terminalPublicModelId)) {
+            if (CloudCdnPolicy.enabled()) return;
+            terminalPublicModelId = null;
+        }
         long worldGeneration;
         try {
             worldGeneration = CloudClientRuntime.currentWorldGeneration();
@@ -53,6 +72,9 @@ final class CloudSelectedModelRecovery {
             if (request != requestGeneration) return;
             if (failure != null) {
                 inFlight = false;
+                if (terminalPublicCdnMiss(asset, failure, CloudCdnPolicy.enabled())) {
+                    terminalPublicModelId = modelId;
+                }
                 YesSteveModel.LOGGER.warn("[SM] Failed to restore selected Cloud model {}", modelId, failure);
                 return;
             }
@@ -86,6 +108,28 @@ final class CloudSelectedModelRecovery {
             }
         }
         return null;
+    }
+
+    static Optional<String> preferredInstanceId(String modelId,
+            List<CloudInstanceRegistry.CloudInstanceProfile> profiles) {
+        if (!CloudAssetIdentity.isRuntimeModelId(modelId)) return Optional.empty();
+        for (CloudInstanceRegistry.CloudInstanceProfile profile : profiles) {
+            if (findAsset(profile.instanceId(), modelId,
+                    CloudModelSelectionStore.recent(profile.instanceId())) != null) {
+                return Optional.of(profile.instanceId());
+            }
+        }
+        return Optional.empty();
+    }
+
+    static boolean terminalPublicCdnMiss(CloudAssetSummary asset, Throwable failure, boolean cdnEnabled) {
+        if (!cdnEnabled || asset == null || !asset.isPublic()) return false;
+        Throwable current = failure;
+        while ((current instanceof CompletionException || current instanceof java.util.concurrent.ExecutionException)
+                && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current instanceof CloudHttpException http && http.statusCode() == 404;
     }
 
     private static void restoreSelection(CloudClientRuntime.RuntimeState runtime, long worldGeneration, Pair<String, String> expected) {
