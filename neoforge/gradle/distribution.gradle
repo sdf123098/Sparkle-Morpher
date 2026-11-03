@@ -1,0 +1,19 @@
+/** Central distribution provider for the original and CurseForge artifacts. */
+def requested = providers.gradleProperty("dist").map { it.trim().toLowerCase(Locale.ROOT) }.orElse("native").get()
+def supported = ["native", "modrinth", "curseforge"]
+if (!supported.contains(requested)) throw new GradleException("Unsupported dist='${requested}'. Expected native, modrinth or curseforge.")
+// Modrinth publishes the same original jar as GitHub. Keep -Pdist=modrinth as a compatibility alias.
+def selected = requested == "modrinth" ? "native" : requested
+ext.distributionVariant = selected
+ext.distributionRequestedVariant = requested
+ext.isNativeDist = selected == "native"
+ext.isModrinthDist = requested == "modrinth"
+ext.isCurseForgeDist = selected == "curseforge"
+ext.distributionArchiveName = { String baseName -> selected == "native" ? "${baseName}.jar" : "${baseName}-${selected}.jar" }
+ext.distributionResourceExcludes = { spec -> spec.exclude 'natives/**'; spec.exclude 'native-manifest.json'; spec.exclude '**/*.dll'; spec.exclude '**/*.so'; spec.exclude '**/*.dylib'; spec.exclude '**/*.jnilib'; spec.exclude '**/*.exe' }
+// Native-only Java sources live under a dedicated source root. CurseForge builds
+// intentionally omit that root and use the matching src/curseforge/java variants.
+// merged-layout: native 源根保持本嵌套构建内的 common/src/native/java（neo 版本，
+// 与仓库根 common/ 的 fa 版本在 ResourceStationConfig 上有内容差异）。
+ext.distributionNativeJavaSourceDir = rootProject.file('common/src/native/java')
+tasks.register('printDistribution') { doLast { println "distribution=${selected}" } }

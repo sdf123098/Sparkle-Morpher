@@ -129,3 +129,15 @@ level_javap.txt
 
 # 运行时日志（游戏/测试产生，勿入库）
 fabric/logs/
+
+# merged-layout: neoforge 是嵌套的独立 Gradle 构建，补齐它原本单独仓库时的忽略项
+neoforge/local-maven/
+neoforge/runs/
+neoforge/logs/
+neoforge/common/logs/
+common/logs/
+__pycache__/
+*.pyc
+.xdg/
+token/
+$HOME/.gradle/

@@ -1,0 +1,113 @@
+package com.micaftic.morpher.client.input;
+
+import com.micaftic.morpher.client.motion.ClientMotionSources;
+import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.event.AnimationLockEvent;
+import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
+import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import com.micaftic.morpher.resource.models.ModelProperties;
+import com.micaftic.morpher.util.InputUtil;
+import com.micaftic.morpher.util.data.OrderedStringMap;
+import com.google.common.collect.Lists;
+import com.mojang.blaze3d.platform.InputConstants;
+import com.micaftic.morpher.core.architectury.event.EventResult;
+import com.micaftic.morpher.core.architectury.event.events.client.ClientRawInputEvent;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import com.micaftic.morpher.core.api.client.KeyMappingFactory;
+import com.micaftic.morpher.core.api.client.InputCodeAdapter;
+import com.micaftic.morpher.core.api.PlatformAPI;
+
+import java.util.List;
+
+public final class ExtraAnimationKey {
+
+    public static final List<KeyMapping> KEY_MAPPINGS = Lists.newArrayList();
+
+    private static boolean initialized = false;
+
+    private ExtraAnimationKey() {
+    }
+
+    public static List<KeyMapping> getKeyMappings() {
+        if (!initialized) {
+            initialized = true;
+            if (YesSteveModel.isAvailable()) {
+                for (int i = 0; i <= 7; i++) {
+                    KeyMapping eventMapping = KeyMappingFactory.createInGameNone(String.format("key.sparkle_morpher.extra_animation.%d.desc", Integer.valueOf(i)), InputConstants.Type.KEYBOARD, InputConstants.UNKNOWN.getValue(), "key.category.sparkle_morpher");
+                    KEY_MAPPINGS.add(eventMapping);
+                }
+            }
+        }
+        return KEY_MAPPINGS;
+    }
+
+    public static void register() {
+        if (PlatformAPI.isServer()) {
+            return;
+        }
+        ClientRawInputEvent.KEY_PRESSED.register((client, keyCode, scanCode, action, modifiers) -> {
+            onKeyInput(action, keyCode, scanCode, modifiers);
+            return EventResult.pass();
+        });
+        ClientRawInputEvent.MOUSE_CLICKED_PRE.register((client, button, action, modifiers) -> {
+            return onMouseInput(action, button, modifiers) ? EventResult.interruptFalse() : EventResult.pass();
+        });
+    }
+
+    private static void onKeyInput(int action, int keyCode, int scanCode, int modifiers) {
+        if (!YesSteveModel.isAvailable() || !InputUtil.isPlayerReady()) {
+            return;
+        }
+        LocalPlayer localPlayer = Minecraft.getInstance().player;
+        for (KeyMapping eventMapping : KEY_MAPPINGS) {
+            if (action == 1 && InputUtil.isKeyPressed(keyCode, scanCode, modifiers, eventMapping) && localPlayer != null && !AnimationLockEvent.isPlayerMoving(localPlayer)) {
+                playExtraAnimation(localPlayer, eventMapping);
+                return;
+            }
+        }
+    }
+
+    private static boolean onMouseInput(int action, int button, int modifiers) {
+        if (!YesSteveModel.isAvailable() || !InputUtil.isPlayerReady()) {
+            return false;
+        }
+        LocalPlayer localPlayer = Minecraft.getInstance().player;
+        for (KeyMapping eventMapping : KEY_MAPPINGS) {
+            if (action == 1 && InputUtil.isMousePressed(button, modifiers, eventMapping) && localPlayer != null && !AnimationLockEvent.isPlayerMoving(localPlayer)) {
+                playExtraAnimation(localPlayer, eventMapping);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void playExtraAnimation(LocalPlayer localPlayer, KeyMapping eventMapping) {
+        PlayerCapability.get(localPlayer).ifPresent(cap -> {
+            ModelAssembly modelAssembly = cap.getModelAssembly();
+            if (modelAssembly == null || !modelAssembly.getPresentationCapabilities().playerActionControlsAvailable()
+                    || modelAssembly.getModelData() == null) {
+                return;
+            }
+            int index = KEY_MAPPINGS.indexOf(eventMapping);
+            ModelProperties modelProperties = modelAssembly.getModelData().getModelProperties();
+            OrderedStringMap<String, String> map = modelProperties.getExtraAnimation();
+            if (map.size() > index) {
+                String rouletteKey = map.getKeyAt(index);
+                if ("#return".equals(rouletteKey)) {
+                    ClientMotionSources.stop(cap);
+                    return;
+                }
+                if (rouletteKey.startsWith("#") && modelProperties.getExtraAnimationClassify().containsKey(rouletteKey.substring(1))) {
+                    UnifiedRouletteScreen.setInitialSubmenu(rouletteKey.substring(1));
+                    com.micaftic.morpher.util.InputUtil.setScreen(new UnifiedRouletteScreen(cap.getModelId(), modelAssembly, cap));
+                    return;
+                }
+                ClientMotionSources.play(cap, rouletteKey);
+            }
+        });
+    }
+}
