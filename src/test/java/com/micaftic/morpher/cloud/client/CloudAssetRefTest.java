@@ -9,10 +9,15 @@ class CloudAssetRefTest {
 
     @Test
     void preservesUnicodeCaseAndEscapesOneAssetPathSegment() {
-        String id = "芙宁娜V3.14 100%+日语";
+        String id = "gooner/actual gooner shit/笙黑 26 3 28+100%";
         CloudAssetRef ref = new CloudAssetRef(id, 2, "a".repeat(64));
         assertEquals(id, ref.assetId());
-        assertEquals("/v1/assets/%E8%8A%99%E5%AE%81%E5%A8%9CV3%2E14%20100%25%2B%E6%97%A5%E8%AF%AD/revisions/2/content", ref.contentPath());
+        assertEquals("/v1/assets/gooner%2Factual%20gooner%20shit%2F%E7%AC%99%E9%BB%91%2026%203%2028%2B100%25/revisions/2/content", ref.contentPath());
+        assertEquals("/v1/public/assets/gooner%2Factual%20gooner%20shit%2F%E7%AC%99%E9%BB%91%2026%203%2028%2B100%25/revisions/2/content",
+                ref.contentPath("PUBLIC", true));
+        assertEquals(ref.contentPath(), ref.contentPath("PRIVATE", true));
+        assertEquals(ref.contentPath(), ref.contentPath(null, true));
+        assertEquals(ref.contentPath(), ref.contentPath("PUBLIC", false));
     }
 
     @Test
@@ -20,7 +25,7 @@ class CloudAssetRefTest {
         String boundary = "模".repeat(42) + "Ab";
         assertEquals(boundary, new CloudAssetRef(boundary, 1, "a".repeat(64)).assetId());
         assertThrows(IllegalArgumentException.class, () -> new CloudAssetRef("模".repeat(43), 1, "a".repeat(64)));
-        for (String invalid : new String[]{"", "   ", "bad\nname", "bad\u0000name", "a/b", "a\\b", "a:b", "a*b", "a?b", "a\"b", "a<b", "a>b", "a|b"}) {
+        for (String invalid : new String[]{"", "   ", "bad\nname", "bad\u0000name"}) {
             assertThrows(IllegalArgumentException.class, () -> new CloudAssetRef(invalid, 1, "a".repeat(64)));
         }
     }
@@ -34,10 +39,10 @@ class CloudAssetRefTest {
     }
 
     @Test
-    void rejectsPathTraversalAndNonShaIdentity() {
-        assertThrows(IllegalArgumentException.class, () -> new CloudAssetRef(
-                "../secret", 1,
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"));
+    void pathLikeIdentityStaysInsideOneEncodedSegmentAndNonShaIsRejected() {
+        CloudAssetRef pathLike = new CloudAssetRef("../secret", 1,
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        assertEquals("/v1/assets/%2E%2E%2Fsecret/revisions/1/content", pathLike.contentPath());
         assertThrows(IllegalArgumentException.class, () -> new CloudAssetRef(
                 "model", 1, "not-a-sha"));
     }
