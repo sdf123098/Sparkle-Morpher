@@ -87,6 +87,8 @@ public class GeneralConfig {
     public static ModConfigSpec.BooleanValue LAZY_MODEL_LOADING;
 
     public static ModConfigSpec.BooleanValue CLOUD_CDN_CACHE;
+    public static ModConfigSpec.BooleanValue CLOUD_DISK_CACHE;
+    public static ModConfigSpec.IntValue CLOUD_DISK_CACHE_MEGABYTES;
 
     public static ModConfigSpec.EnumValue<com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset> CLOUD_PERFORMANCE_PRESET;
     public static ModConfigSpec.IntValue CLOUD_UPLOAD_CONCURRENCY;
@@ -269,6 +271,10 @@ public class GeneralConfig {
         LAZY_MODEL_LOADING = builder.define("LazyModelLoading", true);
         builder.comment("Use the public CDN-cached content route for Cloud assets explicitly marked PUBLIC.");
         CLOUD_CDN_CACHE = builder.define("CloudCdnCache", true);
+        builder.comment("Keep downloaded Cloud assets in a local cache so a reopened model needs no network request. Only the dedicated cloud-cache directory is written.");
+        CLOUD_DISK_CACHE = builder.define("CloudDiskCache", true);
+        builder.comment("Size limit of the Cloud disk cache in megabytes. Model bytes and card images share this budget; the least recently used entries are evicted first.");
+        CLOUD_DISK_CACHE_MEGABYTES = builder.defineInRange("CloudDiskCacheMegabytes", 512, 64, 8192);
         builder.comment("Use local models only and block all Sparkle Morpher client-to-server traffic.");
         PRIVACY_MODE = builder.define("PrivacyMode", false);
         CLOUD_PERFORMANCE_PRESET = builder.comment("Client-side SPM Cloud performance preset. UNLIMITED adds no client concurrency cap; server limits still apply.").defineEnum("CloudPerformancePreset", com.micaftic.morpher.cloud.client.CloudClientPerformance.Preset.UNLIMITED);
