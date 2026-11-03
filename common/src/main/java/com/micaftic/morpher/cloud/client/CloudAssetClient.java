@@ -273,7 +273,9 @@ public final class CloudAssetClient {
                         object.get("byte_length").getAsLong(),
                         object.has("visibility") ? object.get("visibility").getAsString() : "PRIVATE",
                         object.has("owner_account_id") && !object.get("owner_account_id").isJsonNull() ? object.get("owner_account_id").getAsString() : "",
-                        object.has("owned") && object.get("owned").getAsBoolean()));
+                        object.has("owned") && object.get("owned").getAsBoolean(),
+                        textOrEmpty(object, "thumbnail"),
+                        textOrEmpty(object, "thumbnail_status")));
             } catch (RuntimeException malformedEntry) {
                 skipped++;
                 com.micaftic.morpher.YesSteveModel.LOGGER.warn(
@@ -293,7 +295,14 @@ public final class CloudAssetClient {
         return new CloudAssetSummary(ref, object.get("name").getAsString(), object.get("format").getAsString(), object.get("byte_length").getAsLong(),
                 object.has("visibility") ? object.get("visibility").getAsString() : "PRIVATE",
                 object.has("owner_account_id") && !object.get("owner_account_id").isJsonNull() ? object.get("owner_account_id").getAsString() : "",
-                object.has("owned") && object.get("owned").getAsBoolean());
+                object.has("owned") && object.get("owned").getAsBoolean(),
+                textOrEmpty(object, "thumbnail"), textOrEmpty(object, "thumbnail_status"));
+    }
+
+    /** Absent or non-string optional catalog fields degrade to an empty value. */
+    private static String textOrEmpty(com.google.gson.JsonObject object, String name) {
+        JsonElement value = object.get(name);
+        return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString() ? value.getAsString() : "";
     }
 
     private static String encode(String value) {
