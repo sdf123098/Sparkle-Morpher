@@ -1177,7 +1177,14 @@ public class ModernPlayerModelScreen extends Screen {
             return;
         }
         CloudModelPage page = cloudGridPage(w, h);
-        this.controller.requestCloudPreviews(visible.subList(page.start(), page.end()));
+        java.util.List<CloudAssetSummary> pageEntries = visible.subList(page.start(), page.end());
+        boolean thumbnailCards = gridMode(w, h) == ModelPickerLayout.GridMode.CARDS;
+        if (thumbnailCards)
+            com.micaftic.morpher.cloud.client.CloudThumbnailService.request(
+                    CloudClientRuntime.state(this.controller.cloudInstanceId()), pageEntries);
+        this.controller.requestCloudPreviews(thumbnailCards
+                ? com.micaftic.morpher.cloud.client.CloudThumbnailService.withoutReadyThumbnails(pageEntries)
+                : pageEntries);
         g.enableScissor(x, y, x + w, y + h);
         if (gridMode(w, h) == ModelPickerLayout.GridMode.CARDS) {
             ModelPickerLayout.Cards cards = ModelPickerLayout.cards(w, h, visible.size(), denseModelToolbar());
@@ -1246,7 +1253,10 @@ public class ModernPlayerModelScreen extends Screen {
         int nameH = ch-coverH;
         roundedFill(g,cx,cy,cw,ch,UiElementLayout.CARD_RADIUS,selected?CARD_SELECT:hover?CARD_BASE_HOVER:CARD_BASE);
         ModelAssembly assembly = this.controller.assemblyOrNull(modelId);
-        if (assembly != null) {
+        OuterFileTexture thumbnail = com.micaftic.morpher.cloud.client.CloudThumbnailService.texture(entry.ref());
+        if (thumbnail != null && drawCoverImage(g, thumbnail, cx, cy, cw, coverH)) {
+            // Static Cloud card image: no model bytes were downloaded for this card.
+        } else if (assembly != null) {
             renderCardMonster(g, slot, modelId, cx, cy, cw, ch, coverH);
         } else if(this.controller.cloudPreviewError(entry)!=null){
             drawIconScaled(g,IconGlyph.INFO,cx+cw/2-7,cy+coverH/2-7,14);
