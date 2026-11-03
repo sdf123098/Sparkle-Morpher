@@ -536,6 +536,7 @@
   "gui.sparkle_morpher.model_panel.setting.opengl_gui_blur": "OpenGL GUIブラー",
   "gui.sparkle_morpher.model_panel.setting.vulkan_probe": "Vulkan機能の検出",
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "オンデマンドモデル読み込み",
+  "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Cloud CDNキャッシュ高速化",
   "message.sparkle_morpher.privacy_mode.enabled": "プライバシーモードが有効です。サーバーモデルの同期と、Sparkle Morpherのクライアントからサーバーへの通信はすべてブロックされます。",
   "message.sparkle_morpher.privacy_mode.reconnect": "プライバシーモードは切断するまで有効です。再接続するとサーバー同期が再開されます。",
   "gui.sparkle_morpher.model_panel.model.on_demand": "初回使用時に読み込み",
