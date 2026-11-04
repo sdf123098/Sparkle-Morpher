@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.micaftic.morpher.neoforge.mixin",
+  "plugin": "com.micaftic.morpher.neoforge.mixin.plugin.SparkleNeoForgeMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "compat.punchy.PunchyArmRendererMixin"
+  ],
+  "mixins": []
+}

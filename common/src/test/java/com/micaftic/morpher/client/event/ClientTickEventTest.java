@@ -42,10 +42,7 @@ class ClientTickEventTest {
 
     @Test
     void normalClientTickDelegatesToTheTestedTrimHook() throws IOException {
-        Path eventPath = firstExisting(
-                Path.of("common/src/main/java/com/micaftic/morpher/client/event/ClientTickEvent.java"),
-                Path.of("src/neoforge/java/com/micaftic/morpher/client/event/ClientTickEvent.java"));
-        String source = Files.readString(eventPath, StandardCharsets.UTF_8);
+        String source = Files.readString(findClientTickEvent(), StandardCharsets.UTF_8);
 
         assertEquals(1, occurrences(source,
                 "runScheduledModelCacheTrim(tickCount, ClientModelManager::trimUnusedGpuCaches);"),
@@ -58,15 +55,27 @@ class ClientTickEventTest {
         return count;
     }
 
-    private static Path firstExisting(Path... candidates) throws IOException {
-        Path directory = Path.of("").toAbsolutePath();
-        while (directory != null) {
+    /**
+     * Locates ClientTickEvent.java without hard-coding one physical layout: the class is
+     * loader-divergent, so it lives in the fabric tree on the fabric loader and in the
+     * neoforge tree on the neoforge loader, never in the shared common/ layer.
+     */
+    private static Path findClientTickEvent() throws IOException {
+        Path relative = Path.of("com", "micaftic", "morpher", "client", "event", "ClientTickEvent.java");
+        Path[] candidates = {
+                Path.of("fabric", "src", "main", "java").resolve(relative),
+                Path.of("neoforge", "src", "main", "java").resolve(relative),
+                Path.of("common", "src", "main", "java").resolve(relative),
+                Path.of("src", "main", "java").resolve(relative)
+        };
+        for (Path base = Path.of("").toAbsolutePath(); base != null; base = base.getParent()) {
             for (Path candidate : candidates) {
-                Path resolved = directory.resolve(candidate);
-                if (Files.isRegularFile(resolved)) return resolved;
+                Path resolved = base.resolve(candidate).normalize();
+                if (Files.isRegularFile(resolved)) {
+                    return resolved;
+                }
             }
-            directory = directory.getParent();
         }
-        throw new IOException("ClientTickEvent source not found");
+        throw new IOException("ClientTickEvent source not found under any loader source root");
     }
 }

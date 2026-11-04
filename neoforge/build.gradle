@@ -1,22 +1,24 @@
 plugins {
     id 'java-library'
-    id 'net.neoforged.moddev' version '2.0.141'
+    id 'net.neoforged.moddev'
 }
 
 apply from: rootProject.file('gradle/verify-native-abi.gradle')
 
+group = mod_group_id
 version = mod_version
-group = maven_group
 
 apply from: rootProject.file('gradle/distribution.gradle')
 
-// JVM tests use heap-backed JOML operations and need no internal Unsafe access.
-allprojects {
-    tasks.withType(Test).configureEach {
-        systemProperty 'joml.nounsafe', 'true'
-    }
-}
 def isCurseForgeDist = rootProject.ext.isCurseForgeDist
+
+base {
+    archivesName = "sparkle-morpher-${project.version}-neo${rootProject.minecraft_version}"
+}
+
+tasks.named('jar') {
+    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo${rootProject.minecraft_version}")
+}
 
 repositories {
     mavenLocal()
@@ -35,14 +37,16 @@ repositories {
     maven { url = 'https://maven.neoforged.net/releases' }
     maven { url = 'https://jitpack.io' }
     mavenCentral()
+    flatDir { dirs 'libs' }
 }
 
-base {
-    archivesName = "sparkle-morpher-${project.version}-neo1.21.1"
-}
-
-tasks.named("jar") {
-    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo1.21.1")
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
 }
 
 neoForge {
@@ -66,81 +70,47 @@ neoForge {
             sourceSet sourceSets.main
         }
     }
+}
 
-    // ModDevGradle must own the test classpath and the generated Minecraft
-    // artifacts.  A plain Gradle test source set otherwise compiles before
-    // createMinecraftArtifacts on a clean CI runner.
-    unitTest {
-        enable()
-        testedMod = mods."${mod_id}"
+// Symmetric loader layout: `common/` is the shared source layer at the repo root,
+// this module owns src/{main,native,curseforge,test}/ exactly like :fabric does.
+// `src/main/resources` holds only loader-specific files plus the few images that
+// differ from the Fabric build (the rest is inherited from common/).
+// The two variant roots are mutually exclusive: native builds compile the native
+// layer, CurseForge builds compile the CurseForge layer instead.
+sourceSets {
+    main {
+        java {
+            srcDir rootProject.file('common/src/main/java')
+            if (isCurseForgeDist) {
+                srcDir rootProject.file('common/src/curseforge/java')
+                srcDir file('src/curseforge/java')
+            } else {
+                srcDir rootProject.file('common/src/native/java')
+                srcDir file('src/native/java')
+            }
+        }
+        resources {
+            srcDir 'src/generated/resources'
+            srcDir rootProject.file('common/src/main/resources')
+            exclude 'native/**'
+        }
     }
-}
-
-// merged-layout: 共享层在仓库根的 ../common。本模块 src/main/resources 只保留
-// loader 专属资源 + 与 fabric 内容不同的少量覆盖资源。
-sourceSets.main.java {
-    srcDir rootProject.file('../common/src/main/java')
-    srcDir 'src/neoforge/java'
-    if (!isCurseForgeDist) {
-        srcDir rootProject.ext.distributionNativeJavaSourceDir
+    test {
+        java {
+            srcDir rootProject.file('common/src/test/java')
+        }
     }
-}
-sourceSets.main.resources {
-    srcDir 'src/generated/resources'
-    srcDir rootProject.file('../common/src/main/resources')
-    exclude 'native/**'
-}
-sourceSets.test.java {
-    srcDir rootProject.file('../common/src/test/java')
-}
-
-if (isCurseForgeDist) {
-    tasks.named('compileJava', JavaCompile) {
-        source = files(
-                fileTree(rootProject.file('../common/src/main/java')),
-                fileTree('src/neoforge/java'),
-                fileTree('src/curseforge/java')
-        )
-    }
-}
-
-repositories {
-    flatDir { dirs 'libs' }
-}
-
-dependencies {
-    // Optional at runtime. Used only to compile the TaCZ 1.21.1 compatibility bridge.
-    compileOnly "maven.modrinth:OypNE65K:wPvGWIj9"
-    // Optional at runtime. Used only to compile the SlashBlade 1.21.1 compatibility bridge.
-    compileOnly "maven.modrinth:8T53F0sy:u02EDgAr"
-    implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
-    jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
-
-    // R0: JVM 单测（JUnit 5），测试代码在 src/test/java。
-    // Minecraft / NeoForge 类路径由 neoForge.unitTest 统一管理，避免同时
-    // 注入普通和 merged 工件而在测试启动时产生重复类。
-    testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
-    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-    // Tests also resolve loader annotations referenced by the main classes.
-    testCompileOnly files(sourceSets.main.compileClasspath)
-}
-
-test {
-    useJUnitPlatform()
-    // The suite loads Minecraft; keep room for the texture decoder's heap reserve.
-    maxHeapSize = '1G'
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 21
     options.compilerArgs.addAll([
-                '-Xlint:deprecation', '-Xlint:unchecked',"--add-modules", "jdk.incubator.vector"])
-}
-
-java {
-    withSourcesJar()
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+            '-Xlint:deprecation', '-Xlint:unchecked',
+            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            '--add-modules', 'jdk.incubator.vector'
+    ])
 }
 
 processResources {
@@ -159,12 +129,53 @@ processResources {
         expand expandProps
     }
 
-    from(rootProject.file('LICENSE')) {
+    from(rootProject.file('LICENSE.txt')) {
         rename { 'LICENSE' }
     }
 
     if (isCurseForgeDist) {
         rootProject.ext.distributionResourceExcludes(delegate)
+    }
+}
+
+dependencies {
+    // Optional at runtime. Used only to compile the TaCZ 1.21.1 compatibility bridge.
+    compileOnly "maven.modrinth:OypNE65K:wPvGWIj9"
+    // Optional at runtime. Used only to compile the SlashBlade 1.21.1 compatibility bridge.
+    compileOnly "maven.modrinth:8T53F0sy:u02EDgAr"
+    implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+    jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
+
+    // R0: JVM 单测（JUnit 5），测试代码在 common/src/test/java。
+    // Plain Gradle test source set (not neoForge.unitTest): the suite is a pure
+    // JVM contract suite that must not boot ModLauncher, because booting it
+    // requires every declared mixin config to resolve at runtime.
+    testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testImplementation "net.neoforged:neoforge:$neoforge_version"
+    testImplementation "net.neoforged:minecraft-dependencies:$minecraft_version"
+    testCompileOnly files(sourceSets.main.compileClasspath)
+    testRuntimeOnly files(fileTree("build/moddev/artifacts") {
+        include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
+    })
+    testCompileOnly files(fileTree("build/moddev/artifacts") {
+        include "minecraft-patched-*.jar", "neoforge-*-merged.jar"
+    })
+}
+
+test {
+    useJUnitPlatform()
+    // The suite loads Minecraft; keep room for the texture decoder's heap reserve.
+    maxHeapSize = '1G'
+    // Patched MC chat/enums consult FMLLoader even in plain JVM tests.
+    classpath += sourceSets.main.runtimeClasspath
+}
+
+tasks.register("printRepositories") {
+    doLast {
+        repositories.eachWithIndex { repo, index ->
+            println "${index}: ${repo.name} -> ${repo.hasProperty('url') ? repo.url : ''}"
+        }
     }
 }
 

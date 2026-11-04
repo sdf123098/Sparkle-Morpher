@@ -1,6 +1,7 @@
 plugins {
     id 'dev.architectury.loom' version '1.14-SNAPSHOT' apply false
     id 'architectury-plugin' version '3.4-SNAPSHOT'
+    id 'net.neoforged.moddev' version '2.0.141' apply false
     id 'com.gradleup.shadow' version '8.3.10' apply false
 }
 
@@ -22,16 +23,18 @@ allprojects {
     version = rootProject.mod_version
 }
 
-subprojects {
+// Symmetric multi-loader layout: only :fabric runs the Architectury/Loom toolchain,
+// :neoforge runs ModDevGradle from its own build script. Everything else that both
+// loader modules share is configured here.
+configure([project(':fabric')]) {
     apply plugin: 'dev.architectury.loom'
     apply plugin: 'architectury-plugin'
     apply plugin: 'maven-publish'
 
     base {
-        // Per-subproject archivesName: fabric jar is overridden in fabric/build.gradle to
-        // sparkle-morpher-<ver>-fa1.21.1.jar; common stays a build-time intermediate.
-        // Use fa1.21.1 suffix instead of subproject name ("-common"/"-fabric") to keep
-        // the published-name shape consistent across modules.
+        // The fabric jar is renamed in fabric/build.gradle to
+        // sparkle-morpher-<ver>-fa1.21.1.jar; the shared layer is compiled straight
+        // into this module, so there is no intermediate :common artifact any more.
         archivesName = "$rootProject.archives_name-fa1.21.1"
     }
 
@@ -99,10 +102,6 @@ subprojects {
         it.options.compilerArgs.addAll([
                 '-Xlint:deprecation', '-Xlint:unchecked',
                 // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
                 '--add-modules', 'jdk.incubator.vector'
         ])
     }
@@ -114,14 +113,6 @@ subprojects {
                 artifactId = base.archivesName.get()
                 from components.java
             }
-        }
-
-        // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
-        repositories {
-            // Add repositories to publish to here.
-            // Notice: This block does NOT have the same function as the block in the top level.
-            // The repositories here will be used for publishing your artifact, not for
-            // retrieving dependencies.
         }
     }
 

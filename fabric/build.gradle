@@ -1,12 +1,20 @@
 plugins {
     id 'com.gradleup.shadow'
 }
+// Symmetric loader layout: `common/` is the shared source layer at the repo root,
+// this module owns src/{main,native,curseforge,test}/ exactly like :neoforge does.
+// The two variant roots are mutually exclusive: native builds compile the native
+// layer, CurseForge builds compile the CurseForge layer instead.
 sourceSets {
     main {
         java {
             srcDir rootProject.file('common/src/main/java')
-            if (!rootProject.ext.isCurseForgeDist) {
-                srcDir rootProject.ext.distributionNativeJavaSourceDir
+            if (rootProject.ext.isCurseForgeDist) {
+                srcDir rootProject.file('common/src/curseforge/java')
+                srcDir file('src/curseforge/java')
+            } else {
+                srcDir rootProject.file('common/src/native/java')
+                srcDir file('src/native/java')
             }
         }
         resources {
@@ -53,6 +61,11 @@ dependencies {
     // Optional at runtime. Used only to compile the TaCZ: Refabricated compatibility bridge.
     modCompileOnly "maven.modrinth:1j76DVHU:sqMweCpe"
     modImplementation "net.fabricmc:fabric-loader:$rootProject.fabric_loader_version"
+
+    // R0: JVM 单测挂靠 fabric 模块。原本由 common 模块的 build.gradle 声明，
+    // 改成同编译单元布局后必须在本模块显式声明。
+    testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 
     modImplementation "net.fabricmc.fabric-api:fabric-api:$rootProject.fabric_api_version"
 

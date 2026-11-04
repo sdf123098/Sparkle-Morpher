@@ -1,18 +1,21 @@
 {
   "formatVersion": 1,
+  "commonLoaderApiAllowlist": {
+    "1.21.1": [
+      "net.fabricmc.api.EnvType",
+      "net.fabricmc.api.Environment",
+      "net.minecraftforge.common.ForgeConfigSpec",
+      "net.minecraftforge.fml.config.ModConfig"
+    ],
+    "26.2": [
+      "net.neoforged.neoforge.common.ModConfigSpec"
+    ]
+  },
   "temporaryOwnedUpstreamNamespaceClasses": {
     "fa1.21.1": [],
     "fa26.1.2": ["com/mojang/blaze3d/vertex/BufferUploader.class"],
-    "fa26.2": [
-      "com/mojang/blaze3d/vertex/BufferUploader.class",
-      "net/minecraft/client/renderer/MultiBufferSource.class",
-      "net/minecraft/client/renderer/MultiBufferSource$BufferSource.class"
-    ],
-    "fa26.3": [
-      "com/mojang/blaze3d/vertex/BufferUploader.class",
-      "net/minecraft/client/renderer/MultiBufferSource.class",
-      "net/minecraft/client/renderer/MultiBufferSource$BufferSource.class"
-    ],
+    "fa26.2": [],
+    "fa26.3": [],
     "neo1.21.1": [],
     "neo26.1.2": [],
     "neo26.2": [],
@@ -22,22 +25,14 @@
     "fa26.2": {
       "coordinate": "curse.maven:forge-config-api-port-547434",
       "versionProperty": "forge_config_api_port_curse_file_id",
-      "distribution": "included in both native and CurseForge final JARs",
-      "classes": [
-        "net/minecraftforge/client/extensions/IForgeGuiGraphicsExtractor.class",
-        "net/minecraftforge/fml/config/ModConfig.class",
-        "net/minecraftforge/fml/config/ModConfig$Type.class"
-      ]
+      "distribution": "nested dependency retained; no direct Forge namespace class copies",
+      "classes": []
     },
     "fa26.3": {
       "coordinate": "curse.maven:forge-config-api-port-547434",
       "versionProperty": "forge_config_api_port_curse_file_id",
-      "distribution": "included in both native and CurseForge final JARs",
-      "classes": [
-        "net/minecraftforge/client/extensions/IForgeGuiGraphicsExtractor.class",
-        "net/minecraftforge/fml/config/ModConfig.class",
-        "net/minecraftforge/fml/config/ModConfig$Type.class"
-      ]
+      "distribution": "nested dependency retained; no direct Forge namespace class copies",
+      "classes": []
     }
   },
   "registeredEmbeddedLibraries": {

@@ -3,10 +3,19 @@ pluginManagement {
         maven { url = "https://maven.fabricmc.net/" }
         maven { url = "https://maven.architectury.dev/" }
         maven { url = "https://files.minecraftforge.net/maven/" }
+        maven { url = "https://maven.neoforged.net/releases" }
+        maven { url = "https://maven.creeperhost.net" }
+        maven { url = "https://maven.aliyun.com/repository/gradle-plugin" }
+        maven { url = "https://maven.aliyun.com/repository/public" }
+        mavenCentral()
         gradlePluginPortal()
     }
 }
 
 rootProject.name = 'sparkle_morpher'
 
+// Symmetric multi-loader layout: `common/` holds the shared source layer, and each
+// loader module owns `<loader>/build.gradle` plus
+// `<loader>/src/{main,native,curseforge,test}/`.
 include 'fabric'
+include 'neoforge'

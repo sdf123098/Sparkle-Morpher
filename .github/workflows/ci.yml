@@ -97,7 +97,7 @@ jobs:
         with:
           name: ${{ matrix.diagnostic_branch }}-diagnostics
           path: |
-            ${{ matrix.build_root }}/build/ci-diagnostics/
+            build/ci-diagnostics/
             **/build/test-results/test/TEST-*.xml
             **/build/reports/tests/test/
           if-no-files-found: warn
