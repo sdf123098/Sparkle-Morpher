@@ -14,17 +14,50 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The repo holds both loaders as symmetric Gradle subprojects, so the same logical
+# class can live in either loader tree or in the shared `common` tree. Resolution
+# order matters: the loader-specific roots come first so a merged-layout checkout
+# picks this loader's copy of a divergent class, and `common` is the fallback.
+SOURCE_ROOTS = [
+    "fabric/src/main/java",      # Fabric-specific sources
+    "neoforge/src/main/java",    # NeoForge-specific sources
+    "common/src/main/java",      # shared sources
+    "src/main/java",             # legacy single-loader layout
+]
+
+
+def resolve(relative):
+    """Return the first existing source root joined with relative, else None."""
+    for root in SOURCE_ROOTS:
+        candidate = ROOT / root / relative
+        if candidate.exists():
+            return candidate
+    return None
+
 
 class FreecamCompatibilityTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="spm-freecam-")
         cls.work = Path(cls.temp.name)
-        store = next(p for prefix in ["fabric/src/main/java", "common/src/main/java", "src/main/java"]
-                     for p in (ROOT / prefix / "com/micaftic/morpher/capability").glob("**/PlayerCapabilityClientStore.java"))
-        event = ROOT / "common/src/main/java/com/micaftic/morpher/client/event/ReplacePlayerRenderEvent.java"
-        if not event.exists():
-            event = ROOT / "src/main/java/com/micaftic/morpher/client/event/ReplacePlayerRenderEvent.java"
+        store = None
+        for root in SOURCE_ROOTS:
+            capability = ROOT / root / "com/micaftic/morpher/capability"
+            if capability.is_dir():
+                store = next(capability.glob("**/PlayerCapabilityClientStore.java"), None)
+                if store is not None:
+                    break
+        if store is None:
+            raise RuntimeError(
+                "PlayerCapabilityClientStore.java not found under any source root: "
+                + ", ".join(SOURCE_ROOTS)
+            )
+        event = resolve("com/micaftic/morpher/client/event/ReplacePlayerRenderEvent.java")
+        if event is None:
+            raise RuntimeError(
+                "ReplacePlayerRenderEvent.java not found under any source root: "
+                + ", ".join(SOURCE_ROOTS)
+            )
         store_package = re.search(r"package ([\w.]+);", store.read_text(encoding="utf-8")).group(1)
         buffer_class = re.search(r"import ([\w.]+MultiBufferSource);", event.read_text(encoding="utf-8")).group(1)
         has_collector = "import net.minecraft.client.renderer.SubmitNodeCollector;" in event.read_text(encoding="utf-8")
@@ -165,11 +198,9 @@ class FreecamCompatibilityTest(unittest.TestCase):
           .replace("BUFFER", buffer_class).replace("RENDER_ARGS", "0," if has_collector else "0,0,"))
         production = [store, event]
         for name in ["client/render/PlayerRenderPolicy.java", "core/compat/tweakeroo/TweakerooCompat.java"]:
-            for prefix in ["common/src/main/java", "src/main/java"]:
-                candidate = ROOT / prefix / "com/micaftic/morpher" / name
-                if candidate.exists():
-                    production.append(candidate)
-                    break
+            candidate = resolve("com/micaftic/morpher/" + name)
+            if candidate is not None:
+                production.append(candidate)
         java_home = os.environ.get("JAVA_HOME")
         cls.java = str(Path(java_home) / "bin/java") if java_home else shutil.which("java")
         javac = str(Path(java_home) / "bin/javac") if java_home else shutil.which("javac")
