@@ -1,33 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# merged-layout: this repo holds both loaders.
-#   BUILD_ROOT=fabric   -> the repo root is the Fabric Gradle build
-#   BUILD_ROOT=neoforge -> neoforge/ is a nested, independent Gradle build
-# Each build root ships its own gradlew/gradle/scripts, so we run the same
-# pipeline from inside the selected build root, but keep every artifact path
-# and log directory repo-root-relative so one CI matrix row == one loader.
+# Symmetric multi-loader layout: this repository is ONE Gradle build that contains
+# both `:fabric` and `:neoforge`. The BUILD_ROOT selector therefore only decides
+# which loader's release JAR this matrix row audits and which module's sources get
+# the javac-warning fingerprint gate; every Gradle invocation runs from the repo
+# root with an explicit `:<loader>:<task>` path.
 BUILD_ROOT="${BUILD_ROOT:-fabric}"
-if [ "$BUILD_ROOT" = "fabric" ]; then
-  BUILD_REL="."
-else
-  BUILD_REL="$BUILD_ROOT"
-fi
+case "$BUILD_ROOT" in
+  fabric|neoforge) ;;
+  *) echo "Unsupported BUILD_ROOT='$BUILD_ROOT' (expected fabric or neoforge)" >&2; exit 2 ;;
+esac
 
 repo_root="$(pwd)"
 diag="$repo_root/build/ci-diagnostics"
+mkdir -p "$diag"
 
 # Only the hosted checkout is changed; developers keep their wrapper mirror.
-python3 - "$BUILD_REL" <<'PY'
-import sys
+python3 - <<'PY'
 from pathlib import Path
-p = Path(sys.argv[1]) / 'gradle/wrapper/gradle-wrapper.properties'
+p = Path('gradle/wrapper/gradle-wrapper.properties')
 p.write_text(p.read_text().replace('mirrors.cloud.tencent.com/gradle/',
-                                 'services.gradle.org/distributions/'))
+                                  'services.gradle.org/distributions/'))
 PY
 
-mkdir -p "$diag"
-cd "$BUILD_REL"
 chmod +x gradlew
 python3 scripts/test_tweakeroo_freecam.py 2>&1 | tee "$diag/tweakeroo-freecam.log"
 args=(--init-script gradle/ci.init.gradle --no-daemon --no-build-cache
@@ -47,7 +43,6 @@ for dist in native curseforge; do
     mkdir -p "$target"
     cp "$report" "$target/"
   done < <(find . -path '*/build/test-results/test/TEST-*.xml' -not -path './build/ci-diagnostics/*')
-  cd "$repo_root"
   DIST="$dist" python3 - <<'PY'
 import glob, os, zipfile
 pattern = os.environ['JAR_GLOB']
@@ -67,7 +62,6 @@ with zipfile.ZipFile(jars[0]) as jar:
                        n.endswith(('.dll', '.so', '.dylib', '.jnilib', '.exe')) for n in names)
 print(f'Final artifact smoke passed: {jars[0]}')
 PY
-  cd "$repo_root/$BUILD_REL"
 done
 ./gradlew -Pdist=modrinth printDistribution "${args[@]}" | tee "$diag/modrinth-distribution.txt"
 grep -q '^distribution=native$' "$diag/modrinth-distribution.txt"

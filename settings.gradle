@@ -2,6 +2,11 @@ pluginManagement {
     repositories {
         maven { url = "https://maven.fabricmc.net/" }
         maven { url = "https://maven.architectury.dev/" }
+        maven { url = "https://maven.neoforged.net/releases" }
+        maven { url = "https://maven.creeperhost.net" }
+        maven { url = "https://maven.aliyun.com/repository/gradle-plugin" }
+        maven { url = "https://maven.aliyun.com/repository/public" }
+        mavenCentral()
         gradlePluginPortal()
     }
 }
@@ -12,5 +17,11 @@ plugins {
 
 rootProject.name = 'sparkle_morpher'
 
+// One MC version per repository. `common/` is a shared *source* layer (not a Gradle
+// project); :fabric and :neoforge are the two loader subprojects and are deliberately
+// symmetric: each owns its own build.gradle + src/{main,native,curseforge,test}/.
+// Dependency repositories stay declared per project (see build.gradle / each
+// loader build), because the two loaders need different mirrors.
 include 'fabric'
+include 'neoforge'
 include 'caustica-compat'

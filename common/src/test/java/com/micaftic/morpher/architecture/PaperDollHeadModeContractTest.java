@@ -3,9 +3,6 @@ package com.micaftic.morpher.architecture;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,43 +58,15 @@ class PaperDollHeadModeContractTest {
     }
 
     private static String readGuiSource() throws IOException {
-        Path source = firstExisting(
-                Path.of("common/src/main/java/com/micaftic/morpher/client/renderer/preview/GuiModelRenderer.java"),
-                Path.of("../common/src/main/java/com/micaftic/morpher/client/renderer/preview/GuiModelRenderer.java"),
-                Path.of("src/main/java/com/micaftic/morpher/client/renderer/preview/GuiModelRenderer.java"));
-        return Files.readString(source, StandardCharsets.UTF_8);
+        return RepoSourceLookup.readSource("com/micaftic/morpher/client/renderer/preview/GuiModelRenderer.java");
     }
 
     private static String readSource() throws IOException {
-        Path source = firstExisting(
-                Path.of("common/src/main/java/com/micaftic/morpher/client/renderer/preview/PaperDollRenderer.java"),
-                Path.of("../common/src/main/java/com/micaftic/morpher/client/renderer/preview/PaperDollRenderer.java"),
-                Path.of("src/main/java/com/micaftic/morpher/client/renderer/preview/PaperDollRenderer.java"));
-        return Files.readString(source, StandardCharsets.UTF_8);
+        return RepoSourceLookup.readSource("com/micaftic/morpher/client/renderer/preview/PaperDollRenderer.java");
     }
 
     private static String readConfigSource() throws IOException {
-        // Config lives in the loader source set: fabric/... (Fabric) or src/neoforge/java/... (NeoForge).
-        Path source = firstExisting(
-                Path.of("fabric/src/main/java/com/micaftic/morpher/config/ExtraPlayerRenderConfig.java"),
-                Path.of("src/neoforge/java/com/micaftic/morpher/config/ExtraPlayerRenderConfig.java"),
-                Path.of("src/main/java/com/micaftic/morpher/config/ExtraPlayerRenderConfig.java"),
-                Path.of("../fabric/src/main/java/com/micaftic/morpher/config/ExtraPlayerRenderConfig.java"),
-                Path.of("../src/neoforge/java/com/micaftic/morpher/config/ExtraPlayerRenderConfig.java"));
-        return Files.readString(source, StandardCharsets.UTF_8);
-    }
-
-    private static Path firstExisting(Path... candidates) throws IOException {
-        Path directory = Path.of("").toAbsolutePath();
-        while (directory != null) {
-            for (Path candidate : candidates) {
-                Path resolved = directory.resolve(candidate);
-                if (Files.isRegularFile(resolved)) {
-                    return resolved;
-                }
-            }
-            directory = directory.getParent();
-        }
-        throw new IOException("Paper Doll head-mode source not found");
+        // Config lives in the shared layer of the symmetric layout.
+        return RepoSourceLookup.readSource("com/micaftic/morpher/config/ExtraPlayerRenderConfig.java");
     }
 }

@@ -1,23 +1,28 @@
 plugins {
+    // Both loader toolchains are declared here and only applied by the subproject
+    // that owns them: fabric-loom for :fabric/:caustica-compat, moddev for :neoforge.
     id 'net.fabricmc.fabric-loom' version '1.17.21' apply false
     id 'com.gradleup.shadow' version '9.0.0-beta4' apply false
+    id 'net.neoforged.moddev' version '2.0.148' apply false
 }
 
 apply from: rootProject.file('gradle/distribution.gradle')
 
 // JVM tests use heap-backed JOML operations and need no internal Unsafe access.
 allprojects {
+    group = rootProject.maven_group
+    version = rootProject.mod_version
+
     tasks.withType(Test).configureEach {
         systemProperty 'joml.nounsafe', 'true'
     }
 }
 
-allprojects {
-    group = rootProject.maven_group
-    version = rootProject.mod_version
-}
-
-subprojects {
+// ---------------------------------------------------------------------------
+// Fabric-side projects. The shared `common/` layer is compiled straight into each
+// loader's compile unit (see each build.gradle), so there is no :common project.
+// ---------------------------------------------------------------------------
+configure([project(':fabric'), project(':caustica-compat')]) {
     apply plugin: 'net.fabricmc.fabric-loom'
     apply plugin: 'maven-publish'
 
@@ -65,6 +70,10 @@ subprojects {
             name = "Terraformers"
             url = "https://maven.terraformersmc.com/"
         }
+        maven {
+            name = "FabricMC"
+            url = "https://maven.fabricmc.net/"
+        }
     }
 
     dependencies {
@@ -72,7 +81,6 @@ subprojects {
     }
 
     java {
-        //withSourcesJar()
         sourceCompatibility = JavaVersion.VERSION_25
         targetCompatibility = JavaVersion.VERSION_25
         toolchain {
@@ -84,10 +92,6 @@ subprojects {
         it.options.release = 25
         it.options.compilerArgs.addAll([
                 '-Xlint:deprecation', '-Xlint:unchecked',
-                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-                // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
                 // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
                 '--add-modules', 'jdk.incubator.vector',
                 '-Xmaxerrs', '10000',
@@ -103,7 +107,14 @@ subprojects {
             }
         }
     }
+}
 
+// :neoforge declares its own java {} block + compiler args inside its build.gradle:
+// the `java` plugin is applied there, so configuring it from the root would run
+// before the plugin exists.
+
+// CurseForge variants drop native binaries from every resource-processing task.
+subprojects {
     afterEvaluate {
         tasks.withType(ProcessResources).configureEach {
             if (rootProject.ext.isCurseForgeDist) {

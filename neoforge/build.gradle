@@ -1,6 +1,6 @@
 plugins {
     id "java"
-    id "net.neoforged.moddev" version "2.0.148"
+    id "net.neoforged.moddev"
 }
 
 apply from: rootProject.file('gradle/verify-native-abi.gradle')
@@ -10,20 +10,14 @@ version = mod_version
 
 apply from: rootProject.file('gradle/distribution.gradle')
 
-// JVM tests use heap-backed JOML operations and need no internal Unsafe access.
-allprojects {
-    tasks.withType(Test).configureEach {
-        systemProperty 'joml.nounsafe', 'true'
-    }
-}
 def isCurseForgeDist = rootProject.ext.isCurseForgeDist
 
 base {
-    archivesName = "sparkle-morpher-${project.version}-neo26.3"
+    archivesName = "sparkle-morpher-${project.version}-neo${rootProject.minecraft_version}"
 }
 
 tasks.named("jar") {
-    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo26.3")
+    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo${rootProject.minecraft_version}")
 }
 
 repositories {
@@ -64,6 +58,8 @@ repositories {
 }
 
 java {
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
     }
@@ -101,33 +97,32 @@ neoForge {
     }
 }
 
-// merged-layout: 共享层上提到仓库根的 ../common，本模块只保留 neoforge 专属源根。
-// 共享资源同样来自 ../common/src/main/resources（本模块 src/main/resources 只放 loader 专属 +
-// 与 fabric 内容不同的少量覆盖资源）。
-sourceSets.main.resources {
-    srcDir "src/generated/resources"
-    srcDir rootProject.file('../common/src/main/resources')
-    exclude 'native/**'
-}
-sourceSets.main.java {
-    srcDir rootProject.file('../common/src/main/java')
-    srcDir "src/neoforge/java"
-    if (!isCurseForgeDist) {
-        srcDir rootProject.ext.distributionNativeJavaSourceDir
+// Symmetric loader layout: `common/` is the shared source layer at the repo root,
+// this module owns src/{main,native,curseforge,test}/ exactly like :fabric does.
+// The two variant roots are mutually exclusive; the loader-only roots hold the
+// classes whose content diverges from the other loader's copy.
+sourceSets {
+    main {
+        java {
+            srcDir rootProject.file('common/src/main/java')
+            if (isCurseForgeDist) {
+                srcDir rootProject.file('common/src/curseforge/java')
+                srcDir file('src/curseforge/java')
+            } else {
+                srcDir rootProject.file('common/src/native/java')
+                srcDir file('src/native/java')
+            }
+        }
+        resources {
+            srcDir "src/generated/resources"
+            srcDir rootProject.file('common/src/main/resources')
+            exclude 'native/**'
+        }
     }
-}
-
-sourceSets.test.java {
-    srcDir rootProject.file('../common/src/test/java')
-}
-
-if (isCurseForgeDist) {
-    tasks.named('compileJava', JavaCompile) {
-        source = files(
-                fileTree(rootProject.file('../common/src/main/java')),
-                fileTree('src/neoforge/java'),
-                fileTree('src/curseforge/java')
-        )
+    test {
+        java {
+            srcDir rootProject.file('common/src/test/java')
+        }
     }
 }
 
@@ -215,3 +210,4 @@ tasks.register("printRepositories") {
 }
 
 apply from: rootProject.file('gradle/verify-distribution.gradle')
+
