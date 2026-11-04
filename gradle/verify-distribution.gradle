@@ -19,6 +19,7 @@ def distributionProjectName = project.name
 def isNeoForge = distributionProjectName == 'neoforge'
 def distributionProjectVersion = project.version.toString()
 def distributionRootDirectory = rootProject.projectDir
+def distributionLoaderProjectDir = project.projectDir
 // Audit identity must also work in an arbitrarily named clone or CI checkout.
 def distributionRepositoryName = "Sparkle-Morpher-${isNeoForge ? 'Neo' : 'Fa'}${rootProject.property('minecraft_version')}"
 def distributionAuditFile = rootProject.file('gradle/distribution-audit-allowlist.json')
@@ -174,7 +175,7 @@ def verifySourceInputs = tasks.register('verifyProductionSourceBoundary') {
             // subproject so the shared layer gets audited once, and Fabric's `org.gagravarr`
             // copies are legal there.
             boolean loaderOwned = sourceFile.toPath().toAbsolutePath().normalize()
-                    .startsWith(project.projectDir.toPath().toAbsolutePath().normalize())
+                    .startsWith(distributionLoaderProjectDir.toPath().toAbsolutePath().normalize())
             if (isNeoForge && loaderOwned && text.contains('org.gagravarr')) {
                 errors.add("unrelocated Gagravarr reference in ${relative}")
             }
