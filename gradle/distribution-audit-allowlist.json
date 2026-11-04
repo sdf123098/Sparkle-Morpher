@@ -1,5 +1,22 @@
 {
   "formatVersion": 1,
+  "commonLoaderApiAllowlist": {
+    "26.1.2": [
+      "net.neoforged.neoforge.common.ModConfigSpec"
+    ],
+    "26.2": [
+      "net.neoforged.neoforge.common.ModConfigSpec"
+    ],
+    "26.3": [
+      "net.neoforged.neoforge.common.ModConfigSpec"
+    ],
+    "1.21.1": [
+      "net.fabricmc.api.EnvType",
+      "net.fabricmc.api.Environment",
+      "net.minecraftforge.common.ForgeConfigSpec",
+      "net.minecraftforge.fml.config.ModConfig"
+    ]
+  },
   "temporaryOwnedUpstreamNamespaceClasses": {
     "fa1.21.1": [],
     "fa26.1.2": [],

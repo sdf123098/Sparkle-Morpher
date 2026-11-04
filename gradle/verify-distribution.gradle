@@ -1,3 +1,12 @@
+/**
+ * Loader-aware object audits for both artifact and source boundaries.
+ *
+ * This file runs once per loader subproject (applied from :fabric/build.gradle and
+ * :neoforge/build.gradle). Loader identity is derived from `project.name`, which the
+ * symmetric layout guarantees to be exactly `fabric` or `neoforge`; everything else
+ * (repoTag, artifact tag, allowlist lookup) follows from it. The only loader-specific
+ * rule lives in the Gagravarr block guarded by `isNeoForge`.
+ */
 import groovy.json.JsonSlurper
 import org.gradle.api.tasks.bundling.AbstractArchiveTask
 import org.gradle.api.tasks.compile.JavaCompile
@@ -7,10 +16,11 @@ import java.util.zip.ZipInputStream
 
 // Capture project metadata during configuration; task actions only use values/files.
 def distributionProjectName = project.name
+def isNeoForge = distributionProjectName == 'neoforge'
 def distributionProjectVersion = project.version.toString()
 def distributionRootDirectory = rootProject.projectDir
 // Audit identity must also work in an arbitrarily named clone or CI checkout.
-def distributionRepositoryName = "Sparkle-Morpher-${project.name == 'fabric' ? 'Fa' : 'Neo'}${rootProject.property('minecraft_version')}"
+def distributionRepositoryName = "Sparkle-Morpher-${isNeoForge ? 'Neo' : 'Fa'}${rootProject.property('minecraft_version')}"
 def distributionAuditFile = rootProject.file('gradle/distribution-audit-allowlist.json')
 def distributionBuildScripts = rootProject.allprojects.collect { it.file('build.gradle') }
 def distributionLoaderBuildFile = project.file('build.gradle')
@@ -22,7 +32,7 @@ def distributionDependencyVersions = (new JsonSlurper().parse(distributionAuditF
 }
 
 def distributionName = rootProject.ext.distributionVariant.toString()
-def finalJarTaskName = distributionProjectName == 'fabric' && tasks.findByName('remapJar') != null ? 'remapJar' : 'jar'
+def finalJarTaskName = !isNeoForge && tasks.findByName('remapJar') != null ? 'remapJar' : 'jar'
 def finalJarProvider = tasks.named(finalJarTaskName, AbstractArchiveTask)
 def finalJarFile = finalJarProvider.flatMap { it.archiveFile }
 def javaCompileTask = tasks.named('compileJava', JavaCompile).get()
@@ -36,12 +46,13 @@ rootProject.allprojects.each { candidate ->
 javaInputs = javaInputs.toList().sort { it.path }
 def commonRoot = rootProject.file('common/src/main/java').canonicalFile
 def isFa121 = distributionRepositoryName.toLowerCase().contains('fa1.21.1')
-def fa121CommonLoaderAllowlist = [
-        'net.fabricmc.api.EnvType',
-        'net.fabricmc.api.Environment',
-        'net.minecraftforge.common.ForgeConfigSpec',
-        'net.minecraftforge.fml.config.ModConfig'
-] as Set
+// The shared layer legitimately uses APIs that a *port* library provides to both
+// loaders: 1.21.1 gets ForgeConfigSpec/ModConfig from forge-config-api-port, while the
+// 26.x line gets ModConfigSpec from the same port under the neoforged namespace. These
+// are not loader leaks, so they are declared per MC version in the audit allowlist
+// instead of being hard-coded here.
+def commonLoaderAllowlist = ((new JsonSlurper().parse(distributionAuditFile)
+        .commonLoaderApiAllowlist ?: [:])[rootProject.property('minecraft_version').toString()] ?: []) as Set<String>
 
 def stripComments = { String source ->
     StringBuilder result = new StringBuilder(source.length())
@@ -89,8 +100,13 @@ def verifyScannerExamples = {
     if (findLoaderReferences('class Reflective { String type = "net.fabricmc.fake.LoaderType"; }', [] as Set).isEmpty()) {
         throw new GradleException('Source boundary scanner missed a reflective loader API string')
     }
-    if (!findLoaderReferences('import net.fabricmc.api.Environment;', fa121CommonLoaderAllowlist).isEmpty()) {
-        throw new GradleException('Source boundary scanner rejected an exact Fa1.21.1 common API exception')
+    // Scanner mechanics only: a synthetic allowlist proves the exception path works,
+    // independent of which APIs this MC version actually permits in the shared layer.
+    if (!findLoaderReferences('import net.fabricmc.api.Environment;', ['net.fabricmc.api.Environment'] as Set).isEmpty()) {
+        throw new GradleException('Source boundary scanner rejected an allowlisted reference')
+    }
+    if (commonLoaderAllowlist.any { !findLoaderReferences('import ' + it + ';', commonLoaderAllowlist).isEmpty() }) {
+        throw new GradleException('Source boundary scanner rejected a declared shared-layer API exception')
     }
 }
 
@@ -152,13 +168,23 @@ def verifySourceInputs = tasks.register('verifyProductionSourceBoundary') {
                 errors.add("production self-check source: ${relative}")
             }
             String text = sourceFile.getText('UTF-8')
+            // NeoForge resolves mod JARs as Java modules, so its tree must not reference the
+            // upstream Gagravarr package that Fabric legitimately keeps. The rule is scoped to
+            // this project's own source roots: `javaInputs` intentionally spans every
+            // subproject so the shared layer gets audited once, and Fabric's `org.gagravarr`
+            // copies are legal there.
+            boolean loaderOwned = sourceFile.toPath().toAbsolutePath().normalize()
+                    .startsWith(project.projectDir.toPath().toAbsolutePath().normalize())
+            if (isNeoForge && loaderOwned && text.contains('org.gagravarr')) {
+                errors.add("unrelocated Gagravarr reference in ${relative}")
+            }
             if (text =~ /\b(?:import\s+)?org\.junit(?:\.jupiter|\.platform)?\./) {
                 errors.add("test framework referenced by production source: ${relative}")
             }
             boolean commonMain = sourceFile.toPath().toAbsolutePath().normalize().startsWith(commonRoot.toPath())
             if (commonMain) {
-                Set<String> allowed = isFa121 ? fa121CommonLoaderAllowlist : ([] as Set)
-                if (sourceFile.name == 'YsmCrypt.java' && relative.endsWith('/core/security/YsmCrypt.java')) {
+                Set<String> allowed = new LinkedHashSet<>(commonLoaderAllowlist)
+                if (isFa121 && sourceFile.name == 'YsmCrypt.java' && relative.endsWith('/core/security/YsmCrypt.java')) {
                     allowed = (allowed + ['net.neoforged.fml.ModList', 'net.fabricmc.loader.api.FabricLoader']) as Set
                 }
                 findLoaderReferences(text, allowed).each { ref -> errors.add("loader API ${ref} leaked into ${relative}") }
@@ -176,7 +202,7 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
     inputs.file(distributionAuditFile)
     inputs.property('distribution', distributionName)
     inputs.property('modVersion', distributionProjectVersion)
-    inputs.property('loader', distributionProjectName == 'fabric' ? 'fabric' : 'neoforge')
+    inputs.property('loader', isNeoForge ? 'neoforge' : 'fabric')
     dependsOn(verifySourceInputs)
     doLast {
         verifyArtifactRuleExamples()
@@ -187,7 +213,7 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
             List<String> names = []
             def enumeration = zip.entries()
             while (enumeration.hasMoreElements()) names.add(enumeration.nextElement().name)
-            String metadataPath = distributionProjectName == 'fabric' ? 'fabric.mod.json' : 'META-INF/neoforge.mods.toml'
+            String metadataPath = isNeoForge ? 'META-INF/neoforge.mods.toml' : 'fabric.mod.json'
             def coreErrors = coreArtifactEntryViolations(names, metadataPath)
             if (!coreErrors.isEmpty()) throw new GradleException("Final JAR entry audit failed for ${artifact.name}: ${coreErrors}")
             String repoTag = distributionRepositoryName.replaceFirst('(?i)^Sparkle-Morpher-', '').toLowerCase()
@@ -284,7 +310,21 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
                 }
             }
 
-            if (distributionProjectName == 'fabric') {
+            if (isNeoForge) {
+                String toml = zip.getInputStream(zip.getEntry(metadataPath)).getText('UTF-8')
+                String expectedModId = distributionExpectedModId
+                if (!(toml =~ /(?m)^modId\s*=\s*"${java.util.regex.Pattern.quote(expectedModId)}"\s*$/)) throw new GradleException("NeoForge metadata mod id does not match ${expectedModId}")
+                if (!(toml =~ /(?m)^version\s*=\s*"${java.util.regex.Pattern.quote(distributionProjectVersion)}"\s*$/)) throw new GradleException("NeoForge metadata version does not match ${distributionProjectVersion}")
+                def mixinConfigs = (toml =~ /(?m)^config\s*=\s*"([^"]+)"/).collect { it[1] }
+                mixinConfigs.each { mixinPath -> verifyMixinConfig(mixinPath) }
+                if (!nestedJarPaths.isEmpty()) {
+                    String jarJarMetadataPath = 'META-INF/jarjar/metadata.json'
+                    if (!names.contains(jarJarMetadataPath)) throw new GradleException("NeoForge jar-in-jar metadata is missing in ${artifact.name}")
+                    def jarJarMetadata = new JsonSlurper().parse(zip.getInputStream(zip.getEntry(jarJarMetadataPath)))
+                    Set<String> declaredNested = (jarJarMetadata.jars ?: []).collect { it.path?.toString() }.findAll { it } as Set<String>
+                    if (declaredNested != (nestedJarPaths as Set<String>)) throw new GradleException("NeoForge jar-in-jar metadata does not match actual entries: declared=${declaredNested}, actual=${nestedJarPaths}")
+                }
+            } else {
                 def fabricMetadata = new JsonSlurper().parse(zip.getInputStream(zip.getEntry(metadataPath)))
                 String expectedModId = distributionExpectedModId ?: 'sparkle_morpher'
                 if (fabricMetadata.id != expectedModId) throw new GradleException("Fabric mod id ${fabricMetadata.id} does not match expected ${expectedModId} in ${artifact.name}")
@@ -300,19 +340,19 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
                 if (fabricMetadata.accessWidener && !names.contains(fabricMetadata.accessWidener.toString())) throw new GradleException("Fabric access widener is missing: ${fabricMetadata.accessWidener}")
                 Set<String> declaredNested = (fabricMetadata.jars ?: []).collect { it.file?.toString() }.findAll { it } as Set<String>
                 if (declaredNested != (nestedJarPaths as Set<String>)) throw new GradleException("Fabric nested-JAR metadata does not match actual entries: declared=${declaredNested}, actual=${nestedJarPaths}")
-            } else {
-                String toml = zip.getInputStream(zip.getEntry(metadataPath)).getText('UTF-8')
-                String expectedModId = distributionExpectedModId
-                if (!(toml =~ /(?m)^modId\s*=\s*"${java.util.regex.Pattern.quote(expectedModId)}"\s*$/)) throw new GradleException("NeoForge metadata mod id does not match ${expectedModId}")
-                if (!(toml =~ /(?m)^version\s*=\s*"${java.util.regex.Pattern.quote(distributionProjectVersion)}"\s*$/)) throw new GradleException("NeoForge metadata version does not match ${distributionProjectVersion}")
-                def mixinConfigs = (toml =~ /(?m)^config\s*=\s*"([^"]+)"/).collect { it[1] }
-                mixinConfigs.each { mixinPath -> verifyMixinConfig(mixinPath) }
-                if (!nestedJarPaths.isEmpty()) {
-                    String jarJarMetadataPath = 'META-INF/jarjar/metadata.json'
-                    if (!names.contains(jarJarMetadataPath)) throw new GradleException("NeoForge jar-in-jar metadata is missing in ${artifact.name}")
-                    def jarJarMetadata = new JsonSlurper().parse(zip.getInputStream(zip.getEntry(jarJarMetadataPath)))
-                    Set<String> declaredNested = (jarJarMetadata.jars ?: []).collect { it.path?.toString() }.findAll { it } as Set<String>
-                    if (declaredNested != (nestedJarPaths as Set<String>)) throw new GradleException("NeoForge jar-in-jar metadata does not match actual entries: declared=${declaredNested}, actual=${nestedJarPaths}")
+            }
+
+            // NeoForge resolves mod JARs as Java modules, so bundled third-party packages must
+            // stay private. Only NeoForge has this constraint; Fabric keeps the original
+            // `org.gagravarr` package, which is why the two loader trees vendor it separately.
+            if (isNeoForge) {
+                def leakedGagravarr = names.findAll { it.startsWith('org/gagravarr/') && it.endsWith('.class') }
+                if (!leakedGagravarr.isEmpty()) {
+                    throw new GradleException("Unrelocated Gagravarr classes in ${artifact.name}: ${leakedGagravarr.take(20)}")
+                }
+                ['com/micaftic/morpher/internal/vendor/gagravarr/ogg/OggFile.class',
+                 'com/micaftic/morpher/internal/vendor/gagravarr/opus/OpusFile.class'].each { privateClass ->
+                    if (!names.contains(privateClass)) throw new GradleException("Missing private audio library class: ${privateClass}")
                 }
             }
 

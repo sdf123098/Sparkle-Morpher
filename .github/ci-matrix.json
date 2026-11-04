@@ -15,7 +15,7 @@
     "diagnostic_branch": "neo26.1.2",
     "java": "25.0.4",
     "build_root": "neoforge",
-    "compile_task": "compileJava",
+    "compile_task": ":neoforge:compileJava",
     "gradle_task": "build",
     "jar_glob": "neoforge/build/libs/sparkle-morpher-*-neo26.1.x.jar",
     "mod_meta": "META-INF/neoforge.mods.toml",
