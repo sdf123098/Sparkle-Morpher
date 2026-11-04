@@ -63,7 +63,7 @@ class ArchitectureBoundaryTest {
     private static final String[] GL_BOUNDARY_PACKAGES = { "com/micaftic/morpher/core/gpu", "com/micaftic/morpher/client/renderer", "com/micaftic/morpher/client/event" };
 
     /** 平台适配边界包（仅 CHECK_PLATFORM_API=true 时生效）。 */
-    private static final String[] PLATFORM_ADAPTER_PACKAGES = { "com/micaftic/morpher/core/architectury", "com/micaftic/morpher/core/api/config/fabric", "com/micaftic/morpher/config", "com/micaftic/morpher/client/event" };
+    private static final String[] PLATFORM_ADAPTER_PACKAGES = { "com/micaftic/morpher/core/architectury", "com/micaftic/morpher/core/api/config/fabric", "com/micaftic/morpher/core/api/network/fabric", "com/micaftic/morpher/config", "com/micaftic/morpher/client/event", "com/micaftic/morpher/fabric" };
 
     @Test
     void rawOpenGlOnlyInsideGlBoundary() throws Exception {

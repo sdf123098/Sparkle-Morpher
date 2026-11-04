@@ -30,6 +30,15 @@ sourceSets {
     }
 }
 
+// JUnit 5 must be selected explicitly. Without it Gradle 8 falls back to the
+// deprecated "automatic loading of test framework implementation dependencies"
+// path and then reports "No test executed", which fails the CI build because it
+// runs with --warning-mode fail.
+test {
+    useJUnitPlatform()
+    maxHeapSize = '1G'
+}
+
 
 loom {
     accessWidenerPath = file('src/main/resources/sparkle_morpher.accesswidener')
