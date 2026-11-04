@@ -64,12 +64,10 @@ Figura パックからはモデルとテクスチャを読み込みます。Figu
 
 | ビルド | ローダー | Minecraft | Git ブランチ |
 |---|---|---|---|
-| Sparkle-Morpher-Fa1.21.1 | Fabric | 1.21.1 | `main` |
-| Sparkle-Morpher-Fa26.1.2 | Fabric | 26.1.2 | `fa26.1.2` |
-| Sparkle-Morpher-Fa26.2 | Fabric | 26.2 | `fa26.2` |
-| Sparkle-Morpher-Neo1.21.1 | NeoForge | 1.21.1 | `neo1.21.1` |
-| Sparkle-Morpher-Neo26.1.2 | NeoForge | 26.1.2 | `neo26.1.2` |
-| Sparkle-Morpher-Neo26.2 | NeoForge | 26.2 | `neo26.2` |
+| Sparkle-Morpher-1.21.1 | Fabric + NeoForge | 1.21.1 | `1.21.1` |
+| Sparkle-Morpher-26.1.2 | Fabric + NeoForge | 26.1.2 | `26.1.2` |
+| Sparkle-Morpher-26.2 | Fabric + NeoForge | 26.2 | `main` |
+| Sparkle-Morpher-26.3 | Fabric + NeoForge | 26.3 | `26.3` |
 
 Minecraft 1.21.1 には Java 21、Minecraft 26.1.2 / 26.2 には Java 25 を使用します。依存関係は各リリースの要件に従ってください。一緒に遊ぶ場合は、Cloud プロトコルに互換性のあるビルドを使用してください。
 
