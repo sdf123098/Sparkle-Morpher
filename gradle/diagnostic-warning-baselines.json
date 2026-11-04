@@ -52,49 +52,49 @@
     {
       "branch": "neo1.21.1",
       "fingerprints": [],
-      "task": "compileJava",
+      "task": ":neoforge:compileJava",
       "dist": "native"
     },
     {
       "branch": "neo1.21.1",
       "fingerprints": [],
-      "task": "compileJava",
+      "task": ":neoforge:compileJava",
       "dist": "curseforge"
     },
     {
       "branch": "neo26.1.2",
       "fingerprints": [],
-      "task": "compileJava",
+      "task": ":neoforge:compileJava",
       "dist": "native"
     },
     {
       "branch": "neo26.1.2",
       "fingerprints": [],
-      "task": "compileJava",
+      "task": ":neoforge:compileJava",
       "dist": "curseforge"
     },
     {
       "branch": "neo26.2",
       "fingerprints": [],
-      "task": "compileJava",
+      "task": ":neoforge:compileJava",
       "dist": "native"
     },
     {
       "branch": "neo26.2",
       "fingerprints": [],
-      "task": "compileJava",
+      "task": ":neoforge:compileJava",
       "dist": "curseforge"
     },
     {
       "branch": "neo26.3",
       "fingerprints": [],
-      "task": "compileJava",
+      "task": ":neoforge:compileJava",
       "dist": "native"
     },
     {
       "branch": "neo26.3",
       "fingerprints": [],
-      "task": "compileJava",
+      "task": ":neoforge:compileJava",
       "dist": "curseforge"
     }
   ]

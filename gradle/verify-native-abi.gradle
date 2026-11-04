@@ -8,24 +8,17 @@ def isNativeAbiVerificationEnabled = {
     return !dist.equalsIgnoreCase("curseforge")
 }
 
+// Native binaries live in the shared resource layer; a loader subproject may still
+// override them with its own src/main/resources/natives (none does today, but the
+// scan is symmetric so an override is picked up automatically).
 def nativeAbiDirs = []
+def sharedNativeDir = rootProject.file('common/src/main/resources/natives')
+if (sharedNativeDir.isDirectory()) {
+    nativeAbiDirs << sharedNativeDir
+}
 def projectNativeDir = file('src/main/resources/natives')
 if (projectNativeDir.isDirectory()) {
     nativeAbiDirs << projectNativeDir
-}
-def commonNativeDir = file('common/src/main/resources/natives')
-if (commonNativeDir.isDirectory()) {
-    nativeAbiDirs << commonNativeDir
-}
-if (findProject(':common') != null) {
-    def commonProjectNativeDir = project(':common').file('src/main/resources/natives')
-    if (commonProjectNativeDir.isDirectory()) {
-        nativeAbiDirs << commonProjectNativeDir
-    }
-}
-def rootCommonNativeDir = rootProject.file('common/src/main/resources/natives')
-if (rootCommonNativeDir.isDirectory()) {
-    nativeAbiDirs << rootCommonNativeDir
 }
 nativeAbiDirs = nativeAbiDirs.unique { it.canonicalPath }
 
@@ -158,7 +151,7 @@ tasks.register('verifyNativeAbi') {
                     }
                 }
                 forbidden.each { marker ->
-                if (text.contains(marker)) {
+                    if (text.contains(marker)) {
                         throw new GradleException("Forbidden stale native ABI marker '${marker}' found in ${nativeFile}")
                     }
                 }

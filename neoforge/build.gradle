@@ -1,6 +1,6 @@
 plugins {
-    id "java"
-    id "net.neoforged.moddev" version "2.0.141"
+    id 'java'
+    id 'net.neoforged.moddev'
 }
 
 apply from: rootProject.file('gradle/verify-native-abi.gradle')
@@ -10,20 +10,14 @@ version = mod_version
 
 apply from: rootProject.file('gradle/distribution.gradle')
 
-// JVM tests use heap-backed JOML operations and need no internal Unsafe access.
-allprojects {
-    tasks.withType(Test).configureEach {
-        systemProperty 'joml.nounsafe', 'true'
-    }
-}
 def isCurseForgeDist = rootProject.ext.isCurseForgeDist
 
 base {
-    archivesName = "sparkle-morpher-${project.version}-neo26.2"
+    archivesName = "sparkle-morpher-${project.version}-neo${rootProject.minecraft_version}"
 }
 
-tasks.named("jar") {
-    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo26.2")
+tasks.named('jar') {
+    archiveFileName = rootProject.ext.distributionArchiveName("sparkle-morpher-${project.version}-neo${rootProject.minecraft_version}")
 }
 
 repositories {
@@ -49,9 +43,13 @@ repositories {
         name = "Aliyun Central"
         url = "https://maven.aliyun.com/repository/central"
     }
+    maven {
+        name = "NeoForged"
+        url = "https://maven.neoforged.net/releases"
+    }
 }
 
-["BMCLAPI Minecraft Libraries", "Aliyun Central", "Aliyun Public", "Project Local Maven"].each { repoName ->
+["BMCLAPI Minecraft Libraries", "Aliyun Central", "Aliyun Public", "Project Local Maven", "NeoForged"].each { repoName ->
     def repo = repositories.findByName(repoName)
     if (repo != null) {
         repositories.remove(repo)
@@ -60,6 +58,8 @@ repositories {
 }
 
 java {
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
     }
@@ -97,32 +97,34 @@ neoForge {
     }
 }
 
-// merged-layout: 共享层在仓库根的 ../common。本模块 src/main/resources 只保留
-// loader 专属资源 + 与 fabric 内容不同的少量覆盖资源。
-sourceSets.main.resources {
-    srcDir "src/generated/resources"
-    srcDir rootProject.file('../common/src/main/resources')
-    exclude 'native/**'
-}
-sourceSets.main.java {
-    srcDir rootProject.file('../common/src/main/java')
-    srcDir "src/neoforge/java"
-    if (!isCurseForgeDist) {
-        srcDir rootProject.ext.distributionNativeJavaSourceDir
+// Symmetric loader layout: `common/` is the shared source layer at the repo root,
+// this module owns src/{main,native,curseforge,test}/ exactly like :fabric does.
+// `src/main/resources` holds only loader-specific files plus the few images that
+// differ from the Fabric build (the rest is inherited from common/).
+// The two variant roots are mutually exclusive: native builds compile the native
+// layer, CurseForge builds compile the CurseForge layer instead.
+sourceSets {
+    main {
+        java {
+            srcDir rootProject.file('common/src/main/java')
+            if (isCurseForgeDist) {
+                srcDir rootProject.file('common/src/curseforge/java')
+                srcDir file('src/curseforge/java')
+            } else {
+                srcDir rootProject.file('common/src/native/java')
+                srcDir file('src/native/java')
+            }
+        }
+        resources {
+            srcDir "src/generated/resources"
+            srcDir rootProject.file('common/src/main/resources')
+            exclude 'native/**'
+        }
     }
-
-sourceSets.test.java {
-    srcDir rootProject.file('../common/src/test/java')
-}
-}
-
-if (isCurseForgeDist) {
-    tasks.named('compileJava', JavaCompile) {
-        source = files(
-                fileTree(rootProject.file('../common/src/main/java')),
-                fileTree('src/neoforge/java'),
-                fileTree('src/curseforge/java')
-        )
+    test {
+        java {
+            srcDir rootProject.file('common/src/test/java')
+        }
     }
 }
 
@@ -130,11 +132,7 @@ tasks.withType(JavaCompile).configureEach {
     options.release = 25
     options.encoding = "UTF-8"
     options.compilerArgs.addAll([
-                '-Xlint:deprecation', '-Xlint:unchecked',
-            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
-            // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
+            '-Xlint:deprecation', '-Xlint:unchecked',
             // S18.7 restored javac diagnostics; warnings are tracked by stable fingerprints.
             "--add-modules", "jdk.incubator.vector",
             "-Xmaxerrs", "10000",
@@ -169,18 +167,15 @@ processResources {
     }
 }
 
-
 dependencies {
-    // zstd-jni dependency removed: project now uses YSM native �?pure-Java ZstdUtil �?raw-frame fallback chain.
+    // zstd-jni is not used: the project relies on YSM native / pure-Java ZstdUtil / raw-frame fallback.
     implementation "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
     jarJar "com.github.TartaricAlkaline:ImageStream:-SNAPSHOT"
 
-    // R0: JVM 单测（JUnit 5），测试代码在 src/test/java。
-    // moddev 将 MC 依赖链剥离出 test 运行时：neoforge + minecraft-dependencies（gson/joml/fastutil 等库）
-    // + moddev 生成的 MC 类 jar（接口签名引用 MC 类需要）。
+    // R0: JVM unit tests (JUnit 5). moddev keeps MC deps out of the test runtime, so
+    // declare neoforge + minecraft-dependencies + the generated MC class jars.
     testImplementation "org.junit.jupiter:junit-jupiter:5.12.1"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-    // Tests also resolve loader annotations referenced by the main classes.
     testCompileOnly files(sourceSets.main.compileClasspath)
     testImplementation "net.neoforged:neoforge:$neo_version"
     testImplementation "net.neoforged:minecraft-dependencies:$minecraft_version"
@@ -200,6 +195,9 @@ test {
     // Use the game's resolved runtime so loader versions follow NeoForge.
     classpath += sourceSets.main.runtimeClasspath
 }
+
+// The Fabric module ships a shadowed release; NeoForge's jar task is the release
+// artifact, so both loaders expose the same `check` gate from one shared script.
 
 tasks.register("printRepositories") {
     doLast {

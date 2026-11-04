@@ -15,14 +15,22 @@ configurations {
     }
 }
 
-def releaseArchiveName = "${rootProject.archives_name}-${project.version}-fa26.2"
+def releaseArchiveName = "${rootProject.archives_name}-${project.version}-fa${rootProject.minecraft_version}"
 
+// Symmetric loader layout: `common/` is the shared source layer at the repo root,
+// this module owns src/{main,native,curseforge,test}/ exactly like :neoforge does.
+// The two variant roots are mutually exclusive: native builds compile the native
+// layer, CurseForge builds compile the CurseForge layer instead.
 sourceSets {
     main {
         java {
             srcDir rootProject.file('common/src/main/java')
-            if (!rootProject.ext.isCurseForgeDist) {
-                srcDir rootProject.ext.distributionNativeJavaSourceDir
+            if (rootProject.ext.isCurseForgeDist) {
+                srcDir rootProject.file('common/src/curseforge/java')
+                srcDir file('src/curseforge/java')
+            } else {
+                srcDir rootProject.file('common/src/native/java')
+                srcDir file('src/native/java')
             }
         }
         resources {
@@ -43,16 +51,6 @@ test {
     useJUnitPlatform()
     // jdk.zipfs 不在默认 ALL-DEFAULT 解析集（java.se 闭包不含），.ysm 容器解析需要 jar: FileSystem
     jvmArgs "--add-modules", "jdk.zipfs"
-}
-
-if (rootProject.ext.isCurseForgeDist) {
-    tasks.named('compileJava', JavaCompile) {
-        source = files(
-                fileTree('src/main/java'),
-                fileTree(rootProject.file('common/src/main/java')),
-                fileTree(rootProject.file('common/src/curseforge/java'))
-        )
-    }
 }
 
 // Public release artifacts are compile-only: TaCZ stays optional and is never bundled.

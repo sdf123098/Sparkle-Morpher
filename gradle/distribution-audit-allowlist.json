@@ -1,5 +1,16 @@
 {
   "formatVersion": 1,
+  "commonLoaderApiAllowlist": {
+    "1.21.1": [
+      "net.fabricmc.api.EnvType",
+      "net.fabricmc.api.Environment",
+      "net.minecraftforge.common.ForgeConfigSpec",
+      "net.minecraftforge.fml.config.ModConfig"
+    ],
+    "26.2": [
+      "net.neoforged.neoforge.common.ModConfigSpec"
+    ]
+  },
   "temporaryOwnedUpstreamNamespaceClasses": {
     "fa1.21.1": [],
     "fa26.1.2": ["com/mojang/blaze3d/vertex/BufferUploader.class"],
