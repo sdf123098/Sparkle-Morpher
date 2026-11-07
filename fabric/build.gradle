@@ -126,5 +126,6 @@ remapJar {
 }
 
 apply from: rootProject.file('gradle/verify-distribution.gradle')
+apply from: rootProject.file('gradle/spm-core-host.gradle')
 
 

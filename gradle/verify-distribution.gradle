@@ -23,7 +23,8 @@ def distributionLoaderProjectDir = project.projectDir
 // Audit identity must also work in an arbitrarily named clone or CI checkout.
 def distributionRepositoryName = "Sparkle-Morpher-${isNeoForge ? 'Neo' : 'Fa'}${rootProject.property('minecraft_version')}"
 def distributionAuditFile = rootProject.file('gradle/distribution-audit-allowlist.json')
-def distributionBuildScripts = rootProject.allprojects.collect { it.file('build.gradle') }
+def distributionBuildScripts = rootProject.allprojects.collect { it.file('build.gradle') } +
+        [rootProject.file('gradle/spm-core-host.gradle')]
 def distributionLoaderBuildFile = project.file('build.gradle')
 def distributionExpectedModId = rootProject.findProperty('mod_id')?.toString()
 def distributionDependencyVersions = (new JsonSlurper().parse(distributionAuditFile)
@@ -201,6 +202,7 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
     description = 'Audits the exact remapped/NeoForge release JAR selected by its archiveFile provider.'
     inputs.file(finalJarFile)
     inputs.file(distributionAuditFile)
+    inputs.files(distributionBuildScripts)
     inputs.property('distribution', distributionName)
     inputs.property('modVersion', distributionProjectVersion)
     inputs.property('loader', isNeoForge ? 'neoforge' : 'fabric')

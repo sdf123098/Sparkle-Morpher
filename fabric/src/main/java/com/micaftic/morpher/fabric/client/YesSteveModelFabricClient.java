@@ -13,6 +13,7 @@ import com.micaftic.morpher.core.api.client.HudOverlay;
 public final class YesSteveModelFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
+        CoreSceneFabricLifecycle.register();
         net.fabricmc.loader.api.FabricLoader.getInstance()
                 .getEntrypoints("sparkle_morpher_render_compat", ClientRenderCompatibility.class)
                 .forEach(ClientRenderCompatibilityRegistry::register);

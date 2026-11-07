@@ -20,7 +20,8 @@ import com.micaftic.morpher.core.api.client.HudOverlay;
 public final class YesSteveModelNeoForgeClient {
     private static HudOverlay debugOverlay; private static HudOverlay loadingOverlay;
 
-    public YesSteveModelNeoForgeClient(ModContainer modContainer) {
+    public YesSteveModelNeoForgeClient(net.neoforged.bus.api.IEventBus modBus, ModContainer modContainer) {
+        CoreSceneNeoForgeLifecycle.register(modBus);
         modContainer.registerExtensionPoint(IConfigScreenFactory.class, (mc, parentScreen) -> ModernPlayerModelScreen.settings(parentScreen));
     }
 

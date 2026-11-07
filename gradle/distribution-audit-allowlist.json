@@ -13,7 +13,9 @@
   },
   "temporaryOwnedUpstreamNamespaceClasses": {
     "fa1.21.1": [],
-    "fa26.1.2": ["com/mojang/blaze3d/vertex/BufferUploader.class"],
+    "fa26.1.2": [
+      "com/mojang/blaze3d/vertex/BufferUploader.class"
+    ],
     "fa26.2": [],
     "fa26.3": [],
     "neo1.21.1": [],
@@ -37,36 +39,122 @@
   },
   "registeredEmbeddedLibraries": {
     "fa1.21.1": {
-      "patterns": ["ImageStream--SNAPSHOT\\.jar$", "architectury-fabric-13\\.0\\.8\\.jar$", "forge-config-api-port-v21\\.1\\.6-1\\.21\\.1-Fabric\\.jar$"],
-      "coordinates": ["com.github.TartaricAlkaline:ImageStream", "dev.architectury:architectury-fabric", "maven.modrinth:forge-config-api-port"]
+      "patterns": [
+        "ImageStream--SNAPSHOT\\.jar$",
+        "architectury-fabric-13\\.0\\.8\\.jar$",
+        "forge-config-api-port-v21\\.1\\.6-1\\.21\\.1-Fabric\\.jar$",
+        "api\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "codec\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-common\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-bedrock\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-bbmodel\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-ysm\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-v3d\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "parser\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "scene\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "aircompressor\\-0\\.27\\.jar$"
+      ],
+      "coordinates": [
+        "com.github.TartaricAlkaline:ImageStream",
+        "dev.architectury:architectury-fabric",
+        "maven.modrinth:forge-config-api-port",
+        "dev.spm.core:api",
+        "dev.spm.core:codec",
+        "dev.spm.core:format-common",
+        "dev.spm.core:format-bedrock",
+        "dev.spm.core:format-bbmodel",
+        "dev.spm.core:format-ysm",
+        "dev.spm.core:format-v3d",
+        "dev.spm.core:parser",
+        "dev.spm.core:scene",
+        "io.airlift:aircompressor"
+      ]
     },
     "fa26.1.2": {
-      "patterns": ["ImageStream--SNAPSHOT\\.jar$", "forge-config-api-port-.*\\.jar$"],
-      "coordinates": ["com.github.TartaricAlkaline:ImageStream", "maven.modrinth:forge-config-api-port"]
+      "patterns": [
+        "ImageStream--SNAPSHOT\\.jar$",
+        "forge-config-api-port-.*\\.jar$"
+      ],
+      "coordinates": [
+        "com.github.TartaricAlkaline:ImageStream",
+        "maven.modrinth:forge-config-api-port"
+      ]
     },
     "fa26.2": {
-      "patterns": ["ImageStream--SNAPSHOT\\.jar$", "forge-config-api-port-547434-.*\\.jar$", "sparkle-morpher-caustica-compat-.*\\.jar$"],
-      "coordinates": ["com.github.TartaricAlkaline:ImageStream", "curse.maven:forge-config-api-port-547434", ":caustica-compat"]
+      "patterns": [
+        "ImageStream--SNAPSHOT\\.jar$",
+        "forge-config-api-port-547434-.*\\.jar$",
+        "sparkle-morpher-caustica-compat-.*\\.jar$"
+      ],
+      "coordinates": [
+        "com.github.TartaricAlkaline:ImageStream",
+        "curse.maven:forge-config-api-port-547434",
+        ":caustica-compat"
+      ]
     },
     "fa26.3": {
-      "patterns": ["ImageStream--SNAPSHOT\\.jar$", "forge-config-api-port-547434-.*\\.jar$", "sparkle-morpher-caustica-compat-.*\\.jar$"],
-      "coordinates": ["com.github.TartaricAlkaline:ImageStream", "curse.maven:forge-config-api-port-547434", ":caustica-compat"]
+      "patterns": [
+        "ImageStream--SNAPSHOT\\.jar$",
+        "forge-config-api-port-547434-.*\\.jar$",
+        "sparkle-morpher-caustica-compat-.*\\.jar$"
+      ],
+      "coordinates": [
+        "com.github.TartaricAlkaline:ImageStream",
+        "curse.maven:forge-config-api-port-547434",
+        ":caustica-compat"
+      ]
     },
     "neo1.21.1": {
-      "patterns": ["ImageStream--SNAPSHOT\\.jar$"],
-      "coordinates": ["com.github.TartaricAlkaline:ImageStream"]
+      "patterns": [
+        "ImageStream--SNAPSHOT\\.jar$",
+        "api\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "codec\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-common\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-bedrock\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-bbmodel\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-ysm\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "format\\-v3d\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "parser\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "scene\\-0\\.1\\.0\\-preview\\.952508376c62\\.jar$",
+        "aircompressor\\-0\\.27\\.jar$"
+      ],
+      "coordinates": [
+        "com.github.TartaricAlkaline:ImageStream",
+        "dev.spm.core:api",
+        "dev.spm.core:codec",
+        "dev.spm.core:format-common",
+        "dev.spm.core:format-bedrock",
+        "dev.spm.core:format-bbmodel",
+        "dev.spm.core:format-ysm",
+        "dev.spm.core:format-v3d",
+        "dev.spm.core:parser",
+        "dev.spm.core:scene",
+        "io.airlift:aircompressor"
+      ]
     },
     "neo26.1.2": {
-      "patterns": ["ImageStream--SNAPSHOT\\.jar$"],
-      "coordinates": ["com.github.TartaricAlkaline:ImageStream"]
+      "patterns": [
+        "ImageStream--SNAPSHOT\\.jar$"
+      ],
+      "coordinates": [
+        "com.github.TartaricAlkaline:ImageStream"
+      ]
     },
     "neo26.2": {
-      "patterns": ["ImageStream--SNAPSHOT\\.jar$"],
-      "coordinates": ["com.github.TartaricAlkaline:ImageStream"]
+      "patterns": [
+        "ImageStream--SNAPSHOT\\.jar$"
+      ],
+      "coordinates": [
+        "com.github.TartaricAlkaline:ImageStream"
+      ]
     },
     "neo26.3": {
-      "patterns": ["ImageStream--SNAPSHOT\\.jar$"],
-      "coordinates": ["com.github.TartaricAlkaline:ImageStream"]
+      "patterns": [
+        "ImageStream--SNAPSHOT\\.jar$"
+      ],
+      "coordinates": [
+        "com.github.TartaricAlkaline:ImageStream"
+      ]
     }
   }
 }

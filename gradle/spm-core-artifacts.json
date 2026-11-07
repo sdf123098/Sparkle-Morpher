@@ -1,0 +1,18 @@
+{
+  "sourceRevision": "952508376c625d51bf2f1d28376067ed8f206f6f",
+  "version": "0.1.0-preview.952508376c62",
+  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/3beb53c5fa1af7beec8ef09ebaa735bcd31dd7a8/",
+  "artifactCommit": "3beb53c5fa1af7beec8ef09ebaa735bcd31dd7a8",
+  "manifestSha256": "ce753c189a096a68e1c1fc76e6b89c3460694463c46b0a15502a5b679a903a72",
+  "sha256": {
+    "api": "a1ee4f3fc0fb5743e1db97edae6129e0979c7807b1dd4e089cd75ae3963ca284",
+    "codec": "4763c370cf3fd6ed53be291f7ca658182c4d488a8a2023fc4a7f44087bbedf04",
+    "format-common": "551dc7a316999fcc862097cfef47415f4a5d14639af8b926dfa69e43204dd028",
+    "format-bedrock": "c06119aef7d1dbdefaca64647872bf81bd6d51fd437a51e50671987b6248f3b2",
+    "format-bbmodel": "abf6b41473de0f0ab5933dc6d132acf488c248e6de3d69b426b098774c9c98cd",
+    "format-ysm": "11b683e61a70a6ce6868b395ebf1e63311b9a85fa91d2a690f1f0a0af386fe18",
+    "format-v3d": "ea45bb52f06abc8908aca6f4140c0d0dcc81fbe378f2ef5d5042b3b89199dece",
+    "parser": "d4949ff44091a26d5908f55b4e0db71fd7d255e885b3d3f277cb991147398fc0",
+    "scene": "8580a83a57ca4b27fe2229f8b632c57bdeb57e4c4fad80dd94755f7efb1537b5"
+  }
+}

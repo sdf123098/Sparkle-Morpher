@@ -1,0 +1,79 @@
+// Exact independent Core candidate: immutable artifact commit and per-module SHA-256.
+def corePin = new groovy.json.JsonSlurper().parse(rootProject.file('gradle/spm-core-artifacts.json'))
+def coreVersion = corePin.version.toString()
+def repositoryUri = corePin.repository.toString()
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'IndependentSpmCore'
+                url = uri(repositoryUri)
+            }
+        }
+        filter { includeGroup 'dev.spm.core' }
+    }
+}
+// Explicit loader nesting: include/jarJar are not assumed to bundle transitive Core artifacts.
+def coreModules = ['dev.spm.core:api', 'dev.spm.core:codec', 'dev.spm.core:format-common',
+                   'dev.spm.core:format-bedrock', 'dev.spm.core:format-bbmodel', 'dev.spm.core:format-ysm',
+                   'dev.spm.core:format-v3d', 'dev.spm.core:parser', 'dev.spm.core:scene']
+def verificationArtifacts = configurations.create('spmCoreVerification') {
+    canBeConsumed = false
+    canBeResolved = true
+    transitive = false
+}
+coreModules.each { module ->
+    def coordinate = "${module}:${coreVersion}"
+    dependencies.add(verificationArtifacts.name, coordinate)
+    dependencies.add('implementation', coordinate)
+    dependencies.add(project.name == 'fabric' ? 'include' : 'jarJar', coordinate) {
+        transitive = false
+    }
+}
+def expectedCoreHashes = corePin.sha256.collectEntries { module, hash ->
+    [("${module}-${coreVersion}.jar".toString()): hash.toString()]
+}
+def verifyCore = tasks.register('verifySpmCoreArtifacts') {
+    group = 'verification'
+    inputs.file(rootProject.file('gradle/spm-core-artifacts.json'))
+    inputs.files(verificationArtifacts)
+    doLast {
+        def actual = verificationArtifacts.files.collectEntries { artifact ->
+            [(artifact.name): java.security.MessageDigest.getInstance('SHA-256').digest(artifact.bytes).encodeHex().toString()]
+        }
+        if (actual != expectedCoreHashes) throw new GradleException('Independent Core artifact inventory or SHA-256 mismatch')
+        logger.lifecycle("Verified ${actual.size()} immutable Core artifacts (${coreVersion}).")
+    }
+}
+tasks.named('compileJava') { dependsOn verifyCore }
+tasks.named('check') { dependsOn verifyCore }
+dependencies.add('implementation', 'io.airlift:aircompressor:0.27')
+dependencies.add(project.name == 'fabric' ? 'include' : 'jarJar', 'io.airlift:aircompressor:0.27') {
+    transitive = false
+}
+// Gson is provided by Minecraft; every Core module carries its own license and provenance entries.
+
+// Gradle JVM properties are not inherited by the launched Minecraft JVM. Forward only this
+// explicit opt-in surface; values remain individual structured JVM arguments.
+def sceneProperties = [
+        spmCoreSceneModel: 'spm.core.scene.model',
+        spmCoreSceneVariant: 'spm.core.scene.variant',
+        spmCoreSceneClip: 'spm.core.scene.clip',
+        spmCoreSceneDiagnostics: 'spm.core.scene.diagnostics',
+        spmCoreScenePreview: 'spm.core.scene.preview'
+]
+if (project.name == 'fabric') {
+    loom.runs.configureEach {
+        sceneProperties.each { property, systemName ->
+            def value = providers.gradleProperty(property)
+            if (value.isPresent()) vmArg "-D${systemName}=${value.get()}"
+        }
+    }
+} else {
+    neoForge.runs.configureEach {
+        sceneProperties.each { property, systemName ->
+            def value = providers.gradleProperty(property)
+            if (value.isPresent()) systemProperty systemName, value.get()
+        }
+    }
+}
