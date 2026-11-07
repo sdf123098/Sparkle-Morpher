@@ -97,6 +97,7 @@ sourceSets {
         }
     }
     test {
+        resources.srcDir rootProject.file('common/src/test/resources')
         java {
             srcDir rootProject.file('common/src/test/java')
         }

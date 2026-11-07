@@ -157,7 +157,9 @@ public final class MinecraftHostEffectDispatcher implements AutoCloseable {
         sounds.clear();
     }
     private static ParticleOptions particle(String value) {
-        try { return ParticleArgument.readParticle(new StringReader(value), BuiltInRegistries.PARTICLE_TYPE.asLookup()); }
+        var level = Minecraft.getInstance().level;
+        if (level == null) throw new IllegalStateException("Core particle parsing requires the current world registry provider");
+        try { return ParticleArgument.readParticle(new StringReader(value), level.registryAccess()); }
         catch (com.mojang.brigadier.exceptions.CommandSyntaxException invalid) { throw new IllegalArgumentException("Invalid Core particle resource", invalid); }
     }
     private static String text(MolangValue value) {

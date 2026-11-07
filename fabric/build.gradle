@@ -24,6 +24,7 @@ sourceSets {
     }
     // R0: JVM 单测挂靠 fabric 模块，测试代码随核心代码放 common/src/test/java
     test {
+        resources.srcDir rootProject.file('common/src/test/resources')
         java {
             srcDir rootProject.file('common/src/test/java')
         }

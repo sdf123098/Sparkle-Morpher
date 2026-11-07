@@ -50,7 +50,8 @@ public final class MinecraftCoreSceneHost {
                 LOGGER.info("Core scene loaded lane={} model={} clip={}", state.lane, path, state.owner.clip());
             }
             var owner = state.owner;
-            var snapshot = MinecraftHostSnapshotSampler.sample(client, entity, state.lane == CoreSceneOwner.Lane.PREVIEW);
+            var snapshot = MinecraftHostSnapshotSampler.sample(client, entity, state.lane == CoreSceneOwner.Lane.PREVIEW,
+                    state.motion, now, paused);
             var requests = state.dispatcher.requests();
             var frame = owner.advance(now, paused, snapshot, call -> resolve(call, snapshot, requests, entity));
             var ticket = owner.ticket();
@@ -115,9 +116,11 @@ public final class MinecraftCoreSceneHost {
         final CoreSceneOwner.Lane lane;
         CoreSceneOwner owner;
         MinecraftHostEffectDispatcher dispatcher;
+        CoreMotionSnapshot motion = new CoreMotionSnapshot();
         String failure;
         LaneState(CoreSceneOwner.Lane lane) { this.lane = lane; }
         void retireOwner() {
+            motion = new CoreMotionSnapshot();
             if (owner != null) { owner.close(); owner = null; }
             var retired = dispatcher; dispatcher = null;
             if (retired != null) {

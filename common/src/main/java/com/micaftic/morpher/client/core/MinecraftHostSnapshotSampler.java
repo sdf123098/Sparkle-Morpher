@@ -24,12 +24,16 @@ public final class MinecraftHostSnapshotSampler {
         parCoolPresent = java.util.Objects.requireNonNull(presence);
     }
 
-    public static SceneInputs sample(Minecraft client, LivingEntity entity, boolean preview) {
+    public static SceneInputs sample(Minecraft client, LivingEntity entity, boolean preview,
+                                     CoreMotionSnapshot motion, long nowNanos, boolean paused) {
         var query = new HashMap<String, Double>();
         var values = new HashMap<String, MolangValue>();
         Vec3 velocity = entity.getDeltaMovement();
+        Vec3 position = entity.getPosition(client.getTimer().getGameTimeDeltaPartialTick(false));
+        var movement = motion.sample(nowNanos, paused, position.x, position.y, position.z);
+        var head = new CoreHeadSnapshot(entity.getYHeadRot() - entity.yBodyRot, entity.getXRot());
         query.put("ground_speed", velocity.horizontalDistance() * 20);
-        query.put("vertical_speed", velocity.y * 20);
+        query.put("vertical_speed", movement.verticalSpeed());
         query.put("health", (double) entity.getHealth());
         query.put("max_health", (double) entity.getMaxHealth());
         query.put("is_on_ground", entity.onGround() ? 1.0 : 0.0);
@@ -40,8 +44,9 @@ public final class MinecraftHostSnapshotSampler {
         query.put("is_alive", entity.isAlive() ? 1.0 : 0.0);
         query.put("is_using_item", entity.isUsingItem() ? 1.0 : 0.0);
         query.put("is_riding", entity.isPassenger() ? 1.0 : 0.0);
-        query.put("head_x_rotation", (double) entity.getXRot());
-        query.put("head_y_rotation", (double) (entity.getYHeadRot() - entity.yBodyRot));
+        // d253 QueryBinding intentionally exposes net head yaw under x, pitch under y.
+        query.put("head_x_rotation", head.queryHeadXRotation());
+        query.put("head_y_rotation", head.queryHeadYRotation());
         query.put("time_of_day", (entity.level().getDayTime() % 24000L) / 24000.0);
         query.put("moon_phase", (double) entity.level().getMoonPhase());
         query.put("life_time", entity.tickCount / 20.0);
@@ -59,7 +64,7 @@ public final class MinecraftHostSnapshotSampler {
         values.put("ysm.hurt_time", MolangValue.number(entity.hurtTime));
         values.put("ysm.food_level", MolangValue.number(entity instanceof Player player ? player.getFoodData().getFoodLevel() : 20));
         values.put("query.position", vector(entity.position()));
-        values.put("query.position_delta", vector(velocity));
+        values.put("query.position_delta", vector(new Vec3(movement.dx(), movement.dy(), movement.dz())));
         values.put("ysm.entity_type", MolangValue.text(entity instanceof Player ? "player" : BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()));
         values.put("ysm.is_player", MolangValue.bool(entity instanceof Player));
         values.put("ysm.is_passenger", MolangValue.bool(entity.isPassenger()));
