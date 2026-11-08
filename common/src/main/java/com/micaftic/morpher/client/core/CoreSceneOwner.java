@@ -112,10 +112,12 @@ public final class CoreSceneOwner implements AutoCloseable {
         var time = clock.advance(nowNanos, paused);
         if (published != null && published.frameId() == time.slot()) return published;
         if (sampledSlot != time.slot()) {
-            sampledSlot = time.slot();
-            sampledInputs = java.util.Objects.requireNonNull(sampleInputs.get());
+            var candidateInputs = java.util.Objects.requireNonNull(sampleInputs.get());
+            var candidateCalls = Map.copyOf(candidateInputs.bindings().calls());
+            sampledInputs = candidateInputs;
             sampledCalls.clear();
-            sampledCalls.putAll(sampledInputs.bindings().calls());
+            sampledCalls.putAll(candidateCalls);
+            sampledSlot = time.slot();
         }
         ScriptBudget meter = policy.frame(time.slot(), cancellation);
         for (int request = 0; request <= 4096; request++) {

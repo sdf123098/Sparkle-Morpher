@@ -9,6 +9,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Exercises the actual opt-in Host owner with an original, redistributable model. No Minecraft runtime. */
 final class CoreHostFixtureTest {
+    @Test void failedInputSamplingCanRetryTheSameSlotWithoutPublishingStaleInputs() throws Exception {
+        Path model = Path.of(getClass().getResource("/core-host-fixture/model.geo.json").toURI());
+        try (var owner = CoreSceneOwner.load(model, CoreSceneOwner.Lane.WORLD)) {
+            assertThrows(IllegalStateException.class, () -> owner.advance(100, false,
+                    () -> { throw new IllegalStateException("Sampler unavailable"); },
+                    (call, frozen) -> fail("Failed sampler must not evaluate the Core")));
+            assertNull(owner.snapshot());
+            var frame = owner.advance(100, false, () -> new SceneInputs(Map.of("ground_speed", 2.0)),
+                    (call, frozen) -> MolangValue.bool(true));
+            assertEquals(1.0, frame.variables().get("fixture_initialized"));
+            assertTrue(frame.pose().rotations()[1] != 0);
+        }
+    }
     @Test void samplesInputsOncePerSlotIncludingBindingRetriesAndMultipass() throws Exception {
         Path model = Path.of(getClass().getResource("/core-host-fixture/model.geo.json").toURI());
         try (var owner = CoreSceneOwner.load(model, CoreSceneOwner.Lane.WORLD)) {
