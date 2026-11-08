@@ -20,6 +20,11 @@ public final class CoreCompatibilityRegistry<C> {
     private final Map<CoreCompatibilityDefaults.Integration, Provider<C>> providers =
             new EnumMap<>(CoreCompatibilityDefaults.Integration.class);
     public synchronized void registerPresence(Predicate<String> sampler) { presence = Objects.requireNonNull(sampler); }
+    /** Read-only actual loader fact, also usable for function-only integrations. Never guesses absence. */
+    public synchronized boolean isInstalled(String modId) {
+        if (presence == null) throw new IllegalStateException("Core Host loader compatibility presence sampler was not registered");
+        return presence.test(Objects.requireNonNull(modId));
+    }
     public synchronized void registerProvider(CoreCompatibilityDefaults.Integration integration, Provider<C> provider) {
         if (providers.putIfAbsent(Objects.requireNonNull(integration), Objects.requireNonNull(provider)) != null)
             throw new IllegalStateException("Duplicate Core Host compatibility provider: " + integration);

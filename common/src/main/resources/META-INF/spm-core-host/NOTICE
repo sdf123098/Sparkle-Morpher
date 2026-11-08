@@ -1,0 +1,19 @@
+Independent SPM Core Host adapters
+
+The new com.micaftic.morpher.client.core animation/query adapters use component-scoped
+behavior references from YesSteveModel and the explicitly allowed OhMyYesSteveModel
+snapshot d2536542747a1aa5c02594827f579171c525843c:
+https://github.com/AndreaFrederica/OhMyYesSteveModel
+
+Referenced components include QueryBinding, MolangUtils, CtrlBinding, YSM Molang
+functions and compatibility registration defaults. The reference's top-level
+license is Apache-2.0. Its GeckoLib and Mocha-derived paths retain MIT notices;
+copies of those upstream license notices accompany this file. This attribution
+does not certify unrelated upstream components or the existing SPM runtime.
+
+query.get_equipped_item_name is independently implemented from Mojang's public
+Molang documentation: https://mojang.github.io/bedrock-samples/Molang.html
+
+No upstream model artwork or runtime/native implementation is included by these
+new adapters. The core-host-fixture and core-host-smoke test models are original
+synthetic fixtures. Independent Core libraries retain their own bundled notices.

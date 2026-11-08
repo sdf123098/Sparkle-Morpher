@@ -5,7 +5,6 @@ import dev.spm.core.scene.MolangValue;
 import dev.spm.core.scene.PoseFrame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.LivingEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,12 +50,22 @@ public final class MinecraftCoreSceneHost {
             }
             var owner = state.owner;
             var requests = new MinecraftHostEffectDispatcher.Requests[1];
+            var queries = new MinecraftCoreQueryResolver[1];
             var frame = owner.advance(now, paused,
                     () -> MinecraftHostSnapshotSampler.sample(client, entity, state.lane == CoreSceneOwner.Lane.PREVIEW,
                             state.motion, now, paused),
                     (call, frozen) -> {
+                        if (MinecraftCoreQueryResolver.supports(call.name())) {
+                            if (queries[0] == null) {
+                                var cosmetic = frozen.bindings().values().get("host.compatibility.cosmeticarmor");
+                                if (!(cosmetic instanceof MolangValue.BooleanValue))
+                                    throw new IllegalStateException("Missing frozen CosmeticArmor presence fact");
+                                queries[0] = MinecraftHostSnapshotSampler.queryResolver(client, entity, cosmetic.truth());
+                            }
+                            return queries[0].resolve(call);
+                        }
                         if (requests[0] == null) requests[0] = state.dispatcher.requests();
-                        return resolve(call, frozen, requests[0], entity);
+                        return resolve(call, requests[0]);
                     });
             var ticket = owner.ticket();
             state.dispatcher.validateBatch(frame.effects());
@@ -78,24 +87,10 @@ public final class MinecraftCoreSceneHost {
         }
     }
 
-    private static MolangValue resolve(MolangBindings.Call call, dev.spm.core.scene.SceneInputs snapshot,
-                                       MinecraftHostEffectDispatcher.Requests requests, LivingEntity entity) {
+    private static MolangValue resolve(MolangBindings.Call call, MinecraftHostEffectDispatcher.Requests requests) {
         var args = call.arguments();
         return switch (call.name()) {
             case "ysm.play_sound", "ysm.stop_sound", "ysm.stop_all_sounds", "ysm.particle", "ysm.abs_particle" -> requests.sample(call);
-            case "ysm.relative_block_name" -> {
-                if (args.size() != 3) throw new IllegalArgumentException("relative_block_name expects x,y,z");
-                var position = entity.blockPosition().offset((int) args.get(0).number(), (int) args.get(1).number(), (int) args.get(2).number());
-                yield MolangValue.text(BuiltInRegistries.BLOCK.getKey(entity.level().getBlockState(position).getBlock()).toString());
-            }
-            case "query.get_equipped_item_name" -> {
-                if (args.size() > 1) throw new IllegalArgumentException("get_equipped_item_name expects at most one hand index");
-                String hand = args.isEmpty() || args.get(0).number() == 0 ? "mainhand" : "offhand";
-                var value = snapshot.bindings().values().get("host.equipment." + hand);
-                if (!(value instanceof MolangValue.TextValue text)) throw new IllegalStateException("Missing sampled hand item");
-                String name = text.value();
-                yield MolangValue.text(name.startsWith("minecraft:") ? name.substring(10) : name);
-            }
             default -> throw new IllegalArgumentException("Unregistered Core Host binding: " + call.name() + " arguments=" + args);
         };
     }
