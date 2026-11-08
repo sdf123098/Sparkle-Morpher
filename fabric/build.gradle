@@ -63,8 +63,6 @@ configurations {
 }
 
 dependencies {
-    // @ExpectPlatform 注解来源（原由 architectury 插件间接提供，删 common 模块后需显式声明）
-    compileOnly "dev.architectury:architectury-injectables:1.0.10"
     // Loom 1.14 + JDK21 源码重映射（Mercury）需要 javax.annotation；缺失会导致
     // cardinal-components 等依赖的 sources 重映射报 Pb(347) 并在配置阶段失败。
     implementation 'com.google.code.findbugs:jsr305:3.0.2'

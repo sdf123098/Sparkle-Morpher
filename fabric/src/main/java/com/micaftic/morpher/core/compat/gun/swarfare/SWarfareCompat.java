@@ -6,7 +6,6 @@ import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import com.micaftic.morpher.geckolib3.core.enums.PlayState;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -17,43 +16,35 @@ public final class SWarfareCompat {
     private SWarfareCompat() {
     }
 
-    @ExpectPlatform
     public static boolean isLoaded() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.isLoaded();
     }
 
-    @ExpectPlatform
     public static boolean isGunItem(ItemStack itemStack) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.isGunItem(itemStack);
     }
 
-    @ExpectPlatform
     public static boolean isPlayerAiming(Player player) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.isPlayerAiming(player);
     }
 
-    @ExpectPlatform
     public static void applyGunTransform(ItemStack stack, AnimatedGeoModel model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
-        throw new AssertionError();
+        com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.applyGunTransform(stack, model, entity, poseStack, packedLightIn, partialTicks);
     }
 
-    @ExpectPlatform
     public static PlayState handleTaczAnim(LivingEntity entity, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event, String str, ILoopType loopType) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.handleTaczAnim(entity, event, str, loopType);
     }
 
-    @ExpectPlatform
     public static PlayState handleGunHoldAnim(ItemStack stack, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.handleGunHoldAnim(stack, event);
     }
 
-    @ExpectPlatform
     public static PlayState handleGunActionAnim(ItemStack stack, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.handleGunActionAnim(stack, event);
     }
 
-    @ExpectPlatform
     public static ResourceLocation getGunTexture(ItemStack stack) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.getGunTexture(stack);
     }
 }

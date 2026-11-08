@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.compat.sbackpack;
 
 import com.micaftic.morpher.client.animation.molang.CtrlBinding;
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import org.apache.commons.lang3.tuple.Pair;
@@ -13,28 +12,23 @@ public final class SBackpackCompat {
     private SBackpackCompat() {
     }
 
-    @ExpectPlatform
     public static boolean isLoaded() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.sbackpack.fabric.SBackpackCompatImpl.isLoaded();
     }
 
-    @ExpectPlatform
     public static void setupRenderLayers() {
-        throw new AssertionError();
+        com.micaftic.morpher.core.compat.sbackpack.fabric.SBackpackCompatImpl.setupRenderLayers();
     }
 
-    @ExpectPlatform
     public static Optional<Pair<String, String>> getInCompatibleInfo() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.sbackpack.fabric.SBackpackCompatImpl.getInCompatibleInfo();
     }
 
-    @ExpectPlatform
     public static void registerControllerFunctions(CtrlBinding binding) {
-        throw new AssertionError();
+        com.micaftic.morpher.core.compat.sbackpack.fabric.SBackpackCompatImpl.registerControllerFunctions(binding);
     }
 
-    @ExpectPlatform
     public static ItemStack getBackpackItem(LivingEntity livingEntity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.sbackpack.fabric.SBackpackCompatImpl.getBackpackItem(livingEntity);
     }
 }

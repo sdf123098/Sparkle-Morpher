@@ -1,6 +1,5 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.world.entity.Entity;
 
 public final class TouhouMaidCompat {
@@ -8,19 +7,16 @@ public final class TouhouMaidCompat {
     private TouhouMaidCompat() {
     }
 
-    @ExpectPlatform
     public static boolean isLoaded() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouMaidCompatImpl.isLoaded();
     }
 
-    @ExpectPlatform
     public static void init() {
-        throw new AssertionError();
+        com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouMaidCompatImpl.init();
     }
 
-    @ExpectPlatform
     public static boolean isMaidEntity(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouMaidCompatImpl.isMaidEntity(entity);
     }
 
 }

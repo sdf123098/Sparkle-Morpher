@@ -1,6 +1,5 @@
 package com.micaftic.morpher.core.compat.punchy;
 
-import dev.architectury.injectables.annotations.ExpectPlatform;
 
 /**
  * Punchy! (Modrinth slug {@code punchy-fpa}) detection.
@@ -20,20 +19,17 @@ public final class PunchyCompat {
     private PunchyCompat() {
     }
 
-    @ExpectPlatform
     public static boolean isLoaded() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.punchy.fabric.PunchyCompatImpl.isLoaded();
     }
 
     /** Loader-reported mod id, or {@code null} when Punchy! is absent. */
-    @ExpectPlatform
     public static String modId() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.punchy.fabric.PunchyCompatImpl.modId();
     }
 
     /** Loader-reported version, or {@code null} when Punchy! is absent. */
-    @ExpectPlatform
     public static String version() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.punchy.fabric.PunchyCompatImpl.version();
     }
 }

@@ -1,6 +1,5 @@
 package com.micaftic.morpher.core.api.attribute;
 
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.LivingEntity;
@@ -12,40 +11,40 @@ public final class ForgeAttributes {
     private ForgeAttributes() {
     }
 
-    @ExpectPlatform
+
     @Nullable
     public static Attribute blockReach() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.attribute.fabric.ForgeAttributesImpl.blockReach();
     }
 
-    @ExpectPlatform
+
     @Nullable
     public static Attribute entityReach() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.attribute.fabric.ForgeAttributesImpl.entityReach();
     }
 
-    @ExpectPlatform
+
     @Nullable
     public static Attribute swimSpeed() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.attribute.fabric.ForgeAttributesImpl.swimSpeed();
     }
 
-    @ExpectPlatform
+
     @Nullable
     public static Attribute entityGravity() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.attribute.fabric.ForgeAttributesImpl.entityGravity();
     }
 
-    @ExpectPlatform
+
     @Nullable
     public static Attribute stepHeightAddition() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.attribute.fabric.ForgeAttributesImpl.stepHeightAddition();
     }
 
-    @ExpectPlatform
+
     @Nullable
     public static Attribute nametagDistance() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.attribute.fabric.ForgeAttributesImpl.nametagDistance();
     }
 
     public static double getValue(LivingEntity entity, @Nullable Attribute attribute, double defaultValue) {

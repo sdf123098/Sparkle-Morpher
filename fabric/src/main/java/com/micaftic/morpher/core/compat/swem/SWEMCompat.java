@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.compat.swem;
 
 import com.micaftic.morpher.client.animation.molang.CtrlBinding;
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.world.entity.LivingEntity;
 
 public final class SWEMCompat {
@@ -9,18 +8,15 @@ public final class SWEMCompat {
     private SWEMCompat() {
     }
 
-    @ExpectPlatform
     public static boolean isLoaded() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.swem.fabric.SWEMCompatImpl.isLoaded();
     }
 
-    @ExpectPlatform
     public static String getHorseGaitName(LivingEntity livingEntity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.swem.fabric.SWEMCompatImpl.getHorseGaitName(livingEntity);
     }
 
-    @ExpectPlatform
     public static void registerControllerFunctions(CtrlBinding ctrlBinding) {
-        throw new AssertionError();
+        com.micaftic.morpher.core.compat.swem.fabric.SWEMCompatImpl.registerControllerFunctions(ctrlBinding);
     }
 }

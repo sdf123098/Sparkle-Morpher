@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.compat.immersivemelodies;
 
 import com.micaftic.morpher.client.animation.molang.CtrlBinding;
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.world.entity.LivingEntity;
 
 public final class ImmersiveMelodiesCompat {
@@ -17,18 +16,15 @@ public final class ImmersiveMelodiesCompat {
     private ImmersiveMelodiesCompat() {
     }
 
-    @ExpectPlatform
     public static boolean isLoaded() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.immersivemelodies.fabric.ImmersiveMelodiesCompatImpl.isLoaded();
     }
 
-    @ExpectPlatform
     public static void updateMelodyProgress(LivingEntity livingEntity, ImmersiveMelodiesData imData) {
-        throw new AssertionError();
+        com.micaftic.morpher.core.compat.immersivemelodies.fabric.ImmersiveMelodiesCompatImpl.updateMelodyProgress(livingEntity, imData);
     }
 
-    @ExpectPlatform
     public static void registerBindings(CtrlBinding binding) {
-        throw new AssertionError();
+        com.micaftic.morpher.core.compat.immersivemelodies.fabric.ImmersiveMelodiesCompatImpl.registerBindings(binding);
     }
 }

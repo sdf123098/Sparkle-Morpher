@@ -170,6 +170,9 @@ def verifySourceInputs = tasks.register('verifyProductionSourceBoundary') {
                 errors.add("production self-check source: ${relative}")
             }
             String text = sourceFile.getText('UTF-8')
+            if (text =~ /(?m)^\s*@(?:dev\.architectury\.injectables\.annotations\.)?ExpectPlatform\b/) {
+                errors.add("unresolved common-module platform stub in merged compilation unit: ${relative}")
+            }
             // NeoForge resolves mod JARs as Java modules, so its tree must not reference the
             // upstream Gagravarr package that Fabric legitimately keeps. The rule is scoped to
             // this project's own source roots: `javaInputs` intentionally spans every
@@ -254,6 +257,13 @@ def verifyJar = tasks.register('verifyDistributionArtifact') {
             Set<String> nestedSpmClasses = [] as Set<String>
             Set<String> nestedSpmNamespaceClasses = [] as Set<String>
             Set<String> outerSpmClasses = names.findAll { it.startsWith('com/micaftic/morpher/') && it.endsWith('.class') } as Set<String>
+            outerSpmClasses.each { className ->
+                byte[] content = zip.getInputStream(zip.getEntry(className)).withCloseable { it.bytes }
+                if (new String(content, java.nio.charset.StandardCharsets.ISO_8859_1)
+                        .contains('dev/architectury/injectables/annotations/ExpectPlatform')) {
+                    throw new GradleException("Unresolved platform bridge annotation in final JAR: ${className}")
+                }
+            }
             Set<String> allSeenSpmClasses = new LinkedHashSet<>(outerSpmClasses)
             List<String> nestedJarPaths = names.findAll { (it.startsWith('META-INF/jars/') || it.startsWith('META-INF/jarjar/')) && it.endsWith('.jar') }.sort()
             List<String> nestedBasenames = nestedJarPaths.collect { it.substring(it.lastIndexOf('/') + 1) }

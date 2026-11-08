@@ -1,34 +1,28 @@
 package com.micaftic.morpher.core.compat.oculus;
 
-import dev.architectury.injectables.annotations.ExpectPlatform;
 
 public final class OculusCompat {
 
     private OculusCompat() {
     }
 
-    @ExpectPlatform
     public static boolean isLoaded() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.oculus.fabric.OculusCompatImpl.isLoaded();
     }
 
-    @ExpectPlatform
     public static boolean isPBRActive() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.oculus.fabric.OculusCompatImpl.isPBRActive();
     }
 
-    @ExpectPlatform
     public static void updatePBRState() {
-        throw new AssertionError();
+        com.micaftic.morpher.core.compat.oculus.fabric.OculusCompatImpl.updatePBRState();
     }
 
-    @ExpectPlatform
     public static boolean isShaderPackInUse() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.oculus.fabric.OculusCompatImpl.isShaderPackInUse();
     }
 
-    @ExpectPlatform
     public static boolean isRenderingShadowPass() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.oculus.fabric.OculusCompatImpl.isRenderingShadowPass();
     }
 }

@@ -1,6 +1,5 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -11,73 +10,59 @@ public final class TouhouLittleMaidCompat {
     private TouhouLittleMaidCompat() {
     }
 
-    @ExpectPlatform
     public static boolean isLoaded() {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isLoaded();
     }
 
-    @ExpectPlatform
     public static boolean isMaidEntity(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isMaidEntity(entity);
     }
 
-    @ExpectPlatform
     public static boolean isYsmModel(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isYsmModel(entity);
     }
 
-    @ExpectPlatform
     public static String getYsmModelId(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.getYsmModelId(entity);
     }
 
-    @ExpectPlatform
     public static String getYsmModelTexture(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.getYsmModelTexture(entity);
     }
 
-    @ExpectPlatform
     public static boolean isMaidRideable(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isMaidRideable(entity);
     }
 
-    @ExpectPlatform
     public static boolean isSimplePlanesEntity(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isSimplePlanesEntity(entity);
     }
 
-    @ExpectPlatform
     public static boolean isImmersiveAircraftEntity(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isImmersiveAircraftEntity(entity);
     }
 
-    @ExpectPlatform
     public static boolean isMaidItem(Item item) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isMaidItem(item);
     }
 
-    @ExpectPlatform
     public static String getMaidEntityId(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.getMaidEntityId(entity);
     }
 
-    @ExpectPlatform
     public static boolean isMaidSitting(LivingEntity livingEntity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isMaidSitting(livingEntity);
     }
 
-    @ExpectPlatform
     public static boolean isMaidOwnedBy(Entity entity, Player player) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.isMaidOwnedBy(entity, player);
     }
 
-    @ExpectPlatform
     public static String getMaidGameAnimation(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.getMaidGameAnimation(entity);
     }
 
-    @ExpectPlatform
     public static String getMaidRenderAnimation(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.compat.touhoulittlemaid.fabric.TouhouLittleMaidCompatImpl.getMaidRenderAnimation(entity);
     }
 }

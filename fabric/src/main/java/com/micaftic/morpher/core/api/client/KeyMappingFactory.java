@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.api.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.minecraft.client.KeyMapping;
 
 public final class KeyMappingFactory {
@@ -9,28 +8,23 @@ public final class KeyMappingFactory {
     private KeyMappingFactory() {
     }
 
-    @ExpectPlatform
     public static KeyMapping createInGameAlt(String name, InputConstants.Type type, int keyCode, String category) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.client.fabric.KeyMappingFactoryImpl.createInGameAlt(name, type, keyCode, category);
     }
 
-    @ExpectPlatform
     public static KeyMapping createInGameNone(String name, InputConstants.Type type, int keyCode, String category) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.client.fabric.KeyMappingFactoryImpl.createInGameNone(name, type, keyCode, category);
     }
 
-    @ExpectPlatform
     public static boolean isActiveAndMatches(KeyMapping keyMapping, int keyCode, int scanCode) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.client.fabric.KeyMappingFactoryImpl.isActiveAndMatches(keyMapping, keyCode, scanCode);
     }
 
-    @ExpectPlatform
     public static boolean isActiveAndMatches(KeyMapping keyMapping, int keyCode, int scanCode, int modifiers) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.client.fabric.KeyMappingFactoryImpl.isActiveAndMatches(keyMapping, keyCode, scanCode, modifiers);
     }
 
-    @ExpectPlatform
     public static boolean isMouseActiveAndMatches(KeyMapping keyMapping, int button) {
-        throw new AssertionError();
+        return com.micaftic.morpher.core.api.client.fabric.KeyMappingFactoryImpl.isMouseActiveAndMatches(keyMapping, button);
     }
 }

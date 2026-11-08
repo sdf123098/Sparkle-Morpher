@@ -22,7 +22,6 @@ import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
 import com.micaftic.morpher.molang.runtime.Struct;
 
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
 import it.unimi.dsi.fastutil.ints.Int2FloatMaps;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
@@ -43,14 +42,12 @@ import java.util.Optional;
 @Environment(EnvType.CLIENT)
 public final class PlayerCapability extends CustomPlayerEntity {
 
-    @ExpectPlatform
     public static Optional<PlayerCapability> get(Player player) {
-        throw new AssertionError();
+        return com.micaftic.morpher.capability.fabric.PlayerCapabilityImpl.get(player);
     }
 
-    @ExpectPlatform
     public static Optional<PlayerCapability> get(Entity entity) {
-        throw new AssertionError();
+        return com.micaftic.morpher.capability.fabric.PlayerCapabilityImpl.get(entity);
     }
 
     private final Int2ReferenceOpenHashMap<MolangVarHolder> molangVarsMap;
