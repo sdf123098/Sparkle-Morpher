@@ -50,15 +50,26 @@ public final class MinecraftCoreSceneHost {
                 LOGGER.info("Core scene loaded lane={} model={} clip={}", state.lane, path, state.owner.clip());
             }
             var owner = state.owner;
-            var snapshot = MinecraftHostSnapshotSampler.sample(client, entity, state.lane == CoreSceneOwner.Lane.PREVIEW,
-                    state.motion, now, paused);
-            var requests = state.dispatcher.requests();
-            var frame = owner.advance(now, paused, snapshot, call -> resolve(call, snapshot, requests, entity));
+            var requests = new MinecraftHostEffectDispatcher.Requests[1];
+            var frame = owner.advance(now, paused,
+                    () -> MinecraftHostSnapshotSampler.sample(client, entity, state.lane == CoreSceneOwner.Lane.PREVIEW,
+                            state.motion, now, paused),
+                    (call, frozen) -> {
+                        if (requests[0] == null) requests[0] = state.dispatcher.requests();
+                        return resolve(call, frozen, requests[0], entity);
+                    });
             var ticket = owner.ticket();
             state.dispatcher.validateBatch(frame.effects());
             for (var effect : owner.claim(ticket)) {
+                long before = state.dispatcher.diagnostics().committedOccurrences();
                 state.dispatcher.commit(client, entity, effect, () -> state.owner == owner && owner.current(ticket, effect)
                         && client.level == entity.level() && client.player == entity);
+                var diagnostics = state.dispatcher.diagnostics();
+                if (Boolean.getBoolean("spm.core.scene.diagnostics") && diagnostics.committedOccurrences() > before) {
+                    LOGGER.info("Core effect lane={} owner={} generation={} frame={} tick={} sequence={} resource={} soundQueues={} particlesCreated={}",
+                            state.lane, effect.instanceId(), effect.generation(), frame.frameId(), effect.step(), effect.sequence(),
+                            effect.resource(), diagnostics.soundQueues(), diagnostics.particlesCreated());
+                }
             }
         } catch (Exception failure) {
             state.failure = failure.getClass().getSimpleName() + ": " + failure.getMessage();
@@ -105,9 +116,12 @@ public final class MinecraftCoreSceneHost {
     private static String diagnostic(LaneState state) {
         if (state.failure != null) return "Core " + state.lane + " REJECTED " + state.failure;
         PoseFrame frame = state.owner == null ? null : state.owner.snapshot();
+        var stats = state.dispatcher == null ? null : state.dispatcher.diagnostics();
+        String effects = stats == null ? "" : " effects=" + stats.committedOccurrences()
+                + " soundQueue=" + stats.soundQueues() + " particles=" + stats.particlesCreated();
         return frame == null ? "Core " + state.lane + " awaiting explicit model/world"
                 : "Core " + state.lane + " clip=" + state.owner.clip() + " frame=" + frame.frameId()
-                + " 60HzStep=" + frame.step() + " generation=" + frame.generation() + " bones=" + frame.pose().boneCount();
+                + " 60HzStep=" + frame.step() + " generation=" + frame.generation() + " bones=" + frame.pose().boneCount() + effects;
     }
     public static synchronized PoseFrame worldSnapshot() { return WORLD.owner == null ? null : WORLD.owner.snapshot(); }
     public static synchronized PoseFrame previewSnapshot() { return PREVIEW.owner == null ? null : PREVIEW.owner.snapshot(); }

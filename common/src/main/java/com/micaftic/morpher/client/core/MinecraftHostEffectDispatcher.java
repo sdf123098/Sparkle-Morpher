@@ -23,6 +23,9 @@ import java.util.function.BooleanSupplier;
 /** Client-thread effects owned only by the new Core lane; never executes arbitrary commands. */
 public final class MinecraftHostEffectDispatcher implements AutoCloseable {
     private final Map<String, SoundInstance> sounds = new HashMap<>();
+    private long committedOccurrences, soundQueues, particlesCreated;
+    public record Diagnostics(long committedOccurrences, long soundQueues, long particlesCreated) { }
+    public Diagnostics diagnostics() { return new Diagnostics(committedOccurrences, soundQueues, particlesCreated); }
 
     /** Per-attempt projection makes play/stop return values observe earlier accepted occurrences. */
     public final class Requests {
@@ -97,6 +100,7 @@ public final class MinecraftHostEffectDispatcher implements AutoCloseable {
     public void commit(Minecraft client, LivingEntity entity, EffectCommand effect, BooleanSupplier stillCurrent) {
         if (!client.isSameThread()) throw new IllegalStateException("Core effects require the client thread");
         if (!stillCurrent.getAsBoolean()) return;
+        committedOccurrences++;
         if (CoreBoneEffects.handles(effect)) return;
         var args = effect.arguments();
         if (effect.kind().equals("sound") && args.isEmpty()) {
@@ -133,7 +137,7 @@ public final class MinecraftHostEffectDispatcher implements AutoCloseable {
                             speed * (authoredCount == 0 ? dx : random.nextGaussian()),
                             speed * (authoredCount == 0 ? dy : random.nextGaussian()),
                             speed * (authoredCount == 0 ? dz : random.nextGaussian()));
-                    if (created != null) created.setLifetime(lifetime);
+                    if (created != null) { created.setLifetime(lifetime); particlesCreated++; }
                 }
             }
             default -> throw new IllegalArgumentException("Unregistered Core Host effect: " + effect.kind() + "/" + effect.resource());
@@ -149,6 +153,7 @@ public final class MinecraftHostEffectDispatcher implements AutoCloseable {
                 Math.clamp(volume, 0.001f, 1000), Math.clamp(pitch, 0.001f, 1000), RandomSource.create(), entity.getX(), entity.getY(), entity.getZ());
         sounds.put(key, instance);
         client.getSoundManager().play(instance);
+        soundQueues++;
     }
 
     @Override public void close() {

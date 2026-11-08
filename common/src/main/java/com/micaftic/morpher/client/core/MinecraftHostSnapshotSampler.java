@@ -17,17 +17,22 @@ import java.util.Map;
 /** New Host sampler: Minecraft objects stop here; only immutable values reach the Core. */
 public final class MinecraftHostSnapshotSampler {
     private MinecraftHostSnapshotSampler() { }
-    private static java.util.function.BooleanSupplier parCoolPresent = () -> {
-        throw new IllegalStateException("Core Host loader compatibility presence sampler was not registered");
-    };
-    public static void registerParCoolPresence(java.util.function.BooleanSupplier presence) {
-        parCoolPresent = java.util.Objects.requireNonNull(presence);
+    public record CompatibilityContext(Minecraft client, LivingEntity entity, boolean preview) { }
+    private static final CoreCompatibilityRegistry<CompatibilityContext> COMPATIBILITY = new CoreCompatibilityRegistry<>();
+    public static void registerCompatibilityPresence(java.util.function.Predicate<String> presence) {
+        COMPATIBILITY.registerPresence(presence);
+    }
+    public static void registerCompatibilityProvider(CoreCompatibilityDefaults.Integration integration,
+            CoreCompatibilityRegistry.Provider<CompatibilityContext> provider) {
+        COMPATIBILITY.registerProvider(integration, provider);
     }
 
     public static SceneInputs sample(Minecraft client, LivingEntity entity, boolean preview,
                                      CoreMotionSnapshot motion, long nowNanos, boolean paused) {
         var query = new HashMap<String, Double>();
         var values = new HashMap<String, MolangValue>();
+        var compatibility = COMPATIBILITY.sample(new CompatibilityContext(client, entity, preview));
+        values.putAll(compatibility.values());
         Vec3 velocity = entity.getDeltaMovement();
         Vec3 position = entity.getPosition(client.getTimer().getGameTimeDeltaPartialTick(false));
         var movement = motion.sample(nowNanos, paused, position.x, position.y, position.z);
@@ -119,7 +124,8 @@ public final class MinecraftHostSnapshotSampler {
         if (entity.onGround() && entity.isSprinting()) conditions.add("run");
         if (entity.onGround() && moving) conditions.add("walk");
         var vehicle = entity.getVehicle();
-        values.putAll(CoreVanillaController.snapshot(conditions, preview, vehicle != null && vehicle.isAlive(), parCoolPresent.getAsBoolean()));
+        values.putAll(CoreVanillaController.snapshot(conditions, preview, vehicle != null && vehicle.isAlive(),
+                compatibility.present(CoreCompatibilityDefaults.Integration.PARCOOL)));
         return new SceneInputs(query, new MolangBindings(values, Map.of()), !preview,
                 client.hasSingleplayerServer() ? SceneInputs.SyncMode.LOCAL : SceneInputs.SyncMode.HOST);
     }

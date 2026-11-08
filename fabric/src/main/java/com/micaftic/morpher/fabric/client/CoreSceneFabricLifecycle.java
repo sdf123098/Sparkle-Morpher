@@ -20,8 +20,8 @@ public final class CoreSceneFabricLifecycle {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        com.micaftic.morpher.client.core.MinecraftHostSnapshotSampler.registerParCoolPresence(
-                () -> net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("parcool"));
+        com.micaftic.morpher.client.core.MinecraftHostSnapshotSampler.registerCompatibilityPresence(
+                id -> net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded(id));
         ClientTickEvents.START_CLIENT_TICK.register(client -> MinecraftCoreSceneHost.drive());
         WorldRenderEvents.START.register(context -> MinecraftCoreSceneHost.drive());
         HudRenderCallback.EVENT.register((graphics, delta) -> {

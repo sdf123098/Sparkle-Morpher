@@ -18,8 +18,8 @@ public final class CoreSceneNeoForgeLifecycle {
     public static synchronized void register(IEventBus modBus) {
         if (registered) return;
         registered = true;
-        com.micaftic.morpher.client.core.MinecraftHostSnapshotSampler.registerParCoolPresence(
-                () -> net.neoforged.fml.ModList.get().isLoaded("parcool"));
+        com.micaftic.morpher.client.core.MinecraftHostSnapshotSampler.registerCompatibilityPresence(
+                id -> net.neoforged.fml.ModList.get().isLoaded(id));
         modBus.addListener(CoreSceneNeoForgeLifecycle::reloadListeners);
         NeoForge.EVENT_BUS.addListener(CoreSceneNeoForgeLifecycle::tick);
         NeoForge.EVENT_BUS.addListener(CoreSceneNeoForgeLifecycle::frame);

@@ -9,6 +9,28 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Exercises the actual opt-in Host owner with an original, redistributable model. No Minecraft runtime. */
 final class CoreHostFixtureTest {
+    @Test void samplesInputsOncePerSlotIncludingBindingRetriesAndMultipass() throws Exception {
+        Path model = Path.of(getClass().getResource("/core-host-fixture/model.geo.json").toURI());
+        try (var owner = CoreSceneOwner.load(model, CoreSceneOwner.Lane.WORLD)) {
+            var samples = new java.util.concurrent.atomic.AtomicInteger();
+            var requests = new java.util.concurrent.atomic.AtomicInteger();
+            java.util.function.Supplier<SceneInputs> input = () -> {
+                samples.incrementAndGet();
+                return new SceneInputs(Map.of("ground_speed", 2.0));
+            };
+            var first = owner.advance(100, false, input, (call, frozen) -> {
+                requests.incrementAndGet();
+                assertEquals(2.0, frozen.queries().get("ground_speed"));
+                return MolangValue.bool(true);
+            });
+            assertEquals(1, samples.get());
+            assertTrue(requests.get() > 0, "Fixture must actually request a Host binding");
+            assertSame(first, owner.advance(5_000_100, false, () -> fail("Cached slot resampled inputs"),
+                    (call, frozen) -> fail("Cached slot requested a binding")));
+            owner.advance(50_000_100, false, input, (call, frozen) -> MolangValue.bool(true));
+            assertEquals(2, samples.get());
+        }
+    }
     @Test void originalBedrockFunctionsAndEffectsReachPublishedHostChannels() throws Exception {
         Path model = Path.of(getClass().getResource("/core-host-fixture/model.geo.json").toURI());
         try (var owner = CoreSceneOwner.load(model, CoreSceneOwner.Lane.WORLD)) {

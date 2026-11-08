@@ -101,14 +101,21 @@ public final class CoreSceneOwner implements AutoCloseable {
     /** Resolver runs in the Host, between failed transactional attempts; Core sees data only. */
     public synchronized PoseFrame advance(long nowNanos, boolean paused, SceneInputs inputs,
                                           Function<MolangBindings.Call, MolangValue> sampleCall) {
+        return advance(nowNanos, paused, () -> inputs, (call, frozen) -> sampleCall.apply(call));
+    }
+
+    /** Inputs are sampled only for a new logical slot; retries reuse that same immutable snapshot. */
+    public synchronized PoseFrame advance(long nowNanos, boolean paused,
+                                          java.util.function.Supplier<SceneInputs> sampleInputs,
+                                          java.util.function.BiFunction<MolangBindings.Call, SceneInputs, MolangValue> sampleCall) {
         requireOpen();
         var time = clock.advance(nowNanos, paused);
         if (published != null && published.frameId() == time.slot()) return published;
         if (sampledSlot != time.slot()) {
             sampledSlot = time.slot();
-            sampledInputs = inputs;
+            sampledInputs = java.util.Objects.requireNonNull(sampleInputs.get());
             sampledCalls.clear();
-            sampledCalls.putAll(inputs.bindings().calls());
+            sampledCalls.putAll(sampledInputs.bindings().calls());
         }
         ScriptBudget meter = policy.frame(time.slot(), cancellation);
         for (int request = 0; request <= 4096; request++) {
@@ -132,7 +139,7 @@ public final class CoreSceneOwner implements AutoCloseable {
             } catch (MolangException missing) {
                 var binding = missing.bindingRequest().orElseThrow(() -> missing);
                 if (sampledCalls.containsKey(binding)) throw new IllegalStateException("Core rejected an already sampled Host binding", missing);
-                sampledCalls.put(binding, java.util.Objects.requireNonNull(sampleCall.apply(binding)));
+                sampledCalls.put(binding, java.util.Objects.requireNonNull(sampleCall.apply(binding, sampledInputs)));
             }
         }
         throw new IllegalStateException("Core Host binding request limit exceeded");
