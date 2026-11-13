@@ -11,6 +11,7 @@ import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.render.RenderContext;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
 import com.micaftic.morpher.client.render.RenderPass;
+import com.micaftic.morpher.client.renderer.preview.HudOverlayCrop;
 import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
@@ -653,8 +654,10 @@ public final class ModelPreviewRenderer {
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
         Tesselator tesselator = Tesselator.getInstance();
         BufferBuilder buffer = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        float x0 = (float) x - EXTRA_PLAYER_FBO_PADDING;
-        float y0 = (float) y - EXTRA_PLAYER_FBO_PADDING;
+        HudOverlayCrop.Origin compositeOrigin = HudOverlayCrop.compositeOrigin(x, y, scale,
+                modelBounds.maxX, modelBounds.maxY, EXTRA_PLAYER_FBO_PADDING);
+        float x0 = compositeOrigin.x();
+        float y0 = compositeOrigin.y();
         float x1 = x0 + logicalFboWidth;
         float y1 = y0 + logicalFboHeight;
         float z = (float) zDepth;
