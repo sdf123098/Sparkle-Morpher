@@ -20,7 +20,7 @@ import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.data.OrderedStringMap;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 
 import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
@@ -99,8 +99,8 @@ public final class ClientModelBundleAssembler {
         Map<String, String> mainParentMap = GeometryBaker.buildParentMap(raw.mainEntity.mainModel);
         SpecialHandLocatorProfile specialHandLocatorProfile = detectSpecialHandLocatorProfile(raw, mainParentMap);
 
-        GeoModel mainMesh = GeometryBaker.buildMesh(raw.mainEntity.mainModel, context, textureCount, mainScanner, raw.properties.allCutout, specialHandLocatorProfile);
-        GeoModel armMesh = raw.mainEntity.armModel != null ? GeometryBaker.buildMesh(raw.mainEntity.armModel, context, textureCount, armScanner, raw.properties.allCutout) : mainMesh;
+        BuiltModel mainMesh = GeometryBaker.buildMesh(raw.mainEntity.mainModel, context, textureCount, mainScanner, raw.properties.allCutout, specialHandLocatorProfile);
+        BuiltModel armMesh = raw.mainEntity.armModel != null ? GeometryBaker.buildMesh(raw.mainEntity.armModel, context, textureCount, armScanner, raw.properties.allCutout) : mainMesh;
 
         // Only geometry baking reads these images. Do not retain every large raster
         // while parsing animations, scripts, projectile models and vehicles.
@@ -110,7 +110,7 @@ public final class ClientModelBundleAssembler {
         mainScanner = null;
         armScanner = null;
 
-        GeoModel[] meshes = new GeoModel[]{mainMesh, armMesh};
+        BuiltModel[] meshes = new BuiltModel[]{mainMesh, armMesh};
 
         Map<String, AnimationFile> animations = new LinkedHashMap<>();
         for (Map.Entry<String, RawYsmModel.RawAnimationFile> entry : raw.mainEntity.animationFiles.entrySet()) {
@@ -368,7 +368,7 @@ public final class ClientModelBundleAssembler {
             }
         }
 
-        GeoModel mesh = GeometryBaker.buildMesh(sub.model, context, textureCount, subScanner, true);
+        BuiltModel mesh = GeometryBaker.buildMesh(sub.model, context, textureCount, subScanner, true);
         subScanner = null;
 
         Map<String, Animation> allAnimations = new LinkedHashMap<>();
@@ -412,7 +412,7 @@ public final class ClientModelBundleAssembler {
             }
         }
 
-        GeoModel mesh = GeometryBaker.buildMesh(sub.model, context, textureCount, subScanner, true);
+        BuiltModel mesh = GeometryBaker.buildMesh(sub.model, context, textureCount, subScanner, true);
         subScanner = null;
 
         Map<String, Animation> allAnimations = new LinkedHashMap<>();

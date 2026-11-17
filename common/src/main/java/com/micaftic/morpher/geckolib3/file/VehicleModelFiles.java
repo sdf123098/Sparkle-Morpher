@@ -3,13 +3,13 @@ package com.micaftic.morpher.geckolib3.file;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.geckolib3.file.AnimationFile;
 import com.micaftic.morpher.geckolib3.file.AnimationControllerFile;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 
 public class VehicleModelFiles {
 
     private final String[] textureNames;
 
-    private final GeoModel model;
+    private final BuiltModel model;
 
     private final AnimationFile animations;
 
@@ -17,7 +17,7 @@ public class VehicleModelFiles {
 
     private final OuterFileTexture texture;
 
-    public VehicleModelFiles(String[] textureNames, GeoModel model, AnimationFile animations, AnimationControllerFile animationController, OuterFileTexture texture) {
+    public VehicleModelFiles(String[] textureNames, BuiltModel model, AnimationFile animations, AnimationControllerFile animationController, OuterFileTexture texture) {
         this.textureNames = textureNames;
         this.model = model;
         this.animations = animations;
@@ -29,7 +29,7 @@ public class VehicleModelFiles {
         return this.textureNames;
     }
 
-    public GeoModel getModel() {
+    public BuiltModel getModel() {
         return this.model;
     }
 

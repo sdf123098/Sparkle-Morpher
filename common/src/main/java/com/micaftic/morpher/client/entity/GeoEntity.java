@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.audio.*;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
@@ -62,7 +62,7 @@ public abstract class GeoEntity<T extends Entity> extends AnimatableEntity<T> {
     @Nullable
     public abstract GeoEntity.ModelWrapper buildRenderShape(ModelAssembly modelAssembly, boolean isDefault);
 
-    public abstract GeoModel getAnimationProcessor();
+    public abstract BuiltModel getAnimationProcessor();
 
     public GeoEntity(T t, boolean registerWithCache) {
         super(t);

@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import org.lwjgl.system.MemoryUtil;
 
@@ -14,10 +14,10 @@ final class GpuMeshDataBuilder {
     private GpuMeshDataBuilder() {
     }
 
-    static GpuMeshData build(GeoModel model) {
+    static GpuMeshData build(BuiltModel model) {
         int totalQuads = 0;
-        for (GeoModel.BakedBone bone : model.bakedBones) {
-            for (GeoModel.BakedCube cube : bone.cubes) {
+        for (BuiltModel.BakedBone bone : model.bakedBones) {
+            for (BuiltModel.BakedCube cube : bone.cubes) {
                 totalQuads += cube.quads.size();
             }
         }
@@ -31,9 +31,9 @@ final class GpuMeshDataBuilder {
         List<QuadRecord> quads = new ArrayList<>(totalQuads);
 
         for (int boneIdx = 0; boneIdx < model.bakedBones.size(); boneIdx++) {
-            GeoModel.BakedBone bone = model.bakedBones.get(boneIdx);
-            for (GeoModel.BakedCube cube : bone.cubes) {
-                for (GeoModel.BakedQuad quad : cube.quads) {
+            BuiltModel.BakedBone bone = model.bakedBones.get(boneIdx);
+            for (BuiltModel.BakedCube cube : bone.cubes) {
+                for (BuiltModel.BakedQuad quad : cube.quads) {
                     int vertexOffset = vertices.position() / GpuMeshData.VERTEX_STRIDE;
                     int normal = packNormal(quad.normalX(), quad.normalY(), quad.normalZ());
                     for (int v = 0; v < 4; v++) {

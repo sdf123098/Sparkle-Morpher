@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.core.render.RenderBackend;
 import com.micaftic.morpher.core.render.RenderBackendDecision;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -23,7 +23,7 @@ public final class OpenGlGpuRenderBackend implements RenderBackend {
 
     @Override
     public boolean tryRender(RenderRequest request) {
-        GeoModel model = request.model();
+        BuiltModel model = request.model();
         PoseStack.Pose pose = request.pose();
         return GpuRenderPath.tryRender(
                 model, pose, request.boneParams(), request.stateBuffer(), request.renderPartMask(),
@@ -33,7 +33,7 @@ public final class OpenGlGpuRenderBackend implements RenderBackend {
     }
 
     @Override
-    public void release(GeoModel model) {
+    public void release(BuiltModel model) {
         // R10.2：GPU mesh 租约 revoke——mesh ownership 与 model runtime 绑定。
         GpuRenderPath.disposeOwner(model);
     }

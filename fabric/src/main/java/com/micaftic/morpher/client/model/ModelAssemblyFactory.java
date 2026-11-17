@@ -18,7 +18,7 @@ import com.micaftic.morpher.geckolib3.file.AnimationControllerFile;
 import com.micaftic.morpher.geckolib3.file.AnimationFile;
 import com.micaftic.morpher.geckolib3.file.ProjectileModelFiles;
 import com.micaftic.morpher.geckolib3.file.VehicleModelFiles;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.resource.models.Metadata;
 import com.micaftic.morpher.util.FileTypeUtil;
 import it.unimi.dsi.fastutil.objects.*;
@@ -190,8 +190,8 @@ public class ModelAssemblyFactory {
 
     public static PlayerModelBundle buildPlayerModelBundle(ClientModelInfo clientModelInfo, ModelResourceBundle resourceBundle, boolean isPrimary, List<AbstractTexture> textureList) {
         MainModelData hierarchyData = clientModelInfo.getMainModelData();
-        GeoModel mainModel = hierarchyData.getModels().get(0);
-        GeoModel armModel = hierarchyData.getModels().get(1);
+        BuiltModel mainModel = hierarchyData.getModels().get(0);
+        BuiltModel armModel = hierarchyData.getModels().get(1);
         Object2ReferenceLinkedOpenHashMap<String, Animation> object2ReferenceOpenHashMap = new Object2ReferenceLinkedOpenHashMap<>();
         Object2ReferenceLinkedOpenHashMap<String, Animation> armAnimations = new Object2ReferenceLinkedOpenHashMap<>();
         for (String str : hierarchyData.getAnimations().keySet()) {
@@ -356,7 +356,7 @@ public class ModelAssemblyFactory {
         return ModelActionProfile.YSM_AUTHORED;
     }
 
-    private static SemanticSkeleton buildSemanticSkeleton(GeoModel mainModel) {
+    private static SemanticSkeleton buildSemanticSkeleton(BuiltModel mainModel) {
         LinkedHashMap<String, String> normalizedToActual = new LinkedHashMap<>();
         if (mainModel != null && mainModel.bones != null) {
             for (GeoBone bone : mainModel.bones) {
@@ -409,7 +409,7 @@ public class ModelAssemblyFactory {
     private static Map<Identifier, ProjectileModelBundle> buildProjectileModels(ClientModelInfo clientModelInfo, ModelResourceBundle resourceBundle, boolean isPrimary, List<AbstractTexture> textureList) {
         Object2ReferenceOpenHashMap<Identifier, ProjectileModelBundle> projectileMap = new Object2ReferenceOpenHashMap<>();
         for (ProjectileModelFiles projectileFiles : clientModelInfo.getExtraItemModels()) {
-            GeoModel model = projectileFiles.getModel();
+            BuiltModel model = projectileFiles.getModel();
             AnimationFile animationFile = projectileFiles.getAnimations();
             AnimationControllerFile controllerFile = projectileFiles.getAnimationController();
             Object2ReferenceOpenHashMap<String, Animation> animations = new Object2ReferenceOpenHashMap<>(animationFile != null ? animationFile.getAnimations() : Object2ReferenceMaps.emptyMap());
@@ -431,7 +431,7 @@ public class ModelAssemblyFactory {
     private static Map<Identifier, VehicleModelBundle> buildVehicleModels(ClientModelInfo clientModelInfo, ModelResourceBundle resourceBundle, boolean isPrimary, List<AbstractTexture> textureList) {
         Object2ReferenceOpenHashMap<Identifier, VehicleModelBundle> vehicleMap = new Object2ReferenceOpenHashMap<>();
         for (VehicleModelFiles vehicleFiles : clientModelInfo.getVehicleModelFiles()) {
-            GeoModel model = vehicleFiles.getModel();
+            BuiltModel model = vehicleFiles.getModel();
             AnimationFile animationFile = vehicleFiles.getAnimations();
             AnimationControllerFile controllerFile = vehicleFiles.getAnimationController();
             Object2ReferenceOpenHashMap<String, Animation> animations = new Object2ReferenceOpenHashMap<>(animationFile != null ? animationFile.getAnimations() : Object2ReferenceMaps.emptyMap());

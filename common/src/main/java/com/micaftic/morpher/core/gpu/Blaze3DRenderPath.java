@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class Blaze3DRenderPath {
     private static final AtomicBoolean warnedIncompleteDrawPath = new AtomicBoolean(false);
     private static final AtomicBoolean warnedRuntimeFailure = new AtomicBoolean(false);
-    private static final Map<GeoModel, Blaze3DModelMesh> meshCache = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<BuiltModel, Blaze3DModelMesh> meshCache = Collections.synchronizedMap(new WeakHashMap<>());
     private static final Matrix4f IDENTITY_MATRIX = new Matrix4f();
     private static final Vector3f overlayScratch = new Vector3f();
     private static final float[] rootPoseScratch = new float[16];
@@ -65,10 +65,10 @@ public final class Blaze3DRenderPath {
     }
 
     /** Prepare/upload a separate bone snapshot before Minecraft starts executing feature passes. */
-    public static PreparedDraw prepare(GeoModel model, PoseStack.Pose pose, float[] boneParams,
+    public static PreparedDraw prepare(BuiltModel model, PoseStack.Pose pose, float[] boneParams,
             float[] stateBuffer, int renderPartMask, int packedLight, int packedOverlay,
             float r, float g, float b, float a, Identifier texture, boolean translucent,
-            com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.BoneRenderPass bonePass, boolean outline) {
+            com.micaftic.morpher.client.render.ModelRendererBridge.BoneRenderPass bonePass, boolean outline) {
         if (!isExperimentalEnabled() || model == null || texture == null) return null;
         VulkanBoneBufferPool.Lease lease = null;
         try {
@@ -76,20 +76,12 @@ public final class Blaze3DRenderPath {
             Blaze3DModelMesh mesh = getOrBuildMesh(model);
             if (mesh == null) return null;
             ByteBuffer bones = mesh.perFrameBoneBuffer;
-            boolean nativeComputed = computeBoneMatricesNativeVulkan(model, pose, boneParams, packedLight, bones);
-            if (nativeComputed) {
-                com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.computeStateBufferForNative(
-                        model, boneParams, stateBuffer, pose);
-            } else {
-                if (warnedNativeStorageFallback.compareAndSet(false, true)) {
-                    com.micaftic.morpher.YesSteveModel.LOGGER.warn("[SM-VULKAN-SSBO] Native SIMD bone computation unavailable; Java bone fallback is active and does not count as a complete SIMD/GPU chain");
-                }
-                if (!Blaze3DBoneMatrices.write(model, pose.pose(), pose.normal(), boneParams, stateBuffer, packedLight, bones)) return null;
-            }
-            if (bonePass != com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.BoneRenderPass.ALL) {
+            boolean nativeComputed = false;
+            if (!Blaze3DBoneMatrices.write(model, pose.pose(), pose.normal(), boneParams, stateBuffer, packedLight, bones)) return null;
+            if (bonePass != com.micaftic.morpher.client.render.ModelRendererBridge.BoneRenderPass.ALL) {
                 for (int i = 0; i < model.bakedBones.size(); i++) {
                     boolean glow = model.bakedBones.get(i).glow;
-                    if (glow != (bonePass == com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.BoneRenderPass.GLOW)) {
+                    if (glow != (bonePass == com.micaftic.morpher.client.render.ModelRendererBridge.BoneRenderPass.GLOW)) {
                         bones.putFloat(i * 144 + 132, 1.0f);
                     }
                 }
@@ -181,7 +173,7 @@ public final class Blaze3DRenderPath {
     }
 
     public static boolean tryRender(
-            GeoModel model,
+            BuiltModel model,
             PoseStack.Pose pose,
             float[] boneParams,
             float[] stateBuffer,
@@ -226,8 +218,7 @@ public final class Blaze3DRenderPath {
             }
 
             ByteBuffer boneBuf = mesh.perFrameBoneBuffer;
-            if (!computeBoneMatricesNativeVulkan(model, pose, boneParams, packedLight, boneBuf)
-                    && !Blaze3DBoneMatrices.write(model, pose.pose(), pose.normal(), boneParams, stateBuffer, packedLight, boneBuf)) {
+            if (!Blaze3DBoneMatrices.write(model, pose.pose(), pose.normal(), boneParams, stateBuffer, packedLight, boneBuf)) {
                 GpuDebugLog.warn("Blaze3D render path fallback: bone matrix update failed bones={} boneParamsLen={}",
                         model.bakedBones.size(), boneParams == null ? -1 : boneParams.length);
                 return false;
@@ -299,7 +290,7 @@ public final class Blaze3DRenderPath {
         }
     }
 
-    private static Blaze3DModelMesh getOrBuildMesh(GeoModel model) {
+    private static Blaze3DModelMesh getOrBuildMesh(BuiltModel model) {
         Blaze3DModelMesh mesh = meshCache.get(model);
         if (mesh != null) {
             return mesh;
@@ -313,59 +304,16 @@ public final class Blaze3DRenderPath {
 
     /**
      * 释放指定模型持有的 Blaze3D GPU mesh（租约 revoke），与
-     * {@link OpenGlGpuRenderBackend#release(GeoModel)} 对称。WeakHashMap 仅能回收 key，
+     * {@link OpenGlGpuRenderBackend#release(BuiltModel)} 对称。WeakHashMap 仅能回收 key，
      * 不会关闭其 GpuBuffer / 直接内存，故模型装配释放时必须显式调用。
      */
-    public static void disposeOwner(GeoModel model) {
+    public static void disposeOwner(BuiltModel model) {
         if (model == null) {
             return;
         }
         Blaze3DModelMesh mesh = meshCache.remove(model);
         if (mesh != null) {
             mesh.close();
-        }
-    }
-
-    private static boolean computeBoneMatricesNativeVulkan(
-            GeoModel model,
-            PoseStack.Pose pose,
-            float[] boneParams,
-            int packedLight,
-            ByteBuffer out
-    ) {
-        int boneCount = model.bakedBones == null ? 0 : model.bakedBones.size();
-        if (boneCount <= 0 || boneParams == null || boneParams.length < boneCount * 12
-                || ConfigPolicies.graphics().nativeSimdPolicy()
-                == com.micaftic.morpher.core.render.NativeSimdPolicy.OFF
-                || !AccelerationCapability.canRenderSimd()
-                || !model.ensureVulkanNativeGpuMesh()) {
-            return false;
-        }
-
-        pose.pose().get(rootPoseScratch);
-        pose.normal().get(rootNormalScratch);
-        out.clear();
-        NativeSimdGpuCompute.markVulkanUnwritten(out, boneCount);
-        try {
-            GeoModel.nComputeBoneMatricesVulkan(
-                    model.vulkanNativeGpuMeshHandle,
-                    rootPoseScratch,
-                    rootNormalScratch,
-                    boneParams,
-                    packedLight,
-                    out
-            );
-            if (!NativeSimdGpuCompute.hasCompleteVulkanWrite(out, boneCount)) {
-                GpuDebugLog.warn("Blaze3D native Vulkan bone buffer incomplete bones={} handle={}",
-                        boneCount, model.vulkanNativeGpuMeshHandle);
-                return false;
-            }
-            out.position(0);
-            out.limit(boneCount * NativeSimdGpuCompute.BONE_STRIDE_BYTES);
-            return true;
-        } catch (Throwable t) {
-            GpuDebugLog.warn("Blaze3D native Vulkan bone computation failed: {}", t.toString());
-            return false;
         }
     }
 

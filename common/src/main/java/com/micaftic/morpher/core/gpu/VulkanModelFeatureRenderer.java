@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.BoneRenderPass;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.ModelRendererBridge.BoneRenderPass;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.core.render.SmGraphicsBackend;
 import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
@@ -26,14 +26,14 @@ public final class VulkanModelFeatureRenderer implements FeatureRenderer<VulkanM
     }
 
     public static boolean trySubmit(SubmitNodeCollector collector, RenderType renderType,
-            PoseStack.Pose pose, GeoModel model, float[] bones, float[] state, int packedLight,
+            PoseStack.Pose pose, BuiltModel model, float[] bones, float[] state, int packedLight,
             int packedOverlay, float r, float g, float b, float a, Identifier texture, BoneRenderPass bonePass) {
         return trySubmit(collector, renderType, pose, model, bones, state, packedLight, packedOverlay,
                 r, g, b, a, texture, bonePass, 0);
     }
 
     public static boolean trySubmit(SubmitNodeCollector collector, RenderType renderType,
-            PoseStack.Pose pose, GeoModel model, float[] bones, float[] state, int packedLight,
+            PoseStack.Pose pose, BuiltModel model, float[] bones, float[] state, int packedLight,
             int packedOverlay, float r, float g, float b, float a, Identifier texture, BoneRenderPass bonePass,
             int renderPartMask) {
         if (SmGraphicsBackendDetector.currentBackend() != SmGraphicsBackend.VULKAN

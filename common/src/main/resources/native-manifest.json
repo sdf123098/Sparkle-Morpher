@@ -1,15 +1,58 @@
 {
   "formatVersion": 1,
-  "abi": 3,
-  "version": "8d572acf572e62817de5a08086df2188d91c989f",
-  "source": "sdf123098/openysm.cpp@8d572acf572e62817de5a08086df2188d91c989f",
-  "comment": "R1.2.2 §11 Native 信任链：digest mismatch 禁止加载。构建前由 verify-native-abi.gradle 根据实际原生文件自动刷新 SHA-256，并在打包前复核。",
+  "abi": 1,
+  "version": "1.0.0",
+  "source": "AIH-Interactive/spm-core@166402d4707e01b17a9b87a8631e18768eb3c1eb",
+  "comment": "spm-core 1.0.0 native SIMD compute kernels (Rust). Verified via native-manifest SHA-256 and JNI ABI markers.",
   "artifacts": [
-    { "platform": "windows-x64", "filename": "ysm-core.dll", "sha256": "5929C863177FD46433F486234ECE2CF225B5F75AFB2D4A04877D60D349186C8D", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "windows-x86", "filename": "ysm-core.dll", "sha256": "B38B5743C55F73F9255094C001A890A8B2BC02C9AAA5BCF74BAD38FCAD7E5091", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "linux-x64", "filename": "libysm-core.so", "sha256": "68E3EE6689CF7A6326E8D073F680AA074DEDAFBDB31EAEC968C7C30B4C55EF04", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "macos-x64", "filename": "libysm-core.dylib", "sha256": "AC683CC59D5E71A94EAC9C4709F5EED3C472879D4418FA67D121580577FFF328", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "macos-arm64", "filename": "libysm-core.dylib", "sha256": "33C6AA6DD36D925E81E4EF4D83F4E7F40D803D4E511BECE2B8F84E039F5822EA", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" },
-    { "platform": "android-arm64", "filename": "libysm-core.so", "sha256": "062A3D3C99FBFD15A59486F2684C9CB7BFF20DF199929FEB6C8E00A6DC3BAAD8", "abi": 3, "version": "8d572acf572e62817de5a08086df2188d91c989f" }
+    {
+      "platform": "windows-x64",
+      "filename": "spm_core_native.dll",
+      "sha256": "0F399A91AECC0A201D6CE26D6E9BB6727BA26D33C9D2DAA906D2BCEE7923C087",
+      "abi": 1,
+      "version": "1.0.0"
+    },
+    {
+      "platform": "windows-x86",
+      "filename": "spm_core_native.dll",
+      "sha256": "6E91B6560E465AFE540B090167259E63B6A8075F80E9439CEA3E3153B2420690",
+      "abi": 1,
+      "version": "1.0.0"
+    },
+    {
+      "platform": "linux-x64",
+      "filename": "libspm_core_native.so",
+      "sha256": "24C85D286F59DEDA33E91AD3BF9383743D745236F734B2BC5C67FD128424156D",
+      "abi": 1,
+      "version": "1.0.0"
+    },
+    {
+      "platform": "linux-arm64",
+      "filename": "libspm_core_native.so",
+      "sha256": "FEF3797E4964AFF198E228FB15320BB79A949BD58DE9D73519E2AB759BA052CC",
+      "abi": 1,
+      "version": "1.0.0"
+    },
+    {
+      "platform": "macos-x64",
+      "filename": "libspm_core_native.dylib",
+      "sha256": "619DA06023BF393FB1ACADCED860F67A18566A2892E79ED9079B68188A2E4E75",
+      "abi": 1,
+      "version": "1.0.0"
+    },
+    {
+      "platform": "macos-arm64",
+      "filename": "libspm_core_native.dylib",
+      "sha256": "EECE73913C8B02B9E8793EFF445B98AE39F0D2BFCF8176103565B862D4CEF3B0",
+      "abi": 1,
+      "version": "1.0.0"
+    },
+    {
+      "platform": "android-arm64",
+      "filename": "libspm_core_native.so",
+      "sha256": "AA858F464A18115A6C4170714515D7D431D65B9AC42F8E5D5F128A8315314A62",
+      "abi": 1,
+      "version": "1.0.0"
+    }
   ]
 }

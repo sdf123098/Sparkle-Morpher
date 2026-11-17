@@ -207,4 +207,6 @@ tasks.register("printRepositories") {
     }
 }
 
+apply from: rootProject.file('gradle/spm-core-host.gradle')
+
 apply from: rootProject.file('gradle/verify-distribution.gradle')

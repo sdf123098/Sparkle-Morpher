@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.render;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.core.api.version.VersionAdapters;
@@ -27,7 +27,7 @@ public final class RenderBackendDecision {
     }
 
     public static RenderBackendDecision choose(
-            GeoModel model,
+            BuiltModel model,
             boolean allowDirectGpuRenderer,
             boolean translucentTexture,
             boolean disableGlow,

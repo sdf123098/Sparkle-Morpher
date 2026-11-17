@@ -159,5 +159,7 @@ tasks.named('remapSourcesJar') {
     archiveFileName = "${releaseArchiveName}-sources.jar"
 }
 
+apply from: rootProject.file('gradle/spm-core-host.gradle')
+
 apply from: rootProject.file('gradle/verify-distribution.gradle')
 

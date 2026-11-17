@@ -47,12 +47,11 @@ class LocalModelCorpusVerificationTest {
                     if (name.endsWith(".bbmodel")) {
                         skipped++;
                     } else if (name.endsWith(".ysm") && ysm < limit) {
-                        // .ysm = YSGP 容器；生产路径（ClientModelManager.parseYsmImport）：
-                        // v1/v2 → YesModelUtils.input → 内存 map 解析；v3+ → YsmCrypt.decryptYsmFile → 二进制解析
+                        // .ysm = YSGP 容器；生产路径：v1/v2 → LegacyCompatModelFormat；v3+ → YsmCrypt.decryptYsmFile → 二进制解析
                         byte[] data = Files.readAllBytes(p);
-                        int v = com.micaftic.morpher.core.legacy.YesModelUtils.getYsmCryptoVersion(data);
+                        int v = com.micaftic.morpher.legacy.compat.LegacyCompatModelFormat.detectCryptoVersion(data);
                         if (v == 1 || v == 2) {
-                            try (YSMFolderDeserializer d = new YSMFolderDeserializer(com.micaftic.morpher.core.legacy.YesModelUtils.input(data))) {
+                            try (YSMFolderDeserializer d = new YSMFolderDeserializer(com.micaftic.morpher.legacy.compat.LegacyCompatModelFormat.read(data))) {
                                 RawYsmModel m = d.deserialize();
                                 assertNotNull(m.mainEntity.mainModel, "mainModel null: " + p);
                             }

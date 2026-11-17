@@ -3,7 +3,7 @@ package com.micaftic.morpher.client.model;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.geckolib3.file.AnimationControllerFile;
 import com.micaftic.morpher.geckolib3.file.AnimationFile;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 
@@ -12,7 +12,7 @@ import java.util.Map;
 
 public class MainModelData {
 
-    private final List<GeoModel> models;
+    private final List<BuiltModel> models;
 
     private final Map<String, AnimationFile> animations;
 
@@ -22,11 +22,11 @@ public class MainModelData {
 
     private final SpecialHandLocatorProfile specialHandLocatorProfile;
 
-    public MainModelData(GeoModel[] models, Map<String, AnimationFile> animations, AnimationControllerFile[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap) {
+    public MainModelData(BuiltModel[] models, Map<String, AnimationFile> animations, AnimationControllerFile[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap) {
         this(models, animations, animationControllerFiles, textureMap, SpecialHandLocatorProfile.NONE);
     }
 
-    public MainModelData(GeoModel[] models, Map<String, AnimationFile> animations, AnimationControllerFile[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap, SpecialHandLocatorProfile specialHandLocatorProfile) {
+    public MainModelData(BuiltModel[] models, Map<String, AnimationFile> animations, AnimationControllerFile[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap, SpecialHandLocatorProfile specialHandLocatorProfile) {
         this.models = ObjectArrayList.wrap(models);
         this.animations = animations;
         this.animationControllers = ObjectArrayList.wrap(animationControllerFiles);
@@ -38,7 +38,7 @@ public class MainModelData {
         return this.animations;
     }
 
-    public List<GeoModel> getModels() {
+    public List<BuiltModel> getModels() {
         return this.models;
     }
 
