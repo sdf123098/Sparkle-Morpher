@@ -43,7 +43,6 @@ public final class CloudManagementScreen {
         return CompletableFuture.supplyAsync(()->{try{return store.loadOrCreate(scope);}catch(IOException failure){throw new java.util.concurrent.CompletionException(failure);}});
     }
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("SparkleMorpher/Cloud");
-    private static final String CLIENT_VERSION = "2.0.0";
     private static CloudManagementController management;
     private static long nextRealtimeReconnectMillis;
     private static final com.micaftic.morpher.cloud.client.CloudAutoLoginGate AUTO_LOGIN =
@@ -75,7 +74,7 @@ public final class CloudManagementScreen {
                     .resolve("config").resolve("sparkle-morpher").resolve("cloud-instances.json");
             CloudInstanceRegistry registry = new CloudInstanceRegistry(config);
             management = new CloudManagementController(registry, new CloudConnectionController(),
-                    CloudClientRuntime.defaultCacheRoot(), CLIENT_VERSION);
+                    CloudClientRuntime.defaultCacheRoot(), CloudHttpClient.resolveClientVersion());
             try {
                 management.loadInstances();
                 resumeOfficialAccount();

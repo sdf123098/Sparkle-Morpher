@@ -277,4 +277,46 @@ class CloudHttpClientTest {
                         "{\"instance_id\":\"local-dev\",\"origin\":\"https://cloud.example.test\",\"protocol\":\"spm.cloud.v2\"}"));
         assertEquals(CloudErrorCode.PROTOCOL_UNSUPPORTED, protocolFailure.errorCode());
     }
+
+    @Test
+    void clientVersionHeaderAndFiguraCapabilitySupportDualVersionServers() throws Exception {
+        CloudInstanceInfo legacyServer = CloudHttpClient.parseInstanceResponse(INSTANCE, """
+                {"instance_id":"local-dev","origin":"https://cloud.example.test","protocol":"spm.cloud.v1",
+                 "capabilities":["player_motion_v1"]}
+                """);
+        assertEquals(false, legacyServer.supportsFiguraAssets());
+
+        CloudInstanceInfo dualVersionServer = CloudHttpClient.parseInstanceResponse(INSTANCE, """
+                {"instance_id":"local-dev","origin":"https://cloud.example.test","protocol":"spm.cloud.v1",
+                 "capabilities":["player_motion_v1","figura_assets_v1"]}
+                """);
+        assertTrue(dualVersionServer.supportsFiguraAssets());
+
+        CloudPlayerSelection figuraSelection = new CloudPlayerSelection(
+                "local-dev", "a".repeat(64),
+                new CloudAssetRef("fig-asset", 1, "b".repeat(64)),
+                "figura", "default");
+        assertEquals("player-model.figura", figuraSelection.importFileName());
+
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicReference<String> seenVersionHeader = new AtomicReference<>();
+        server.createContext("/v1/instance", exchange -> {
+            seenVersionHeader.set(exchange.getRequestHeaders().getFirst(CloudHttpClient.CLIENT_VERSION_HEADER));
+            byte[] json = ("{\"instance_id\":\"local-dev\",\"origin\":\"https://cloud.example.test\",\"protocol\":\"spm.cloud.v1\",\"capabilities\":[\"figura_assets_v1\"]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, json.length);
+            exchange.getResponseBody().write(json);
+            exchange.close();
+        });
+        server.start();
+        try (HttpClient delegate = HttpClient.newHttpClient()) {
+            HttpClient local = new LoopbackClient(delegate, URI.create("http://127.0.0.1:" + server.getAddress().getPort()));
+            CloudHttpClient client = new CloudHttpClient(INSTANCE, local);
+            CloudInstanceInfo info = client.discoverInstance().get(10, TimeUnit.SECONDS);
+            assertTrue(info.supportsFiguraAssets());
+            assertEquals(CloudHttpClient.resolveClientVersion(), seenVersionHeader.get());
+        } finally {
+            server.stop(0);
+        }
+    }
 }

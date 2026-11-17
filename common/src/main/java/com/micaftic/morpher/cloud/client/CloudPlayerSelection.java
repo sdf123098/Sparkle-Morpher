@@ -22,7 +22,7 @@ public record CloudPlayerSelection(String instanceId, String originSha256, Cloud
         if (originSha256 == null || !originSha256.matches("[0-9a-f]{64}"))
             throw new IllegalArgumentException("Invalid Cloud origin fingerprint");
         format = Objects.requireNonNull(format, "format").toLowerCase(Locale.ROOT);
-        if (!java.util.Set.of("ysm", "zip", "bbmodel", "gltf", "glb").contains(format))
+        if (!java.util.Set.of("ysm", "zip", "bbmodel", "gltf", "glb", "figura").contains(format))
             throw new IllegalArgumentException("Unsupported Cloud model format");
         textureId = Objects.requireNonNull(textureId, "textureId");
         if (textureId.isBlank() || textureId.length() > 256 || textureId.chars().anyMatch(Character::isISOControl))

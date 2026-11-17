@@ -19,7 +19,8 @@ public final class PeerModelPreflight {
         boolean supported = switch(profile) {
             case "ysm-directory-v1" -> name.equals("ysm.json") || name.equals("main.json");
             case "ysm-v1" -> name.endsWith(".ysm");
-            case "ysm-zip-v1", "bbmodel-zip-v1", "figura-geometry-v1" -> name.endsWith(".zip") && PeerArchiveProfile.detect(asset.entrypoint()).equals(profile);
+            case "ysm-zip-v1", "bbmodel-zip-v1" -> name.endsWith(".zip") && PeerArchiveProfile.detect(asset.entrypoint()).equals(profile);
+            case "figura-geometry-v1" -> (name.endsWith(".zip") || name.endsWith(".figura")) && PeerArchiveProfile.detect(asset.entrypoint()).equals(profile);
             case "bedrock-v1" -> name.endsWith(".geo.json") || name.endsWith("geometry.json") || name.endsWith(".zip") && PeerArchiveProfile.detect(asset.entrypoint()).equals(profile);
             case "bbmodel-v1" -> name.endsWith(".bbmodel");
             case "gltf-v1" -> name.endsWith(".gltf");
@@ -29,14 +30,15 @@ public final class PeerModelPreflight {
         if(!supported) throw new IOException("Unsupported Peer profile/entrypoint combination");
         for(int i = 0; i < asset.manifest().resources().size(); i++) {
             Path path = asset.file(i); String lower = path.toString().toLowerCase(Locale.ROOT);
-            if(lower.endsWith(".zip")) {
+            if(lower.endsWith(".zip") || lower.endsWith(".figura")) {
                 PeerArchivePreflight.validate(path, PeerLimits.EXPANDED_BYTES, PeerLimits.RESOURCE_COUNT);
                 try(var zip = new ZipFile(path.toFile())) {
                     var entries = zip.entries();
                     while(entries.hasMoreElements()) {
                         var entry = entries.nextElement(); if(entry.isDirectory()) continue;
                         if(entry.getSize() < 0 || entry.getSize() > PeerLimits.RESOURCE_BYTES) throw new PeerFailure(PeerFailure.Stage.IMPORT,PeerFrame.ErrorCode.BUDGET_EXCEEDED);
-                        if(entry.getName().toLowerCase(Locale.ROOT).endsWith(".zip")) throw new IOException("Nested Peer archive");
+                        String entryLower = entry.getName().toLowerCase(Locale.ROOT);
+                        if(entryLower.endsWith(".zip") || entryLower.endsWith(".figura")) throw new IOException("Nested Peer archive");
                         try(var input = zip.getInputStream(entry)) { inspect(entry.getName(), input); }
                     }
                 }

@@ -61,6 +61,10 @@ class PeerProfileFixturesTest {
             if(profile.equals("gltf-v1"))Files.writeString(source.resolve(file),mesh);else{byte[] json=mesh.getBytes(StandardCharsets.UTF_8);int padded=(json.length+3)&~3;var bytes=ByteBuffer.allocate(20+padded).order(ByteOrder.LITTLE_ENDIAN);bytes.putInt(0x46546c67).putInt(2).putInt(20+padded).putInt(padded).putInt(0x4e4f534a).put(json);while(bytes.hasRemaining())bytes.put((byte)' ');Files.write(source.resolve(file),bytes.array());}
             var asset=fixture(source,file,profile);try(var scope=new PeerDecodeScope()){PeerModelPreflight.validate(new PeerModelIdentity(asset.manifest().contentRoot(),profile),asset);var parsed=GltfLoader.loadWithManifest(asset.entrypoint()).model();PeerModelPreflight.validateGltf(parsed);assertEquals(1,parsed.meshes().getFirst().primitives().getFirst().triangleCount());}
         }
+        Path figuraDotSource=Files.createDirectory(temporary.resolve("figura-dot-extension"));
+        Files.write(figuraDotSource.resolve("avatar.figura"),models.get("figura-geometry-v1"));
+        var figuraDotAsset=fixture(figuraDotSource,"avatar.figura","figura-geometry-v1");
+        try(var scope=new PeerDecodeScope()){PeerModelPreflight.validate(new PeerModelIdentity(figuraDotAsset.manifest().contentRoot(),"figura-geometry-v1"),figuraDotAsset);}
         assertEquals(9,PeerProfiles.ENABLED.size());
     }
 }

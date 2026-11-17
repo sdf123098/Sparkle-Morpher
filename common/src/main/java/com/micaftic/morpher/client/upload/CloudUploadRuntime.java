@@ -2,6 +2,7 @@ package com.micaftic.morpher.client.upload;
 
 import com.micaftic.morpher.cloud.CloudInstanceConfig;
 import com.micaftic.morpher.cloud.client.CloudClientRuntime;
+import com.micaftic.morpher.cloud.client.CloudHttpClient;
 import com.micaftic.morpher.cloud.client.CloudSession;
 import com.micaftic.morpher.core.api.network.upload.ModelUploadTransport;
 
@@ -14,7 +15,7 @@ public final class CloudUploadRuntime {
     }
 
     public static synchronized void configure(CloudInstanceConfig instance, CloudSession session) {
-        configure(instance, session, CloudClientRuntime.defaultCacheRoot(), "2.0.0");
+        configure(instance, session, CloudClientRuntime.defaultCacheRoot(), CloudHttpClient.resolveClientVersion());
     }
 
     public static synchronized void configure(
