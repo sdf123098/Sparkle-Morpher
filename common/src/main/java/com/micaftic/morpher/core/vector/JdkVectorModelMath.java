@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.vector;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import jdk.incubator.vector.FloatVector;
 import jdk.incubator.vector.VectorSpecies;
 import org.joml.Matrix4f;
@@ -16,7 +16,7 @@ public final class JdkVectorModelMath {
         return AVAILABLE;
     }
 
-    public static void transformQuadPositions(GeoModel.BakedQuad quad, Matrix4f matrix, float[] outX, float[] outY, float[] outZ) {
+    public static void transformQuadPositions(BuiltModel.BakedQuad quad, Matrix4f matrix, float[] outX, float[] outY, float[] outZ) {
         float[] x = outX;
         float[] y = outY;
         float[] z = outZ;

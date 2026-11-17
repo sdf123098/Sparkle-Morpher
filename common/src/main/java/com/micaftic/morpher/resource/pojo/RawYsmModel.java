@@ -14,6 +14,8 @@ public class RawYsmModel {
     public Map<String, RawDataFile> functionFiles = new LinkedHashMap<>();
     public Map<String, RawLanguageFile> languageFiles = new LinkedHashMap<>(); // locale -> key/value
     public RawFooter footer = new RawFooter();
+    public transient byte[] figuraArchiveBytes;
+    public transient String figuraSourceName;
 
     public static class RawMainEntity {
         public RawGeometry mainModel;

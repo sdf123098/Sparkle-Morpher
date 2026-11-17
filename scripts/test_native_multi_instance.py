@@ -25,19 +25,19 @@ class NativeMultiInstanceTest(unittest.TestCase):
         cls.work = Path(cls.temp.name)
         cache = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle")) / "caches/modules-2/files-2.1"
         dependencies = ["com.google.code.gson/gson", "commons-io/commons-io",
-                        "org.apache.commons/commons-lang3", "net.java.dev.jna/jna"]
+                        "org.apache.commons/commons-lang3", "net.java.dev.jna/jna",
+                        "org.slf4j/slf4j-api",
+                        "dev.spm.core/api", "dev.spm.core/acceleration-api",
+                        "dev.spm.core/native-jni", "dev.spm.core/render-cpu"]
         jars = [next(p for p in sorted((cache / dep).glob("*/*/*.jar"), reverse=True)
                      if not p.name.endswith(("-sources.jar", "-javadoc.jar"))) for dep in dependencies]
         cls.classpath = str(cls.work / "classes") + os.pathsep + os.pathsep.join(map(str, jars))
         stubs = {
             "org.jetbrains.annotations.Nullable": "public @interface Nullable {}",
             "org.jetbrains.annotations.NotNull": "public @interface NotNull {}",
-            "net.minecraft.network.chat.Component": "public class Component {public static Component translatable(String k,Object...v){return new Component();}}",
-            "net.minecraft.util.StringUtil": "public class StringUtil {public static boolean isNullOrEmpty(String s){return s==null || s.isEmpty();}}",
-            "com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel": "public class GeoModel {public static int nGetAbiVersion(){return ModelAccelerationBridge.nGetAbiVersion();}}",
-            "com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge": "public class ModelRendererBridge {public static void submitVertices(Object v,int n,java.nio.ByteBuffer f,java.nio.ByteBuffer i){}}",
+            "net.minecraft.network.chat.Component": "public class Component {public static Component translatable(String k,Object...v){return new Component();} public static Component literal(String s){return new Component();}}",
             BASE + "core.architectury.platform.Platform": "public class Platform {public static java.nio.file.Path getConfigFolder(){return java.nio.file.Path.of(System.getProperty(\"fixture.config\"));}}",
-            "dev.architectury.platform.Platform": "public class Platform {public static java.nio.file.Path getConfigFolder(){return java.nio.file.Path.of(System.getProperty(\"fixture.config\"));}}",
+            BASE + "core.architectury.platform.Platform": "public class Platform {public static java.nio.file.Path getConfigFolder(){return java.nio.file.Path.of(System.getProperty(\"fixture.config\"));}}",
             BASE + "core.api.PlatformAPI": "public class PlatformAPI {public static boolean isServer(){return Boolean.getBoolean(\"fixture.server\");}}",
             "net.neoforged.fml.loading.FMLPaths": "public class FMLPaths {public static final Config CONFIGDIR=new Config();public static class Config {public java.nio.file.Path get(){return java.nio.file.Path.of(System.getProperty(\"fixture.config\"));}}}",
             BASE + "YesSteveModel": """public class YesSteveModel {
@@ -53,15 +53,14 @@ class NativeMultiInstanceTest(unittest.TestCase):
             cls.write(name, "package " + name.rsplit(".", 1)[0] + "; " + body)
         production = {
             "RuntimeAccelerationLoader": "common/src/native/java/",
-            "core.nativeutil.NativeArtifactVerifier": "common/src/main/java/",
+            "core.acceleration.NativeRuntimeSupport": "common/src/native/java/",
+            "core.nativeutil.NativeArtifactVerifier": "fabric/src/main/java/",
             "core.storage.AtomicFileMover": "common/src/main/java/",
             "util.DigestUtil": "common/src/main/java/",
         }
         for suffix, prefix in production.items():
             name = BASE + suffix
             cls.write(name, (ROOT / prefix / (name.replace(".", "/") + ".java")).read_text(encoding="utf-8"))
-        bridge = "com.elfmcys.yesstevemodel.geckolib3.geo.render.built.ModelAccelerationBridge"
-        cls.write(bridge, (ROOT / "common/src/native/java" / (bridge.replace(".", "/") + ".java")).read_text(encoding="utf-8"))
         cls.write("fixture.Probe", """
             package fixture;
             import java.nio.file.*;
@@ -83,22 +82,23 @@ class NativeMultiInstanceTest(unittest.TestCase):
             }
         """)
         result = subprocess.run([shutil.which("javac"), "-cp", cls.classpath, "-d", str(cls.work / "classes"),
-                                 *map(str, cls.work.rglob("*.java"))], capture_output=True, text=True)
+                                 *map(str, cls.work.rglob("*.java"))],
+                                capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode:
-            raise AssertionError(result.stdout + result.stderr)
-        native_file = next(ROOT / prefix / "natives/windows-x64/ysm-core.dll"
+            raise AssertionError((result.stdout or "") + (result.stderr or ""))
+        native_file = next(ROOT / prefix / "natives/windows-x64/spm_core_native.dll"
                            for prefix in ["common/src/main/resources", "src/main/resources"]
-                           if (ROOT / prefix / "natives/windows-x64/ysm-core.dll").exists())
+                           if (ROOT / prefix / "natives/windows-x64/spm_core_native.dll").exists())
         cls.dll = native_file.read_bytes()
         # PE permits overlay data: different trusted artifact hashes, same valid DLL code.
         cls.new_dll = cls.dll + b"SPM multi-instance regression build B"
         cls.resources = cls.work / "resources"
         (cls.resources / "natives/windows-x64").mkdir(parents=True)
-        (cls.resources / "natives/windows-x64/ysm-core.dll").write_bytes(cls.new_dll)
+        (cls.resources / "natives/windows-x64/spm_core_native.dll").write_bytes(cls.new_dll)
         cls.digest = hashlib.sha256(cls.new_dll).hexdigest()
         (cls.resources / "native-manifest.json").write_text(json.dumps({"artifacts": [{
-            "platform": "windows-x64", "filename": "ysm-core.dll", "sha256": cls.digest,
-            "abi": 3, "version": "fixture-build-B"}]}), encoding="utf-8")
+            "platform": "windows-x64", "filename": "spm_core_native.dll", "sha256": cls.digest,
+            "abi": 1, "version": "fixture-build-B"}]}), encoding="utf-8")
 
     @classmethod
     def write(cls, name, text):
@@ -154,7 +154,7 @@ class NativeMultiInstanceTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_legacy_dll_in_use_does_not_block_another_build(self):
-        legacy = self.cache_root / "ysm-core.dll"
+        legacy = self.cache_root / "spm_core_native.dll"
         legacy.write_bytes(self.dll)
         self.hold(legacy)
         self.probe()
@@ -176,7 +176,7 @@ class NativeMultiInstanceTest(unittest.TestCase):
         self.assertEqual(native.stat().st_mtime_ns, before, "verified loaded native must not be rewritten")
 
     def test_corrupt_digest_cache_in_use_gets_private_install(self):
-        target = self.cache_root / "windows-x64" / self.digest / "ysm-core.dll"
+        target = self.cache_root / "windows-x64" / self.digest / "spm_core_native.dll"
         target.parent.mkdir(parents=True)
         target.write_bytes(self.dll)
         self.hold(target)
@@ -196,7 +196,7 @@ class NativeMultiInstanceTest(unittest.TestCase):
         results = [child.communicate(timeout=20)[0] for child in children]
         for child, output in zip(children, results):
             self.assertEqual(child.returncode, 0, output)
-        target = self.cache_root / "windows-x64" / self.digest / "ysm-core.dll"
+        target = self.cache_root / "windows-x64" / self.digest / "spm_core_native.dll"
         self.assertEqual(target.read_bytes(), self.new_dll)
 
 

@@ -21,7 +21,7 @@ import com.micaftic.morpher.client.gui.resource.ResourceStationConfig;
  * 未引入 fa 分支的参数模型。
  */
 public final class HttpTransport {
-    public static final String USER_AGENT = "OpenYSM-ResourceStation";
+    public static final String USER_AGENT = "SparkleMorpher-ResourceStation";
     public static final String GITHUB_ACCEPT = "application/vnd.github+json";
     public static final String GITHUB_API_VERSION = "2022-11-28";
     public static final String CACHE_BUSTER_PARAM = "ysm_refresh";

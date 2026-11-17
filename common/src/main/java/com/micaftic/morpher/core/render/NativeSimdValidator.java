@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.render;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
@@ -53,7 +53,7 @@ public final class NativeSimdValidator {
      * Called from the direct Native SIMD path before rendering. Runs Java-side
      * validation per the configured mode and records the result.
      */
-    public static void onNativeSimdRender(GeoModel model, float[] boneParams, int renderPartMask, Object textureLocation) {
+    public static void onNativeSimdRender(BuiltModel model, float[] boneParams, int renderPartMask, Object textureLocation) {
         NativeSimdValidationMode m = mode();
         if (m == NativeSimdValidationMode.OFF) return;
         if (model == null || model.bakedBones == null || model.bakedBones.isEmpty()) return;
@@ -67,7 +67,7 @@ public final class NativeSimdValidator {
         int partMaskSelected = 0;
 
         for (int i = 0; i < boneCount; i++) {
-            GeoModel.BakedBone bone = model.bakedBones.get(i);
+            BuiltModel.BakedBone bone = model.bakedBones.get(i);
             int pOffset = i * 12;
             if (boneParams == null || pOffset + 11 >= boneParams.length) {
                 if (firstShortParamsBone < 0) firstShortParamsBone = i;
@@ -112,7 +112,7 @@ public final class NativeSimdValidator {
         }
     }
 
-    private static String identity(GeoModel model) {
+    private static String identity(BuiltModel model) {
         try {
             return String.valueOf(model.getProperties());
         } catch (Throwable t) {

@@ -27,6 +27,12 @@ public class ModelMetadata {
 
     private final int hashId;
 
+    @Nullable
+    private volatile byte[] figuraArchiveBytes;
+
+    @Nullable
+    private volatile String figuraSourceName;
+
     public ModelMetadata(@Nullable Metadata metadata, ModelProperties modelProperties, MainModelInfo mainModelInfo, int formatVersion, String modelHash, String extra, long timestamp, String rand) {
         this.metadata = metadata;
         this.modelProperties = modelProperties;
@@ -74,5 +80,18 @@ public class ModelMetadata {
 
     public int getHashId() {
         return this.hashId;
+    }
+
+    public void setFiguraArchive(@Nullable byte[] bytes, @Nullable String sourceName) {
+        this.figuraArchiveBytes = bytes;
+        this.figuraSourceName = sourceName;
+    }
+
+    public byte @Nullable [] getFiguraArchiveBytes() {
+        return this.figuraArchiveBytes;
+    }
+
+    public @Nullable String getFiguraSourceName() {
+        return this.figuraSourceName;
     }
 }

@@ -155,5 +155,7 @@ tasks.named('jar', Jar) {
     }
 }
 
+apply from: rootProject.file('gradle/spm-core-host.gradle')
+
 apply from: rootProject.file('gradle/verify-distribution.gradle')
 

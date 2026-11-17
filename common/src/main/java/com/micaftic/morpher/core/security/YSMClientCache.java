@@ -1,7 +1,6 @@
 package com.micaftic.morpher.core.security;
 
-import com.micaftic.morpher.core.algorithms.CityHash;
-import com.micaftic.morpher.core.algorithms.MT19937;
+import dev.spm.core.codec.legacy.LegacyHash;
 
 import java.io.File;
 import java.nio.ByteBuffer;
@@ -9,7 +8,6 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -20,11 +18,11 @@ public class YSMClientCache {
 
     public static String generateCacheFileName(long hash1, long hash2, byte[] rtKey) {
         if (rtKey == null || rtKey.length != 56) return null;
-        int seed = 114514; // todo: 换成真随机数
+        int seed = 114514;
 
-        MT19937 mt = new MT19937(Integer.toUnsignedLong(seed));
-        long m1 = hash1 ^ mt.extract_number();
-        long m2 = hash2 ^ mt.extract_number();
+        LegacyStreamCipher.Random64 mt = new LegacyStreamCipher.Random64(Integer.toUnsignedLong(seed));
+        long m1 = hash1 ^ mt.next();
+        long m2 = hash2 ^ mt.next();
 
         ByteBuffer buf = ByteBuffer.allocate(20).order(ByteOrder.LITTLE_ENDIAN);
         buf.putInt(seed);
@@ -47,21 +45,16 @@ public class YSMClientCache {
         return verifyFileContent(cacheFile, hash1, hash2, null);
     }
 
+    /** Verifies trailer checksum and, when {@code rtKey} is supplied, tests decryption+decompression. */
     public static boolean verifyFileContent(File cacheFile, long hash1, long hash2, byte[] rtKey) {
         if (cacheFile == null || !cacheFile.exists() || cacheFile.length() <= 8) {
             return false;
         }
-
         try {
             byte[] fileData = Files.readAllBytes(cacheFile.toPath());
             int payloadLen = fileData.length - 8;
-
             long realHash = ByteBuffer.wrap(fileData, payloadLen, 8).order(ByteOrder.LITTLE_ENDIAN).getLong();
-
-            byte[] payload = Arrays.copyOfRange(fileData, 0, payloadLen);
-            CityHash ch = new CityHash();
-            long calculatedHash = ch.hash64WithSeed(payload, YsmCrypt.SEED_CACHE_VERIFICATION);
-
+            long calculatedHash = LegacyHash.seeded(fileData, 0, payloadLen, YsmCrypt.SEED_CACHE_VERIFICATION);
             long verif = calculatedHash ^ hash1 ^ hash2;
             if (verif != realHash) {
                 return false;
@@ -79,7 +72,6 @@ public class YSMClientCache {
         if (fileName == null || fileName.length() != 40 || rtKey == null || rtKey.length != 56) {
             return null;
         }
-
         try {
             byte[] buf = new byte[20];
             for (int i = 0; i < 20; i++) {
@@ -88,20 +80,17 @@ public class YSMClientCache {
                 if (high == -1 || low == -1) return null;
                 buf[i] = (byte) ((high << 4) | low);
             }
-
             for (int i = 0; i < buf.length; i++) {
                 buf[i] ^= rtKey[i % rtKey.length];
             }
-
             ByteBuffer byteBuf = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN);
             int seed = byteBuf.getInt();
             long m1 = byteBuf.getLong();
             long m2 = byteBuf.getLong();
 
-            MT19937 mt = new MT19937(Integer.toUnsignedLong(seed));
-            long hash1 = m1 ^ mt.extract_number();
-            long hash2 = m2 ^ mt.extract_number();
-
+            LegacyStreamCipher.Random64 mt = new LegacyStreamCipher.Random64(Integer.toUnsignedLong(seed));
+            long hash1 = m1 ^ mt.next();
+            long hash2 = m2 ^ mt.next();
             return new UUID(hash1, hash2);
         } catch (Exception e) {
             return null;
@@ -110,15 +99,11 @@ public class YSMClientCache {
 
     public static Map<UUID, File> buildCacheIndex(File cacheDir, byte[] rtKey) {
         Map<UUID, File> cacheIndex = new HashMap<>();
-
         if (!cacheDir.exists() || !cacheDir.isDirectory()) {
             return cacheIndex;
         }
-
         File[] files = cacheDir.listFiles();
         if (files == null) return cacheIndex;
-
-        System.out.println("scanning cache directory");
         for (File file : files) {
             if (file.isFile()) {
                 UUID realModelUuid = getModelUUIDFromFileName(file.getName(), rtKey);
@@ -127,7 +112,6 @@ public class YSMClientCache {
                 }
             }
         }
-        System.out.println("indexed " + cacheIndex.size() + " cached models.");
         return cacheIndex;
     }
 
@@ -135,7 +119,6 @@ public class YSMClientCache {
         if (cacheDir == null || !cacheDir.isDirectory()) {
             return;
         }
-
         Path marker = cacheDir.toPath().resolve(CACHE_IDENTITY_FILE);
         String currentIdentity = YsmCrypt.getModelCacheIdentity();
         try {
@@ -164,27 +147,17 @@ public class YSMClientCache {
         if (cacheDir == null || expectedModels == null || rtKey == null || rtKey.length != 56 || !cacheDir.isDirectory()) {
             return;
         }
-
         File[] files = cacheDir.listFiles();
         if (files == null) return;
-
-        int removed = 0;
         for (File file : files) {
-            if (!file.isFile()) continue;
-            if (CACHE_IDENTITY_FILE.equals(file.getName())) continue;
-
+            if (!file.isFile() || CACHE_IDENTITY_FILE.equals(file.getName())) continue;
             UUID realModelUuid = getModelUUIDFromFileName(file.getName(), rtKey);
             if (realModelUuid == null || !expectedModels.contains(realModelUuid)) {
                 try {
-                    if (Files.deleteIfExists(file.toPath())) {
-                        removed++;
-                    }
+                    Files.deleteIfExists(file.toPath());
                 } catch (Exception ignored) {
                 }
             }
-        }
-        if (removed > 0) {
-            System.out.println("cleaned " + removed + " stale cached models.");
         }
     }
 

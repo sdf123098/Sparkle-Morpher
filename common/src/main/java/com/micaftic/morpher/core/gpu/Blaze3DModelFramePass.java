@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.render.RenderContext;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
@@ -143,7 +143,7 @@ public final class Blaze3DModelFramePass {
      * @return true = 已登记（调用方<span>不得</span>再走原路径）；false = 未接管
      */
     public static boolean tryDefer(
-            GeoModel model,
+            BuiltModel model,
             PoseStack.Pose pose,
             float[] boneParams,
             float[] stateBuffer,
@@ -291,7 +291,7 @@ public final class Blaze3DModelFramePass {
 
     /** 一次延迟绘制所需的全部数据（pose 已深拷贝）。 */
     private record Draw(
-            GeoModel model,
+            BuiltModel model,
             PoseStack.Pose pose,
             float[] boneParams,
             float[] stateBuffer,

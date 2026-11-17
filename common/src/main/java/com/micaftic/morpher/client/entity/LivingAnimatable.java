@@ -5,10 +5,12 @@ import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.model.VehicleModelBundle;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
 import com.micaftic.morpher.client.model.ModelAssembly;
+import com.micaftic.morpher.core.bridge.FiguraRuntimeBridge;
+import net.minecraft.client.Minecraft;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
 import com.micaftic.morpher.client.upload.UploadManager;
@@ -52,6 +54,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     private boolean extraRenderFlag;
 
     private GltfAnimationController gltfAnimationController;
+    private @Nullable FiguraRuntimeBridge figuraBridge;
 
     public LivingAnimatable(T t, boolean isActive) {
         super(t, isActive);
@@ -147,6 +150,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     @Override
     public void onModelLoaded(ModelAssembly context) {
         super.onModelLoaded(context);
+        closeFiguraBridge();
         if (context.isGltf()) {
             this.playerUpdateIValue = null;
             this.gltfAnimationController = new GltfAnimationController(context.getGltfModel());
@@ -154,6 +158,12 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
             return;
         }
         this.gltfAnimationController = null;
+        if (context.getModelData() != null && context.getModelData().getFiguraArchiveBytes() != null) {
+            this.figuraBridge = FiguraRuntimeBridge.create(
+                    context.getModelData().getFiguraArchiveBytes(),
+                    context.getModelData().getFiguraSourceName(),
+                    getEntity().getName().getString());
+        }
         updateCurrentTexture();
         List<IValue> values = context.getExpressionCache().getEvents().get(MolangEventDispatcher.PLAYER_UPDATE);
         if (values != null) {
@@ -175,10 +185,34 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     @Override
     public void resetModel() {
         super.resetModel();
+        closeFiguraBridge();
         this.currentTextureName = null;
         this.textureIndex = 0;
         this.forceDisabled = false;
         this.gltfAnimationController = null;
+    }
+
+    @Override
+    public void tickModel() {
+        super.tickModel();
+        if (this.figuraBridge != null && !this.forceDisabled) {
+            Minecraft mc = Minecraft.getInstance();
+            this.figuraBridge.tick(getEntity(), mc != null && getEntity() == mc.player);
+        }
+    }
+
+    public void applyFiguraFrame(float partialTick, @Nullable AnimatedGeoModel model) {
+        if (this.figuraBridge != null && !this.forceDisabled) {
+            Minecraft mc = Minecraft.getInstance();
+            this.figuraBridge.renderAndApply(getEntity(), mc != null && getEntity() == mc.player, partialTick, model);
+        }
+    }
+
+    private void closeFiguraBridge() {
+        if (this.figuraBridge != null) {
+            this.figuraBridge.close();
+            this.figuraBridge = null;
+        }
     }
 
     @Override
@@ -242,7 +276,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     }
 
     @Override
-    public GeoModel getAnimationProcessor() {
+    public BuiltModel getAnimationProcessor() {
         return getModelAssembly().getAnimationBundle().getMainModel();
     }
 

@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.device.GpuDevice;
@@ -17,7 +17,7 @@ public final class Blaze3DModelMeshBuilder {
     private Blaze3DModelMeshBuilder() {
     }
 
-    public static Blaze3DModelMesh build(GeoModel model) {
+    public static Blaze3DModelMesh build(BuiltModel model) {
         if (model.bakedBones == null || model.bakedBones.isEmpty()) return null;
         RenderSystem.assertOnRenderThread();
         GpuDevice device = RenderSystem.getDevice();
@@ -85,10 +85,10 @@ public final class Blaze3DModelMeshBuilder {
         }
     }
 
-    private static Blaze3DMeshData buildMeshData(GeoModel model) {
+    private static Blaze3DMeshData buildMeshData(BuiltModel model) {
         int totalQuads = 0;
-        for (GeoModel.BakedBone bone : model.bakedBones) {
-            for (GeoModel.BakedCube cube : bone.cubes) {
+        for (BuiltModel.BakedBone bone : model.bakedBones) {
+            for (BuiltModel.BakedCube cube : bone.cubes) {
                 totalQuads += cube.quads.size();
             }
         }
@@ -102,9 +102,9 @@ public final class Blaze3DModelMeshBuilder {
         List<QuadRecord> quads = new ArrayList<>(totalQuads);
 
         for (int boneIdx = 0; boneIdx < model.bakedBones.size(); boneIdx++) {
-            GeoModel.BakedBone bone = model.bakedBones.get(boneIdx);
-            for (GeoModel.BakedCube cube : bone.cubes) {
-                for (GeoModel.BakedQuad quad : cube.quads) {
+            BuiltModel.BakedBone bone = model.bakedBones.get(boneIdx);
+            for (BuiltModel.BakedCube cube : bone.cubes) {
+                for (BuiltModel.BakedQuad quad : cube.quads) {
                     int vertexOffset = vertices.position() / Blaze3DModelMesh.VERTEX_STRIDE;
                     for (int v = 0; v < 4; v++) {
                         vertices.putFloat(quad.x(v));

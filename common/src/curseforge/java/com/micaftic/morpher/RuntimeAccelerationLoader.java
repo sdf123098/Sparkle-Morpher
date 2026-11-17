@@ -1,5 +1,6 @@
 package com.micaftic.morpher;
 
+import com.micaftic.morpher.core.acceleration.NativeRuntimeSupport;
 import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
@@ -12,22 +13,22 @@ public final class RuntimeAccelerationLoader {
     }
 
     public static boolean isAvailable() {
-        return true;
+        return NativeRuntimeSupport.isAvailable();
     }
 
     public static boolean isLoaded() {
-        return false;
+        return NativeRuntimeSupport.isLoaded();
     }
 
     public static boolean isOnAndroid() {
-        return false;
+        return NativeRuntimeSupport.isOnAndroid();
     }
 
     public static Component getErrorComponent() {
-        return Component.literal("Native SIMD is unavailable in the CurseForge distribution.");
+        return NativeRuntimeSupport.getErrorComponent();
     }
 
     public static String getErrorMessage() {
-        return "[SM] Native SIMD unavailable: CurseForge distribution excludes native libraries";
+        return NativeRuntimeSupport.getErrorMessage();
     }
 }

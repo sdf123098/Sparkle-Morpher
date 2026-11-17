@@ -27,6 +27,6 @@ class CityHashKnownVectorTest {
         };
 
         assertEquals(0xcc6f56e6e94aba81L,
-                new CityHash().hash64WithSeed(input, 0xD1C3D1D13A99752BL));
+                dev.spm.core.codec.legacy.LegacyHash.seeded(input, 0, input.length, 0xD1C3D1D13A99752BL));
     }
 }

@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.core.render.RenderBackend;
 import com.micaftic.morpher.core.render.RenderBackendDecision;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -24,7 +24,7 @@ public final class Blaze3DGpuRenderBackend implements RenderBackend {
 
     @Override
     public boolean tryRender(RenderRequest request) {
-        GeoModel model = request.model();
+        BuiltModel model = request.model();
         PoseStack.Pose pose = request.pose();
         return Blaze3DRenderPath.tryRender(
                 model, pose, request.boneParams(), request.stateBuffer(), request.renderPartMask(),
@@ -34,7 +34,7 @@ public final class Blaze3DGpuRenderBackend implements RenderBackend {
     }
 
     @Override
-    public void release(GeoModel model) {
+    public void release(BuiltModel model) {
         // Blaze3D mesh ownership is bound to the model runtime, mirroring the
         // OpenGL backend; without this the cached GpuBuffers and direct bone
         // buffer would leak on model unload.

@@ -1,5 +1,9 @@
 package com.micaftic.morpher.core.zstd;
 
+import io.airlift.compress.zstd.ZstdCompressor;
+import io.airlift.compress.zstd.ZstdDecompressor;
+import io.airlift.compress.zstd.ZstdInputStream;
+import io.airlift.compress.zstd.ZstdOutputStream;
 import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

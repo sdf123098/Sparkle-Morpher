@@ -1,12 +1,12 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.mojang.renderpearl.backend.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import org.lwjgl.opengl.*;
 
 public final class GpuMeshBuilder {
-    public static GpuMesh build(GeoModel model) {
+    public static GpuMesh build(BuiltModel model) {
         if (model.bakedBones == null || model.bakedBones.isEmpty()) return null;
         RenderSystem.assertOnRenderThread();
         GpuMeshData meshData = GpuMeshDataBuilder.build(model);

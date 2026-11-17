@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.model;
 
 import com.micaftic.morpher.geckolib3.core.controller.controllers.VehicleAnimationController;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
@@ -12,7 +12,7 @@ import net.minecraft.client.renderer.texture.AbstractTexture;
 import java.util.function.Consumer;
 
 public class VehicleModelBundle {
-    private final GeoModel model;
+    private final BuiltModel model;
 
     private final Object2ReferenceMap<String, Animation> animations;
 
@@ -22,7 +22,7 @@ public class VehicleModelBundle {
 
     private final Consumer<GeckoVehicleEntity> controllerInitializer;
 
-    public VehicleModelBundle(GeoModel model, Object2ReferenceMap<String, Animation> animations, Object2ReferenceMap<String, AnimationController> animationControllers, AbstractTexture abstractTexture, ModelResourceBundle modelResourceBundle) {
+    public VehicleModelBundle(BuiltModel model, Object2ReferenceMap<String, Animation> animations, Object2ReferenceMap<String, AnimationController> animationControllers, AbstractTexture abstractTexture, ModelResourceBundle modelResourceBundle) {
         this.model = model;
         this.animations = animations;
         this.animationControllers = animationControllers;
@@ -30,7 +30,7 @@ public class VehicleModelBundle {
         this.controllerInitializer = VehicleAnimationController.buildControllers(this, modelResourceBundle);
     }
 
-    public GeoModel getModel() {
+    public BuiltModel getModel() {
         return this.model;
     }
 
