@@ -4,7 +4,7 @@ import java.util.Locale;
 
 /** Chooses the parser extension from Cloud metadata, independently of the display name. */
 public final class CloudAssetImportName {
-    private static final String[] EXTENSIONS = {".ysm", ".zip", ".bbmodel", ".gltf", ".glb"};
+    private static final String[] EXTENSIONS = {".ysm", ".zip", ".bbmodel", ".gltf", ".glb", ".figura"};
 
     private CloudAssetImportName() {}
 
@@ -13,7 +13,7 @@ public final class CloudAssetImportName {
         String lowerName = name.toLowerCase(Locale.ROOT);
         String format = summary.format().trim().toLowerCase(Locale.ROOT);
         String extension = switch (format) {
-            case "ysm", "zip", "bbmodel", "gltf", "glb" -> "." + format;
+            case "ysm", "zip", "bbmodel", "gltf", "glb", "figura" -> "." + format;
             default -> "";
         };
         for (String known : EXTENSIONS) {

@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class CloudAssetImportNameTest {
     @Test
     void everyUploadFormatKeepsItsParserAfterRecovery() {
-        for (String format : new String[] {"ysm", "zip", "bbmodel", "gltf", "glb"}) {
+        for (String format : new String[] {"ysm", "zip", "bbmodel", "gltf", "glb", "figura"}) {
             CloudAssetSummary summary = new CloudAssetSummary(
                     new CloudAssetRef("asset", 1, "a".repeat(64)), "model", format, 8);
             assertEquals("model." + format, CloudAssetImportName.fileName(summary));

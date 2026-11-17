@@ -95,7 +95,8 @@ public final class CloudAuthClient {
     public record GameAccountSession(String accountId, CloudSession session) { }
 
     public CloudHttpClient authenticated(CloudSession session) {
-        return new CloudHttpClient(unauthenticated.instance(), session.accessToken());
+        return new CloudHttpClient(unauthenticated.instance(), session.accessToken())
+                .withClientVersion(unauthenticated.clientVersion());
     }
 
     static CloudSession parseSession(String body) {
