@@ -247,6 +247,7 @@ public final class ModelUploadSession {
     private static String extensionFor(String fileName) {
         String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".zip")) return ".zip";
+        if (lower.endsWith(".figura")) return ".figura";
         if (lower.endsWith(".bbmodel")) return ".bbmodel";
         if (lower.endsWith(".gltf")) return ".gltf";
         if (lower.endsWith(".glb")) return ".glb";
@@ -278,7 +279,7 @@ public final class ModelUploadSession {
     public enum State { STARTING, UPLOADING, FINISHING, COMPLETED, FAILED }
 
     private enum ImportKind {
-        YSM("ysm"), ZIP("zip"), BBMODEL("bbmodel"), GLTF("gltf"), GLB("glb"), UNKNOWN("");
+        YSM("ysm"), ZIP("zip"), FIGURA("figura"), BBMODEL("bbmodel"), GLTF("gltf"), GLB("glb"), UNKNOWN("");
         private final String wireName;
         ImportKind(String wireName) { this.wireName = wireName; }
         private static ImportKind fromFileName(String fileName) {
@@ -286,6 +287,7 @@ public final class ModelUploadSession {
             String lower = fileName.toLowerCase(Locale.ROOT);
             if (lower.endsWith(".ysm")) return YSM;
             if (lower.endsWith(".zip")) return ZIP;
+            if (lower.endsWith(".figura")) return FIGURA;
             if (lower.endsWith(".bbmodel")) return BBMODEL;
             if (lower.endsWith(".gltf")) return GLTF;
             if (lower.endsWith(".glb")) return GLB;

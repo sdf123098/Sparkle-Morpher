@@ -20,7 +20,7 @@ public final class CloudAssetClient {
     private static final java.util.concurrent.atomic.AtomicLong DISPLAY_DOWNLOADS = new java.util.concurrent.atomic.AtomicLong();
     public static long displayDownloadCount() { return DISPLAY_DOWNLOADS.get(); }
     /** Every display format a cached object may be replayed as; the bytes alone cannot tell. */
-    private static final java.util.Set<String> DISPLAY_FORMATS = java.util.Set.of("ysm", "zip", "bbmodel", "gltf", "glb");
+    private static final java.util.Set<String> DISPLAY_FORMATS = java.util.Set.of("ysm", "zip", "bbmodel", "gltf", "glb", "figura");
     private final CloudHttpClient http;
     /** Optional content-addressed store; {@code null} keeps the pure memory-only behaviour. */
     private final CloudDiskCache diskCache;

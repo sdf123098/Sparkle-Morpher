@@ -28,7 +28,10 @@ public record CloudInstanceInfo(
         this(config, message, snapshot, chunk, asset, subscriptions, interval, ttl, motion, auth,
                 64, motion ? java.util.Set.of("player_motion_v1") : java.util.Set.of(), 8192, 32);
     }
+    public static final String FIGURA_ASSETS_CAPABILITY = "figura_assets_v1";
+
     public boolean supports(String capability) { return capabilities.contains(capability); }
+    public boolean supportsFiguraAssets() { return supports(FIGURA_ASSETS_CAPABILITY); }
     public CloudInstanceInfo(CloudInstanceConfig config, long message, long snapshot, long chunk, long asset,
                              long subscriptions, long interval, long ttl) {
         this(config, message, snapshot, chunk, asset, subscriptions, interval, ttl, false, null);
