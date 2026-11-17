@@ -23,4 +23,15 @@ public final class PlatformAPIImpl {
     public static LoaderKind loaderKind() {
         return LoaderKind.FABRIC;
     }
+
+    public static String getModVersion() {
+        try {
+            return FabricLoader.getInstance()
+                    .getModContainer("sparkle_morpher")
+                    .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                    .orElse("unknown");
+        } catch (Throwable ignored) {
+            return "unknown";
+        }
+    }
 }

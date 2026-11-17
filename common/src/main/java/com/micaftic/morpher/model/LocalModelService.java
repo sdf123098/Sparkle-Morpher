@@ -438,6 +438,10 @@ public final class LocalModelService {
                         com.micaftic.morpher.resource.bbmodel.BBModelParser.parse(json);
                 RawYsmModel rawModel = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.convert(bbmodel, sniff.sideTextures);
                 rawModel.properties.sha256 = com.micaftic.morpher.resource.bbmodel.BBToRawConverter.importCacheSha256(raw);
+                if (sniff.kind == com.micaftic.morpher.resource.bbmodel.ZipModelSniffer.Kind.FIGURA_AVATAR) {
+                    rawModel.figuraArchiveBytes = raw;
+                    rawModel.figuraSourceName = source;
+                }
                 return rawModel;
             }
             case YSM_FOLDER:

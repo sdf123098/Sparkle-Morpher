@@ -13,7 +13,7 @@ import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
 import com.micaftic.morpher.geckolib3.geo.LayerTypeConstants;
-import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
+import com.micaftic.morpher.client.render.ModelRendererBridge;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.micaftic.morpher.client.renderer.gltf.GltfPlayerActionMapper;
 import com.micaftic.morpher.resource.gltf.GltfAnimationClock;

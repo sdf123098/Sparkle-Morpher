@@ -33,7 +33,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public final class ModelRepoClient {
-    private static final String USER_AGENT = "OpenYSM-ResourceStation";
+    private static final String USER_AGENT = "SparkleMorpher-ResourceStation";
     private static final String GITHUB_ACCEPT = "application/vnd.github+json";
     private static final String GITHUB_API_VERSION = "2022-11-28";
     private static final String CACHE_BUSTER_PARAM = "ysm_refresh";

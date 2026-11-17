@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.model;
 
 import com.micaftic.morpher.client.entity.GeckoProjectileEntity;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.geckolib3.core.controller.controllers.ProjectileAnimationController;
@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 
 public class ProjectileModelBundle {
 
-    private final GeoModel model;
+    private final BuiltModel model;
 
     private final Object2ReferenceMap<String, Animation> animations;
 
@@ -23,7 +23,7 @@ public class ProjectileModelBundle {
 
     private final Consumer<GeckoProjectileEntity> controllerInitializer;
 
-    public ProjectileModelBundle(GeoModel model, Object2ReferenceMap<String, Animation> animations, Object2ReferenceMap<String, AnimationController> animationControllers, AbstractTexture texture, ModelResourceBundle resourceBundle) {
+    public ProjectileModelBundle(BuiltModel model, Object2ReferenceMap<String, Animation> animations, Object2ReferenceMap<String, AnimationController> animationControllers, AbstractTexture texture, ModelResourceBundle resourceBundle) {
         this.model = model;
         this.animations = animations;
         this.animationControllers = animationControllers;
@@ -31,7 +31,7 @@ public class ProjectileModelBundle {
         this.controllerInitializer = ProjectileAnimationController.buildControllers(this, resourceBundle);
     }
 
-    public GeoModel getModel() {
+    public BuiltModel getModel() {
         return this.model;
     }
 

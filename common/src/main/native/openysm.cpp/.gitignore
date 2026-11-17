@@ -1,7 +1,0 @@
-zig-out/
-.zig-cache/
-.zig-global-cache/
-tools/zig/
-tools/android-ndk/
-tools/*.zip
-*.pdb

@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.renderer.layer;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.util.ItemTagsConstants;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.entity.HumanoidArm;
@@ -12,12 +12,12 @@ import java.util.WeakHashMap;
 
 /** Detects sword geometry authored under YSM's left/right sword locator bones. */
 public final class SwordReplacementHelper {
-    private static final Map<GeoModel, SwordGeometry> GEOMETRY_CACHE = new WeakHashMap<>();
+    private static final Map<BuiltModel, SwordGeometry> GEOMETRY_CACHE = new WeakHashMap<>();
 
     private SwordReplacementHelper() {
     }
 
-    public static boolean shouldSuppressVanillaItem(GeoModel model, ItemStack stack, HumanoidArm arm) {
+    public static boolean shouldSuppressVanillaItem(BuiltModel model, ItemStack stack, HumanoidArm arm) {
         if (model == null || stack == null || stack.isEmpty() || arm == null || !isSwordItem(stack)) {
             return false;
         }
@@ -33,8 +33,8 @@ public final class SwordReplacementHelper {
         return stack.is(ItemTags.SWORDS) || stack.is(ItemTagsConstants.SWORDS);
     }
 
-    private static SwordGeometry scanGeometry(GeoModel model) {
-        List<GeoModel.BakedBone> bones = model.bakedBones;
+    private static SwordGeometry scanGeometry(BuiltModel model) {
+        List<BuiltModel.BakedBone> bones = model.bakedBones;
         if (bones == null || bones.isEmpty()) {
             return new SwordGeometry(false, false);
         }
@@ -50,7 +50,7 @@ public final class SwordReplacementHelper {
         boolean hasLeftGeometry = false;
         boolean hasRightGeometry = false;
         for (int i = 0; i < bones.size() && !(hasLeftGeometry && hasRightGeometry); i++) {
-            GeoModel.BakedBone bone = bones.get(i);
+            BuiltModel.BakedBone bone = bones.get(i);
             if (bone.cubes == null || bone.cubes.stream().noneMatch(cube ->
                     cube != null && cube.quads != null && !cube.quads.isEmpty())) {
                 continue;

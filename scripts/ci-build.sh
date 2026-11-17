@@ -55,7 +55,7 @@ with zipfile.ZipFile(jars[0]) as jar:
     assert os.environ['MOD_META'] in names
     assert 'com/micaftic/morpher/YesSteveModel.class' in names
     if os.environ['DIST'] == 'native':
-        assert 'natives/windows-x64/ysm-core.dll' in names
+        assert 'natives/windows-x64/spm_core_native.dll' in names
         assert 'native-manifest.json' in names
     else:
         assert not any(n.startswith('natives/') or n == 'native-manifest.json' or

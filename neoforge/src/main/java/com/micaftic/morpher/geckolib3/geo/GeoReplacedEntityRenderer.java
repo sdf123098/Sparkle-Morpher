@@ -153,6 +153,9 @@ public abstract class GeoReplacedEntityRenderer<TEntity extends LivingEntity, T 
             preRenderCallback(entity, poseStack, partialTick);
             poseStack.translate(0.0f, 0.01f, 0.0f);
             AnimatedGeoModel animatedGeoModel = t.getCurrentModel();
+            if (t instanceof com.micaftic.morpher.client.entity.LivingAnimatable<?> living) {
+                living.applyFiguraFrame(partialTick, animatedGeoModel);
+            }
             Identifier renderTexture = textureLocation == null ? t.getTextureLocation() : textureLocation;
             int textureIndex = textureLocation == null ? t.getTextureIndex() : 0;
             // MC 26.x: isBodyVisible/shouldEntityAppearGlowing API changed

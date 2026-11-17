@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -16,7 +16,7 @@ import java.nio.ByteOrder;
 public final class GpuMeshBuilder {
     private static final int VERTEX_STRIDE = 32;
 
-    public static GpuMesh build(GeoModel model) {
+    public static GpuMesh build(BuiltModel model) {
         if (model.bakedBones == null || model.bakedBones.isEmpty()) return null;
         RenderSystem.assertOnRenderThread();
         MeshData meshData = buildJavaMesh(model);
@@ -81,10 +81,10 @@ public final class GpuMeshBuilder {
         }
     }
 
-    private static MeshData buildJavaMesh(GeoModel model) {
+    private static MeshData buildJavaMesh(BuiltModel model) {
         int totalQuads = 0;
-        for (GeoModel.BakedBone bone : model.bakedBones) {
-            for (GeoModel.BakedCube cube : bone.cubes) {
+        for (BuiltModel.BakedBone bone : model.bakedBones) {
+            for (BuiltModel.BakedCube cube : bone.cubes) {
                 totalQuads += cube.quads.size();
             }
         }
@@ -98,9 +98,9 @@ public final class GpuMeshBuilder {
         List<QuadRecord> quads = new ArrayList<>(totalQuads);
 
         for (int boneIdx = 0; boneIdx < model.bakedBones.size(); boneIdx++) {
-            GeoModel.BakedBone bone = model.bakedBones.get(boneIdx);
-            for (GeoModel.BakedCube cube : bone.cubes) {
-                for (GeoModel.BakedQuad quad : cube.quads) {
+            BuiltModel.BakedBone bone = model.bakedBones.get(boneIdx);
+            for (BuiltModel.BakedCube cube : bone.cubes) {
+                for (BuiltModel.BakedQuad quad : cube.quads) {
                     int vertexOffset = vertices.position() / VERTEX_STRIDE;
                     int normal = packNormal(quad.normalX, quad.normalY, quad.normalZ);
                     for (int v = 0; v < 4; v++) {

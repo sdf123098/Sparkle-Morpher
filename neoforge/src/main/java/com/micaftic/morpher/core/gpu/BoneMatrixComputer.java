@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
@@ -31,7 +31,7 @@ public final class BoneMatrixComputer {
     }
 
     /** Writes one 144-byte SSBO record per bone: transform, normal, light and metadata. */
-    public static boolean compute(GeoModel model, Matrix4f rootPose, Matrix3f rootNormal,
+    public static boolean compute(BuiltModel model, Matrix4f rootPose, Matrix3f rootNormal,
                                   float[] boneParams, float[] stateBuffer, int packedLight,
                                   ByteBuffer out) {
         int boneCount = model.bakedBones == null ? 0 : model.bakedBones.size();
@@ -56,7 +56,7 @@ public final class BoneMatrixComputer {
 
         out.clear();
         for (int i = 0; i < boneCount; i++) {
-            GeoModel.BakedBone bone = model.bakedBones.get(i);
+            BuiltModel.BakedBone bone = model.bakedBones.get(i);
             if (!boneVisibleScratch[i]) {
                 writeMatrix4(out, identityScratch.identity());
                 writeIdentityNormal(out);
@@ -87,9 +87,9 @@ public final class BoneMatrixComputer {
         }
     }
 
-    private static void computeBoneLocalTransformLinear(int idx, List<GeoModel.BakedBone> bones,
+    private static void computeBoneLocalTransformLinear(int idx, List<BuiltModel.BakedBone> bones,
                                                         float[] boneParams, float[] stateBuffer) {
-        GeoModel.BakedBone bone = bones.get(idx);
+        BuiltModel.BakedBone bone = bones.get(idx);
         Matrix4f parentMatrix = identityScratch.identity();
         boolean isVisible = true;
         if (bone.parentIdx != -1) {
@@ -127,10 +127,10 @@ public final class BoneMatrixComputer {
         boneVisibleScratch[idx] = isVisible;
     }
 
-    private static Matrix4f computeBoneLocalTransform(int idx, List<GeoModel.BakedBone> bones,
+    private static Matrix4f computeBoneLocalTransform(int idx, List<BuiltModel.BakedBone> bones,
                                                       float[] boneParams, float[] stateBuffer) {
         if (boneComputedScratch[idx]) return boneLocalScratch[idx];
-        GeoModel.BakedBone bone = bones.get(idx);
+        BuiltModel.BakedBone bone = bones.get(idx);
         Matrix4f parentMatrix = identityScratch.identity();
         boolean isVisible = true;
         if (bone.parentIdx != -1) {

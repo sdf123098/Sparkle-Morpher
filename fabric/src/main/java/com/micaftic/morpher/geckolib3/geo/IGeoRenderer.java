@@ -1,5 +1,5 @@
 package com.micaftic.morpher.geckolib3.geo;
-import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
+import com.micaftic.morpher.client.render.ModelRendererBridge;
 
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
