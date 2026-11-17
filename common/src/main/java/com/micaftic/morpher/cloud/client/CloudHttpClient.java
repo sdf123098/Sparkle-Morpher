@@ -41,10 +41,13 @@ public final class CloudHttpClient {
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
     private static final Duration UPLOAD_TIMEOUT = Duration.ofMinutes(5);
+    public static final String CLIENT_VERSION_HEADER = "X-SPM-Client-Version";
+    public static final String FALLBACK_CLIENT_VERSION = "2.4.0";
 
     private final CloudInstanceConfig instance;
     private final HttpClient httpClient;
     private final String accessToken;
+    private final String clientVersion;
     // Weak identity keys: delayed consumers carry their download epoch without retaining any model bytes.
     private static final java.util.Map<byte[], Long> DISPLAY_BYTE_GENERATIONS =
             java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
@@ -92,9 +95,40 @@ public final class CloudHttpClient {
     }
 
     CloudHttpClient(CloudInstanceConfig instance, HttpClient httpClient, String accessToken) {
+        this(instance, httpClient, accessToken, resolveClientVersion());
+    }
+
+    private CloudHttpClient(CloudInstanceConfig instance, HttpClient httpClient, String accessToken, String clientVersion) {
         this.instance = Objects.requireNonNull(instance, "instance");
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.accessToken = accessToken == null || accessToken.isBlank() ? null : accessToken;
+        this.clientVersion = normalizeClientVersion(clientVersion);
+    }
+
+    public static String resolveClientVersion() {
+        try {
+            String version = com.micaftic.morpher.core.api.PlatformAPI.getModVersion();
+            if (version != null && !version.isBlank() && !"unknown".equalsIgnoreCase(version.trim())) {
+                return version.trim();
+            }
+        } catch (Throwable ignored) {
+        }
+        return FALLBACK_CLIENT_VERSION;
+    }
+
+    private static String normalizeClientVersion(String clientVersion) {
+        if (clientVersion == null || clientVersion.isBlank()) {
+            return resolveClientVersion();
+        }
+        return clientVersion.trim();
+    }
+
+    public String clientVersion() {
+        return clientVersion;
+    }
+
+    public CloudHttpClient withClientVersion(String clientVersion) {
+        return new CloudHttpClient(instance, httpClient, accessToken, clientVersion);
     }
 
     public CloudInstanceConfig instance() {
@@ -439,7 +473,8 @@ public final class CloudHttpClient {
     }
 
     private HttpRequest.Builder requestBuilder(String path) {
-        HttpRequest.Builder builder = HttpRequest.newBuilder(instance.apiUri(path));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(instance.apiUri(path))
+                .header(CLIENT_VERSION_HEADER, clientVersion);
         if (accessToken != null) {
             builder.header("Authorization", "Bearer " + accessToken);
         }

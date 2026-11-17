@@ -81,7 +81,8 @@ public final class CloudClientRuntime {
         RuntimeState previous = INSTANCES.remove(instance.instanceId());
         if (previous != null) closeState(previous);
 
-        CloudHttpClient http = new CloudAuthClient(new CloudHttpClient(instance)).authenticated(session);
+        CloudHttpClient http = new CloudAuthClient(
+                new CloudHttpClient(instance).withClientVersion(clientVersion)).authenticated(session);
         // The dedicated cloud-cache directory is the only place display bytes may reach the disk.
         CloudDiskCache diskCache = CloudDiskCache.fromConfig(cacheRoot);
         CloudAssetClient assets = new CloudAssetClient(http, diskCache);
