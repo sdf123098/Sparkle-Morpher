@@ -3,7 +3,7 @@ package com.micaftic.morpher.geckolib3.geo.animated;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouMaidBoneProcessor;
 import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceMap;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceMaps;
@@ -34,7 +34,7 @@ public class AnimatedGeoModel {
 
     private final float[] absPivotData;
 
-    private final GeoModel geoModel;
+    private final BuiltModel geoModel;
 
     @NotNull
     private final List<IBone> headBones;
@@ -99,7 +99,7 @@ public class AnimatedGeoModel {
     @Nullable
     private Object touhouMaidData = null;
 
-    public AnimatedGeoModel(GeoModel data) {
+    public AnimatedGeoModel(BuiltModel data) {
         this.geoModel = data;
 
         List<GeoBone> bones = data.topLevelBones();
@@ -152,7 +152,7 @@ public class AnimatedGeoModel {
         return this.boneIdsMap;
     }
 
-    public GeoModel getGeoModel() {
+    public BuiltModel getGeoModel() {
         return this.geoModel;
     }
 

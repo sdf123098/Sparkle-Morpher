@@ -21,4 +21,8 @@ public final class PlatformAPI {
     public static LoaderKind loaderKind() {
         return com.micaftic.morpher.core.api.fabric.PlatformAPIImpl.loaderKind();
     }
+
+    public static String getModVersion() {
+        return com.micaftic.morpher.core.api.fabric.PlatformAPIImpl.getModVersion();
+    }
 }

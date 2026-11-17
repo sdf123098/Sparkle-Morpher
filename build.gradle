@@ -60,7 +60,6 @@ configure([project(':fabric')]) {
             name = "JitPack"
             url = "https://jitpack.io"
             content {
-                includeGroup "com.github.OpenYSM"
                 includeGroup "com.github.TartaricAlkaline"
             }
         }

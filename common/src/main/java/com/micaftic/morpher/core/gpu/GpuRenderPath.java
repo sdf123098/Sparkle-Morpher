@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.YesSteveModel;
@@ -33,7 +33,7 @@ public final class GpuRenderPath {
     private static final RenderStateCache stateCache = new RenderStateCache();
 
     public static boolean tryRender(
-            GeoModel model,
+            BuiltModel model,
             PoseStack.Pose pose,
             float[] boneParams,
             float[] stateBuffer,
@@ -77,21 +77,7 @@ public final class GpuRenderPath {
 
         boolean profileExtraPlayer = ExtraPlayerRenderProfiler.enabled() && RenderContext.isGuiPreview();
         long boneStart = profileExtraPlayer ? System.nanoTime() : 0L;
-        boolean nativeComputed = false;
-        if (ConfigPolicies.graphics().nativeSimdPolicy() != com.micaftic.morpher.core.render.NativeSimdPolicy.OFF
-                && AccelerationCapability.isLoaded() && mesh.pointer != 0
-                && boneParams != null && boneParams.length >= mesh.boneCount * 12) {
-            NativeSimdGpuCompute.markUnwritten(boneBuf, mesh.boneCount);
-            try {
-                rootPose.get(rootPoseScratch);
-                rootNormal.get(rootNormalScratch);
-                GeoModel.nComputeBoneMatrices(mesh.pointer, rootPoseScratch, rootNormalScratch, boneParams, packedLight, boneBuf);
-                nativeComputed = NativeSimdGpuCompute.hasCompleteWrite(boneBuf, mesh.boneCount);
-            } catch (Throwable t) {
-                GpuDebugLog.error("native SIMD GPU bone computation failed; using Java fallback", t);
-            }
-        }
-        if (!nativeComputed && !BoneMatrixComputer.compute(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
+        if (!BoneMatrixComputer.compute(model, rootPose, rootNormal, boneParams, stateBuffer, packedLight, boneBuf)) {
             return false;
         }
         if (profileExtraPlayer) {
@@ -216,7 +202,7 @@ public final class GpuRenderPath {
     }
 
 
-    public static void disposeMesh(GeoModel model) {
+    public static void disposeMesh(BuiltModel model) {
         if (model.gpuMeshHandle == 0) return;
         GpuMesh mesh = MESH_REGISTRY.remove(model.gpuMeshHandle);
         if (mesh != null) mesh.dispose();
@@ -224,11 +210,11 @@ public final class GpuRenderPath {
     }
 
     /**
-     * R10.2：释放指定模型（GeoModel，即租约 owner）名下的全部 GPU mesh。
-     * 与 {@link #disposeMesh} 等价（每个 GeoModel 至多一个 mesh），但语义按 owner 释放，
+     * R10.2：释放指定模型（BuiltModel，即租约 owner）名下的全部 GPU mesh。
+     * 与 {@link #disposeMesh} 等价（每个 BuiltModel 至多一个 mesh），但语义按 owner 释放，
      * 供 RenderBackend.release 走统一的租约 revoke 路径。
      */
-    public static void disposeOwner(GeoModel model) {
+    public static void disposeOwner(BuiltModel model) {
         if (model.gpuMeshHandle != 0) {
             disposeMesh(model);
             return;
@@ -280,7 +266,7 @@ public final class GpuRenderPath {
         }
     }
 
-    public static GpuMesh getOrBuildMesh(GeoModel model) {
+    public static GpuMesh getOrBuildMesh(BuiltModel model) {
         if (model.gpuMeshHandle == 0) {
             GpuMesh mesh = GpuMeshBuilder.build(model);
             if (mesh == null) return null;
@@ -294,7 +280,7 @@ public final class GpuRenderPath {
         return mesh;
     }
 
-    private static long encodeMeshRef(GeoModel owner, GpuMesh mesh) {
+    private static long encodeMeshRef(BuiltModel owner, GpuMesh mesh) {
         return MESH_REGISTRY.register(owner, mesh);
     }
 
@@ -302,7 +288,7 @@ public final class GpuRenderPath {
         return MESH_REGISTRY.get(ref);
     }
 
-    private static void updatePivotAbsStateBuffer(GeoModel model, float[] boneParams, float[] stateBuffer) {
+    private static void updatePivotAbsStateBuffer(BuiltModel model, float[] boneParams, float[] stateBuffer) {
         if (stateBuffer == null || boneParams == null) return;
         if (model.bakedBones == null || model.bakedBones.isEmpty()) return;
 
@@ -322,7 +308,7 @@ public final class GpuRenderPath {
         }
     }
 
-    private static void computeOnePivotAbs(int targetIdx, List<GeoModel.BakedBone> bones, float[] boneParams, float[] stateBuffer, int stateOffset) {
+    private static void computeOnePivotAbs(int targetIdx, List<BuiltModel.BakedBone> bones, float[] boneParams, float[] stateBuffer, int stateOffset) {
         int depth = 0;
         int idx = targetIdx;
 
@@ -342,7 +328,7 @@ public final class GpuRenderPath {
 
         for (int p = depth - 1; p >= 0; p--) {
             int boneIdx = pivotAbsPathScratch[p];
-            GeoModel.BakedBone bone = bones.get(boneIdx);
+            BuiltModel.BakedBone bone = bones.get(boneIdx);
 
             int pOffset = boneIdx * 12;
             if (pOffset + 11 >= boneParams.length) return;

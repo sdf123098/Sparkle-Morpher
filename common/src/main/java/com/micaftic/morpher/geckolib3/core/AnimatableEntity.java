@@ -7,7 +7,7 @@ import com.micaftic.morpher.audio.IAudioStreamFactory;
 import com.micaftic.morpher.client.event.ClientTickEvent;
 import com.micaftic.morpher.geckolib3.core.enums.AnimationState;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.geckolib3.core.manager.AnimationData;
 import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
@@ -522,7 +522,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
         return this.animationProcessor;
     }
 
-    public void initAnimationControllers(@NotNull GeoModel model, Object2ReferenceMap<String, List<IValue>> object2ReferenceMap) {
+    public void initAnimationControllers(@NotNull BuiltModel model, Object2ReferenceMap<String, List<IValue>> object2ReferenceMap) {
         reset();
         this.currentModel = new AnimatedGeoModel(model);
         this.animationMap = object2ReferenceMap;
@@ -533,7 +533,7 @@ public abstract class AnimatableEntity<TEntity extends Entity> {
 
     public void clearAnimationControllers() {
         if (this.currentModel != null) {
-            GeoModel model = this.currentModel.getGeoModel();
+            BuiltModel model = this.currentModel.getGeoModel();
             Object2ReferenceMap<String, List<IValue>> object2ReferenceMap = this.animationMap;
             reset();
             initAnimationControllers(model, object2ReferenceMap);

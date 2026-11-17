@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.util.ModelMemoryProfiler;
 import com.micaftic.morpher.util.ResourceLifecycleStats;
 import com.mojang.blaze3d.platform.GlStateManager;
@@ -129,9 +129,6 @@ public final class GpuMesh {
         GL45.glDeleteVertexArrays(vao);
         if (xformVbo != 0) GlStateManager._glDeleteBuffers(xformVbo);
         if (xformVao != 0) GL45.glDeleteVertexArrays(xformVao);
-        if (pointer != 0) {
-            GeoModel.nFreeGpuMesh(pointer);
-        }
         int boneBufferBytes = perFrameBoneBuffer.capacity();
         MemoryUtil.memFree(perFrameBoneBuffer);
         ResourceLifecycleStats.onDirectBufferFreed(null, boneBufferBytes);

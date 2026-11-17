@@ -10,7 +10,7 @@ import com.micaftic.morpher.resource.ModelOptimizationStats;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.data.OrderedStringMap;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,7 +22,7 @@ import java.util.stream.IntStream;
 /**
  * 1.2.7 §24.1：从 {@code YSMClientMapper} 外提的几何烘焙职责（行为等价，纯搬运）。
  *
- * 负责 raw YSM 几何 → {@link GeoModel} 的烘焙：骨骼/立方体/面展开、透明度剔除、
+ * 负责 raw YSM 几何 → {@link BuiltModel} 的烘焙：骨骼/立方体/面展开、透明度剔除、
  * cullable 判定、locator 骨名数组构建、优化统计。不含动画、贴图解码或元数据映射。
  */
 public final class GeometryBaker {
@@ -30,17 +30,17 @@ public final class GeometryBaker {
     private GeometryBaker() {
     }
 
-    public static GeoModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TextureAlphaAnalyzer scanner, boolean allCutout) {
+    public static BuiltModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TextureAlphaAnalyzer scanner, boolean allCutout) {
         return buildMesh(rawGeo, context, textureCount, scanner, allCutout, SpecialHandLocatorProfile.NONE);
     }
 
-    public static GeoModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TextureAlphaAnalyzer scanner, boolean allCutout, SpecialHandLocatorProfile specialHandLocatorProfile) {
+    public static BuiltModel buildMesh(RawYsmModel.RawGeometry rawGeo, GeometryDescription context, int textureCount, TextureAlphaAnalyzer scanner, boolean allCutout, SpecialHandLocatorProfile specialHandLocatorProfile) {
         long bakeStart = System.nanoTime();
         ModelOptimizationStats stats = new ModelOptimizationStats();
         stats.textures = textureCount;
         if (rawGeo == null || rawGeo.bones.isEmpty()) {
             boolean[] fallbackArray = scanner != null ? scanner.getResults() : new boolean[Math.max(1, textureCount)];
-            GeoModel mesh = buildMesh(new GeoBone[0], new HashMap<>(), context, fallbackArray);
+            BuiltModel mesh = buildMesh(new GeoBone[0], new HashMap<>(), context, fallbackArray);
             stats.importBakeMillis = (System.nanoTime() - bakeStart) / 1_000_000L;
             mesh.optimizationStats = stats;
             logModelOptimizationStats(stats);
@@ -48,7 +48,7 @@ public final class GeometryBaker {
         }
 
         List<GeoBone> geoBones = new ArrayList<>();
-        List<GeoModel.BakedBone> bakedBones = new ArrayList<>();
+        List<BuiltModel.BakedBone> bakedBones = new ArrayList<>();
         Map<String, String> parentMap = new HashMap<>();
 
         for (RawYsmModel.RawBone rb : rawGeo.bones) {
@@ -56,7 +56,7 @@ public final class GeometryBaker {
             parentMap.put(rb.name, rb.parentName);
             geoBones.add(new GeoBone(rb.name, false, false, false, rb.pivot[0], rb.pivot[1], rb.pivot[2], rb.rotation[0], rb.rotation[1], rb.rotation[2]));
 
-            GeoModel.BakedBone bb = new GeoModel.BakedBone();
+            BuiltModel.BakedBone bb = new BuiltModel.BakedBone();
             bb.name = rb.name;
             if (rb.name.startsWith("ysmGlow")) bb.glow = true;
             bb.pivotX = rb.pivot[0];
@@ -73,7 +73,7 @@ public final class GeometryBaker {
 
             for (RawYsmModel.RawCube rc : rb.cubes) {
                 stats.cubes++;
-                GeoModel.BakedCube bc = new GeoModel.BakedCube();
+                BuiltModel.BakedCube bc = new BuiltModel.BakedCube();
 
                 int validFaceCount = 0;
                 boolean hasTranslucentFace = false;
@@ -104,7 +104,7 @@ public final class GeometryBaker {
                         stats.glowFaces++;
                     }
 
-                    GeoModel.BakedQuad bq = new GeoModel.BakedQuad();
+                    BuiltModel.BakedQuad bq = new BuiltModel.BakedQuad();
                     bq.setNormal(rf.normal[0], rf.normal[1], rf.normal[2]);
                     for (int i = 0; i < 4; i++) {
                         float px = rf.positions[i][0];
@@ -120,7 +120,7 @@ public final class GeometryBaker {
 
                 boolean isZeroThickness = true;
                 if (!bc.quads.isEmpty()) {
-                    GeoModel.BakedQuad baseQuad = bc.quads.get(0);
+                    BuiltModel.BakedQuad baseQuad = bc.quads.get(0);
                     float baseNormalX = baseQuad.normalX;
                     float baseNormalY = baseQuad.normalY;
                     float baseNormalZ = baseQuad.normalZ;
@@ -128,7 +128,7 @@ public final class GeometryBaker {
                     float baseY = baseQuad.y(0);
                     float baseZ = baseQuad.z(0);
 
-                    for (GeoModel.BakedQuad q : bc.quads) {
+                    for (BuiltModel.BakedQuad q : bc.quads) {
                         for (int i = 0; i < 4; i++) {
                             float dx = q.x(i) - baseX;
                             float dy = q.y(i) - baseY;
@@ -168,7 +168,7 @@ public final class GeometryBaker {
         }
 
         // 回填父级索引
-        for (GeoModel.BakedBone b : bakedBones) {
+        for (BuiltModel.BakedBone b : bakedBones) {
             String parentName = parentMap.get(b.name);
             if (parentName != null && !parentName.isEmpty()) {
                 for (int i = 0; i < bakedBones.size(); i++) {
@@ -187,26 +187,26 @@ public final class GeometryBaker {
         finalizeOptimizationStats(bakedBones, stats);
 
         boolean[] translucencyArray = scanner != null ? scanner.getResults() : new boolean[Math.max(1, textureCount)];
-        GeoModel mesh = buildMesh(geoBones.toArray(new GeoBone[0]), parentMap, context, translucencyArray, specialHandLocatorProfile);
+        BuiltModel mesh = buildMesh(geoBones.toArray(new GeoBone[0]), parentMap, context, translucencyArray, specialHandLocatorProfile);
 
         mesh.bakedBones = bakedBones;
-        mesh.bakedBoneOrder = GeoModel.buildParentFirstBoneOrder(bakedBones);
+        mesh.bakedBoneOrder = BuiltModel.buildParentFirstBoneOrder(bakedBones);
         mesh.buildPartMaskBoneRenderOrders();
         stats.importBakeMillis = (System.nanoTime() - bakeStart) / 1_000_000L;
         mesh.optimizationStats = stats;
         logModelOptimizationStats(stats);
-        if (RuntimeAccelerationLoader.isLoaded()) mesh.buildNativeCache();
+        if (RuntimeAccelerationLoader.isLoaded()) mesh.ensureComputeCache();
         return mesh;
     }
 
-    public static GeoModel buildMesh(GeoBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray) {
+    public static BuiltModel buildMesh(GeoBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray) {
         return buildMesh(bones, parentMap, context, translucencyArray, SpecialHandLocatorProfile.NONE);
     }
 
-    public static GeoModel buildMesh(GeoBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray, SpecialHandLocatorProfile specialHandLocatorProfile) {
+    public static BuiltModel buildMesh(GeoBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray, SpecialHandLocatorProfile specialHandLocatorProfile) {
         String[][] boneNameArrays = buildBoneNameArrays(parentMap, specialHandLocatorProfile);
         boolean[] flags = new boolean[]{parentMap.containsKey("LeftArm"), parentMap.containsKey("RightArm"), parentMap.containsKey("Background")};
-        return new GeoModel(bones, boneNameArrays, flags, context, translucencyArray);
+        return new BuiltModel(bones, boneNameArrays, flags, context, translucencyArray);
     }
 
     public static GeometryDescription buildContext(RawYsmModel.RawGeometry model) {
@@ -446,13 +446,13 @@ public final class GeometryBaker {
         return dot < -1e-5f;
     }
 
-    private static void finalizeOptimizationStats(List<GeoModel.BakedBone> bakedBones, ModelOptimizationStats stats) {
+    private static void finalizeOptimizationStats(List<BuiltModel.BakedBone> bakedBones, ModelOptimizationStats stats) {
         int totalQuads = 0;
         int totalCubes = 0;
         for (int boneIdx = 0; boneIdx < bakedBones.size(); boneIdx++) {
-            GeoModel.BakedBone bone = bakedBones.get(boneIdx);
+            BuiltModel.BakedBone bone = bakedBones.get(boneIdx);
             totalCubes += bone.cubes.size();
-            for (GeoModel.BakedCube cube : bone.cubes) {
+            for (BuiltModel.BakedCube cube : bone.cubes) {
                 totalQuads += cube.quads.size();
                 switch (bone.partMask) {
                     case 1 -> stats.partMaskLeftArmQuads += cube.quads.size();
@@ -477,15 +477,15 @@ public final class GeometryBaker {
         return vertexBytes + indexBytes + boneBytes;
     }
 
-    private static int countConservativeInternalFaceCandidates(List<GeoModel.BakedBone> bakedBones) {
+    private static int countConservativeInternalFaceCandidates(List<BuiltModel.BakedBone> bakedBones) {
         Map<FaceAuditKey, int[]> buckets = new HashMap<>();
         for (int boneIdx = 0; boneIdx < bakedBones.size(); boneIdx++) {
-            GeoModel.BakedBone bone = bakedBones.get(boneIdx);
+            BuiltModel.BakedBone bone = bakedBones.get(boneIdx);
             if (bone.glow) {
                 continue;
             }
-            for (GeoModel.BakedCube cube : bone.cubes) {
-                for (GeoModel.BakedQuad quad : cube.quads) {
+            for (BuiltModel.BakedCube cube : bone.cubes) {
+                for (BuiltModel.BakedQuad quad : cube.quads) {
                     int axis = dominantAxis(quad.normalX, quad.normalY, quad.normalZ);
                     if (axis < 0 || isZeroAreaQuad(quad, axis)) {
                         continue;
@@ -519,7 +519,7 @@ public final class GeometryBaker {
         return 2;
     }
 
-    private static int normalSign(GeoModel.BakedQuad quad, int axis) {
+    private static int normalSign(BuiltModel.BakedQuad quad, int axis) {
         float value = switch (axis) {
             case 0 -> quad.normalX;
             case 1 -> quad.normalY;
@@ -530,7 +530,7 @@ public final class GeometryBaker {
         return 0;
     }
 
-    private static boolean isZeroAreaQuad(GeoModel.BakedQuad quad, int axis) {
+    private static boolean isZeroAreaQuad(BuiltModel.BakedQuad quad, int axis) {
         float minA = Float.POSITIVE_INFINITY;
         float maxA = Float.NEGATIVE_INFINITY;
         float minB = Float.POSITIVE_INFINITY;
@@ -557,7 +557,7 @@ public final class GeometryBaker {
     }
 
     private record FaceAuditKey(int boneIndex, int partMask, int axis, int plane, int minA, int maxA, int minB, int maxB) {
-        static FaceAuditKey from(int boneIndex, int partMask, int axis, GeoModel.BakedQuad quad) {
+        static FaceAuditKey from(int boneIndex, int partMask, int axis, BuiltModel.BakedQuad quad) {
             float planeValue;
             float minA = Float.POSITIVE_INFINITY;
             float maxA = Float.NEGATIVE_INFINITY;

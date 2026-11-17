@@ -14,9 +14,12 @@ repositories {
     }
 }
 // Explicit loader nesting: include/jarJar are not assumed to bundle transitive Core artifacts.
-def coreModules = ['dev.spm.core:api', 'dev.spm.core:codec', 'dev.spm.core:format-common',
-                   'dev.spm.core:format-bedrock', 'dev.spm.core:format-bbmodel', 'dev.spm.core:format-ysm',
-                   'dev.spm.core:format-v3d', 'dev.spm.core:parser', 'dev.spm.core:scene']
+def coreModules = ['dev.spm.core:acceleration-api', 'dev.spm.core:api', 'dev.spm.core:codec',
+                   'dev.spm.core:format-common', 'dev.spm.core:format-bedrock', 'dev.spm.core:format-bbmodel',
+                   'dev.spm.core:format-figura', 'dev.spm.core:format-gltf', 'dev.spm.core:format-v3d',
+                   'dev.spm.core:format-ysm', 'dev.spm.core:native-jni', 'dev.spm.core:parser',
+                   'dev.spm.core:render-cpu', 'dev.spm.core:runtime', 'dev.spm.core:scene',
+                   'dev.spm.core:script-lua']
 def verificationArtifacts = configurations.create('spmCoreVerification') {
     canBeConsumed = false
     canBeResolved = true

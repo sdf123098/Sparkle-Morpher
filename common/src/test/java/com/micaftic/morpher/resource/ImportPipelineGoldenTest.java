@@ -1,6 +1,6 @@
 package com.micaftic.morpher.resource;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.client.ClientModelInfo;
 import com.micaftic.morpher.client.model.MainModelData;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
@@ -392,14 +392,14 @@ class ImportPipelineGoldenTest {
         RawYsmModel.RawTexture rawTex = raw.mainEntity.textures.values().iterator().next();
 
         MainModelData data = info.getMainModelData();
-        GeoModel mainMesh = data.getModels().get(0);
-        GeoModel armMesh = data.getModels().get(1);
+        BuiltModel mainMesh = data.getModels().get(0);
+        BuiltModel armMesh = data.getModels().get(1);
 
         int bakedCubes = 0;
         int bakedQuads = 0;
-        for (GeoModel.BakedBone bakedBone : mainMesh.bakedBones) {
+        for (BuiltModel.BakedBone bakedBone : mainMesh.bakedBones) {
             bakedCubes += bakedBone.cubes.size();
-            for (GeoModel.BakedCube bakedCube : bakedBone.cubes) {
+            for (BuiltModel.BakedCube bakedCube : bakedBone.cubes) {
                 bakedQuads += bakedCube.quads.size();
             }
         }

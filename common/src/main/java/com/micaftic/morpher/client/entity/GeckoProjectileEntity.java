@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.client.upload.UploadManager;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
@@ -80,7 +80,7 @@ public class GeckoProjectileEntity extends GeoEntity<Projectile> {
     }
 
     @Override
-    public GeoModel getAnimationProcessor() {
+    public BuiltModel getAnimationProcessor() {
         return this.projectileModelContext.getModel();
     }
 

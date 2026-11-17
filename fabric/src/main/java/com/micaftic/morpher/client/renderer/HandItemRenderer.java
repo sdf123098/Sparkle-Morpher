@@ -18,7 +18,7 @@ import com.micaftic.morpher.resource.gltf.GltfAnimationClock;
 import com.micaftic.morpher.resource.gltf.GltfAnimationController;
 import com.micaftic.morpher.resource.gltf.GltfModel;
 import com.micaftic.morpher.resource.gltf.GltfSceneEvaluator;
-import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
+import com.micaftic.morpher.client.render.ModelRendererBridge;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;

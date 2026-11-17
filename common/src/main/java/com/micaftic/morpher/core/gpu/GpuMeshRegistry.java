@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>把"mesh ownership 与 model runtime 绑定"落成显式租约：
  * <ul>
- *   <li>每个 mesh 注册时绑定 owner（弱引用，通常为 {@code GeoModel}——它随 ModelAssembly
+ *   <li>每个 mesh 注册时绑定 owner（弱引用，通常为 {@code BuiltModel}——它随 ModelAssembly
  *       runtime 存活）；</li>
  *   <li>owner 显式释放（{@link #releaseOwner}）时，其名下 mesh 从注册表移除并交还调用方 dispose；
  *       同一 owner 的 {@code gpuMeshHandle} 因 ref 已移除而失效，下次渲染走既有"ref 缺失重建"路径；

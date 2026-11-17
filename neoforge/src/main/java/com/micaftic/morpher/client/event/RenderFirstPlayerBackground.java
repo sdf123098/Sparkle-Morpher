@@ -9,7 +9,7 @@ import com.micaftic.morpher.client.renderer.CustomPlayerRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
-import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
+import com.micaftic.morpher.client.render.ModelRendererBridge;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;

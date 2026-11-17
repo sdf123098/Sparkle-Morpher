@@ -2,7 +2,7 @@ package com.micaftic.morpher.client.model;
 
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.animation.condition.ArmorConditions;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.geckolib3.core.controller.controllers.FirstPersonArmAnimationController;
 import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
@@ -20,9 +20,9 @@ import java.util.function.Consumer;
 
 public class PlayerModelBundle {
 
-    private final GeoModel mainModel;
+    private final BuiltModel mainModel;
 
-    private final GeoModel armModel;
+    private final BuiltModel armModel;
 
     private final Object2ReferenceMap<String, Animation> mainAnimations;
 
@@ -58,8 +58,8 @@ public class PlayerModelBundle {
 
     private final Object maidControllerInstaller;
 
-    public PlayerModelBundle(GeoModel mainModel,
-                             GeoModel armModel,
+    public PlayerModelBundle(BuiltModel mainModel,
+                             BuiltModel armModel,
                              Object2ReferenceMap<String, Animation> mainAnimations,
                              Object2ReferenceMap<String, Animation> armAnimations,
                              ConditionManager conditionManager,
@@ -94,11 +94,11 @@ public class PlayerModelBundle {
         this.maidControllerInstaller = actionProfile == ModelActionProfile.VANILLA_HUMANOID ? null : TouhouLittleMaidClientCompat.buildControllers(this, modelResourceBundle);
     }
 
-    public GeoModel getMainModel() {
+    public BuiltModel getMainModel() {
         return this.mainModel;
     }
 
-    public GeoModel getArmModel() {
+    public BuiltModel getArmModel() {
         return this.armModel;
     }
 
@@ -168,7 +168,7 @@ public class PlayerModelBundle {
         return this.ridingAnimationPlan;
     }
 
-    private static boolean detectsFallFlyingRootRotation(GeoModel model, Object2ReferenceMap<String, Animation> animations) {
+    private static boolean detectsFallFlyingRootRotation(BuiltModel model, Object2ReferenceMap<String, Animation> animations) {
         Animation animation = animations.get("elytra_fly");
         if (animation == null || animation.isEmpty()) {
             return false;

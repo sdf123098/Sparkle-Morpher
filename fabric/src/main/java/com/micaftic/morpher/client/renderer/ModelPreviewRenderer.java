@@ -16,9 +16,9 @@ import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.geckolib3.core.processor.IBone;
 import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
 import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.geckolib3.util.RenderUtils;
-import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge;
+import com.micaftic.morpher.client.render.ModelRendererBridge;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.util.AnimatableCacheUtil;
 import com.mojang.blaze3d.platform.Lighting;
@@ -752,9 +752,9 @@ public final class ModelPreviewRenderer {
             float minY = Float.POSITIVE_INFINITY;
             float maxX = Float.NEGATIVE_INFINITY;
             float maxY = Float.NEGATIVE_INFINITY;
-            for (GeoModel.BakedBone bone : model.getGeoModel().bakedBones) {
-                for (GeoModel.BakedCube cube : bone.cubes) {
-                    for (GeoModel.BakedQuad quad : cube.quads) {
+            for (BuiltModel.BakedBone bone : model.getGeoModel().bakedBones) {
+                for (BuiltModel.BakedCube cube : bone.cubes) {
+                    for (BuiltModel.BakedQuad quad : cube.quads) {
                         for (int vertex = 0; vertex < 4; vertex++) {
                             minX = Math.min(minX, quad.x(vertex));
                             minY = Math.min(minY, quad.y(vertex));

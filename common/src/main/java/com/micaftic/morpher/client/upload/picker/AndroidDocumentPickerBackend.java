@@ -177,7 +177,7 @@ public final class AndroidDocumentPickerBackend {
                         return null;
                     }
             );
-            String key = "openysm_ysm_import_" + FilePickerCoordinator.requestIds.incrementAndGet();
+            String key = "spm_model_import_" + FilePickerCoordinator.requestIds.incrementAndGet();
             Object launcher = registry.getClass()
                     .getMethod("register", String.class, contractClass, callbackClass)
                     .invoke(registry, key, contract, callback);
@@ -210,7 +210,7 @@ public final class AndroidDocumentPickerBackend {
                         return null;
                     }
             );
-            String key = "openysm_ysm_import_document_" + FilePickerCoordinator.requestIds.incrementAndGet();
+            String key = "spm_model_import_document_" + FilePickerCoordinator.requestIds.incrementAndGet();
             Object launcher = registry.getClass()
                     .getMethod("register", String.class, contractClass, callbackClass)
                     .invoke(registry, key, contract, callback);

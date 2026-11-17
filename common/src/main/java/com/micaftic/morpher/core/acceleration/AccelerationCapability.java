@@ -1,9 +1,14 @@
 package com.micaftic.morpher.core.acceleration;
 
 import com.micaftic.morpher.RuntimeAccelerationLoader;
+import dev.spm.core.acceleration.CpuComputeProvider;
 
 public final class AccelerationCapability {
     private AccelerationCapability() {
+    }
+
+    public static CpuComputeProvider computeProvider() {
+        return NativeRuntimeSupport.computeProvider();
     }
 
     public static boolean isLoaded() {
@@ -20,9 +25,9 @@ public final class AccelerationCapability {
 
     public static String getReason() {
         if (isLoaded()) {
-            return "ok";
+            return computeProvider().backend();
         }
         String message = RuntimeAccelerationLoader.getErrorMessage();
-        return message == null || message.isBlank() ? "native ysm-core not loaded" : message;
+        return message == null || message.isBlank() ? computeProvider().backend() : message;
     }
 }

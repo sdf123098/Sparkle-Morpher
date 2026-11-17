@@ -44,7 +44,7 @@ public final class MemoryModelParser {
     public static Kind detectKind(String fileName) {
         String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".ysm")) return Kind.YSM;
-        if (lower.endsWith(".zip")) return Kind.ZIP;
+        if (lower.endsWith(".zip") || lower.endsWith(".figura")) return Kind.ZIP;
         if (lower.endsWith(".bbmodel")) return Kind.BBMODEL;
         if (lower.endsWith(".geo.json") || lower.endsWith("geometry.json")) return Kind.BEDROCK_GEO;
         if (lower.endsWith(".gltf") || lower.endsWith(".glb")) return Kind.GLTF;
@@ -62,7 +62,7 @@ public final class MemoryModelParser {
         }
         return switch (detectKind(fileName)) {
             case YSM -> parseYsm(data, fileName);
-            case ZIP -> parseZip(data);
+            case ZIP -> parseZip(data, fileName);
             case BBMODEL -> parseBbModel(data, fileName);
             case BEDROCK_GEO -> parseBedrockGeo(data, fileName);
             case GLTF -> throw new IllegalArgumentException(
@@ -102,10 +102,10 @@ public final class MemoryModelParser {
         }
     }
 
-    private static RawYsmModel parseZip(byte[] data) throws Exception {
+    private static RawYsmModel parseZip(byte[] data, String fileName) throws Exception {
         ZipModelSniffer sniff = ZipModelSniffer.sniff(data, ZIP_ENTRY_LIMIT_BYTES);
         return switch (sniff.kind) {
-            case FIGURA_AVATAR, PLAIN_BBMODEL -> parseSniffedBbModel(sniff, data);
+            case FIGURA_AVATAR, PLAIN_BBMODEL -> parseSniffedBbModel(sniff, data, fileName);
             case BEDROCK_PACK -> parseBedrockPack(sniff);
             // YSM_FOLDER / UNKNOWN：交给内存 YSM 容器（坏 zip 在容器构造时报错）
             default -> {
@@ -116,11 +116,15 @@ public final class MemoryModelParser {
         };
     }
 
-    private static RawYsmModel parseSniffedBbModel(ZipModelSniffer sniff, byte[] archiveBytes) {
+    private static RawYsmModel parseSniffedBbModel(ZipModelSniffer sniff, byte[] archiveBytes, String fileName) {
         String json = new String(sniff.bbmodelBytes, StandardCharsets.UTF_8);
         BBModelFile bbmodel = BBModelParser.parse(json);
         RawYsmModel rawModel = BBToRawConverter.convert(bbmodel, sniff.sideTextures);
         rawModel.properties.sha256 = BBToRawConverter.importCacheSha256(archiveBytes);
+        if (sniff.kind == ZipModelSniffer.Kind.FIGURA_AVATAR) {
+            rawModel.figuraArchiveBytes = archiveBytes;
+            rawModel.figuraSourceName = fileName;
+        }
         return rawModel;
     }
 

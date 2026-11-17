@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.gpu;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
@@ -42,7 +42,7 @@ public final class BoneMatrixComputer {
      * light 4 + 保留 12 个 float）。返回 false 表示 boneParams 无效（隐藏骨骼会写单位矩阵）。
      */
     public static boolean compute(
-            GeoModel model,
+            BuiltModel model,
             Matrix4f rootPose,
             Matrix3f rootNormal,
             float[] boneParams,
@@ -71,7 +71,7 @@ public final class BoneMatrixComputer {
         }
 
         for (int i = 0; i < boneCount; i++) {
-            GeoModel.BakedBone bone = model.bakedBones.get(i);
+            BuiltModel.BakedBone bone = model.bakedBones.get(i);
             boolean isHidden = !boneVisibleScratch[i];
 
             if (isHidden) {
@@ -109,8 +109,8 @@ public final class BoneMatrixComputer {
         }
     }
 
-    private static void computeBoneLocalTransformLinear(int idx, List<GeoModel.BakedBone> bones, float[] boneParams, float[] stateBuffer) {
-        GeoModel.BakedBone bone = bones.get(idx);
+    private static void computeBoneLocalTransformLinear(int idx, List<BuiltModel.BakedBone> bones, float[] boneParams, float[] stateBuffer) {
+        BuiltModel.BakedBone bone = bones.get(idx);
         Matrix4f parentMatrix = identityScratch.identity();
         boolean isVisible = true;
 
@@ -173,12 +173,12 @@ public final class BoneMatrixComputer {
         boneVisibleScratch[idx] = isVisible;
     }
 
-    private static Matrix4f computeBoneLocalTransform(int idx, List<GeoModel.BakedBone> bones, float[] boneParams, float[] stateBuffer) {
+    private static Matrix4f computeBoneLocalTransform(int idx, List<BuiltModel.BakedBone> bones, float[] boneParams, float[] stateBuffer) {
         if (boneComputedScratch[idx]) {
             return boneLocalScratch[idx];
         }
 
-        GeoModel.BakedBone bone = bones.get(idx);
+        BuiltModel.BakedBone bone = bones.get(idx);
         Matrix4f parentMatrix = identityScratch.identity();
         boolean isVisible = true;
 

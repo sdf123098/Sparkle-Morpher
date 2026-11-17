@@ -7,7 +7,7 @@ import com.micaftic.morpher.client.diagnostics.FirstPersonRenderDiagnostics.Outc
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.RendererManager;
 import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -92,7 +92,7 @@ public class ReplacePlayerHandRenderEvent {
         }
     }
 
-    private static boolean hasArmBone(HumanoidArm humanoidArm, GeoModel meshData) {
+    private static boolean hasArmBone(HumanoidArm humanoidArm, BuiltModel meshData) {
         if (humanoidArm == HumanoidArm.LEFT) {
             return meshData.hasCustomLeftHand;
         }

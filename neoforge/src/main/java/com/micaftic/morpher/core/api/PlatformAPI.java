@@ -11,4 +11,15 @@ public final class PlatformAPI {
     public static boolean isClient() { return FMLEnvironment.dist == Dist.CLIENT; }
     public static String getPlatformName() { return "NeoForge"; }
     public static LoaderKind loaderKind() { return LoaderKind.NEOFORGE; }
+
+    public static String getModVersion() {
+        try {
+            return net.neoforged.fml.ModList.get()
+                    .getModContainerById("sparkle_morpher")
+                    .map(c -> c.getModInfo().getVersion().toString())
+                    .orElse("unknown");
+        } catch (Throwable ignored) {
+            return "unknown";
+        }
+    }
 }

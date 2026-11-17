@@ -66,7 +66,7 @@ public final class ResourceStationConfig {
             properties.setProperty("preferGithubAccelerator", Boolean.toString(state.preferGithubAccelerator()));
             properties.setProperty("githubAccelerators", String.join("|", state.githubAccelerators()));
             try (OutputStream out = Files.newOutputStream(FILE)) {
-                properties.store(out, "OpenYSM resource station");
+                properties.store(out, "Sparkle Morpher resource station");
             }
             if (monitorLogEnabled()) {
                 YesSteveModel.LOGGER.info("[SM-RESOURCE] Saved config file={} selected={} urls={} timeoutMs={} maxDownloadBytes={} preferGithubAccelerator={} accelerators={}",

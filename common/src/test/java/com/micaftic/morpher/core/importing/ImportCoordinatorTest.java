@@ -13,7 +13,7 @@ import com.micaftic.morpher.geckolib3.core.controller.controllers.PlayerActionPr
 import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.util.data.OrderedStringMap;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.BuiltModel;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import com.micaftic.morpher.resource.gltf.GltfModel;
@@ -473,7 +473,7 @@ class ImportCoordinatorTest {
                 (modelBundle, resourceBundle) -> entity -> {});
         PlayerModelBundle bundle;
         try {
-            bundle = new PlayerModelBundle((GeoModel) null, null,
+            bundle = new PlayerModelBundle((BuiltModel) null, null,
                     new Object2ReferenceOpenHashMap<String, Animation>(),
                     new Object2ReferenceOpenHashMap<String, Animation>(), null, new ArmorConditions(),
                     new Object2ReferenceOpenHashMap<String, AnimationController>(),

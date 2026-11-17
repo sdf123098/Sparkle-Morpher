@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.render;
 
-import com.elfmcys.yesstevemodel.geckolib3.geo.ModelRendererBridge.BoneRenderPass;
-import com.elfmcys.yesstevemodel.geckolib3.geo.render.built.GeoModel;
+import com.micaftic.morpher.client.render.ModelRendererBridge.BoneRenderPass;
+import com.micaftic.morpher.client.render.BuiltModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.resources.ResourceLocation;
@@ -23,7 +23,7 @@ public interface RenderBackend {
      * R10.2：释放本后端持有的、属于指定模型的 GPU 资源（租约 revoke）。默认 no-op——
      * 仅持有 GPU mesh 的后端（OpenGL）实现；Java/Native SIMD 无此类资源。
      */
-    default void release(GeoModel model) {
+    default void release(BuiltModel model) {
     }
 
     /** 渲染请求参数（renderMeshPass 入参封装，各后端按需解包）。 */
@@ -31,7 +31,7 @@ public interface RenderBackend {
             VertexConsumer buffer,
             PoseStack.Pose pose,
             Matrix4f projectionModelViewMatrix,
-            GeoModel model,
+            BuiltModel model,
             float[] boneParams,
             float[] stateBuffer,
             int textureIndex,

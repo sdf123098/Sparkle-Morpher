@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
  * Behaviour is identical to the legacy in-class implementation.
  */
 public final class HttpTransport {
-    public static final String USER_AGENT = "OpenYSM-ResourceStation";
+    public static final String USER_AGENT = "SparkleMorpher-ResourceStation";
     public static final String GITHUB_ACCEPT = "application/vnd.github+json";
     public static final String GITHUB_API_VERSION = "2022-11-28";
     public static final String CACHE_BUSTER_PARAM = "ysm_refresh";
