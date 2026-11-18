@@ -39,13 +39,13 @@ Model assets and appearance updates travel between **SPM clients and SPM Cloud**
 
 | Format | Import support |
 |---|---|
-| `.ysm` | YSM models with textures and model-provided animations, using the OpenYSM/YSMParser-based import pipeline. |
+| `.ysm` | YSM models with textures and model-provided animations, parsed and evaluated by the independent `spm-core` engine (versions `2.3.2` and earlier used the OpenYSM/YSMParser pipeline). |
 | `.bbmodel` | Blockbench projects with cube/mesh geometry, bone hierarchies, textures and supported animations. |
 | `.zip` | Content detection for YSM folders, Blockbench model packs, Figura avatar packs and Bedrock model packs. |
 | Bedrock geometry | `.geo.json` / `geometry.json`; Bedrock packs can also contain `.animation.json` files and PNG textures. |
 | `.gltf` / `.glb` | Local glTF model import. Keep external resources referenced by `.gltf` alongside the model. |
 
-Figura pack import reads its model and textures; it does not provide a Figura Lua runtime. Importing a format does not imply support for every feature of its original application. Cloud upload and sharing depend on the formats supported by the selected instance.
+Figura pack import reads models, textures, and audio, and runs supported `.lua` scripts via `spm-core`'s bounded pure-Java Lua 5.3 runtime. Importing a format does not imply 1:1 parity with every feature of its original application. Cloud upload and sharing depend on the formats supported by the selected instance.
 
 <a id="features"></a>
 ## Features
@@ -114,8 +114,8 @@ English, Chinese, Japanese and Korean follow the same section order, installatio
 <a id="credits"></a>
 ## Credits & license
 
-- Built upon [OpenYSM](https://github.com/OpenYSM) (MIT).
-- Uses [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser) (MIT) for YSM model parsing.
+- Core source (`2.4.0+`): powered by the independent **spm-core** (`1.0.0`) Java + Rust SIMD runtime, with the goal of completely replacing legacy OpenYSM code.
+- Legacy versions (`2.3.2` and earlier): releases `<= 2.3.2` remain based on [OpenYSM](https://github.com/OpenYSM) (MIT) and [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser) (MIT).
 - Default model library: [sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model).
 - Blockbench: [JannisX11/Blockbench](https://github.com/JannisX11/blockbench).
 

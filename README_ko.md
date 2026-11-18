@@ -39,13 +39,13 @@ SPM의 모델 공유는 Minecraft 서버의 모드 구성과 독립적으로 작
 
 | 형식 | 가져오기 지원 |
 |---|---|
-| `.ysm` | 텍스처와 모델 자체 애니메이션을 포함한 YSM 모델. OpenYSM/YSMParser 기반 가져오기 파이프라인을 사용합니다. |
+| `.ysm` | 텍스처와 모델 자체 애니메이션을 포함한 YSM 모델. 독립 엔진 `spm-core`가 파싱·구동합니다(`2.3.2` 이하 버전은 OpenYSM/YSMParser 기반). |
 | `.bbmodel` | Blockbench 프로젝트의 큐브/메시 지오메트리, 본 계층, 텍스처와 지원되는 애니메이션. |
 | `.zip` | 내용을 분석해 YSM 폴더, Blockbench 모델 팩, Figura 아바타 팩과 Bedrock 모델 팩을 구분합니다. |
 | Bedrock 지오메트리 | `.geo.json` / `geometry.json`. Bedrock 팩에는 `.animation.json` 파일과 PNG 텍스처도 포함할 수 있습니다. |
 | `.gltf` / `.glb` | 로컬 glTF 모델 가져오기. `.gltf`가 참조하는 외부 리소스를 모델과 함께 보관하세요. |
 
-Figura 팩에서는 모델과 텍스처를 읽으며 Figura Lua 실행 환경은 제공하지 않습니다. 특정 형식을 가져올 수 있다고 해서 원본 프로그램의 모든 기능을 지원하는 것은 아닙니다. Cloud 업로드와 공유는 선택한 인스턴스가 지원하는 형식에 따라 달라집니다.
+Figura 팩에서는 모델·텍스처·오디오를 읽으며 `spm-core`의 제한된 순수 Java Lua 5.3 런타임으로 지원되는 `.lua` 스크립트를 실행할 수 있습니다. 특정 형식을 가져올 수 있다고 해서 원본 프로그램의 모든 기능을 1:1로 지원하는 것은 아닙니다. Cloud 업로드와 공유는 선택한 인스턴스가 지원하는 형식에 따라 달라집니다.
 
 <a id="features"></a>
 ## 기능
@@ -114,8 +114,8 @@ SPM에는 Better Combat, Curios, Create, Iris/Sodium과 스킨 레이어 렌더�
 <a id="credits"></a>
 ## 크레딧과 라이선스
 
-- [OpenYSM](https://github.com/OpenYSM)(MIT)을 기반으로 개발했습니다.
-- YSM 모델 파싱에 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)(MIT)을 사용합니다.
+- 코어 소스 출처(`2.4.0+`): 독자 개발한 **spm-core**(`1.0.0`) Java + Rust SIMD 런타임을 기반으로 전환되었으며, 기존 OpenYSM 레거시 코드를 완전히 대체하는 것을 목표로 합니다.
+- 구버전(`2.3.2` 이하): `2.3.2` 및 이하 버전은 여전히 [OpenYSM](https://github.com/OpenYSM)(MIT)과 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)(MIT)을 기반으로 합니다.
 - 기본 모델 라이브러리: [sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model).
 - Blockbench: [JannisX11/Blockbench](https://github.com/JannisX11/blockbench).
 
