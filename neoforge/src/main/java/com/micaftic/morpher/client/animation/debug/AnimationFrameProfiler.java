@@ -2,11 +2,11 @@ package com.micaftic.morpher.client.animation.debug;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
-import com.micaftic.morpher.client.entity.GeoEntity;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.Nullable;
@@ -36,7 +36,7 @@ public final class AnimationFrameProfiler {
         return renderFrameId;
     }
 
-    public static void logReusedEvaluation(AnimatableEntity<?> animatable, AnimationEvent<?> event, float seekTime) {
+    public static void logReusedEvaluation(HostAnimatable<?> animatable, HostActionEvent<?> event, float seekTime) {
         if (!isEnabled() || !ConfigPolicies.diagnostics().animationDebugLog()) {
             return;
         }
@@ -50,7 +50,7 @@ public final class AnimationFrameProfiler {
                 seekTime);
     }
 
-    public static void logReuseMiss(AnimatableEntity<?> animatable, AnimationEvent<?> event, String reason, float seekTime, float previousSeekTime, boolean animationActive, boolean previousAnimationActive, int boneCount, int previousBoneCount, int controllerCount, int previousControllerCount) {
+    public static void logReuseMiss(HostAnimatable<?> animatable, HostActionEvent<?> event, String reason, float seekTime, float previousSeekTime, boolean animationActive, boolean previousAnimationActive, int boneCount, int previousBoneCount, int controllerCount, int previousControllerCount) {
         if (!isEnabled() || !ConfigPolicies.diagnostics().animationDebugLog()) {
             return;
         }
@@ -72,7 +72,7 @@ public final class AnimationFrameProfiler {
                 previousControllerCount);
     }
 
-    public static Scope beginEvaluation(AnimatableEntity<?> animatable, AnimationEvent<?> event, float renderTickTime, float seekTime, boolean animationActive, boolean firstPersonPass, int boneCount, int controllerCount) {
+    public static Scope beginEvaluation(HostAnimatable<?> animatable, HostActionEvent<?> event, float renderTickTime, float seekTime, boolean animationActive, boolean firstPersonPass, int boneCount, int controllerCount) {
         if (!isEnabled()) {
             return null;
         }
@@ -128,12 +128,12 @@ public final class AnimationFrameProfiler {
         }
     }
 
-    public static void logControllerState(AnimatableEntity<?> animatable, AnimationEvent<?> event, float seekTime) {
+    public static void logControllerState(HostAnimatable<?> animatable, HostActionEvent<?> event, float seekTime) {
         if (!isEnabled() || !ConfigPolicies.diagnostics().animationDebugLog() || event.isFirstPerson()) {
             return;
         }
         StringBuilder controllers = new StringBuilder();
-        for (IAnimationController<?> controller : animatable.getAnimationData().getAnimationControllers()) {
+        for (HostControllerSlot<?> controller : animatable.getControllerSlots()) {
             if (!controllers.isEmpty()) {
                 controllers.append(" | ");
             }
@@ -173,8 +173,8 @@ public final class AnimationFrameProfiler {
         return nanos / 1_000_000.0f;
     }
 
-    private static String getModelId(AnimatableEntity<?> animatable) {
-        return animatable instanceof GeoEntity<?> geoEntity ? geoEntity.getModelId() : "-";
+    private static String getModelId(HostAnimatable<?> animatable) {
+        return animatable instanceof SpmEntity<?> geoEntity ? geoEntity.getModelId() : "-";
     }
 
     /**
@@ -190,7 +190,7 @@ public final class AnimationFrameProfiler {
         }
     }
 
-    private static long getEvaluationKey(int entityId, AnimatableEntity<?> animatable, boolean firstPersonPass, int boneCount, int controllerCount) {
+    private static long getEvaluationKey(int entityId, HostAnimatable<?> animatable, boolean firstPersonPass, int boneCount, int controllerCount) {
         long key = Integer.toUnsignedLong(entityId);
         key = key * 31L + Integer.toUnsignedLong(System.identityHashCode(animatable));
         key = key * 31L + (firstPersonPass ? 1L : 0L);

@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.compat.sbackpack.fabric;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import org.apache.commons.lang3.tuple.Pair;
@@ -23,8 +24,8 @@ public final class SBackpackCompatImpl {
         return Optional.empty();
     }
 
-    public static void registerControllerFunctions(CtrlBinding binding) {
-        binding.livingEntityVar("has_sophisticated_backpack", ctx -> false);
+    public static void registerControllerFunctions(HostMolangSink binding) {
+        binding.var("has_sophisticated_backpack", event -> MolangValue.bool(false));
     }
 
     public static ItemStack getBackpackItem(LivingEntity livingEntity) {

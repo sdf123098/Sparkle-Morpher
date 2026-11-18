@@ -4,26 +4,25 @@ import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
+import com.micaftic.morpher.client.animation.condition.ConditionSwing;
 import com.micaftic.morpher.client.animation.condition.InnerClassify;
-import com.micaftic.morpher.client.input.InputStateKey;
-import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.core.compat.ironsspellbooks.SpellbooksCompat;
-import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
+import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.model.ModelActionProfile;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.client.entity.IPreviewAnimatable;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import com.micaftic.morpher.client.animation.condition.ConditionSwing;
+import com.micaftic.morpher.core.api.item.WeaponKind;
+import com.micaftic.morpher.core.compat.ironsspellbooks.SpellbooksCompat;
+import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
+import com.micaftic.morpher.core.config.ConfigPolicies;
+import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import org.apache.commons.lang3.StringUtils;
-import com.micaftic.morpher.core.api.item.WeaponKind;
 
 public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAnimatable<?>> {
     private static final int SWING_START_MARKER = 1;
@@ -31,17 +30,17 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
     private static int swingEntryDebugLogs;
 
     @Override
-    public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<LivingAnimatable<?>> event) {
         LivingEntity livingEntity = event.getAnimatable().getEntity();
         if (livingEntity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         ModelAssembly modelAssembly = event.getAnimatable().getModelAssembly();
         PlayerModelBundle animationBundle = modelAssembly == null ? null : modelAssembly.getAnimationBundle();
         if (animationBundle == null || animationBundle.getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
-        PlayState playState = SpellbooksCompat.resolvePlayState(event, livingEntity);
+        HostPlayState.Decision playState = SpellbooksCompat.resolvePlayState(event, livingEntity);
         if (playState != null) {
             return playState;
         }
@@ -53,16 +52,16 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
             String str = SlashBladeCompat.getComboAnimName(event);
             if (StringUtils.isNoneBlank(str)) {
                 if (event.getAnimatable().getAnimation(str) != null) {
-                    return IAnimationPredicate.playAnimationWithValid(event, str, ILoopType.EDefaultLoopTypes.PLAY_ONCE, i);
+                    return IAnimationPredicate.playAnimationWithValid(event, str, CodedLoopMode.PLAY_ONCE, i);
                 }
-                return PlayState.CONTINUE;
+                return HostPlayState.Decision.CONTINUE;
             }
         }
         boolean hasLocalSwingPulse = isLocalSwingTarget(event, livingEntity) && InputStateKey.isLocalAnyHandSwinging();
         debugSwingEntry(event, livingEntity, hasLocalSwingPulse);
         if ((InputStateKey.isAnyHandSwinging(livingEntity) || hasLocalSwingPulse) && !livingEntity.isSleeping()) {
             if (!shouldStartSwingAnimation(event, livingEntity, hasLocalSwingPulse)) {
-                return PlayState.CONTINUE;
+                return HostPlayState.Decision.CONTINUE;
             }
             event.getController().stopTransition();
             ConditionManager conditionManager = event.getAnimatable().getModelConfig();
@@ -73,26 +72,24 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 if (StringUtils.isNoneBlank(str2)) {
                     debugSwingSelection(event, livingEntity, swingingHand, str2, hasLocalSwingPulse ? "local-condition" : "condition");
                     applyLanceSwingTickOverride(event, livingEntity, swingingHand);
-                    return IAnimationPredicate.playAnimationWithLoop(event, str2, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
+                    return IAnimationPredicate.playAnimationWithLoop(event, str2, CodedLoopMode.PLAY_ONCE);
                 }
             }
             String fallback = getFallbackSwingAnimation(event, livingEntity, swingingHand);
             if (fallback != null) {
                 debugSwingSelection(event, livingEntity, swingingHand, fallback, hasLocalSwingPulse ? "local-fallback" : "fallback");
                 applyLanceSwingTickOverride(event, livingEntity, swingingHand);
-                return IAnimationPredicate.playAnimationWithLoop(event, fallback, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
+                return IAnimationPredicate.playAnimationWithLoop(event, fallback, CodedLoopMode.PLAY_ONCE);
             }
             debugSwingSelection(event, livingEntity, swingingHand, "none", hasLocalSwingPulse ? "local-missing" : "missing");
         }
-        return PlayState.CONTINUE;
+        return HostPlayState.Decision.CONTINUE;
     }
 
-    private static boolean shouldStartSwingAnimation(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
+    private static boolean shouldStartSwingAnimation(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
         if (hasLocalSwingPulse) {
             boolean pulseJustStarted = event.getAnimatable().getPositionTracker()
                     .markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
-            // The local pulse owns this attack edge. Vanilla mirrors the same swing on a later
-            // tick, so accepting both would restart swing:sword and advance combo controllers twice.
             return pulseJustStarted
                     && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
         }
@@ -100,18 +97,18 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
     }
 
-    private static boolean isLocalSwingTarget(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity) {
+    private static boolean isLocalSwingTarget(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity) {
         return isLocalPlayerModel(event);
     }
 
-    private static boolean isLocalPlayerModel(AnimationEvent<LivingAnimatable<?>> event) {
+    private static boolean isLocalPlayerModel(HostActionEvent<LivingAnimatable<?>> event) {
         if (event.getAnimatable() instanceof PlayerCapability cap && cap.isLocalPlayerModel()) {
             return true;
         }
         return InputStateKey.isLocalPlayerEntity(event.getAnimatable().getEntity());
     }
 
-    private static void applyLanceSwingTickOverride(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand) {
+    private static void applyLanceSwingTickOverride(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand) {
         if (InputStateKey.isLocalPlayerEntity(entity) && isLanceLike(InnerClassify.getWeaponKind(entity.getItemInHand(hand)))) {
             event.getController().setAnimationTickOverride(InputStateKey.getSwingAnimationTicks(entity, event.getPartialTick()));
         }
@@ -121,7 +118,7 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
         return kind == WeaponKind.LANCE || kind == WeaponKind.SPEAR;
     }
 
-    private static void debugSwingEntry(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
+    private static void debugSwingEntry(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
         if (!ConfigPolicies.diagnostics().inputStateDebugLog()
                 || InputStateKey.getLocalSwingPulseTicks() <= 0
                 || swingEntryDebugLogs++ >= 80) {
@@ -145,7 +142,7 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 InputStateKey.getLocalSwingPulseAge());
     }
 
-    private static String getFallbackSwingAnimation(AnimationEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, InteractionHand swingingHand) {
+    private static String getFallbackSwingAnimation(HostActionEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, InteractionHand swingingHand) {
         String defaultName = swingingHand == InteractionHand.MAIN_HAND ? "swing_hand" : "swing_offhand";
         if (event.getAnimatable().getAnimation(defaultName) != null) {
             return defaultName;
@@ -156,7 +153,7 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
         return null;
     }
 
-    private static void debugSwingSelection(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand, String animation, String source) {
+    private static void debugSwingSelection(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand, String animation, String source) {
         if (!ConfigPolicies.diagnostics().inputStateDebugLog() || swingDebugLogs++ >= 120) {
             return;
         }

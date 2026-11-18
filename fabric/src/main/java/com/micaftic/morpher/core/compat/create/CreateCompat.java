@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.compat.create;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import net.minecraft.world.entity.player.Player;
 
 public final class CreateCompat {
@@ -16,7 +16,7 @@ public final class CreateCompat {
         return com.micaftic.morpher.core.compat.create.fabric.CreateCompatImpl.isPlayerOnCreateContraption(player);
     }
 
-    public static void registerCreateFunctions(CtrlBinding binding) {
+    public static void registerCreateFunctions(HostMolangSink binding) {
         com.micaftic.morpher.core.compat.create.fabric.CreateCompatImpl.registerCreateFunctions(binding);
     }
 }

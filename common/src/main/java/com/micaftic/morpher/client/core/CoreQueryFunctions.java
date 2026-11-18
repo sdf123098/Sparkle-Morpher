@@ -4,7 +4,7 @@ import dev.spm.core.scene.MolangValue;
 import java.util.*;
 import java.util.function.IntFunction;
 
-/** Fresh Host-only query adapter; behavior pinned to allowed d253 QueryBinding and query functions. */
+/** Fresh Host-only query adapter backing SPM query functions. */
 public final class CoreQueryFunctions {
     private CoreQueryFunctions() { }
     public enum Slot { CHEST, FEET, HEAD, LEGS, MAINHAND, OFFHAND }

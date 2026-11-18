@@ -1,17 +1,16 @@
 package com.micaftic.morpher.client.animation;
 
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import net.minecraft.world.entity.LivingEntity;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostPlayState;
 
-public class StopAnimationPredicate implements IAnimationPredicate<AnimatableEntity<? extends LivingEntity>> {
+public class StopAnimationPredicate<T extends HostAnimatable<?>> implements IAnimationPredicate<T> {
 
-    public static final StopAnimationPredicate INSTANCE = new StopAnimationPredicate();
+    @SuppressWarnings("rawtypes")
+    public static final StopAnimationPredicate INSTANCE = new StopAnimationPredicate<>();
 
     @Override
-    public PlayState predicate(AnimationEvent<AnimatableEntity<? extends LivingEntity>> event, ExpressionEvaluator<?> evaluator) {
-        return PlayState.STOP;
+    public HostPlayState.Decision predicate(HostActionEvent<T> event) {
+        return HostPlayState.Decision.STOP;
     }
 }

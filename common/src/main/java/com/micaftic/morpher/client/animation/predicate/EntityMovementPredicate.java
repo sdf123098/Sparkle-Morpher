@@ -1,21 +1,20 @@
 package com.micaftic.morpher.client.animation.predicate;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
-import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
+import com.micaftic.morpher.client.entity.SpmVehicleEntity;
 import net.minecraft.world.entity.Entity;
 
-public class EntityMovementPredicate implements IAnimationPredicate<GeckoVehicleEntity> {
+public class EntityMovementPredicate implements IAnimationPredicate<SpmVehicleEntity> {
 
     public static final String[] MOVEMENT_STATES = {"water", "ground", "fly"};
 
     @Override
-    public PlayState predicate(AnimationEvent<GeckoVehicleEntity> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<SpmVehicleEntity> event) {
         Entity entity = event.getAnimatable().getEntity();
         if (entity == null) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         if (entity.isInWater()) {
             return IAnimationPredicate.predicate(event, "water");

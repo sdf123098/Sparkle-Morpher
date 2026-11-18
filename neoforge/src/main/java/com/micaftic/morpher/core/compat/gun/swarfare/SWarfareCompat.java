@@ -1,15 +1,16 @@
 package com.micaftic.morpher.core.compat.gun.swarfare;
 
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 public final class SWarfareCompat {
 
@@ -28,18 +29,26 @@ public final class SWarfareCompat {
         return false;
     }
 
-    public static void applyGunTransform(ItemStack stack, AnimatedGeoModel model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
+    public static void applyGunTransform(ItemStack stack, ModelScenePose model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
     }
 
-    public static PlayState handleTaczAnim(LivingEntity entity, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event, String str, ILoopType loopType) {
+    public static @Nullable HostPlayState.Decision handleTaczAnim(
+            LivingEntity entity,
+            HostActionEvent<? extends LivingAnimatable<? extends LivingEntity>> event,
+            String animation,
+            CodedLoopMode loopType) {
         return null;
     }
 
-    public static PlayState handleGunHoldAnim(ItemStack stack, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
+    public static @Nullable HostPlayState.Decision handleGunHoldAnim(
+            ItemStack stack,
+            HostActionEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
         return null;
     }
 
-    public static PlayState handleGunActionAnim(ItemStack stack, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
+    public static @Nullable HostPlayState.Decision handleGunActionAnim(
+            ItemStack stack,
+            HostActionEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
         return null;
     }
 

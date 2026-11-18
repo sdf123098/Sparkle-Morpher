@@ -1,8 +1,9 @@
 package com.micaftic.morpher.core.compat.parcool;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.fml.ModList;
 import org.apache.commons.lang3.tuple.Pair;
@@ -183,26 +184,33 @@ public final class ParcoolCompatImpl {
         return doing;
     }
 
-    public static Optional<BiFunction<String, CustomPlayerEntity, IAnimationController<CustomPlayerEntity>>> getControllerFactory() {
+    public static Optional<BiFunction<String, CustomPlayerEntity, HostControllerSlot<CustomPlayerEntity>>> getControllerFactory() {
         if (!isLoaded()) {
             return Optional.empty();
         }
         return Optional.of((animationEntryKey, entity) ->
-                new com.micaftic.morpher.geckolib3.core.controller.CompositeAnimationController<>(
+                new HostControllerSlot<>(
                         entity, animationEntryKey, 0.0f,
                         new com.micaftic.morpher.client.animation.predicate.PlayerSpecialAnimationPredicate()));
     }
 
-    public static void registerBindings(CtrlBinding binding) {
+    public static void registerBindings(HostMolangSink binding) {
         if (!isLoaded()) {
-            // Keep the variables resolvable for models that reference ctrl.parcool_*,
-            // even when ParCool is absent (mirrors the historical placeholder).
-            binding.livingEntityVar("parcool_loaded", ctx -> false);
-            binding.livingEntityVar("parcool_doing", ctx -> false);
+            binding.var("parcool_loaded", event -> MolangValue.bool(false));
+            binding.var("parcool_doing", event -> MolangValue.bool(false));
+            binding.var("parcool_state", event -> MolangValue.text(""));
             return;
         }
-        binding.livingEntityVar("parcool_loaded", ctx -> true);
-        binding.livingEntityVar("parcool_doing", ctx -> ctx.entity() instanceof Player player && isPlayerParcooling(player));
+        binding.var("parcool_loaded", event -> MolangValue.bool(true));
+        binding.var("parcool_doing", event -> MolangValue.bool(
+                event.getAnimatable().getEntity() instanceof Player player && isPlayerParcooling(player)));
+        binding.var("parcool_state", event -> {
+            if (event.getAnimatable().getEntity() instanceof Player player) {
+                String action = getActionName(player);
+                return MolangValue.text(action == null ? "" : action);
+            }
+            return MolangValue.text("");
+        });
     }
 
     /* ---------------------------------------------------------------- */

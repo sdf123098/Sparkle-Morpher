@@ -123,6 +123,25 @@ class ArchitectureBoundaryTest {
         assertTrue(violations.isEmpty(), describe("平台 API 边界", violations));
     }
 
+    @Test
+    void legacyOpenYsmPackagesAreCompletelyRemoved() throws Exception {
+        Pattern legacyClassRef = Pattern.compile(
+                "com/micaftic/morpher/(?:geckolib3|molang)/[A-Za-z0-9_$/]+"
+                        + "|com/micaftic/morpher/client/animation/molang/(?:ArgsVariable|CtrlBinding|FnBinding|TLMBinding|YSMBinding)(?:[$A-Za-z0-9_]+)?");
+        List<Violation> violations = new ArrayList<>();
+        for (ClassFile cf : scanMainClasses()) {
+            if (cf.className.startsWith("com/micaftic/morpher/geckolib3/")
+                    || cf.className.startsWith("com/micaftic/morpher/molang/")) {
+                violations.add(new Violation(cf.className, displayReference(cf.className),
+                        "OpenYSM 遗留包已剔除，禁止重新引入"));
+            }
+            for (String ref : cf.references(legacyClassRef)) {
+                violations.add(new Violation(cf.className, displayReference(ref),
+                        "禁止引用已剔除的 OpenYSM 类"));
+            }
+        }
+        assertTrue(violations.isEmpty(), describe("OpenYSM 全量剔除边界", violations));
+    }
     private static boolean isGlBoundary(String className) {
         for (String pkg : GL_BOUNDARY_PACKAGES) {
             if (className.startsWith(pkg + "/")) {

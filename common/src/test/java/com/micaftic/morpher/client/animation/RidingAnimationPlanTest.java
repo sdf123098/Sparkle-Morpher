@@ -1,16 +1,7 @@
 package com.micaftic.morpher.client.animation;
 
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.ParticleEventKeyFrame;
-import com.micaftic.morpher.geckolib3.core.keyframe.BoneAnimation;
-import com.micaftic.morpher.geckolib3.core.keyframe.bone.BoneKeyFrame;
-import com.micaftic.morpher.geckolib3.core.keyframe.bone.Vector3v;
-import com.micaftic.morpher.geckolib3.core.keyframe.event.EventKeyFrame;
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import com.micaftic.morpher.util.data.TypedArrays;
-import org.joml.Vector3f;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -18,28 +9,30 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.micaftic.morpher.client.animation.RidingAnimationPlan.Kind.*;
 import static com.micaftic.morpher.client.animation.RidingAnimationPlan.Content.*;
+import static com.micaftic.morpher.client.animation.RidingAnimationPlan.Kind.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RidingAnimationPlanTest {
-    private static Animation clip(String name, BoneAnimation... bones) {
-        return new Animation(name, Double.POSITIVE_INFINITY, ILoopType.EDefaultLoopTypes.LOOP,
-                null, null, null, null, bones, TypedArrays.events(List.of()),
-                new ParticleEventKeyFrame[0], TypedArrays.events(List.of()));
+    private static ClipSpec clip(String name, RawYsmModel.RawBoneAnimation... bones) {
+        var raw = new RawYsmModel.RawAnimation();
+        raw.name = name;
+        raw.length = Float.POSITIVE_INFINITY;
+        raw.loopMode = 1;
+        raw.boneAnimations.addAll(List.of(bones));
+        return new ClipSpec(name, raw, List.of(), null, false, false);
     }
 
-    private static BoneAnimation pose(String boneName) {
-        IValue noEvaluation = evaluator -> { throw new AssertionError("Analysis executed a script"); };
-        BoneKeyFrame frame = new BoneKeyFrame(0, 1, new Vector3v(noEvaluation, noEvaluation, noEvaluation)) {
-            @Override public Vector3f evaluate(ExpressionEvaluator<?> evaluator, float percent) {
-                throw new AssertionError("Analysis sampled a pose");
-            }
-        };
-        return new BoneAnimation(boneName, List.of(frame), List.of(), List.of());
+    private static RawYsmModel.RawBoneAnimation pose(String boneName) {
+        var bone = new RawYsmModel.RawBoneAnimation();
+        bone.boneName = boneName;
+        var frame = new RawYsmModel.RawKeyframe();
+        frame.postData = new Object[]{"query.should_never_evaluate()", "0", "0"};
+        bone.rotation.add(frame);
+        return bone;
     }
 
-    private static RidingAnimationPlan plan(Map<String, Animation> animations) {
+    private static RidingAnimationPlan plan(Map<String, ClipSpec> animations) {
         return RidingAnimationPlan.analyze(animations::get);
     }
 
@@ -88,12 +81,13 @@ class RidingAnimationPlanTest {
 
     @Test void controlOnlySlotRetainsItsEventsWithoutExecutingThemDuringAnalysis() {
         var sit = clip("sit");
-        sit.customInstructionKeyframes.add(new EventKeyFrame<>(0,
-                new IValue[]{evaluator -> { throw new AssertionError("Executed authored event"); }}));
+        var event = new RawYsmModel.RawTimelineEvent();
+        event.events.add("query.should_never_evaluate()");
+        sit.raw().timelineEvents.add(event);
         var plan = plan(Map.of("sit", sit, "ride", clip("ride", pose("leg"))));
         assertEquals("sit", plan.selection(SEATED).animation());
         assertEquals(EVENTS_ONLY, plan.selection(SEATED).content());
-        assertEquals(1, sit.customInstructionKeyframes.size());
+        assertEquals(1, sit.raw().timelineEvents.size());
     }
 
     @Test void analysisIsBoundedAndIndependentOfRenderRate() {
@@ -106,7 +100,7 @@ class RidingAnimationPlanTest {
     }
 
     @Test void modelReloadCreatesAnIndependentPlanAndCannotReusePreviousChoices() {
-        var clips = new HashMap<String, Animation>();
+        var clips = new HashMap<String, ClipSpec>();
         clips.put("ride", clip("ride"));
         var before = plan(clips);
         clips.put("sit", clip("sit", pose("leg")));

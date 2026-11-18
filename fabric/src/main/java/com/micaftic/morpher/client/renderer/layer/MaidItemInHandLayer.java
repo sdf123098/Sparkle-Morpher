@@ -3,9 +3,10 @@ package com.micaftic.morpher.client.renderer.layer;
 import com.micaftic.morpher.client.model.HandLocatorProfile;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
-import com.micaftic.morpher.geckolib3.geo.GeoLayerRenderer;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.util.RenderUtils;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.render.ModelScenePose;
+import com.micaftic.morpher.client.renderer.SpmLayerRenderer;
+import com.micaftic.morpher.client.renderer.SpmRenderMath;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.ItemInHandRenderer;
@@ -20,7 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 
 /** Renders items held by a maid's Sparkle/Yes Steve Model replacement. */
-public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> implements HeldItemLayer {
+public final class MaidItemInHandLayer extends SpmLayerRenderer<MaidCapability> implements HeldItemLayer {
     private final ItemInHandRenderer itemRenderer;
 
     public MaidItemInHandLayer(ItemInHandRenderer itemRenderer) {
@@ -32,7 +33,7 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
                        MaidCapability capability, float limbSwing, float limbSwingAmount,
                        float partialTick, float ageInTicks, float netHeadYaw, float headPitch) {
         LivingEntity entity = capability.getEntity();
-        AnimatedGeoModel model = capability.getCurrentModel();
+        ModelScenePose model = capability.getCurrentModel();
         if (model == null || capability.getModelAssembly() == null) {
             return;
         }
@@ -49,7 +50,7 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
         renderHand(entity, model, profile, offHand, mainArm.getOpposite(), poseStack, packedLight);
     }
 
-    private void renderHand(LivingEntity entity, AnimatedGeoModel model, HandLocatorProfile profile,
+    private void renderHand(LivingEntity entity, ModelScenePose model, HandLocatorProfile profile,
                             ItemStack item, HumanoidArm arm, PoseStack poseStack, int packedLight) {
         if (item.isEmpty() || !hasHandAnchor(model, arm)) {
             return;
@@ -73,9 +74,9 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
         }
 
         if (!renderedDirectly) {
-            List<List<com.micaftic.morpher.geckolib3.core.processor.IBone>> chains =
-                    arm == HumanoidArm.LEFT ? model.leftHandChains() : model.rightHandChains();
-            for (List<com.micaftic.morpher.geckolib3.core.processor.IBone> chain : chains) {
+            List<List<ModelBoneView>> chains =
+                    arm == HumanoidArm.LEFT ? model.leftHandGroupChains() : model.rightHandGroupChains();
+            for (List<ModelBoneView> chain : chains) {
                 if (chain == null || chain.isEmpty()) {
                     continue;
                 }
@@ -98,12 +99,12 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
     }
 
     private boolean applyItemBoneTransform(HumanoidArm arm, PoseStack poseStack,
-                                           AnimatedGeoModel model, ItemStack item,
+                                           ModelScenePose model, ItemStack item,
                                            HandLocatorProfile profile) {
-        List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> locator =
+        List<? extends ModelBoneView> locator =
                 arm == HumanoidArm.LEFT ? model.leftHandBones() : model.rightHandBones();
         if (profile.usesSpecialHandLocatorSwordAnchor() && isSwordItem(item)) {
-            List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> swordLocator =
+            List<? extends ModelBoneView> swordLocator =
                     arm == HumanoidArm.LEFT ? model.leftSwordBones() : model.rightSwordBones();
             if (swordLocator != null && !swordLocator.isEmpty()) {
                 locator = swordLocator;
@@ -113,32 +114,32 @@ public final class MaidItemInHandLayer extends GeoLayerRenderer<MaidCapability> 
     }
 
     private boolean applyItemBoneTransform(PoseStack poseStack,
-                                           List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> locator,
+                                           List<? extends ModelBoneView> locator,
                                            HandLocatorProfile profile) {
         if (locator == null || locator.isEmpty()) {
             return false;
         }
         if (profile.usesEquipmentLocatorTransform()) {
-            RenderUtils.prepMatrixForEquipmentLocator(poseStack, locator);
+            SpmRenderMath.prepMatrixForEquipmentLocator(poseStack, locator);
         } else {
-            RenderUtils.prepMatrixForLocator(poseStack, locator);
+            SpmRenderMath.prepMatrixForLocator(poseStack, locator);
         }
         return true;
     }
 
-    private boolean hasHandAnchor(AnimatedGeoModel model, HumanoidArm arm) {
+    private boolean hasHandAnchor(ModelScenePose model, HumanoidArm arm) {
         return hasDirectHandAnchor(model, arm) || hasHandChainAnchor(model, arm);
     }
 
-    private boolean hasDirectHandAnchor(AnimatedGeoModel model, HumanoidArm arm) {
+    private boolean hasDirectHandAnchor(ModelScenePose model, HumanoidArm arm) {
         return arm == HumanoidArm.LEFT
                 ? !model.leftHandBones().isEmpty()
                 : !model.rightHandBones().isEmpty();
     }
 
-    private boolean hasHandChainAnchor(AnimatedGeoModel model, HumanoidArm arm) {
-        List<List<com.micaftic.morpher.geckolib3.core.processor.IBone>> chains =
-                arm == HumanoidArm.LEFT ? model.leftHandChains() : model.rightHandChains();
+    private boolean hasHandChainAnchor(ModelScenePose model, HumanoidArm arm) {
+        List<List<ModelBoneView>> chains =
+                arm == HumanoidArm.LEFT ? model.leftHandGroupChains() : model.rightHandGroupChains();
         return chains.stream().anyMatch(chain -> chain != null && !chain.isEmpty());
     }
 

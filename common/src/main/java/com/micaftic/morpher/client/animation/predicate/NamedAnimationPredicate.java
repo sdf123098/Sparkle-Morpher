@@ -1,12 +1,11 @@
 package com.micaftic.morpher.client.animation.predicate;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostPlayState;
 
-public class NamedAnimationPredicate<T extends AnimatableEntity<?>> implements IAnimationPredicate<T> {
+public class NamedAnimationPredicate<T extends HostAnimatable<?>> implements IAnimationPredicate<T> {
 
     private final String animationName;
 
@@ -15,7 +14,7 @@ public class NamedAnimationPredicate<T extends AnimatableEntity<?>> implements I
     }
 
     @Override
-    public PlayState predicate(AnimationEvent<T> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<T> event) {
         return IAnimationPredicate.playLoopAnimation(event, this.animationName);
     }
 }

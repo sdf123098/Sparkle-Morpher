@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.VehicleCapability;
-import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
+import com.micaftic.morpher.client.entity.SpmVehicleEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.util.Mth;
@@ -13,7 +13,7 @@ import com.micaftic.morpher.core.api.entity.EntityDataBridge;
 
 public class CustomVehicleRenderer {
     public static boolean renderVehicle(Entity entity, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
-        if (GeckoVehicleEntity.usesVanillaRenderer(entity)) {
+        if (SpmVehicleEntity.usesVanillaRenderer(entity)) {
             return true;
         }
         return VehicleCapability.get(entity).map(cap -> {

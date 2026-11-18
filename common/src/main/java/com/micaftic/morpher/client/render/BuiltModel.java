@@ -1,8 +1,5 @@
 package com.micaftic.morpher.client.render;
 
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import com.micaftic.morpher.resource.ModelOptimizationStats;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import dev.spm.core.api.Skeleton;
@@ -25,7 +22,7 @@ import java.util.List;
 public class BuiltModel {
 
     @NotNull
-    public final List<GeoBone> bones;
+    public final List<ModelBone> bones;
 
     @NotNull
     public final IntList leftHandIds;
@@ -402,7 +399,7 @@ public class BuiltModel {
         return false;
     }
 
-    public BuiltModel(GeoBone[] geoBones, String[][] strArr, boolean[] zArr, @NotNull GeometryDescription properties, boolean[] zArr2) {
+    public BuiltModel(ModelBone[] geoBones, String[][] strArr, boolean[] zArr, @NotNull GeometryDescription properties, boolean[] zArr2) {
         this.bones = ObjectLists.unmodifiable(ObjectArrayList.wrap(geoBones));
         this.leftHandIds = resolveBoneIds(strArr[0]);
         this.rightHandIds = resolveBoneIds(strArr[1]);
@@ -442,19 +439,19 @@ public class BuiltModel {
         this.hasCustomLimbs = zArr[2];
         this.translucentTexture = zArr2;
         this.properties = properties;
-        this.boneTransformData = new AnimatedGeoModel(this).getMatrixData();
+        this.boneTransformData = new ModelScenePose(this).getMatrixData();
     }
 
     private static IntList resolveBoneIds(String[] strArr) {
         IntArrayList intArrayList = new IntArrayList(strArr.length);
         for (String str : strArr) {
-            intArrayList.add(StringPool.computeIfAbsent(str));
+            intArrayList.add(BoneIds.id(str));
         }
         return IntLists.unmodifiable(intArrayList);
     }
 
     @NotNull
-    public List<GeoBone> topLevelBones() {
+    public List<ModelBone> topLevelBones() {
         return this.bones;
     }
 

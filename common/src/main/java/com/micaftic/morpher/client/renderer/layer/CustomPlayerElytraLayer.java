@@ -3,10 +3,10 @@ package com.micaftic.morpher.client.renderer.layer;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
 import com.micaftic.morpher.core.config.ConfigPolicies;
 import com.micaftic.morpher.core.compat.cosmeticarmorreworked.CosmeticArmorHelper;
-import com.micaftic.morpher.geckolib3.core.processor.IBone;
-import com.micaftic.morpher.geckolib3.geo.GeoLayerRenderer;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.util.RenderUtils;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.renderer.SpmLayerRenderer;
+import com.micaftic.morpher.client.render.ModelScenePose;
+import com.micaftic.morpher.client.renderer.SpmRenderMath;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.model.object.equipment.ElytraModel;
@@ -21,7 +21,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
-public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity> {
+public class CustomPlayerElytraLayer extends SpmLayerRenderer<CustomPlayerEntity> {
 
     private static final String ELYTRA_BONE_NAME = "Elytra";
 
@@ -45,7 +45,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
 
     @Override
     public void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLightIn, CustomPlayerEntity entityLivingBaseIn, float limbSwing, float limbSwingAmount, float partialTick, float ageInTicks, float netHeadYaw, float headPitch) {
-        AnimatedGeoModel animatedGeoModel = entityLivingBaseIn.getCurrentModel();
+        ModelScenePose animatedGeoModel = entityLivingBaseIn.getCurrentModel();
         ElytraRenderMode renderMode = getElytraRenderMode(entityLivingBaseIn, animatedGeoModel);
         if (renderMode == ElytraRenderMode.NONE) {
             return;
@@ -78,8 +78,8 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         return state;
     }
 
-    private boolean renderLocatorElytra(PoseStack poseStack, AnimatedGeoModel model) {
-        boolean hidden = RenderUtils.prepMatrixForEquipmentLocator(poseStack, model.elytraBones());
+    private boolean renderLocatorElytra(PoseStack poseStack, ModelScenePose model) {
+        boolean hidden = SpmRenderMath.prepMatrixForEquipmentLocator(poseStack, model.elytraBones());
         poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
         return hidden;
     }
@@ -97,7 +97,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
     }
 
     public static boolean shouldSuppressVanillaWings(CustomPlayerEntity customPlayer) {
-        AnimatedGeoModel animatedGeoModel = customPlayer == null ? null : customPlayer.getCurrentModel();
+        ModelScenePose animatedGeoModel = customPlayer == null ? null : customPlayer.getCurrentModel();
         if (!hasEquippedElytra(customPlayer)) {
             return false;
         }
@@ -107,7 +107,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         return getElytraRenderMode(customPlayer, animatedGeoModel) != ElytraRenderMode.NONE;
     }
 
-    private static ElytraRenderMode getElytraRenderMode(CustomPlayerEntity customPlayer, AnimatedGeoModel animatedGeoModel) {
+    private static ElytraRenderMode getElytraRenderMode(CustomPlayerEntity customPlayer, ModelScenePose animatedGeoModel) {
         if (!hasEquippedElytra(customPlayer)) {
             return ElytraRenderMode.NONE;
         }
@@ -159,7 +159,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         return cloakTextureLocation;
     }
 
-    private static boolean isCompatibilityElytraBlocked(String modelId, AnimatedGeoModel animatedGeoModel) {
+    private static boolean isCompatibilityElytraBlocked(String modelId, ModelScenePose animatedGeoModel) {
         if (ConfigPolicies.features().experimentalEnableElytraForDefaultAndMiscModels()) {
             return false;
         }
@@ -170,15 +170,15 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         return "default".equals(modelId);
     }
 
-    private static boolean hasNestedElytraLocator(AnimatedGeoModel animatedGeoModel) {
+    private static boolean hasNestedElytraLocator(ModelScenePose animatedGeoModel) {
         if (animatedGeoModel == null) {
             return false;
         }
-        java.util.List<IBone> elytraBones = animatedGeoModel.elytraBones();
+        java.util.List<ModelBoneView> elytraBones = animatedGeoModel.elytraBones();
         if (elytraBones.size() < 2) {
             return false;
         }
-        IBone locatorBone = elytraBones.get(elytraBones.size() - 1);
+        ModelBoneView locatorBone = elytraBones.get(elytraBones.size() - 1);
         if (!ELYTRA_LOCATOR_BONE_NAME.equals(locatorBone.getName())) {
             return false;
         }
@@ -190,15 +190,15 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         return false;
     }
 
-    private static boolean hasModelOwnedElytraVisual(AnimatedGeoModel animatedGeoModel) {
+    private static boolean hasModelOwnedElytraVisual(ModelScenePose animatedGeoModel) {
         return hasNamedWingBones(animatedGeoModel);
     }
 
-    private static boolean hasNamedWingBones(AnimatedGeoModel animatedGeoModel) {
+    private static boolean hasNamedWingBones(ModelScenePose animatedGeoModel) {
         if (animatedGeoModel == null) {
             return false;
         }
-        for (IBone bone : animatedGeoModel.bones().values()) {
+        for (ModelBoneView bone : animatedGeoModel.getOrderedBones()) {
             String name = bone == null ? null : bone.getName();
             if (WING_BONE_NAME.equalsIgnoreCase(name)
                     || LEFT_WING_BONE_NAME.equalsIgnoreCase(name)

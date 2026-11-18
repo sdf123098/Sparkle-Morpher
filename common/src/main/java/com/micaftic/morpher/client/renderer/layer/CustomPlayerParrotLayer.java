@@ -1,9 +1,9 @@
 package com.micaftic.morpher.client.renderer.layer;
 
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.geckolib3.geo.GeoLayerRenderer;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.util.RenderUtils;
+import com.micaftic.morpher.client.render.ModelScenePose;
+import com.micaftic.morpher.client.renderer.SpmLayerRenderer;
+import com.micaftic.morpher.client.renderer.SpmRenderMath;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.model.animal.parrot.ParrotModel;
 import net.minecraft.client.model.geom.ModelLayers;
@@ -17,7 +17,7 @@ import net.minecraft.world.entity.animal.parrot.Parrot;
 import net.minecraft.world.entity.player.Player;
 import com.mojang.math.Axis;
 
-public class CustomPlayerParrotLayer extends GeoLayerRenderer<CustomPlayerEntity> {
+public class CustomPlayerParrotLayer extends SpmLayerRenderer<CustomPlayerEntity> {
 
     private final ParrotModel parrotModel;
 
@@ -28,7 +28,7 @@ public class CustomPlayerParrotLayer extends GeoLayerRenderer<CustomPlayerEntity
     @Override
     public void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLightIn, CustomPlayerEntity entityLivingBaseIn, float limbSwing, float limbSwingAmount, float partialTick, float ageInTicks, float netHeadYaw, float headPitch) {
         Player player = entityLivingBaseIn.getEntity();
-        AnimatedGeoModel model = entityLivingBaseIn.getCurrentModel();
+        ModelScenePose model = entityLivingBaseIn.getCurrentModel();
         if (model == null) {
             return;
         }
@@ -40,7 +40,7 @@ public class CustomPlayerParrotLayer extends GeoLayerRenderer<CustomPlayerEntity
         }
     }
 
-    private void renderParrot(PoseStack poseStack, MultiBufferSource bufferSource, AnimatedGeoModel model, int packedLightIn, Player player, float limbSwing, float limbSwingAmount, float netHeadYaw, float headPitch, boolean isLeftShoulder) {
+    private void renderParrot(PoseStack poseStack, MultiBufferSource bufferSource, ModelScenePose model, int packedLightIn, Player player, float limbSwing, float limbSwingAmount, float netHeadYaw, float headPitch, boolean isLeftShoulder) {
         Parrot.Variant variant = (isLeftShoulder ? player.getShoulderParrotLeft() : player.getShoulderParrotRight()).orElse(null);
         if (variant == null) {
             return;
@@ -58,11 +58,11 @@ public class CustomPlayerParrotLayer extends GeoLayerRenderer<CustomPlayerEntity
         poseStack.popPose();
     }
 
-    public void applyParrotTransform(PoseStack poseStack, AnimatedGeoModel model, boolean isLeftShoulder) {
+    public void applyParrotTransform(PoseStack poseStack, ModelScenePose model, boolean isLeftShoulder) {
         if (isLeftShoulder) {
-            RenderUtils.prepMatrixForLocator(poseStack, model.leftShoulderBones());
+            SpmRenderMath.prepMatrixForLocator(poseStack, model.leftShoulderBones());
         } else {
-            RenderUtils.prepMatrixForLocator(poseStack, model.rightShoulderBones());
+            SpmRenderMath.prepMatrixForLocator(poseStack, model.rightShoulderBones());
         }
     }
 }

@@ -1,28 +1,35 @@
 package com.micaftic.morpher.client.animation.molang.struct;
 
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.molang.runtime.Struct;
+import com.micaftic.morpher.client.render.BoneIds;
+import dev.spm.core.scene.MolangValue;
 
-public abstract class Vec3fStruct implements Struct {
+import java.util.Map;
 
-    private static final int NAME_X = StringPool.computeIfAbsent("x");
+public abstract class Vec3fStruct {
 
-    private static final int NAME_Y = StringPool.computeIfAbsent("y");
+    private static final int NAME_X = BoneIds.id("x");
+    private static final int NAME_Y = BoneIds.id("y");
+    private static final int NAME_Z = BoneIds.id("z");
 
-    private static final int NAME_Z = StringPool.computeIfAbsent("z");
-
-    @Override
-    public Object getProperty(int i) {
-        if (i == NAME_X) {
+    public float getProperty(int id) {
+        if (id == NAME_X) {
             return getX();
         }
-        if (i == NAME_Y) {
+        if (id == NAME_Y) {
             return getY();
         }
-        if (i == NAME_Z) {
+        if (id == NAME_Z) {
             return getZ();
         }
-        return null;
+        return 0.0f;
+    }
+
+    public MolangValue.StructValue toMolangStruct() {
+        return MolangValue.struct(Map.of(
+                "x", MolangValue.number(getX()),
+                "y", MolangValue.number(getY()),
+                "z", MolangValue.number(getZ())
+        ));
     }
 
     public abstract float getX();
@@ -32,16 +39,7 @@ public abstract class Vec3fStruct implements Struct {
     public abstract float getZ();
 
     @Override
-    public void putProperty(int name, Object value) {
-    }
-
-    @Override
     public String toString() {
         return String.format("vec3{x=%.2f, y=%.2f, z=%.2f}", getX(), getY(), getZ());
-    }
-
-    @Override
-    public Struct copy() {
-        return this;
     }
 }

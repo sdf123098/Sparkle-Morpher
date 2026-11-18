@@ -1,9 +1,9 @@
 package com.micaftic.morpher.client.model.processor;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.entity.GeoEntity;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 
 import java.util.Arrays;
@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  *     <li>{@link #buildAll} 对 null 处理器做防御性跳过并给出明确 WARN。</li>
  * </ul>
  */
-public class ProcessorPipeline<T extends GeoEntity<?>, TModel> {
+public class ProcessorPipeline<T extends SpmEntity<?>, TModel> {
 
     private final Object lock = new Object();
 
@@ -81,7 +81,7 @@ public class ProcessorPipeline<T extends GeoEntity<?>, TModel> {
         }
         return entity -> {
             Objects.requireNonNull(entity);
-            Consumer<IAnimationController<T>> consumer = entity::addAnimationController;
+            Consumer<HostControllerSlot<T>> consumer = entity::addAnimationController;
             for (ControllerFactory<T> installer : installers) {
                 if (installer != null) {
                     installer.create(entity, consumer);

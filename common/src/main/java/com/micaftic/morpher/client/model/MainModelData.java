@@ -1,9 +1,9 @@
 package com.micaftic.morpher.client.model;
 
-import com.micaftic.morpher.client.texture.OuterFileTexture;
-import com.micaftic.morpher.geckolib3.file.AnimationControllerFile;
-import com.micaftic.morpher.geckolib3.file.AnimationFile;
+import com.micaftic.morpher.client.core.HostAnimationAssets.AnimationClipSet;
+import com.micaftic.morpher.client.core.HostAnimationAssets.AnimationControllerSet;
 import com.micaftic.morpher.client.render.BuiltModel;
+import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 
@@ -14,19 +14,19 @@ public class MainModelData {
 
     private final List<BuiltModel> models;
 
-    private final Map<String, AnimationFile> animations;
+    private final Map<String, AnimationClipSet> animations;
 
-    private final List<AnimationControllerFile> animationControllers;
+    private final List<AnimationControllerSet> animationControllers;
 
     private final OrderedStringMap<String, OuterFileTexture> textureMap;
 
     private final SpecialHandLocatorProfile specialHandLocatorProfile;
 
-    public MainModelData(BuiltModel[] models, Map<String, AnimationFile> animations, AnimationControllerFile[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap) {
+    public MainModelData(BuiltModel[] models, Map<String, AnimationClipSet> animations, AnimationControllerSet[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap) {
         this(models, animations, animationControllerFiles, textureMap, SpecialHandLocatorProfile.NONE);
     }
 
-    public MainModelData(BuiltModel[] models, Map<String, AnimationFile> animations, AnimationControllerFile[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap, SpecialHandLocatorProfile specialHandLocatorProfile) {
+    public MainModelData(BuiltModel[] models, Map<String, AnimationClipSet> animations, AnimationControllerSet[] animationControllerFiles, OrderedStringMap<String, OuterFileTexture> textureMap, SpecialHandLocatorProfile specialHandLocatorProfile) {
         this.models = ObjectArrayList.wrap(models);
         this.animations = animations;
         this.animationControllers = ObjectArrayList.wrap(animationControllerFiles);
@@ -34,7 +34,7 @@ public class MainModelData {
         this.specialHandLocatorProfile = specialHandLocatorProfile == null ? SpecialHandLocatorProfile.NONE : specialHandLocatorProfile;
     }
 
-    public Map<String, AnimationFile> getAnimations() {
+    public Map<String, AnimationClipSet> getAnimations() {
         return this.animations;
     }
 
@@ -42,7 +42,7 @@ public class MainModelData {
         return this.models;
     }
 
-    public List<AnimationControllerFile> getAnimationControllers() {
+    public List<AnimationControllerSet> getAnimationControllers() {
         return this.animationControllers;
     }
 

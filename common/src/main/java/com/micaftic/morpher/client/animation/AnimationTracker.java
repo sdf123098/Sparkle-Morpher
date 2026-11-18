@@ -1,15 +1,14 @@
 package com.micaftic.morpher.client.animation;
 
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import org.apache.commons.lang3.StringUtils;
 
 public class AnimationTracker {
 
-    private String currentAnimation = StringPool.EMPTY;
+    private String currentAnimation = "";
 
-    private String previousAnimation = StringPool.EMPTY;
+    private String previousAnimation = "";
 
-    private String queuedAnimation = StringPool.EMPTY;
+    private String queuedAnimation = "";
 
     public String getCurrentAnimation() {
         return this.currentAnimation;

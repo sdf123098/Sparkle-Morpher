@@ -1,40 +1,59 @@
 package com.micaftic.morpher.client.animation;
 
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostActionPredicate;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.core.HostPlayState;
+import dev.spm.core.scene.CodedLoopMode;
 import org.jetbrains.annotations.NotNull;
 
 @FunctionalInterface
-public interface IAnimationPredicate<T extends AnimatableEntity<?>> {
-    PlayState predicate(AnimationEvent<T> event, ExpressionEvaluator<?> evaluator);
+public interface IAnimationPredicate<T extends HostAnimatable<?>> extends HostActionPredicate<T> {
+    HostPlayState.Decision predicate(HostActionEvent<T> event);
 
-    @NotNull
-    static <T extends AnimatableEntity<?>> PlayState playAnimationWithLoop(AnimationEvent<T> event, String animationName, ILoopType loopType) {
-        event.getController().setAnimation(animationName, loopType);
-        return PlayState.CONTINUE;
+    @Override
+    default HostPlayState.Decision predicate(HostActionEvent<T> event, HostAnimatable<?> animatable) {
+        return predicate(event);
     }
 
     @NotNull
-    static <P extends AnimatableEntity<?>> PlayState predicate(AnimationEvent<P> event, String animationName) {
-        event.getController().setAnimation(animationName);
-        return PlayState.CONTINUE;
-    }
-
-    @NotNull
-    static <P extends AnimatableEntity<?>> PlayState playAnimationWithValid(AnimationEvent<P> event, String animationName, ILoopType loopType, int version) {
-        if (AnimationFormatValidator.validate(event, animationName, version)) {
-            event.getController().setAnimation(animationName);
-        } else {
-            event.getController().setAnimation(animationName, loopType);
+    static <T extends HostAnimatable<?>> HostPlayState.Decision playAnimationWithLoop(
+            HostActionEvent<T> event, String animationName, CodedLoopMode loopMode) {
+        HostControllerSlot<T> controller = event.getController();
+        if (controller != null) {
+            controller.setAnimation(animationName, loopMode);
         }
-        return PlayState.CONTINUE;
+        return HostPlayState.Decision.CONTINUE;
     }
 
     @NotNull
-    static <T extends AnimatableEntity<?>> PlayState playLoopAnimation(AnimationEvent<T> event, String str) {
-        return playAnimationWithLoop(event, str, ILoopType.EDefaultLoopTypes.LOOP);
+    static <P extends HostAnimatable<?>> HostPlayState.Decision predicate(
+            HostActionEvent<P> event, String animationName) {
+        HostControllerSlot<P> controller = event.getController();
+        if (controller != null) {
+            controller.setAnimation(animationName);
+        }
+        return HostPlayState.Decision.CONTINUE;
+    }
+
+    @NotNull
+    static <P extends HostAnimatable<?>> HostPlayState.Decision playAnimationWithValid(
+            HostActionEvent<P> event, String animationName, CodedLoopMode loopMode, int version) {
+        HostControllerSlot<P> controller = event.getController();
+        if (controller != null) {
+            if (AnimationFormatValidator.validate(event, animationName, version)) {
+                controller.setAnimation(animationName);
+            } else {
+                controller.setAnimation(animationName, loopMode);
+            }
+        }
+        return HostPlayState.Decision.CONTINUE;
+    }
+
+    @NotNull
+    static <T extends HostAnimatable<?>> HostPlayState.Decision playLoopAnimation(
+            HostActionEvent<T> event, String str) {
+        return playAnimationWithLoop(event, str, CodedLoopMode.LOOP);
     }
 }

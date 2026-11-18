@@ -4,44 +4,43 @@ import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.animation.condition.ConditionUse;
 import com.micaftic.morpher.client.animation.condition.InnerClassify;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.client.core.HostPlayState;
+import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.model.ModelActionProfile;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.client.entity.IPreviewAnimatable;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.core.api.item.WeaponActionBridge;
+import com.micaftic.morpher.core.api.item.WeaponActionState;
+import com.micaftic.morpher.core.api.item.WeaponKind;
+import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUseAnimation;
 import org.apache.commons.lang3.StringUtils;
-import com.micaftic.morpher.core.api.item.WeaponActionBridge;
-import com.micaftic.morpher.core.api.item.WeaponActionState;
-import com.micaftic.morpher.core.api.item.WeaponKind;
 
 public class InteractionHandAnimationPredicate implements IAnimationPredicate<LivingAnimatable<?>> {
 
     @Override
-    public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
-        LivingEntity livingEntity = (LivingEntity) ((LivingAnimatable) event.getAnimatable()).getEntity();
+    public HostPlayState.Decision predicate(HostActionEvent<LivingAnimatable<?>> event) {
+        LivingEntity livingEntity = event.getAnimatable().getEntity();
         if (livingEntity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         ModelAssembly modelAssembly = event.getAnimatable().getModelAssembly();
         PlayerModelBundle animationBundle = modelAssembly == null ? null : modelAssembly.getAnimationBundle();
         if (animationBundle == null || animationBundle.getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         InteractionHand usedHand = InputStateKey.getUsedItemHand(livingEntity);
         if (InputStateKey.isUsingItem(livingEntity, usedHand) && !livingEntity.isSleeping()) {
-            if (InputStateKey.getTicksUsingItem(livingEntity) == 1 && ((LivingAnimatable) event.getAnimatable()).getPositionTracker().markProcessed(2)) {
+            if (InputStateKey.getTicksUsingItem(livingEntity) == 1 && event.getAnimatable().getPositionTracker().markProcessed(2)) {
                 event.getController().stopTransition();
             }
             ConditionManager conditionManager = event.getAnimatable().getModelConfig();
@@ -65,35 +64,32 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
             }
             return playUseAnimation(event, livingEntity, usedHand, "use_offhand", i);
         }
-        return PlayState.STOP;
+        return HostPlayState.Decision.STOP;
     }
 
-    private PlayState playUseAnimation(AnimationEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, InteractionHand usedHand, String animation, int version) {
+    private HostPlayState.Decision playUseAnimation(HostActionEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, InteractionHand usedHand, String animation, int version) {
         ItemStack itemStack = livingEntity.getItemInHand(usedHand);
         if (isLanceUse(itemStack)) {
             WeaponActionState state = WeaponActionBridge.get(livingEntity, event.getPartialTick());
             if (isLanceLike(state.kind())) {
-                Animation targetAnimation = event.getAnimatable().getAnimation(animation);
+                ClipSpec targetAnimation = event.getAnimatable().getAnimation(animation);
                 ResolvedAnimation resolved = pickFirstAvailable(event, LanceAnimationTiming.selectChargeNames(state.lance()));
                 if (resolved != null) {
                     animation = resolved.name();
                     targetAnimation = resolved.animation();
                 } else if (state.kind() == WeaponKind.SPEAR) {
-                    // A vanilla spear must not fall through to the short looping generic
-                    // use animation. Legacy models commonly reserve that animation for a
-                    // different action, which makes a held right-click visibly twitch.
-                    return PlayState.STOP;
+                    return HostPlayState.Decision.STOP;
                 }
                 applyKineticChargeAnimationTickOverride(event, itemStack, state.lance().useTicks(), targetAnimation);
             }
         }
-        return IAnimationPredicate.playAnimationWithValid(event, animation, ILoopType.EDefaultLoopTypes.LOOP, version);
+        return IAnimationPredicate.playAnimationWithValid(event, animation, CodedLoopMode.LOOP, version);
     }
 
-    private ResolvedAnimation pickFirstAvailable(AnimationEvent<LivingAnimatable<?>> event, String[] names) {
+    private ResolvedAnimation pickFirstAvailable(HostActionEvent<LivingAnimatable<?>> event, String[] names) {
         LivingAnimatable<?> animatable = event.getAnimatable();
         for (String name : names) {
-            Animation anim = animatable.getAnimation(name);
+            ClipSpec anim = animatable.getAnimation(name);
             if (anim != null && !anim.isEmpty()) {
                 return new ResolvedAnimation(name, anim);
             }
@@ -101,7 +97,7 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
         return null;
     }
 
-    private void applyKineticChargeAnimationTickOverride(AnimationEvent<LivingAnimatable<?>> event, ItemStack itemStack, float useTicks, Animation animation) {
+    private void applyKineticChargeAnimationTickOverride(HostActionEvent<LivingAnimatable<?>> event, ItemStack itemStack, float useTicks, ClipSpec animation) {
         float animationTick = LanceAnimationTiming.sampleKineticChargeAnimationTick(itemStack, useTicks, animation);
         if (animationTick >= 0.0f) {
             event.getController().setAnimationTickOverride(animationTick);
@@ -117,6 +113,6 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
         return kind == WeaponKind.LANCE || kind == WeaponKind.SPEAR;
     }
 
-    private record ResolvedAnimation(String name, Animation animation) {
+    private record ResolvedAnimation(String name, ClipSpec animation) {
     }
 }
