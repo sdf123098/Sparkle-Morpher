@@ -1361,5 +1361,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "클라우드 동기화: 모델, 텍스처, 애니메이션이 동기화됩니다.",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "클라우드 동기화: 모델과 텍스처가 동기화됩니다. 애니메이션을 동기화하도록 백엔드 업그레이드",
   "gui.sparkle_morpher.cloud_player.publish_failed": "클라우드 게시 실패: %s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "클라우드 쿼리 실패: %s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "클라우드 쿼리 실패: %s",
+  "gui.sparkle_morpher.acceleration.auto": "GPU + SIMD 가속 (공격적)",
+  "gui.sparkle_morpher.acceleration.auto.desc": "기존의 공격적 정책을 고정으로 사용합니다. Vulkan 옵션은 아래에 그대로 유지됩니다."
 }

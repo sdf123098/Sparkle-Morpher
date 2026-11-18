@@ -1361,5 +1361,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "Облачная синхронизация: синхронизация модели, текстуры и анимации.",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "Облачная синхронизация: синхронизация модели и текстур; обновите серверную часть для синхронизации анимации",
   "gui.sparkle_morpher.cloud_player.publish_failed": "Ошибка публикации в облаке: %s.",
-  "gui.sparkle_morpher.cloud_player.query_failed": "Не удалось выполнить запрос к облаку: %s."
+  "gui.sparkle_morpher.cloud_player.query_failed": "Не удалось выполнить запрос к облаку: %s.",
+  "gui.sparkle_morpher.acceleration.auto": "Ускорение GPU + SIMD (Агрессивный)",
+  "gui.sparkle_morpher.acceleration.auto.desc": "Использует установленную политику «Агрессивный». Параметры Vulkan по-прежнему доступны ниже."
 }

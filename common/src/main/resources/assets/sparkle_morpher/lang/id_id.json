@@ -1361,5 +1361,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "Sinkronisasi cloud: Model, tekstur, dan animasi disinkronkan",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "Sinkronisasi cloud: Model dan tekstur disinkronkan; tingkatkan backend untuk menyinkronkan animasi",
   "gui.sparkle_morpher.cloud_player.publish_failed": "Publikasi cloud gagal: %s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "Kueri cloud gagal: %s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "Kueri cloud gagal: %s",
+  "gui.sparkle_morpher.acceleration.auto": "Akselerasi GPU + SIMD (Agresif)",
+  "gui.sparkle_morpher.acceleration.auto.desc": "Menggunakan kebijakan Agresif yang telah ditetapkan. Opsi Vulkan tetap tersedia di bawah."
 }
