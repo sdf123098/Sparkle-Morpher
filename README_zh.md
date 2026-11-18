@@ -50,12 +50,12 @@ Figura 包导入可读取模型、贴图与音效，并通过 [spm-core](https:/
 <a id="features"></a>
 ## 功能
 
-- **自定义外观：**替换玩家模型、切换贴图，调整模型提供的自定义设置。
-- **动画转盘：**按 Z 选择模型自带动作；受支持的模型可使用动画控制器、`loop` / `once` / `hold` 播放模式及 Molang 表达式。
-- **模型音效：**播放模型自带语音与音效，支持 Opus 音频解码。
-- **模型管理：**从本地文件、目录或 URL 导入，浏览、分组和收藏模型。
-- **Cloud 模型库：**浏览全部模型、最近使用、收藏、我的模型和公开模型；全部模型直接列出可访问模型，无需搜索词。
-- **更多模型目标：**受支持的实体、载具与投射物也可使用自定义模型；具体目标取决于模型及所选构建的联动支持。
+- **自定义外观：** 替换玩家模型、切换贴图，调整模型提供的自定义设置。
+- **动画转盘：** 按 Z 选择模型自带动作；受支持的模型可使用动画控制器、`loop` / `once` / `hold` 播放模式及 Molang 表达式。
+- **模型音效：** 播放模型自带语音与音效，支持 Opus 音频解码。
+- **模型管理：** 从本地文件、目录或 URL 导入，浏览、分组和收藏模型。
+- **Cloud 模型库：** 浏览全部模型、最近使用、收藏、我的模型和公开模型；全部模型直接列出可访问模型，无需搜索词。
+- **更多模型目标：** 受支持的实体、载具与投射物也可使用自定义模型；具体目标取决于模型及所选构建的联动支持。
 
 <a id="supported-builds"></a>
 ## 支持的构建
@@ -116,7 +116,7 @@ SPM 包含 Better Combat、Curios、Create、Iris/Sodium 和皮肤层渲染的�
 
 ### 核心引擎与上游仓库说明
 
-- **核心运行时（`2.4.0+`）：**基于独立引擎 **[AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)**（`1.0.0`，MIT）——面向宿主中立的 Java 17 + Rust SIMD 运行时，负责模型解析（`.ysm`、`.bbmodel`、`.geo.json`、`.gltf`/`.glb`、`.figura`、`v3d`）、动画与 Molang 求值、有界纯 Java Lua 5.3 执行以及 CPU/SIMD 骨骼蒙皮计算。
+- **核心运行时（`2.4.0+`）：** 基于独立引擎 **[AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)**（`1.0.0`，MIT）——面向宿主中立的 Java 17 + Rust SIMD 运行时，负责模型解析（`.ysm`、`.bbmodel`、`.geo.json`、`.gltf`/`.glb`、`.figura`、`v3d`）、动画与 Molang 求值、有界纯 Java Lua 5.3 执行以及 CPU/SIMD 骨骼蒙皮计算。
   - `spm-core` 本身按净室方式编写，仅参考了 [YesSteveModel/YesSteveModel](https://github.com/YesSteveModel/YesSteveModel)（Apache-2.0，仅规范参考）、[AndreaFrederica/OhMyYesSteveModel](https://github.com/AndreaFrederica/OhMyYesSteveModel)（Apache-2.0，历史格式规范、算法来源记录与 Apache-2.0 合成测试向量）、[JannisX11/blockbench](https://github.com/JannisX11/blockbench)（GPL-3.0，仅格式与变换规范）、[KhronosGroup/glTF](https://github.com/KhronosGroup/glTF)（CC-BY-4.0，仅规范参考）和 [FiguraMC/Figura](https://github.com/FiguraMC/Figura)（LGPL-2.1 历史版本，仅规范参考）；完整来源清单见 `spm-core` 仓库的 `provenance/allowed-sources.json` 与 `THIRD_PARTY_NOTICES.md`。
 - **历史版本说明（`2.3.2` 及以下）：**
   - **[OpenYSM](https://github.com/OpenYSM)**（MIT）——SPM `<= 2.3.2` 所基于的原始上游代码库（自 `2.4.0+` 起，OpenYSM / GeckoLib3 / Molang 相关遗留代码已全量移除并替换为 `spm-core`）。
