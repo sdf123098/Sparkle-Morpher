@@ -1,0 +1,1 @@
+return math.sin(c.arg0 * 180) * 4;
