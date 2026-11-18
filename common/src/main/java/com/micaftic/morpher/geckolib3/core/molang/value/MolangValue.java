@@ -5,6 +5,8 @@ import com.micaftic.morpher.molang.parser.ast.Expression;
 import com.micaftic.morpher.molang.parser.ast.FloatExpression;
 import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import com.micaftic.morpher.molang.runtime.binding.ValueConversions;
+import dev.spm.core.scene.MolangProgram;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -13,10 +15,26 @@ public class MolangValue implements IValue {
     private final List<Expression> expressions;
     private final String source;
     private final String failure;
+    private volatile boolean coreProgramAttempted;
+    private volatile @Nullable MolangProgram coreProgram;
     public List<Expression> expressions() { return expressions; }
     public String source() { return source; }
     public String failure() { return failure; }
     public boolean parsedSuccessfully() { return failure == null; }
+    public @Nullable MolangProgram coreProgram() {
+        if (!parsedSuccessfully() || source == null || source.isBlank()) {
+            return null;
+        }
+        if (!coreProgramAttempted) {
+            coreProgramAttempted = true;
+            try {
+                coreProgram = MolangProgram.compile(source);
+            } catch (RuntimeException ignored) {
+                coreProgram = null;
+            }
+        }
+        return coreProgram;
+    }
     public static MolangValue failed(String source, Throwable error) {
         return new MolangValue(List.of(FloatExpression.ZERO), false, source, error.toString());
     }

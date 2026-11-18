@@ -390,11 +390,11 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
     @Override
     public Object visitExecutionScope(@NotNull ExecutionScopeExpression executionScope) {
         this.peerMeter.step();
-        Object objMo2074xaffeef43 = null;
+        Object evaluated = null;
         final List<Expression> expressions = executionScope.expressions();
         final int size = expressions.size();
         for (int i = 0; i < size; i++) {
-            objMo2074xaffeef43 = expressions.get(i).visit(this);
+            evaluated = expressions.get(i).visit(this);
             Object obj = popReturnValue();
             if (obj != null) {
                 return obj;
@@ -403,7 +403,7 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
                 return null;
             }
         }
-        return objMo2074xaffeef43;
+        return evaluated;
     }
 
     private boolean buildExecutionScope(@NotNull ExecutionScopeExpression executionScope) {
@@ -492,16 +492,16 @@ public final class ExpressionEvaluatorImpl<TEntity> implements ExpressionEvaluat
     @Override
     public Object visitBinaryOperation(BinaryOperationExpression expression) {
         this.peerMeter.step();
-        Object objMo2074xaffeef43 = expression.getLeft().visit(this);
-        Object objMo2074xaffeef432 = expression.getRight().visit(this);
-        if (objMo2074xaffeef432 instanceof Number) {
-            int iIntValue = ((Number) objMo2074xaffeef432).intValue();
-            if (iIntValue < 0) {
-                iIntValue = 0;
+        Object leftValue = expression.getLeft().visit(this);
+        Object rightValue = expression.getRight().visit(this);
+        if (rightValue instanceof Number) {
+            int index = ((Number) rightValue).intValue();
+            if (index < 0) {
+                index = 0;
             }
-            if (objMo2074xaffeef43 instanceof List list) {
-                if (list.size() > iIntValue) {
-                    return list.get(iIntValue);
+            if (leftValue instanceof List<?> list) {
+                if (list.size() > index) {
+                    return list.get(index);
                 }
                 return null;
             }

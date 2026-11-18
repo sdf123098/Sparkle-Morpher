@@ -40,9 +40,9 @@ public interface MolangEngine {
     default List<Expression> parse(String str) throws ParseException {
         try {
             StringReader stringReader = new StringReader(str);
-            List<Expression> listMo872xaffeef43 = parse(stringReader);
+            List<Expression> parsedExpressions = parse(stringReader);
             stringReader.close();
-            return listMo872xaffeef43;
+            return parsedExpressions;
         } catch (ParseException e) {
             throw e;
         } catch (IOException e2) {
