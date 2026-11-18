@@ -30,7 +30,7 @@ public record ImportSource(String fileName, Format format, Kind kind, Path autho
     public static Format formatFromName(String fileName) {
         String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".ysm")) return Format.YSM;
-        if (lower.endsWith(".zip")) return Format.ZIP;
+        if (lower.endsWith(".zip") || lower.endsWith(".figura")) return Format.ZIP;
         if (lower.endsWith(".bbmodel")) return Format.BBMODEL;
         if (lower.endsWith(".geo.json") || lower.endsWith("geometry.json")) return Format.BEDROCK_GEOMETRY;
         if (lower.endsWith(".gltf")) return Format.GLTF;

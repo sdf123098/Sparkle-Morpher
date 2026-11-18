@@ -1,5 +1,8 @@
 package com.micaftic.morpher.resource.gltf;
 
+import com.micaftic.morpher.core.bridge.SpmGltfBridge;
+import org.jetbrains.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,6 +26,7 @@ public final class GltfModel {
     private final List<Image> images;
     private final List<Skin> skins;
     private final List<Animation> animations;
+    private transient volatile @Nullable SpmGltfBridge.ImportedGltf coreBridge;
 
     GltfModel(String generator, List<Scene> scenes, int defaultScene, List<Node> nodes,
               List<Mesh> meshes, List<Material> materials, List<Image> images,
@@ -37,6 +41,22 @@ public final class GltfModel {
         this.images = immutable(images);
         this.skins = immutable(skins);
         this.animations = immutable(animations);
+    }
+
+    public @Nullable SpmGltfBridge.ImportedGltf coreBridge() {
+        return coreBridge;
+    }
+
+    void attachCoreBridge(@Nullable SpmGltfBridge.ImportedGltf coreBridge) {
+        this.coreBridge = coreBridge;
+    }
+
+    public void closeCoreBridge() {
+        SpmGltfBridge.ImportedGltf current = this.coreBridge;
+        this.coreBridge = null;
+        if (current != null) {
+            current.close();
+        }
     }
 
     public String generator() { return generator; }
@@ -267,8 +287,8 @@ public final class GltfModel {
     }
 
     public static final class Channel {
-        public enum Path { TRANSLATION, ROTATION, SCALE }
-        public enum Interpolation { LINEAR, STEP }
+        public enum Path { TRANSLATION, ROTATION, SCALE, WEIGHTS }
+        public enum Interpolation { LINEAR, STEP, CUBICSPLINE }
 
         private final int nodeIndex;
         private final Path path;

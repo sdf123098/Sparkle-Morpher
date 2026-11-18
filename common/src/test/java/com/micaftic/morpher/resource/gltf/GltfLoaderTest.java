@@ -20,6 +20,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -320,6 +321,89 @@ class GltfLoaderTest {
                 .register("TEST_future_extension", root -> { })
                 .build();
         assertEquals(0, GltfLoader.load(source, tempDir, "extension.gltf", registry).meshes().size());
+    }
+
+    @Test
+    void loadsAndEvaluatesCubicSplineAndMorphTargetViaSpmCore() throws Exception {
+        // 3 vertices triangle + morph target shifting y by +2 + CUBICSPLINE translation + LINEAR weight animation
+        ByteBuffer buf = ByteBuffer.allocate(200).order(ByteOrder.LITTLE_ENDIAN);
+        // 0..35: positions (3 * VEC3)
+        buf.putFloat(0).putFloat(0).putFloat(0);
+        buf.putFloat(1).putFloat(0).putFloat(0);
+        buf.putFloat(0).putFloat(1).putFloat(0);
+        // 36..71: morph target 0 POSITION delta (3 * VEC3) -> +2 on Y for vertex 0
+        buf.putFloat(0).putFloat(2).putFloat(0);
+        buf.putFloat(0).putFloat(0).putFloat(0);
+        buf.putFloat(0).putFloat(0).putFloat(0);
+        // 72..79: time inputs [0, 1]
+        buf.putFloat(0f).putFloat(1f);
+        // 80..151: CUBICSPLINE translation (2 keys * 3 vec3 = 18 floats = 72 bytes):
+        for (int i = 0; i < 9; i++) buf.putFloat(0f);
+        buf.putFloat(0f).putFloat(0f).putFloat(0f);
+        buf.putFloat(4f).putFloat(0f).putFloat(0f);
+        buf.putFloat(0f).putFloat(0f).putFloat(0f);
+        // 152..159: LINEAR weights [0.0, 1.0] (8 bytes)
+        buf.putFloat(0f).putFloat(1f);
+        byte[] bin = new byte[160];
+        buf.flip();
+        buf.get(bin);
+        String uri = "data:application/octet-stream;base64," + Base64.getEncoder().encodeToString(bin);
+        String json = """
+                {
+                  "asset": {"version": "2.0"},
+                  "buffers": [{"byteLength": 160, "uri": "%s"}],
+                  "bufferViews": [
+                    {"buffer": 0, "byteOffset": 0, "byteLength": 36},
+                    {"buffer": 0, "byteOffset": 36, "byteLength": 36},
+                    {"buffer": 0, "byteOffset": 72, "byteLength": 8},
+                    {"buffer": 0, "byteOffset": 80, "byteLength": 72},
+                    {"buffer": 0, "byteOffset": 152, "byteLength": 8}
+                  ],
+                  "accessors": [
+                    {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0]},
+                    {"bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [0,2,0]},
+                    {"bufferView": 2, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0], "max": [1]},
+                    {"bufferView": 3, "componentType": 5126, "count": 6, "type": "VEC3"},
+                    {"bufferView": 4, "componentType": 5126, "count": 2, "type": "SCALAR"}
+                  ],
+                  "meshes": [{
+                    "name": "tri",
+                    "weights": [0.0],
+                    "primitives": [{"attributes": {"POSITION": 0}, "targets": [{"POSITION": 1}]}]
+                  }],
+                  "nodes": [{"name": "root", "mesh": 0}],
+                  "scenes": [{"nodes": [0]}],
+                  "scene": 0,
+                  "animations": [{
+                    "name": "morph_slide",
+                    "samplers": [
+                      {"input": 2, "interpolation": "CUBICSPLINE", "output": 3},
+                      {"input": 2, "interpolation": "LINEAR", "output": 4}
+                    ],
+                    "channels": [
+                      {"sampler": 0, "target": {"node": 0, "path": "translation"}},
+                      {"sampler": 1, "target": {"node": 0, "path": "weights"}}
+                    ]
+                  }]
+                }
+                """.formatted(uri);
+
+        GltfModel model = GltfLoader.load(json.getBytes(StandardCharsets.UTF_8), tempDir, "cubic-morph.gltf");
+        try {
+            assertNotNull(model.coreBridge());
+            assertEquals(GltfModel.Channel.Interpolation.CUBICSPLINE, model.animations().get(0).channels().get(0).interpolation());
+            assertEquals(GltfModel.Channel.Path.WEIGHTS, model.animations().get(0).channels().get(1).path());
+
+            GltfSceneEvaluator evaluator = new GltfSceneEvaluator(model);
+            GltfSceneEvaluator.Pose pose = evaluator.evaluate(0, 0, 0.5f, false);
+            assertEquals(2.0f, pose.worldMatrix(0).m30(), 1e-3f);
+            GltfSceneEvaluator.Vertex[] verts = evaluator.transform(pose, 0, 0);
+            // Vertex 0: x shifted +2 by CUBICSPLINE translation, y shifted +1 (0.5 * +2 morph delta)
+            assertEquals(2.0f, verts[0].x(), 1e-3f);
+            assertEquals(1.0f, verts[0].y(), 1e-3f);
+        } finally {
+            model.closeCoreBridge();
+        }
     }
 
     private static byte[] meshBuffer() {
