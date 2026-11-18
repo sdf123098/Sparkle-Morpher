@@ -1,10 +1,10 @@
 package com.micaftic.morpher.client.animation.predicate;
 
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.core.api.item.LanceActionState;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.KineticWeapon;
-import com.micaftic.morpher.core.api.item.LanceActionState;
 
 /**
  * Shared helper for the lance/spear animation pipeline.
@@ -24,12 +24,13 @@ final class LanceAnimationTiming {
         return new String[]{"lance_charge", "use_mainhand:lance"};
     }
 
-    static float sampleKineticChargeAnimationTick(ItemStack itemStack, float useTicks, Animation animation) {
+    static float sampleKineticChargeAnimationTick(ItemStack itemStack, float useTicks, ClipSpec animation) {
         float duration = kineticChargeDurationTicks(itemStack);
-        if (duration <= 0.0f || animation == null || animation.animationLength <= 0.0f) {
+        double lengthTicks = animation != null ? animation.lengthSeconds() * 20.0 : 0.0;
+        if (duration <= 0.0f || lengthTicks <= 0.0) {
             return -1.0f;
         }
-        return clamp01(useTicks / duration) * animation.animationLength;
+        return clamp01(useTicks / duration) * (float) lengthTicks;
     }
 
     static float kineticChargeProgress(ItemStack itemStack, float useTicks) {

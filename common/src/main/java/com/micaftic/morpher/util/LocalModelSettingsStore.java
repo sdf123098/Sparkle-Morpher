@@ -5,9 +5,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
+import com.micaftic.morpher.client.render.BoneIds;
 import com.micaftic.morpher.core.architectury.platform.Platform;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
 import org.jetbrains.annotations.Nullable;
 
@@ -37,21 +36,18 @@ public final class LocalModelSettingsStore {
         return Platform.getConfigFolder().resolve(YesSteveModel.MOD_ID).resolve("local_model_settings.json");
     }
 
-    /** Queue after PLAYER_INIT; absent settings need no expression or animation-cache invalidation. */
+    /** Queue after PLAYER_INIT; absent settings need no action or animation-cache invalidation. */
     @Nullable
-    public static IValue restoreExpression(String modelId, RoamingStruct target) {
-        return restoreExpression(file(), modelId, target);
+    public static Runnable restoreTask(String modelId, RoamingStruct target) {
+        return restoreTask(file(), modelId, target);
     }
 
     @Nullable
-    static IValue restoreExpression(Path file, String modelId, RoamingStruct target) {
+    static Runnable restoreTask(Path file, String modelId, RoamingStruct target) {
         if (target == null) return null;
         Map<String, Float> saved = readValues(file, modelId);
         if (saved.isEmpty()) return null;
-        return evaluator -> {
-            applyValues(saved, target);
-            return null;
-        };
+        return () -> applyValues(saved, target);
     }
 
     public static void restore(String modelId, RoamingStruct target) {
@@ -63,7 +59,7 @@ public final class LocalModelSettingsStore {
     }
 
     private static void applyValues(Map<String, Float> saved, RoamingStruct target) {
-        saved.forEach((name, value) -> target.putProperty(StringPool.computeIfAbsent(name), value));
+        saved.forEach((name, value) -> target.putProperty(BoneIds.id(name), value));
     }
 
     private static Map<String, Float> readValues(Path file, String modelId) {
@@ -119,7 +115,7 @@ public final class LocalModelSettingsStore {
             JsonObject models = getOrCreateObject(root, MODELS);
             JsonObject model = getOrCreateObject(models, modelId);
             for (Int2FloatMap.Entry entry : changedVariables.int2FloatEntrySet()) {
-                String variableName = StringPool.getString(entry.getIntKey());
+                String variableName = BoneIds.name(entry.getIntKey());
                 float value = entry.getFloatValue();
                 if (isValidVariableName(variableName) && Float.isFinite(value)) {
                     model.addProperty(variableName, value);

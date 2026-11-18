@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.VehicleCapability;
-import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
+import com.micaftic.morpher.client.entity.SpmVehicleEntity;
 import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import com.micaftic.morpher.client.render.RenderContext;
@@ -9,11 +9,9 @@ import com.micaftic.morpher.client.render.RenderPass;
 import com.micaftic.morpher.client.renderer.preview.GuiModelRenderer;
 import com.micaftic.morpher.client.renderer.preview.PaperDollRenderer;
 import com.micaftic.morpher.client.renderer.preview.PreviewRenderBridge;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.processor.IBone;
-import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.util.RenderUtils;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -117,31 +115,31 @@ public final class ModelPreviewRenderer {
         return PreviewRenderBridge.renderQueued(renderState, poseStack, collector, bufferSource);
     }
 
-    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment) {
+    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, SpmReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment) {
         GuiModelRenderer.renderLivingEntityPreview(guiGraphics, left, top, right, bottom, originX, originY, scale, partialTick, animatable, renderer, disablePreviewRotation, hideEquipment);
     }
 
-    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, int mouseX, int mouseY) {
+    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, SpmReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, int mouseX, int mouseY) {
         GuiModelRenderer.renderLivingEntityPreview(guiGraphics, left, top, right, bottom, originX, originY, scale, partialTick, animatable, renderer, disablePreviewRotation, hideEquipment, mouseX, mouseY);
     }
 
-    public static void renderEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
+    public static void renderEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float pitch, float yaw, float partialTick, HostAnimatable animatableEntity, SpmReplacedEntityRenderer renderer, boolean renderGround) {
         GuiModelRenderer.renderEntityPreview(guiGraphics, left, top, right, bottom, originX, originY, scale, pitch, yaw, partialTick, animatableEntity, renderer, renderGround);
     }
 
     public static void renderVehicleModel(Entity entity, PoseStack poseStack, float partialTick) {
         Entity vehicle = entity.getVehicle();
-        if (vehicle != null && !GeckoVehicleEntity.usesVanillaRenderer(vehicle)) {
+        if (vehicle != null && !SpmVehicleEntity.usesVanillaRenderer(vehicle)) {
             VehicleCapability.get(vehicle).ifPresent(cap -> {
                 int index;
-                AnimatedGeoModel model;
-                List<IBone> list;
+                ModelScenePose model;
+                List<ModelBoneView> list;
                 if (!cap.isModelInitialized() || !cap.isModelReady() || (index = vehicle.getPassengers().indexOf(entity)) < 0 || (model = cap.getCurrentModel()) == null || model.passengerGroupChains().isEmpty() || index >= model.passengerGroupChains().size() || (list = model.passengerGroupChains().get(index)) == null) {
                     return;
                 }
                 float bodyRotation = CustomVehicleRenderer.getBodyRotation(vehicle, Mth.lerp(partialTick, vehicle.yRotO, vehicle.getYRot()), partialTick);
                 poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - bodyRotation));
-                RenderUtils.prepMatrixForLocator(poseStack, list);
+                SpmRenderMath.prepMatrixForLocator(poseStack, list);
                 poseStack.mulPose(Axis.YN.rotationDegrees(180.0f - bodyRotation));
                 Vec3 passengerAttachment = vehicle.getPassengerRidingPosition(entity).subtract(vehicle.position());
                 double myRidingOffset = -passengerAttachment.y();
@@ -150,12 +148,12 @@ public final class ModelPreviewRenderer {
         }
     }
 
-    public static void renderEntityPreview(float x, float y, float scale, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
+    public static void renderEntityPreview(float x, float y, float scale, float pitch, float yaw, float partialTick, HostAnimatable animatableEntity, SpmReplacedEntityRenderer renderer, boolean renderGround) {
         GuiModelRenderer.renderEntityPreview(x, y, scale, pitch, yaw, partialTick, animatableEntity, renderer, renderGround);
     }
 
     // 模型预览页面（旧直取 BufferSource 路径，MC 26.x 恒不可用；保留兼容签名）
-    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(float x, float y, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment) {
+    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(float x, float y, float scale, float partialTick, TAnimatable animatable, SpmReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment) {
         GuiModelRenderer.renderLivingEntityPreview(x, y, scale, partialTick, animatable, renderer, disablePreviewRotation, hideEquipment);
     }
 

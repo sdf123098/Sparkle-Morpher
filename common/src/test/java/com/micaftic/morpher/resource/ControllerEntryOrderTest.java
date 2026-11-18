@@ -1,38 +1,24 @@
 package com.micaftic.morpher.resource;
 
-import com.micaftic.morpher.geckolib3.core.molang.MolangParser;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ControllerStateSpec;
 import com.micaftic.morpher.resource.bundle.AnimationMapper;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import dev.spm.core.api.CancellationToken;
+import dev.spm.core.scene.MolangContext;
+import dev.spm.core.scene.ScriptBudget;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class ControllerEntryOrderTest {
-    private Queue<MolangParser> pool;
-    private List<MolangParser> saved;
-
-    @SuppressWarnings("unchecked")
-    @BeforeEach void isolateBindings() throws Exception {
-        var field = GeckoLibCache.class.getDeclaredField("PARSER_POOL");
-        field.setAccessible(true);
-        pool = (Queue<MolangParser>) field.get(null);
-        saved = new ArrayList<>(pool);
-        pool.clear();
-        pool.add(new MolangParser(Map.of()));
+    private static MolangContext emptyContext() {
+        return new MolangContext(Map.of(), Map.of(), Map.of(),
+                new ScriptBudget(10_000, 16, new CancellationToken()));
     }
-
-    @AfterEach void restoreBindings() { pool.clear(); pool.addAll(saved); }
 
     private RawYsmModel fixture() {
         String controller = """
@@ -49,26 +35,28 @@ class ControllerEntryOrderTest {
         }
     }
 
-    private com.micaftic.morpher.geckolib3.core.builder.AnimationState mapped(RawYsmModel raw) {
+    private ControllerStateSpec mapped(RawYsmModel raw) {
         var controllers = raw.mainEntity.animationControllerFiles.get(0).controllers;
         return AnimationMapper.buildControllers(controllers, false).get("player.pre_parallel_7")
-                .getStates().get(StringPool.computeIfAbsent("walk"));
+                .states().get("walk");
     }
 
-    @Test void repeatedAnimationKeepsOrdinaryAndWeaponConditions() {
-        var clips = mapped(fixture()).getAnimations();
-        assertEquals(List.of("walk", "other", "walk", "always"), clips.stream().map(p -> p.getKey()).toList());
-        assertTrue(clips.get(0).getValue().evalAsBoolean(ExpressionEvaluator.evaluator()));
-        assertFalse(clips.get(2).getValue().evalAsBoolean(ExpressionEvaluator.evaluator()));
-        assertNull(clips.get(3).getValue());
+    @Test void repeatedAnimationKeepsOrdinaryAndWeaponConditions() throws Exception {
+        var clips = mapped(fixture()).animations();
+        assertEquals(List.of("walk", "other", "walk", "always"), clips.stream().map(e -> e.animationName()).toList());
+        MolangContext ctx = emptyContext();
+        assertTrue(clips.get(0).weight().evaluateAsBoolean(ctx));
+        assertFalse(clips.get(2).weight().evaluateAsBoolean(ctx));
+        assertNull(clips.get(3).weight());
     }
 
-    @Test void repeatedTransitionKeepsFirstMatchingPriority() {
-        var transitions = mapped(fixture()).getTransitions();
+    @Test void repeatedTransitionKeepsFirstMatchingPriority() throws Exception {
+        var transitions = mapped(fixture()).transitions();
         assertEquals(List.of("idle", "jump", "idle"), transitions.stream()
-                .map(p -> StringPool.getString(p.leftInt())).toList());
-        assertTrue(transitions.get(0).right().evalAsBoolean(ExpressionEvaluator.evaluator()));
-        assertFalse(transitions.get(2).right().evalAsBoolean(ExpressionEvaluator.evaluator()));
+                .map(t -> t.targetState()).toList());
+        MolangContext ctx = emptyContext();
+        assertTrue(transitions.get(0).condition().evaluateAsBoolean(ctx));
+        assertFalse(transitions.get(2).condition().evaluateAsBoolean(ctx));
     }
 
     @Test void serverBinaryRoundTripKeepsRepeatedEntries() throws Exception {
@@ -82,9 +70,9 @@ class ControllerEntryOrderTest {
                 buf.getRawBuf().readBytes(bytes);
             }
             var result = mapped(new YSMBinaryDeserializer(bytes, format).deserialize());
-            assertEquals(4, result.getAnimations().size(), "format " + format);
-            assertEquals(3, result.getTransitions().size(), "format " + format);
-            assertTrue(result.getAnimations().get(0).getValue().evalAsBoolean(ExpressionEvaluator.evaluator()));
+            assertEquals(4, result.animations().size(), "format " + format);
+            assertEquals(3, result.transitions().size(), "format " + format);
+            assertTrue(result.animations().get(0).weight().evaluateAsBoolean(emptyContext()));
         }
     }
 }

@@ -1,9 +1,9 @@
 package com.micaftic.morpher.core.compat.carryon.fabric;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.Optional;
@@ -18,7 +18,7 @@ public final class CarryOnCompatImpl {
         return false;
     }
 
-    public static Optional<BiFunction<String, CustomPlayerEntity, IAnimationController<CustomPlayerEntity>>> getControllerFactory() {
+    public static Optional<BiFunction<String, CustomPlayerEntity, HostControllerSlot<CustomPlayerEntity>>> getControllerFactory() {
         return Optional.empty();
     }
 
@@ -26,8 +26,8 @@ public final class CarryOnCompatImpl {
         return false;
     }
 
-    public static void registerBindings(CtrlBinding binding) {
-        binding.livingEntityVar("carryon_type", ctx -> StringPool.EMPTY);
-        binding.livingEntityVar("carryon_is_princess", ctx -> false);
+    public static void registerBindings(HostMolangSink binding) {
+        binding.var("carryon_type", event -> MolangValue.text(""));
+        binding.var("carryon_is_princess", event -> MolangValue.bool(false));
     }
 }

@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.gpu;
 
 import com.micaftic.morpher.client.render.BuiltModel;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
+import com.micaftic.morpher.client.render.ModelBone;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
@@ -32,7 +32,7 @@ final class SpmCoreBoneMatrixWriterTest {
         BuiltModel.BakedBone child = bone("child", 0, 4.0f, 8.0f, 0.0f, glowChild);
         BuiltModel.BakedBone hidden = bone("hidden_child", 0, 0.0f, 0.0f, 0.0f, false);
         BuiltModel model = new BuiltModel(
-                new GeoBone[0],
+                new ModelBone[0],
                 new String[37][0],
                 new boolean[3],
                 new GeometryDescription("geometry.test", 64, 64, 1, 1, new double[]{0, 0, 0}),

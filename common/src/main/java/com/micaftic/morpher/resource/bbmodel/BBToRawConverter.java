@@ -2,7 +2,6 @@ package com.micaftic.morpher.resource.bbmodel;
 
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.geckolib3.util.Interpolations;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 
 import java.nio.charset.StandardCharsets;
@@ -824,10 +823,42 @@ public class BBToRawConverter {
             float leftTime = handleTime(next.bezier_left_time, axis, 0.66f, duration, current.time);
             float rightValue = handleValue(current.bezier_right_value, axis, startValue);
             float leftValue = handleValue(next.bezier_left_value, axis, endValue);
-            float curveT = Interpolations.bezierX(rightTime, leftTime, percent);
-            out[axis] = Interpolations.bezier(startValue, rightValue, leftValue, endValue, curveT);
+            float curveT = bezierX(rightTime, leftTime, percent);
+            out[axis] = bezier(startValue, rightValue, leftValue, endValue, curveT);
         }
         return out;
+    }
+
+    private static float bezierX(float x1, float x2, float t) {
+        final float epsilon = 0.0005f;
+        float x = t;
+        float init = bezier(0f, x1, x2, 1f, t);
+        float factor = Math.copySign(0.1f, t - init);
+        while (Math.abs(t - init) > epsilon) {
+            float oldFactor = factor;
+            x += factor;
+            init = bezier(0f, x1, x2, 1f, x);
+            if (factor * (t - init) < 0) {
+                factor = -factor / 2f;
+            }
+            if (Math.abs(factor) < 1e-7f || oldFactor == 0f) {
+                break;
+            }
+        }
+        return x;
+    }
+
+    private static float bezier(float x1, float x2, float x3, float x4, float t) {
+        float t1 = lerp(t, x1, x2);
+        float t2 = lerp(t, x2, x3);
+        float t3 = lerp(t, x3, x4);
+        float t4 = lerp(t, t1, t2);
+        float t5 = lerp(t, t2, t3);
+        return lerp(t, t4, t5);
+    }
+
+    private static float lerp(float t, float a, float b) {
+        return a + (b - a) * t;
     }
 
     private static float handleTime(float[] values, int axis, float fallback, float duration, float startTime) {

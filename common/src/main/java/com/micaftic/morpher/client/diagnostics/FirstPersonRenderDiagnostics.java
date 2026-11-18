@@ -111,12 +111,12 @@ public final class FirstPersonRenderDiagnostics {
             return;
         }
         report(HumanoidArm.RIGHT, Outcome.HOOK_NOT_INVOKED, capability.getModelId(),
-                assembly.isGltf() ? "gltf" : "geckolib", null);
+                assembly.isGltf() ? "gltf" : "spm", null);
     }
 
     /**
      * @param modelId       active model id, or {@code null} when no model is active
-     * @param format        {@code geckolib} / {@code gltf}, or {@code null} when not resolved
+     * @param format        {@code spm} / {@code gltf}, or {@code null} when not resolved
      * @param armBoneExists whether the model has the required arm bone, or {@code null} when unknown
      */
     public static void report(HumanoidArm arm, Outcome outcome, String modelId, String format, Boolean armBoneExists) {

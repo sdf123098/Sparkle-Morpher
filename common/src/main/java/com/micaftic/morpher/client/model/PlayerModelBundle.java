@@ -1,18 +1,22 @@
 package com.micaftic.morpher.client.model;
 
-import com.micaftic.morpher.client.animation.condition.ConditionManager;
+import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
+import com.micaftic.morpher.client.animation.RidingAnimationPlan;
 import com.micaftic.morpher.client.animation.condition.ArmorConditions;
-import com.micaftic.morpher.client.render.BuiltModel;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.FirstPersonArmAnimationController;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
-import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
+import com.micaftic.morpher.client.animation.condition.ConditionManager;
+import com.micaftic.morpher.client.animation.controller.FirstPersonArmAnimationController;
+import com.micaftic.morpher.client.animation.controller.UnifiedPlayerActionController;
 import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
+import com.micaftic.morpher.client.core.HostAnimationAssets;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ControllerSpec;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.client.entity.PlayerGeoEntity;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.core.keyframe.BoneAnimation;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
+import com.micaftic.morpher.client.entity.SpmPlayerEntity;
+import com.micaftic.morpher.client.render.BuiltModel;
+import com.micaftic.morpher.client.render.ModelBone;
+import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.micaftic.morpher.util.data.OrderedStringMap;
+import dev.spm.core.scene.PoseAnimationLibrary;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 
@@ -24,15 +28,19 @@ public class PlayerModelBundle {
 
     private final BuiltModel armModel;
 
-    private final Object2ReferenceMap<String, Animation> mainAnimations;
+    private final Object2ReferenceMap<String, ClipSpec> mainAnimations;
 
-    private final Object2ReferenceMap<String, Animation> armAnimations;
+    private final Object2ReferenceMap<String, ClipSpec> armAnimations;
+
+    private final PoseAnimationLibrary mainAnimationLibrary;
+
+    private final PoseAnimationLibrary armAnimationLibrary;
 
     private final ConditionManager conditionManager;
 
     private final ArmorConditions modelProcessor;
 
-    private final Object2ReferenceMap<String, AnimationController> animationEntries;
+    private final Object2ReferenceMap<String, ControllerSpec> animationEntries;
 
     private final OrderedStringMap<String, ? extends AbstractTexture> textures;
 
@@ -50,21 +58,21 @@ public class PlayerModelBundle {
 
     private final boolean fallFlyingPitchHandledByAnimation;
 
-    private final com.micaftic.morpher.client.animation.RidingAnimationPlan ridingAnimationPlan;
+    private final RidingAnimationPlan ridingAnimationPlan;
 
     private final Consumer<CustomPlayerEntity> playerControllerInstaller;
 
-    private final Consumer<PlayerGeoEntity> armControllerInstaller;
+    private final Consumer<SpmPlayerEntity> armControllerInstaller;
 
     private final Object maidControllerInstaller;
 
     public PlayerModelBundle(BuiltModel mainModel,
                              BuiltModel armModel,
-                             Object2ReferenceMap<String, Animation> mainAnimations,
-                             Object2ReferenceMap<String, Animation> armAnimations,
+                             Object2ReferenceMap<String, ClipSpec> mainAnimations,
+                             Object2ReferenceMap<String, ClipSpec> armAnimations,
                              ConditionManager conditionManager,
                              ArmorConditions modelProcessor,
-                             Object2ReferenceMap<String, AnimationController> animationEntries,
+                             Object2ReferenceMap<String, ControllerSpec> animationEntries,
                              OrderedStringMap<String, ? extends AbstractTexture> textures,
                              String defaultTextureName, AbstractTexture defaultTexture, ModelResourceBundle modelResourceBundle,
                              ModelSourceFormat sourceFormat, ModelActionProfile actionProfile,
@@ -73,6 +81,14 @@ public class PlayerModelBundle {
         this.armModel = armModel;
         this.mainAnimations = mainAnimations;
         this.armAnimations = armAnimations;
+        this.mainAnimationLibrary = mainModel != null
+                ? HostAnimationAssets.compileLibrary("ysm:main", mainAnimations.values(),
+                HostAnimationAssets.buildSkeleton(mainModel), HostAnimationAssets.buildBindPose(mainModel))
+                : null;
+        this.armAnimationLibrary = armModel != null
+                ? HostAnimationAssets.compileLibrary("ysm:arm", armAnimations.values(),
+                HostAnimationAssets.buildSkeleton(armModel), HostAnimationAssets.buildBindPose(armModel))
+                : null;
         this.conditionManager = conditionManager;
         this.animationEntries = animationEntries;
         this.modelProcessor = modelProcessor;
@@ -84,10 +100,10 @@ public class PlayerModelBundle {
         this.semanticSkeleton = semanticSkeleton;
         this.handLocatorProfile = handLocatorProfile;
         this.fallFlyingPitchHandledByAnimation = detectsFallFlyingRootRotation(mainModel, mainAnimations);
-        this.ridingAnimationPlan = com.micaftic.morpher.client.animation.RidingAnimationPlan.analyze(action -> {
-            Animation animation = mainAnimations.get(action);
+        this.ridingAnimationPlan = RidingAnimationPlan.analyze(action -> {
+            ClipSpec animation = mainAnimations.get(action);
             return animation != null ? animation
-                    : com.micaftic.morpher.client.animation.BedrockAnimationMapping.findByAction(mainAnimations, action);
+                    : BedrockAnimationMapping.findByAction(mainAnimations, action);
         });
         this.playerControllerInstaller = UnifiedPlayerActionController.buildControllers(this, modelResourceBundle);
         this.armControllerInstaller = FirstPersonArmAnimationController.buildControllers(this, modelResourceBundle);
@@ -102,12 +118,20 @@ public class PlayerModelBundle {
         return this.armModel;
     }
 
-    public Object2ReferenceMap<String, Animation> getMainAnimations() {
+    public Object2ReferenceMap<String, ClipSpec> getMainAnimations() {
         return this.mainAnimations;
     }
 
-    public Object2ReferenceMap<String, Animation> getArmAnimations() {
+    public Object2ReferenceMap<String, ClipSpec> getArmAnimations() {
         return this.armAnimations;
+    }
+
+    public PoseAnimationLibrary getMainAnimationLibrary() {
+        return this.mainAnimationLibrary;
+    }
+
+    public PoseAnimationLibrary getArmAnimationLibrary() {
+        return this.armAnimationLibrary;
     }
 
     public ConditionManager getConditionManager() {
@@ -118,7 +142,7 @@ public class PlayerModelBundle {
         return this.modelProcessor;
     }
 
-    public Object2ReferenceMap<String, AnimationController> getAnimationEntries() { // 动画控制器
+    public Object2ReferenceMap<String, ControllerSpec> getAnimationEntries() {
         return this.animationEntries;
     }
 
@@ -139,7 +163,6 @@ public class PlayerModelBundle {
     }
 
     public boolean hasVanillaPoseFallback() {
-        // VANILLA_HUMANOID（bbmodel/figura）现在也装了 fallbackOnly 的 vanilla 姿态兜底控制器
         return this.actionProfile == ModelActionProfile.HYBRID_AUTHORED_WITH_VANILLA_FALLBACK
                 || this.actionProfile == ModelActionProfile.VANILLA_HUMANOID;
     }
@@ -164,20 +187,23 @@ public class PlayerModelBundle {
         return this.fallFlyingPitchHandledByAnimation;
     }
 
-    public com.micaftic.morpher.client.animation.RidingAnimationPlan getRidingAnimationPlan() {
+    public RidingAnimationPlan getRidingAnimationPlan() {
         return this.ridingAnimationPlan;
     }
 
-    private static boolean detectsFallFlyingRootRotation(BuiltModel model, Object2ReferenceMap<String, Animation> animations) {
-        Animation animation = animations.get("elytra_fly");
-        if (animation == null || animation.isEmpty()) {
+    private static boolean detectsFallFlyingRootRotation(BuiltModel model, Object2ReferenceMap<String, ClipSpec> animations) {
+        if (model == null || animations == null) {
             return false;
         }
-        for (BoneAnimation boneAnimation : animation.boneAnimations) {
-            if (boneAnimation.rotationKeyFrames.isEmpty()) {
+        ClipSpec animation = animations.get("elytra_fly");
+        if (animation == null || !animation.hasKeyframes() || animation.raw().boneAnimations == null) {
+            return false;
+        }
+        for (RawYsmModel.RawBoneAnimation boneAnimation : animation.raw().boneAnimations) {
+            if (boneAnimation.rotation == null || boneAnimation.rotation.isEmpty()) {
                 continue;
             }
-            for (GeoBone bone : model.bones) {
+            for (ModelBone bone : model.bones) {
                 if (bone.getName().equals(boneAnimation.boneName)
                         && (bone.parentIdx < 0 || bone.parentName == null || bone.parentName.isEmpty())) {
                     return true;
@@ -191,7 +217,7 @@ public class PlayerModelBundle {
         return this.playerControllerInstaller;
     }
 
-    public Consumer<PlayerGeoEntity> getArmControllerInstaller() {
+    public Consumer<SpmPlayerEntity> getArmControllerInstaller() {
         return this.armControllerInstaller;
     }
 

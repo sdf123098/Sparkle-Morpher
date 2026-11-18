@@ -1,10 +1,9 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
+import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 
@@ -12,16 +11,16 @@ public final class MaidMovementAnimationPredicate implements IAnimationPredicate
     private static final float MIN_SPEED = 0.05f;
 
     @Override
-    public PlayState predicate(AnimationEvent<MaidCapability> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<MaidCapability> event) {
         LivingEntity maid = event.getAnimatable().getEntity();
         if (maid == null || maid.getVehicle() != null) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         String animation;
-        ILoopType loop = ILoopType.EDefaultLoopTypes.LOOP;
+        CodedLoopMode loop = CodedLoopMode.LOOP;
         if (maid.isDeadOrDying()) {
             animation = "death";
-            loop = ILoopType.EDefaultLoopTypes.PLAY_ONCE;
+            loop = CodedLoopMode.PLAY_ONCE;
         } else if (maid.isSleeping()) {
             animation = "sleep";
         } else if (maid.isSwimming()) {
@@ -33,7 +32,7 @@ public final class MaidMovementAnimationPredicate implements IAnimationPredicate
             animation = "swim_stand";
         } else if (maid.hurtTime > 0) {
             animation = "attacked";
-            loop = ILoopType.EDefaultLoopTypes.PLAY_ONCE;
+            loop = CodedLoopMode.PLAY_ONCE;
         } else if (!maid.onGround()) {
             animation = "jump";
         } else if (maid.getPose() == Pose.CROUCHING && Math.abs(event.getLimbSwingAmount()) > MIN_SPEED) {

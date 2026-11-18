@@ -8,10 +8,10 @@ import com.micaftic.morpher.client.model.ModelActionProfile;
 import com.micaftic.morpher.client.model.ModelSourceFormat;
 import com.micaftic.morpher.client.gui.metadata.ModelDisplayAssets;
 import com.micaftic.morpher.client.animation.condition.ArmorConditions;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.ModelActionProviderRegistry;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.PlayerActionProvider;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
+import com.micaftic.morpher.client.animation.controller.ModelActionProviderRegistry;
+import com.micaftic.morpher.client.animation.controller.PlayerActionProvider;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ControllerSpec;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import com.micaftic.morpher.client.render.BuiltModel;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
@@ -474,9 +474,9 @@ class ImportCoordinatorTest {
         PlayerModelBundle bundle;
         try {
             bundle = new PlayerModelBundle((BuiltModel) null, null,
-                    new Object2ReferenceOpenHashMap<String, Animation>(),
-                    new Object2ReferenceOpenHashMap<String, Animation>(), null, new ArmorConditions(),
-                    new Object2ReferenceOpenHashMap<String, AnimationController>(),
+                    new Object2ReferenceOpenHashMap<String, ClipSpec>(),
+                    new Object2ReferenceOpenHashMap<String, ClipSpec>(), null, new ArmorConditions(),
+                    new Object2ReferenceOpenHashMap<String, ControllerSpec>(),
                     new OrderedStringMap<>(new String[]{"legacy"}, new AbstractTexture[]{null}),
                     "legacy", null, resources, ModelSourceFormat.BBMODEL, ModelActionProfile.VANILLA_HUMANOID,
                     null, null);

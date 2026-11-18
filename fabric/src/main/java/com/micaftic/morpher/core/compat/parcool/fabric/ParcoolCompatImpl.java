@@ -1,9 +1,9 @@
 package com.micaftic.morpher.core.compat.parcool.fabric;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.player.Player;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -23,7 +23,7 @@ public final class ParcoolCompatImpl {
         return Optional.empty();
     }
 
-    public static Optional<BiFunction<String, CustomPlayerEntity, IAnimationController<CustomPlayerEntity>>> getControllerFactory() {
+    public static Optional<BiFunction<String, CustomPlayerEntity, HostControllerSlot<CustomPlayerEntity>>> getControllerFactory() {
         return Optional.empty();
     }
 
@@ -35,7 +35,9 @@ public final class ParcoolCompatImpl {
         return "";
     }
 
-    public static void registerBindings(CtrlBinding binding) {
-        binding.livingEntityVar("parcool_state", interfaceC0807x6b368640 -> StringPool.EMPTY);
+    public static void registerBindings(HostMolangSink binding) {
+        binding.var("parcool_loaded", event -> MolangValue.bool(false));
+        binding.var("parcool_doing", event -> MolangValue.bool(false));
+        binding.var("parcool_state", event -> MolangValue.text(""));
     }
 }

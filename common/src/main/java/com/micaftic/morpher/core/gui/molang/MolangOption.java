@@ -2,10 +2,9 @@ package com.micaftic.morpher.core.gui.molang;
 
 import com.micaftic.morpher.client.motion.ClientMotionSources;
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
-import com.micaftic.morpher.molang.parser.ParseException;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostMolangRegistry;
+import com.micaftic.morpher.client.core.HostMolangScript;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import com.micaftic.morpher.core.gui.Option;
@@ -17,7 +16,7 @@ public final class MolangOption {
     private MolangOption() {
     }
 
-    public static Option<Boolean> ofBoolean(String title, String description, AnimatableEntity<?> animatable, String expr) {
+    public static Option<Boolean> ofBoolean(String title, String description, HostAnimatable<?> animatable, String expr) {
         boolean[] cache = new boolean[]{false};
         evaluate(animatable, expr, s -> cache[0] = toFloat(s) > 0.0f);
         return new LiveOption<>(title, description, () -> cache[0], v -> {
@@ -26,7 +25,7 @@ public final class MolangOption {
         });
     }
 
-    public static Option<Double> ofDouble(String title, String description, AnimatableEntity<?> animatable, String expr) {
+    public static Option<Double> ofDouble(String title, String description, HostAnimatable<?> animatable, String expr) {
         double[] cache = new double[]{0.0};
         evaluate(animatable, expr, s -> cache[0] = toFloat(s));
         return new LiveOption<>(title, description, () -> cache[0], v -> {
@@ -35,7 +34,7 @@ public final class MolangOption {
         });
     }
 
-    public static Option<Integer> ofIndex(String title, String description, AnimatableEntity<?> animatable, String readExpr, String[] writeExprs) {
+    public static Option<Integer> ofIndex(String title, String description, HostAnimatable<?> animatable, String readExpr, String[] writeExprs) {
         int[] cache = new int[]{0};
         evaluate(animatable, readExpr, s -> cache[0] = Math.round(toFloat(s)));
         return new LiveOption<>(title, description, () -> cache[0], v -> {
@@ -52,24 +51,26 @@ public final class MolangOption {
         return b != null && b ? 1.0f : 0.0f;
     }
 
-    private static void evaluate(AnimatableEntity<?> animatable, String expr, Consumer<String> consumer) {
-        try {
-            animatable.executeExpression(GeckoLibCache.parseSimpleExpression(expr), true, false, consumer);
-        } catch (ParseException e) {
-            YesSteveModel.LOGGER.error(e);
+    private static void evaluate(HostAnimatable<?> animatable, String expr, Consumer<String> consumer) {
+        HostMolangScript script = HostMolangRegistry.parseExpression(expr);
+        if (!script.parsedSuccessfully()) {
+            YesSteveModel.LOGGER.error("Failed to parse Molang expression '{}': {}", expr, script.failure());
+            return;
         }
+        animatable.executeExpression(script, true, false, consumer);
     }
 
-    private static void execute(AnimatableEntity<?> animatable, String control, String expr) {
-        try {
-            ClientMotionSources.beginEdit(animatable);
-            com.micaftic.morpher.cloud.client.CloudEntityMotionSync.rememberSetting(animatable, control, expr);
-            animatable.executeExpression(GeckoLibCache.parseSimpleExpression(expr), true, false, null);
-            if (!GeckoLibCache.isRoamingVariableAssignment(expr)) {
-                ClientMotionSources.expression(animatable, expr, java.util.List.of());
-            }
-        } catch (ParseException e) {
-            YesSteveModel.LOGGER.error(e);
+    private static void execute(HostAnimatable<?> animatable, String control, String expr) {
+        HostMolangScript script = HostMolangRegistry.parseExpression(expr);
+        if (!script.parsedSuccessfully()) {
+            YesSteveModel.LOGGER.error("Failed to parse Molang expression '{}': {}", expr, script.failure());
+            return;
+        }
+        ClientMotionSources.beginEdit(animatable);
+        com.micaftic.morpher.cloud.client.CloudEntityMotionSync.rememberSetting(animatable, control, expr);
+        animatable.executeExpression(script, true, false, null);
+        if (!HostMolangRegistry.isRoamingVariableAssignment(expr)) {
+            ClientMotionSources.expression(animatable, expr, java.util.List.of());
         }
     }
 }

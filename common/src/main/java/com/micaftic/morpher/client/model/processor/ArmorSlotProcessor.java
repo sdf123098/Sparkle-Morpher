@@ -1,13 +1,13 @@
 package com.micaftic.morpher.client.model.processor;
 
-import com.micaftic.morpher.client.entity.GeoEntity;
-import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
-import com.micaftic.morpher.client.model.ModelResourceBundle;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
 import com.micaftic.morpher.client.animation.condition.ConditionArmor;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ControllerSpec;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.model.AnimationDataProvider;
+import com.micaftic.morpher.client.model.ModelResourceBundle;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -16,7 +16,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 
-public class ArmorSlotProcessor<T extends GeoEntity<?>> implements ModelProcessor<T, PlayerModelBundle> {
+public class ArmorSlotProcessor<T extends SpmEntity<?>> implements ModelProcessor<T, PlayerModelBundle> {
 
     private final String prefix;
 
@@ -24,9 +24,9 @@ public class ArmorSlotProcessor<T extends GeoEntity<?>> implements ModelProcesso
 
     private final AnimationDataProvider<PlayerModelBundle> animationDataProvider;
 
-    private final TriFunction<String, T, EquipmentSlot, IAnimationController<T>> controllerFactory;
+    private final TriFunction<String, T, EquipmentSlot, HostControllerSlot<T>> controllerFactory;
 
-    public ArmorSlotProcessor(String prefix, String category, AnimationDataProvider<PlayerModelBundle> animationDataProvider, TriFunction<String, T, EquipmentSlot, IAnimationController<T>> controllerFactory) {
+    public ArmorSlotProcessor(String prefix, String category, AnimationDataProvider<PlayerModelBundle> animationDataProvider, TriFunction<String, T, EquipmentSlot, HostControllerSlot<T>> controllerFactory) {
         this.prefix = prefix;
         this.category = category;
         this.animationDataProvider = animationDataProvider;
@@ -37,8 +37,8 @@ public class ArmorSlotProcessor<T extends GeoEntity<?>> implements ModelProcesso
     public ControllerFactory<T> process(PlayerModelBundle modelBundle, ModelResourceBundle resourceBundle) {
         ArrayList<Pair<String, EquipmentSlot>> matchingSlots = new ArrayList<>();
         ConditionArmor armorCondition = this.animationDataProvider.getConditionArmor(modelBundle, resourceBundle);
-        Object2ReferenceMap<String, AnimationController> animationEntries = this.animationDataProvider.getAnimationEntries(modelBundle, resourceBundle);
-        Object2ReferenceMap<String, Animation> animations = this.animationDataProvider.getAnimations(modelBundle, resourceBundle);
+        Object2ReferenceMap<String, ControllerSpec> animationEntries = this.animationDataProvider.getAnimationEntries(modelBundle, resourceBundle);
+        Object2ReferenceMap<String, ClipSpec> animations = this.animationDataProvider.getAnimations(modelBundle, resourceBundle);
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             String slotKey = String.format("%s.%s_%s", this.prefix, this.category, slot.getName());
             if (animationEntries.containsKey(slotKey)) {

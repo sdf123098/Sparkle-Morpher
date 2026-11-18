@@ -3,19 +3,19 @@ package com.micaftic.morpher.resource.bundle;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.audio.AudioTrackData;
 import com.micaftic.morpher.client.ClientModelInfo;
+import com.micaftic.morpher.client.core.HostAnimationAssets.AnimationClipSet;
+import com.micaftic.morpher.client.core.HostAnimationAssets.AnimationControllerSet;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ControllerSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ExtraResourceBundleSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ProjectileBundleSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.VehicleBundleSpec;
+import com.micaftic.morpher.client.core.HostMolangRegistry;
+import com.micaftic.morpher.client.core.HostMolangScript;
 import com.micaftic.morpher.client.model.MainModelData;
 import com.micaftic.morpher.client.model.SpecialHandLocatorProfile;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.core.compat.oculus.ShadersTextureType;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
-import com.micaftic.morpher.geckolib3.file.AnimationControllerFile;
-import com.micaftic.morpher.geckolib3.file.AnimationFile;
-import com.micaftic.morpher.geckolib3.file.ModelExtraResourcesFile;
-import com.micaftic.morpher.geckolib3.file.ProjectileModelFiles;
-import com.micaftic.morpher.geckolib3.file.VehicleModelFiles;
-import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import com.micaftic.morpher.model.format.ModelMetadata;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
@@ -112,30 +112,30 @@ public final class ClientModelBundleAssembler {
 
         BuiltModel[] meshes = new BuiltModel[]{mainMesh, armMesh};
 
-        Map<String, AnimationFile> animations = new LinkedHashMap<>();
+        Map<String, AnimationClipSet> animations = new LinkedHashMap<>();
         for (Map.Entry<String, RawYsmModel.RawAnimationFile> entry : raw.mainEntity.animationFiles.entrySet()) {
-            animations.put(entry.getKey(), new AnimationFile(AnimationMapper.buildAnimations(entry.getValue(), raw.properties.mergeMultilineExpr)));
+            animations.put(entry.getKey(), new AnimationClipSet(AnimationMapper.buildAnimations(entry.getValue(), raw.properties.mergeMultilineExpr)));
         }
 
         KipfelCompatibility.bind(raw, animations, modelId);
 
-        List<AnimationControllerFile> controllersList = new ArrayList<>();
+        List<AnimationControllerSet> controllersList = new ArrayList<>();
         if (raw.mainEntity.animationControllerFiles != null) {
             for (RawYsmModel.RawAnimationControllerFile file : raw.mainEntity.animationControllerFiles) {
-                Map<String, AnimationController> controllerMap = AnimationMapper.buildControllers(file.controllers, raw.properties.mergeMultilineExpr);
+                Map<String, ControllerSpec> controllerMap = AnimationMapper.buildControllers(file.controllers, raw.properties.mergeMultilineExpr);
                 if (!controllerMap.isEmpty()) {
-                    controllersList.add(new AnimationControllerFile(controllerMap));
+                    controllersList.add(new AnimationControllerSet(controllerMap));
                 }
             }
         }
 
-        MainModelData mainModelData = new MainModelData(meshes, animations, controllersList.toArray(new AnimationControllerFile[0]), textureMap, specialHandLocatorProfile);
+        MainModelData mainModelData = new MainModelData(meshes, animations, controllersList.toArray(new AnimationControllerSet[0]), textureMap, specialHandLocatorProfile);
 
         ModelMetadata modelInfo = GuiConfigMapper.buildModelInfo(raw);
-        ModelExtraResourcesFile extraResources = buildExtraResources(raw);
+        ExtraResourceBundleSpec extraResources = buildExtraResources(raw);
         com.micaftic.morpher.client.animation.molang.AnimationProgramAnalyzer.bind(animations, controllersList, extraResources.getFunctions(), modelId, GuiConfigMapper.programExpressions(raw.properties));
-        ProjectileModelFiles[] extraItemModels = buildExtraItemModels(raw, context, raw.properties.mergeMultilineExpr);
-        VehicleModelFiles[] extraEntityModels = buildExtraEntityModels(raw, context, raw.properties.mergeMultilineExpr);
+        ProjectileBundleSpec[] extraItemModels = buildExtraItemModels(raw, context, raw.properties.mergeMultilineExpr);
+        VehicleBundleSpec[] extraEntityModels = buildExtraEntityModels(raw, context, raw.properties.mergeMultilineExpr);
         Map<String, OuterFileTexture> extraTextures = buildExtraTextures(raw);
 
         return new ClientModelInfo(mainModelData, extraItemModels, extraEntityModels, extraResources, modelInfo, avatarTextures, extraTextures);
@@ -295,7 +295,7 @@ public final class ClientModelBundleAssembler {
 
     // ---- 附加资源 / 子实体 ----
 
-    private static ModelExtraResourcesFile buildExtraResources(RawYsmModel raw) {
+    private static ExtraResourceBundleSpec buildExtraResources(RawYsmModel raw) {
         Map<String, AudioTrackData> sounds = new LinkedHashMap<>();
         for (Map.Entry<String, RawYsmModel.RawDataFile> entry : raw.soundFiles.entrySet()) {
             String name = entry.getKey();
@@ -307,17 +307,12 @@ public final class ClientModelBundleAssembler {
             }
         }
 
-        Map<String, IValue> functions = new LinkedHashMap<>();
+        Map<String, HostMolangScript> functions = new LinkedHashMap<>();
         for (Map.Entry<String, RawYsmModel.RawDataFile> entry : raw.functionFiles.entrySet()) {
             String name = entry.getKey();
             byte[] data = entry.getValue().data;
             String molangScript = new String(data, StandardCharsets.UTF_8);
-            try {
-                var parser = GeckoLibCache.getMolangParser();
-                try { functions.put(name, parser.parseExpression(molangScript, true)); }
-                finally { GeckoLibCache.releaseParser(parser); }
-            } catch (Exception e) {
-            }
+            functions.put(name, HostMolangRegistry.parseExpression(molangScript, true));
         }
 
         Map<String, Map<String, String>> translations = new LinkedHashMap<>();
@@ -325,30 +320,30 @@ public final class ClientModelBundleAssembler {
             translations.put(entry.getKey(), entry.getValue().data);
         }
 
-        return new ModelExtraResourcesFile(sounds, functions, translations);
+        return new ExtraResourceBundleSpec(sounds, functions, translations);
     }
 
-    private static ProjectileModelFiles[] buildExtraItemModels(RawYsmModel raw, GeometryDescription context, boolean mergeMultilineExpr) {
-        List<ProjectileModelFiles> list = new ArrayList<>();
+    private static ProjectileBundleSpec[] buildExtraItemModels(RawYsmModel raw, GeometryDescription context, boolean mergeMultilineExpr) {
+        List<ProjectileBundleSpec> list = new ArrayList<>();
         for (Map.Entry<String, RawYsmModel.RawSubEntity> entry : raw.projectiles.entrySet()) {
             RawYsmModel.RawSubEntity sub = entry.getValue();
-            ProjectileModelFiles holder = buildSubEntityHolder(sub, context, 1, mergeMultilineExpr);
+            ProjectileBundleSpec holder = buildSubEntityHolder(sub, context, 1, mergeMultilineExpr);
             list.add(holder);
         }
-        return list.toArray(new ProjectileModelFiles[0]);
+        return list.toArray(new ProjectileBundleSpec[0]);
     }
 
-    private static VehicleModelFiles[] buildExtraEntityModels(RawYsmModel raw, GeometryDescription context, boolean mergeMultilineExpr) {
-        List<VehicleModelFiles> list = new ArrayList<>();
+    private static VehicleBundleSpec[] buildExtraEntityModels(RawYsmModel raw, GeometryDescription context, boolean mergeMultilineExpr) {
+        List<VehicleBundleSpec> list = new ArrayList<>();
         for (Map.Entry<String, RawYsmModel.RawSubEntity> entry : raw.vehicles.entrySet()) {
             RawYsmModel.RawSubEntity sub = entry.getValue();
-            VehicleModelFiles wrapper = buildSubEntityWrapper(sub, context, 1, mergeMultilineExpr);
+            VehicleBundleSpec wrapper = buildSubEntityWrapper(sub, context, 1, mergeMultilineExpr);
             list.add(wrapper);
         }
-        return list.toArray(new VehicleModelFiles[0]);
+        return list.toArray(new VehicleBundleSpec[0]);
     }
 
-    private static ProjectileModelFiles buildSubEntityHolder(RawYsmModel.RawSubEntity sub, GeometryDescription context, int textureCount, boolean mergeMultilineExpr) {
+    private static ProjectileBundleSpec buildSubEntityHolder(RawYsmModel.RawSubEntity sub, GeometryDescription context, int textureCount, boolean mergeMultilineExpr) {
         OuterFileTexture texture = null;
         TextureAlphaAnalyzer subScanner = null;
 
@@ -371,14 +366,14 @@ public final class ClientModelBundleAssembler {
         BuiltModel mesh = GeometryBaker.buildMesh(sub.model, context, textureCount, subScanner, true);
         subScanner = null;
 
-        Map<String, Animation> allAnimations = new LinkedHashMap<>();
+        Map<String, ClipSpec> allAnimations = new LinkedHashMap<>();
         for (Map.Entry<String, RawYsmModel.RawAnimationFile> entry : sub.animationFiles.entrySet()) {
-            Map<String, Animation> fileAnims = AnimationMapper.buildAnimations(entry.getValue(), mergeMultilineExpr);
+            Map<String, ClipSpec> fileAnims = AnimationMapper.buildAnimations(entry.getValue(), mergeMultilineExpr);
             allAnimations.putAll(fileAnims);
         }
-        AnimationFile combinedAnim = new AnimationFile(allAnimations);
+        AnimationClipSet combinedAnim = new AnimationClipSet(allAnimations);
 
-        Map<String, AnimationController> controllerMap = new LinkedHashMap<>();
+        Map<String, ControllerSpec> controllerMap = new LinkedHashMap<>();
         if (sub.animationControllerFiles != null) {
             for (RawYsmModel.RawAnimationControllerFile file : sub.animationControllerFiles) {
                 if (file.controllers != null && !file.controllers.isEmpty()) {
@@ -386,13 +381,13 @@ public final class ClientModelBundleAssembler {
                 }
             }
         }
-        AnimationControllerFile controllers = new AnimationControllerFile(controllerMap);
+        AnimationControllerSet controllers = new AnimationControllerSet(controllerMap);
 
         String[] matchIds = sub.matchIds != null ? sub.matchIds : new String[]{sub.identifier};
-        return new ProjectileModelFiles(matchIds, mesh, combinedAnim, controllers, texture);
+        return new ProjectileBundleSpec(matchIds, mesh, combinedAnim, controllers, texture);
     }
 
-    private static VehicleModelFiles buildSubEntityWrapper(RawYsmModel.RawSubEntity sub, GeometryDescription context, int textureCount, boolean mergeMultilineExpr) {
+    private static VehicleBundleSpec buildSubEntityWrapper(RawYsmModel.RawSubEntity sub, GeometryDescription context, int textureCount, boolean mergeMultilineExpr) {
         OuterFileTexture texture = null;
         TextureAlphaAnalyzer subScanner = null;
 
@@ -415,14 +410,14 @@ public final class ClientModelBundleAssembler {
         BuiltModel mesh = GeometryBaker.buildMesh(sub.model, context, textureCount, subScanner, true);
         subScanner = null;
 
-        Map<String, Animation> allAnimations = new LinkedHashMap<>();
+        Map<String, ClipSpec> allAnimations = new LinkedHashMap<>();
         for (RawYsmModel.RawAnimationFile animFile : sub.animationFiles.values()) {
-            Map<String, Animation> fileAnims = AnimationMapper.buildAnimations(animFile, mergeMultilineExpr);
+            Map<String, ClipSpec> fileAnims = AnimationMapper.buildAnimations(animFile, mergeMultilineExpr);
             allAnimations.putAll(fileAnims);
         }
-        AnimationFile combinedAnim = new AnimationFile(allAnimations);
+        AnimationClipSet combinedAnim = new AnimationClipSet(allAnimations);
 
-        Map<String, AnimationController> controllerMap = new LinkedHashMap<>();
+        Map<String, ControllerSpec> controllerMap = new LinkedHashMap<>();
         if (sub.animationControllerFiles != null) {
             for (RawYsmModel.RawAnimationControllerFile file : sub.animationControllerFiles) {
                 if (file.controllers != null && !file.controllers.isEmpty()) {
@@ -430,10 +425,10 @@ public final class ClientModelBundleAssembler {
                 }
             }
         }
-        AnimationControllerFile controllers = new AnimationControllerFile(controllerMap);
+        AnimationControllerSet controllers = new AnimationControllerSet(controllerMap);
 
         String[] matchIds = sub.matchIds != null ? sub.matchIds : new String[]{sub.identifier};
-        return new VehicleModelFiles(matchIds, mesh, combinedAnim, controllers, texture);
+        return new VehicleBundleSpec(matchIds, mesh, combinedAnim, controllers, texture);
     }
 
     private static Map<String, OuterFileTexture> buildExtraTextures(RawYsmModel raw) {

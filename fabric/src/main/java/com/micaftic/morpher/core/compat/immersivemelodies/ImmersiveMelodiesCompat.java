@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.compat.immersivemelodies;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import net.minecraft.world.entity.LivingEntity;
 
 public final class ImmersiveMelodiesCompat {
@@ -24,7 +24,7 @@ public final class ImmersiveMelodiesCompat {
         com.micaftic.morpher.core.compat.immersivemelodies.fabric.ImmersiveMelodiesCompatImpl.updateMelodyProgress(livingEntity, imData);
     }
 
-    public static void registerBindings(CtrlBinding binding) {
+    public static void registerBindings(HostMolangSink binding) {
         com.micaftic.morpher.core.compat.immersivemelodies.fabric.ImmersiveMelodiesCompatImpl.registerBindings(binding);
     }
 }

@@ -1,19 +1,18 @@
 package com.micaftic.morpher.client.animation;
 
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostEntityFrameState;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.core.compat.parcool.ParcoolCompat;
-import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
-import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
-import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
-import com.micaftic.morpher.geckolib3.core.EntityFrameStateTracker;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import com.micaftic.morpher.core.compat.create.CreateCompat;
+import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
+import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
+import com.micaftic.morpher.core.compat.parcool.ParcoolCompat;
+import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
+import dev.spm.core.scene.CodedLoopMode;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -55,7 +54,7 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
     );
 
     public static void registerDefaultStates() {
-        register(PlayerActionState.DEATH, ILoopType.EDefaultLoopTypes.PLAY_ONCE, Priority.HIGHEST);
+        register(PlayerActionState.DEATH, CodedLoopMode.PLAY_ONCE, Priority.HIGHEST);
         register(PlayerActionState.RIPTIDE, Priority.HIGHEST);
         register(PlayerActionState.SLEEP, Priority.HIGHEST);
         register(PlayerActionState.SWIM, Priority.HIGHEST);
@@ -67,7 +66,7 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
         register(PlayerActionState.ELYTRA_FLY, Priority.HIGH);
         register(PlayerActionState.FLY, Priority.HIGH);
         register(PlayerActionState.SWIM_STAND, Priority.NORMAL);
-        register(PlayerActionState.ATTACKED, ILoopType.EDefaultLoopTypes.PLAY_ONCE, 2);
+        register(PlayerActionState.ATTACKED, CodedLoopMode.PLAY_ONCE, 2);
         register(PlayerActionState.JUMP, Priority.NORMAL);
         register(PlayerActionState.SNEAK, Priority.NORMAL);
         register(PlayerActionState.SNEAKING, Priority.NORMAL);
@@ -80,22 +79,22 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
         return REGISTERED_STATES;
     }
 
-    private static void register(PlayerActionState state, ILoopType loopType, int priority) {
+    private static void register(PlayerActionState state, CodedLoopMode loopType, int priority) {
         register(state.animationName(), loopType, priority, (player, event) -> isState(state, player, event));
     }
 
     private static void register(PlayerActionState state, int priority) {
-        register(state, ILoopType.EDefaultLoopTypes.LOOP, priority);
+        register(state, CodedLoopMode.LOOP, priority);
     }
 
-    private static void register(String animationName, ILoopType loopType, int priority,
-                                 BiPredicate<Player, AnimationEvent<CustomPlayerEntity>> predicate) {
+    private static void register(String animationName, CodedLoopMode loopType, int priority,
+                                 BiPredicate<Player, HostActionEvent<CustomPlayerEntity>> predicate) {
         register(new AnimationState<>(animationName, loopType, priority, predicate));
     }
 
-    private static boolean isState(PlayerActionState state, Player player, AnimationEvent<CustomPlayerEntity> event) {
+    private static boolean isState(PlayerActionState state, Player player, HostActionEvent<CustomPlayerEntity> event) {
         CustomPlayerEntity animatable = event.getAnimatable();
-        EntityFrameStateTracker<?> tracker = animatable.getPositionTracker();
+        HostEntityFrameState<?> tracker = animatable.getPositionTracker();
         String cached = tracker.getCachedControllerState();
         if (cached == null) {
             cached = ControllerActionResolver.resolve(animatable, player, event);
@@ -109,25 +108,25 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
     }
 
     @Override
-    public PlayState predicate(AnimationEvent<CustomPlayerEntity> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<CustomPlayerEntity> event) {
         Player player = event.getAnimatable().getEntity();
         if (player == null) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         if (event.getAnimatable() instanceof IPreviewAnimatable) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         ModelAssembly modelAssembly = event.getAnimatable().getModelAssembly();
         PlayerModelBundle animationBundle = modelAssembly == null ? null : modelAssembly.getAnimationBundle();
         if (animationBundle == null) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         if (ParcoolCompat.isPlayerParcooling(player)) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         Entity vehicle = player.getVehicle();
         if (vehicle != null && vehicle.isAlive()) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         if (CreateCompat.isPlayerOnCreateContraption(player)) {
             return IAnimationPredicate.predicate(event, "parcool:ride_zipline");
@@ -136,12 +135,12 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
             for (AnimationState<Player, CustomPlayerEntity> animationState : data.get(i)) {
                 if (animationState.getPredicate().test(player, event)) {
                     String name = animationState.getAnimationName();
-                    ILoopType loopType = animationState.getLoopType();
-                    PlayState slashBladePlayState = SlashBladeCompat.handleSlashBladeAnim(player, event, name, loopType);
+                    CodedLoopMode loopType = animationState.getLoopType();
+                    HostPlayState.Decision slashBladePlayState = SlashBladeCompat.handleSlashBladeAnim(player, event, name, loopType);
                     if (slashBladePlayState != null) {
                         return slashBladePlayState;
                     }
-                    PlayState taczPlayState = TacCompat.handleTaczAnimState(player, event, name, loopType);
+                    HostPlayState.Decision taczPlayState = TacCompat.handleTaczAnimState(player, event, name, loopType);
                     if (taczPlayState == null) {
                         taczPlayState = SWarfareCompat.handleTaczAnim(player, event, name, loopType);
                     }
@@ -149,6 +148,6 @@ public class AnimationManager implements IAnimationPredicate<CustomPlayerEntity>
                 }
             }
         }
-        return PlayState.STOP;
+        return HostPlayState.Decision.STOP;
     }
 }

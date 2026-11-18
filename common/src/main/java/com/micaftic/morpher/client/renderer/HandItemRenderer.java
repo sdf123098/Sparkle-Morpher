@@ -4,7 +4,7 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.diagnostics.FirstPersonRenderDiagnostics;
 import com.micaftic.morpher.client.diagnostics.FirstPersonRenderDiagnostics.Outcome;
-import com.micaftic.morpher.client.entity.PlayerGeoEntity;
+import com.micaftic.morpher.client.entity.SpmPlayerEntity;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.gltf.GltfMaterialResolver;
 import com.micaftic.morpher.client.renderer.gltf.GltfRenderTypes;
@@ -12,9 +12,8 @@ import com.micaftic.morpher.client.renderer.gltf.GltfVertexConsumerRenderer;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
 import com.micaftic.morpher.client.upload.UploadManager;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
-import com.micaftic.morpher.geckolib3.geo.LayerTypeConstants;
 import com.micaftic.morpher.client.render.ModelRendererBridge;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.client.renderer.gltf.GltfPlayerActionMapper;
 import com.micaftic.morpher.resource.gltf.GltfAnimationClock;
 import com.micaftic.morpher.resource.gltf.GltfAnimationController;
@@ -35,7 +34,7 @@ import java.util.Locale;
 
 public class HandItemRenderer {
 
-    private PlayerGeoEntity geoModel = null;
+    private SpmPlayerEntity geoModel = null;
 
     /**
      * 渲染第一人称自定义手模型。
@@ -47,15 +46,15 @@ public class HandItemRenderer {
         if (modelAssembly.isGltf()) {
             return renderGltfHand(localPlayer, modelAssembly, capability.getModelId(), arm, poseStack, collector, packedLight, partialTick);
         }
-        AnimatedGeoModel model;
+        ModelScenePose model;
         if (this.geoModel == null || this.geoModel.getEntity() != localPlayer) {
-            this.geoModel = new PlayerGeoEntity(localPlayer, capability);
+            this.geoModel = new SpmPlayerEntity(localPlayer, capability);
         }
         this.geoModel.tickModel();
         ModelPreviewRenderer.setFirstPersonMode(true);
         try {
             if (this.geoModel.processAnimationImpl(partialTick, true) == null || (model = this.geoModel.getCurrentModel()) == null) {
-                FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_ANIMATION_NOT_READY, capability.getModelId(), "geckolib", null);
+                FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_ANIMATION_NOT_READY, capability.getModelId(), "spm", null);
                 return false;
             }
         } finally {
@@ -64,12 +63,12 @@ public class HandItemRenderer {
         ClientModelManager.markModelUsed(this.geoModel.getModelId());
         SpecialPlayerRenderEvent event = new SpecialPlayerRenderEvent(localPlayer, capability, capability.getModelId());
         if (SpecialPlayerRenderEvent.post(event).isFalse()) {
-            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_VETOED_BY_EVENT, capability.getModelId(), "geckolib", null);
+            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_VETOED_BY_EVENT, capability.getModelId(), "spm", null);
             return false;
         }
         Identifier Identifier = event.getTextureLocation() == null ? capability.getTextureLocation() : event.getTextureLocation();
         int textureIndex = event.getTextureLocation() == null ? capability.getTextureIndex() : 0;
-        int renderPartMask = arm == HumanoidArm.LEFT ? LayerTypeConstants.TYPE_LEFT : LayerTypeConstants.TYPE_RIGHT;
+        int renderPartMask = arm == HumanoidArm.LEFT ? RenderPartMask.TYPE_LEFT : RenderPartMask.TYPE_RIGHT;
         poseStack.pushPose();
         if (arm == HumanoidArm.LEFT) {
             poseStack.translate(0.25d, 1.8d, 0.0d);

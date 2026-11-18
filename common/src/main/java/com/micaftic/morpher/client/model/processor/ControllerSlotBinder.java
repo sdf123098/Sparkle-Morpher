@@ -1,9 +1,9 @@
 package com.micaftic.morpher.client.model.processor;
 
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import com.micaftic.morpher.client.model.AnimationDataProvider;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
-import com.micaftic.morpher.client.entity.GeoEntity;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
 import it.unimi.dsi.fastutil.objects.ObjectRBTreeSet;
 
@@ -11,7 +11,7 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
-public class ControllerSlotBinder<T extends GeoEntity<?>, TModel> implements ModelProcessor<T, TModel> {
+public class ControllerSlotBinder<T extends SpmEntity<?>, TModel> implements ModelProcessor<T, TModel> {
 
     private final Predicate<String> controllerNameMatcher;
 
@@ -19,9 +19,9 @@ public class ControllerSlotBinder<T extends GeoEntity<?>, TModel> implements Mod
 
     private final AnimationDataProvider<TModel> animationDataProvider;
 
-    private final BiFunction<String, T, IAnimationController<T>> controllerFactory;
+    private final BiFunction<String, T, HostControllerSlot<T>> controllerFactory;
 
-    public ControllerSlotBinder(String prefix, String slotName, AnimationDataProvider<TModel> animationDataProvider, BiFunction<String, T, IAnimationController<T>> controllerFactory) {
+    public ControllerSlotBinder(String prefix, String slotName, AnimationDataProvider<TModel> animationDataProvider, BiFunction<String, T, HostControllerSlot<T>> controllerFactory) {
         this.controllerNameMatcher = Pattern.compile(String.format("^%s\\.%s(_.+){0,1}$", prefix, slotName)).asMatchPredicate();
         this.molangEventMatcher = Pattern.compile(String.format("^%s_ctrl_%s(_.+){0,1}$", prefix, slotName)).asMatchPredicate();
         this.animationDataProvider = animationDataProvider;

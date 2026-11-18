@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.compat.swem;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import net.minecraft.world.entity.LivingEntity;
 
 public final class SWEMCompat {
@@ -16,7 +16,7 @@ public final class SWEMCompat {
         return com.micaftic.morpher.core.compat.swem.fabric.SWEMCompatImpl.getHorseGaitName(livingEntity);
     }
 
-    public static void registerControllerFunctions(CtrlBinding ctrlBinding) {
-        com.micaftic.morpher.core.compat.swem.fabric.SWEMCompatImpl.registerControllerFunctions(ctrlBinding);
+    public static void registerControllerFunctions(HostMolangSink sink) {
+        com.micaftic.morpher.core.compat.swem.fabric.SWEMCompatImpl.registerControllerFunctions(sink);
     }
 }

@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.compat.bettercombat.fabric;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import dev.spm.core.scene.MolangValue;
 
 public final class BetterCombatCompatImpl {
 
@@ -12,7 +12,7 @@ public final class BetterCombatCompatImpl {
         return false;
     }
 
-    public static void registerBindings(CtrlBinding binding) {
-        binding.clientPlayerEntityVar("bcombat_attack_animation", ctx -> StringPool.EMPTY);
+    public static void registerBindings(HostMolangSink binding) {
+        binding.var("bcombat_attack_animation", event -> MolangValue.text(""));
     }
 }

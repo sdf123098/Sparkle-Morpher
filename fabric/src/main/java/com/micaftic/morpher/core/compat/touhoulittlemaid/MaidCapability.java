@@ -1,14 +1,13 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
-import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.client.entity.GeoEntity;
+import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangScript;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.entity.RoamingPropertyHolder;
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.molang.parser.ParseException;
-import com.micaftic.morpher.molang.runtime.Struct;
-import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
+import com.micaftic.morpher.client.render.BoneIds;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -24,11 +23,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 @Environment(EnvType.CLIENT)
-public final class MaidCapability extends LivingAnimatable<LivingEntity> {
+public final class MaidCapability extends LivingAnimatable<LivingEntity> implements RoamingPropertyHolder {
     private static final Map<UUID, MaidCapability> CACHE = new ConcurrentHashMap<>();
 
     @Nullable
-    private Struct serverVars;
+    private RoamingStruct serverVars;
     private String rouletteAnimation = "";
     private boolean cloudModelStateApplied;
     private boolean localModelStateApplied;
@@ -48,7 +47,9 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     }
 
     /** Cloud bindings have priority over the optional legacy maid synchronization. */
-    public boolean hasLocalState() { return this.localModelStateApplied; }
+    public boolean hasLocalState() {
+        return this.localModelStateApplied;
+    }
 
     public void applyLocalState(String modelId, String textureId) {
         awaitAsyncResult();
@@ -62,20 +63,34 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
         setForceDisabled(false);
     }
 
-    public boolean hasPeerState() { return this.peerModelStateApplied; }
-    public boolean hasCloudState() { return this.cloudModelStateApplied; }
+    public boolean hasPeerState() {
+        return this.peerModelStateApplied;
+    }
+
+    public boolean hasCloudState() {
+        return this.cloudModelStateApplied;
+    }
+
     public void applyPeerState(String modelId, String textureId) {
         if (this.localModelStateApplied) return;
         awaitAsyncResult();
         this.peerModelStateApplied = true;
         this.cloudModelStateApplied = false;
-        clearDisplayMotion();this.rouletteAnimation = "";this.serverVars = null;
-        initModelWithTexture(modelId, textureId);setForceDisabled(false);
+        clearDisplayMotion();
+        this.rouletteAnimation = "";
+        this.serverVars = null;
+        initModelWithTexture(modelId, textureId);
+        setForceDisabled(false);
     }
+
     public void clearPeerState() {
         if (!this.peerModelStateApplied) return;
-        this.peerModelStateApplied = false;clearDisplayMotion();
-        this.rouletteAnimation = "";this.serverVars = null;resetModel();setForceDisabled(false);
+        this.peerModelStateApplied = false;
+        clearDisplayMotion();
+        this.rouletteAnimation = "";
+        this.serverVars = null;
+        resetModel();
+        setForceDisabled(false);
     }
 
     public void clearLocalState() {
@@ -87,7 +102,10 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     }
 
     public void applyCloudState(String modelId, String textureId) {
-        if (this.localModelStateApplied || (this.peerModelStateApplied && !com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud())) return;
+        if (this.localModelStateApplied
+                || (this.peerModelStateApplied && !com.micaftic.morpher.core.network.NetworkAccess.state().preset().prefersCloud())) {
+            return;
+        }
         this.peerModelStateApplied = false;
         if (modelId == null || modelId.isBlank()) {
             clearCloudState();
@@ -119,12 +137,13 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
     /** Client display values only. Does not change the maid's native AI or equipment. */
     public void applyDisplayMotion(String animation, Map<String, Float> variables) {
         if (this.serverVars != null && java.util.Objects.equals(this.displayMotionVariables, variables)
-                && this.rouletteAnimation.equals(animation)) return;
+                && this.rouletteAnimation.equals(animation)) {
+            return;
+        }
         awaitAsyncResult();
         var values = new Int2FloatOpenHashMap();
-        variables.forEach((name, value) -> values.put(
-            com.micaftic.morpher.geckolib3.core.molang.util.StringPool.computeIfAbsent(name), value.floatValue()));
-        this.serverVars = new Int2FloatOpenHashMapStruct(values);
+        variables.forEach((name, value) -> values.put(BoneIds.id(name), value.floatValue()));
+        this.serverVars = RoamingStruct.readOnly(values);
         this.displayMotionVariables = Map.copyOf(variables);
         this.rouletteAnimation = animation;
     }
@@ -141,11 +160,7 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
         if (!isModelReady() || expression == null || expression.isBlank()) {
             return;
         }
-        try {
-            executeExpression(GeckoLibCache.parseSimpleExpression(expression), true, false, null);
-        } catch (ParseException e) {
-            YesSteveModel.LOGGER.error("Failed to execute maid molang " + expression, e);
-        }
+        executeExpression(HostMolangScript.compile(expression), true, false, null);
     }
 
     @Override
@@ -159,23 +174,18 @@ public final class MaidCapability extends LivingAnimatable<LivingEntity> {
 
     @Override
     @NotNull
-    public GeoEntity.ModelWrapper buildRenderShape(ModelAssembly modelAssembly, boolean isDefault) {
+    public SpmEntity.ModelWrapper buildRenderShape(ModelAssembly modelAssembly, boolean isDefault) {
         return new TexturedModelWrapper(modelAssembly, isDefault, true, true, 600);
     }
 
+    @Override
     @Nullable
-    public Struct getServerVarContainer() {
+    public RoamingStruct getServerVarContainer() {
         return this.serverVars;
     }
 
     @Override
-    public void setupAnim(float seekTime, boolean firstPerson) {
-        super.setupAnim(seekTime, firstPerson);
-        getEvaluationContext().setRoamingProperties(this.serverVars);
-    }
-
-    @Override
-    public boolean shouldSkipAnimation(AnimationEvent<?> event) {
+    public boolean shouldSkipAnimation(HostActionEvent<?> event) {
         return event.isFirstPerson();
     }
 }

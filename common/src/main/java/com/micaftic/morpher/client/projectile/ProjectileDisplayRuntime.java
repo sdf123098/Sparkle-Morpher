@@ -8,7 +8,7 @@ import com.micaftic.morpher.cloud.client.EntityDisplayContext;
 import com.micaftic.morpher.cloud.client.ProjectileFiringCandidates;
 import com.micaftic.morpher.core.api.resource.ResourceApi;
 import com.micaftic.morpher.core.model.catalog.LocalModelCatalog;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import com.micaftic.morpher.client.render.BoneIds;
 import com.micaftic.morpher.util.accessors.ProjectileStateAccessor;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -179,7 +179,7 @@ public final class ProjectileDisplayRuntime {
         capability.setDisplayBundleKey(bundleKey);
         capability.updateModelId(runtimeModelId);
         var values = new Int2FloatOpenHashMap();
-        frozen.forEach((name, value) -> values.put(StringPool.computeIfAbsent(name), value.floatValue()));
+        frozen.forEach((name, value) -> values.put(BoneIds.id(name), value.floatValue()));
         capability.setFloatProperties(values);
         if (entity instanceof ProjectileStateAccessor state) state.ysm$setDisplayFiringItem(firingItemId);
         remoteLeases.put(entityUuid, ClientModelManager.acquireRuntimeModelLease(runtimeModelId));
@@ -240,7 +240,7 @@ public final class ProjectileDisplayRuntime {
         capability.setDisplayBundleKey(snapshot.model().bundleKey());
         capability.updateModelId(snapshot.model().runtimeModelId());
         var values = new Int2FloatOpenHashMap();
-        snapshot.variables().forEach((name, value) -> values.put(StringPool.computeIfAbsent(name), value.floatValue()));
+        snapshot.variables().forEach((name, value) -> values.put(BoneIds.id(name), value.floatValue()));
         capability.setFloatProperties(values);
         if (entity instanceof ProjectileStateAccessor state) state.ysm$setDisplayFiringItem(snapshot.firingItemId());
         retainLocalLease(snapshot.entityUuid(), snapshot.model().runtimeModelId());

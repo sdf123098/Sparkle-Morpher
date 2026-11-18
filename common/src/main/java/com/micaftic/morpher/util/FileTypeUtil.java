@@ -1,7 +1,6 @@
 package com.micaftic.morpher.util;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.google.common.collect.Sets;
 import it.unimi.dsi.fastutil.Pair;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -28,7 +27,7 @@ public final class FileTypeUtil {
     public static Pair<String, String> splitFileNameAndParentDir(String filePath) {
         int lastSlashIndex = filePath.lastIndexOf('/');
         if (lastSlashIndex == -1) {
-            return Pair.of(filePath, StringPool.EMPTY);
+            return Pair.of(filePath, "");
         }
         return Pair.of(filePath.substring(lastSlashIndex + 1), filePath.substring(0, lastSlashIndex + 1));
     }
@@ -51,7 +50,7 @@ public final class FileTypeUtil {
 
     public static String getFinalPathSegment(String path) {
         if (path == null || path.isEmpty()) {
-            return StringPool.EMPTY;
+            return "";
         }
 
         String trimmedPath = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;

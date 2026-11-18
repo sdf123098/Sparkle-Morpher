@@ -2,19 +2,18 @@ package com.micaftic.morpher.client.animation.predicate;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.animation.RidingAnimationPlan;
+import com.micaftic.morpher.client.animation.condition.ConditionChair;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
+import com.micaftic.morpher.client.animation.condition.ConditionVehicle;
+import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
+import com.micaftic.morpher.client.entity.IPreviewAnimatable;
+import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.core.compat.carryon.CarryOnCompat;
 import com.micaftic.morpher.core.compat.swem.SWEMCompat;
-import com.micaftic.morpher.client.animation.condition.ConditionChair;
-import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.client.compat.touhoulittlemaid.TouhouLittleMaidClientCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.client.entity.IPreviewAnimatable;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import com.micaftic.morpher.client.animation.condition.ConditionVehicle;
+import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.happyghast.HappyGhast;
@@ -29,12 +28,12 @@ import java.util.Objects;
 
 public class LivingMovementAnimationPredicate implements IAnimationPredicate<LivingAnimatable<?>> {
     @Override
-    public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
-        return Objects.requireNonNullElse(renderRidingAnimation(event), PlayState.STOP);
+    public HostPlayState.Decision predicate(HostActionEvent<LivingAnimatable<?>> event) {
+        return Objects.requireNonNullElse(renderRidingAnimation(event), HostPlayState.Decision.STOP);
     }
 
     @Nullable
-    public PlayState renderRidingAnimation(AnimationEvent<LivingAnimatable<?>> event) {
+    public HostPlayState.Decision renderRidingAnimation(HostActionEvent<LivingAnimatable<?>> event) {
         Entity vehicle;
         ConditionChair conditionChair;
         LivingEntity livingEntity = event.getAnimatable().getEntity();
@@ -43,20 +42,20 @@ public class LivingMovementAnimationPredicate implements IAnimationPredicate<Liv
         }
         String str = SWEMCompat.getHorseGaitName(livingEntity);
         if (StringUtils.isNoneBlank(str)) {
-            return IAnimationPredicate.playAnimationWithLoop(event, str, ILoopType.EDefaultLoopTypes.LOOP);
+            return IAnimationPredicate.playAnimationWithLoop(event, str, CodedLoopMode.LOOP);
         }
         ConditionManager conditionManager = event.getAnimatable().getModelConfig();
         if (TouhouLittleMaidCompat.isLoaded() && (conditionChair = conditionManager.getChair()) != null) {
             String str2 = conditionChair.doTest(livingEntity);
             if (StringUtils.isNoneBlank(str2)) {
-                return IAnimationPredicate.playAnimationWithLoop(event, str2, ILoopType.EDefaultLoopTypes.LOOP);
+                return IAnimationPredicate.playAnimationWithLoop(event, str2, CodedLoopMode.LOOP);
             }
         }
         ConditionVehicle conditionVehicle = conditionManager.getVehicle();
         if (conditionVehicle != null) {
             String str3 = conditionVehicle.doTest(livingEntity);
             if (StringUtils.isNoneBlank(str3)) {
-                return IAnimationPredicate.playAnimationWithLoop(event, str3, ILoopType.EDefaultLoopTypes.LOOP);
+                return IAnimationPredicate.playAnimationWithLoop(event, str3, CodedLoopMode.LOOP);
             }
         }
         if (vehicle instanceof Pig) {
@@ -71,14 +70,12 @@ public class LivingMovementAnimationPredicate implements IAnimationPredicate<Liv
         boolean z = (livingEntity instanceof Player var8) && CarryOnCompat.isPlayerCarrying(var8);
         boolean z2 = TouhouLittleMaidCompat.isMaidEntity(livingEntity) && (livingEntity.getVehicle() instanceof Player);
         if (z || z2) {
-            return IAnimationPredicate.playAnimationWithLoop(event, "carryon:princess", ILoopType.EDefaultLoopTypes.LOOP);
+            return IAnimationPredicate.playAnimationWithLoop(event, "carryon:princess", CodedLoopMode.LOOP);
         }
-        PlayState playState = TouhouLittleMaidClientCompat.handleMaidInteraction(event, livingEntity, vehicle);
+        HostPlayState.Decision playState = TouhouLittleMaidClientCompat.handleMaidInteraction(event, livingEntity, vehicle);
         if (playState != null) {
             return playState;
         }
-        // 乐魂（快乐恶魂）是坐上去的载具，不跨骑：必须显式识别，否则会被下面的 LivingEntity
-        // 兜底当成骑乘，套用马的骑乘姿势。
         if (vehicle instanceof HappyGhast) {
             return playPlanned(event, RidingAnimationPlan.Kind.SEATED);
         }
@@ -88,12 +85,12 @@ public class LivingMovementAnimationPredicate implements IAnimationPredicate<Liv
         return playPlanned(event, RidingAnimationPlan.Kind.SEATED);
     }
 
-    private PlayState playPlanned(AnimationEvent<LivingAnimatable<?>> event, RidingAnimationPlan.Kind kind) {
+    private HostPlayState.Decision playPlanned(HostActionEvent<LivingAnimatable<?>> event, RidingAnimationPlan.Kind kind) {
         var assembly = event.getAnimatable().getModelAssembly();
         var bundle = assembly == null ? null : assembly.getAnimationBundle();
-        if (bundle == null) return PlayState.STOP;
+        if (bundle == null) return HostPlayState.Decision.STOP;
         String animation = bundle.getRidingAnimationPlan().selection(kind).animation();
-        return animation == null ? PlayState.STOP
-                : IAnimationPredicate.playAnimationWithLoop(event, animation, ILoopType.EDefaultLoopTypes.LOOP);
+        return animation == null ? HostPlayState.Decision.STOP
+                : IAnimationPredicate.playAnimationWithLoop(event, animation, CodedLoopMode.LOOP);
     }
 }

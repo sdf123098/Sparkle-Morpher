@@ -1,5 +1,6 @@
 package com.micaftic.morpher.resource;
 
+import com.micaftic.morpher.client.core.HostMolangScript;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -23,14 +24,9 @@ class AnimationParticleImportTest {
         root.add("particle_effects", effects);
         var frames = AnimationParticleEvents.read(root);
         assertEquals(3, frames.size());
-        var function = new com.micaftic.morpher.client.animation.molang.functions.ysm.AnimationParticleFunction();
-        com.micaftic.morpher.molang.runtime.binding.ObjectBinding binding = name ->
-                "animation_particle".equals(name) ? function : null;
-        var parser = new com.micaftic.morpher.geckolib3.core.molang.MolangParser(java.util.Map.of("ysm", binding));
         for (var frame : frames) {
-            var value = (com.micaftic.morpher.geckolib3.core.molang.value.MolangValue)
-                    parser.parseExpression(frame.events.getFirst(), false);
-            assertTrue(value.parsedSuccessfully(), value.failure());
+            HostMolangScript compiled = HostMolangScript.compile(frame.events.getFirst());
+            assertTrue(compiled.parsedSuccessfully(), compiled.failure());
         }
     }
 

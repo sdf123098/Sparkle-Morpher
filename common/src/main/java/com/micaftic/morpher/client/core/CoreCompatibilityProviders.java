@@ -1,12 +1,5 @@
 package com.micaftic.morpher.client.core;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
-import com.micaftic.morpher.client.animation.molang.TLMBinding;
-import com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import com.micaftic.morpher.molang.runtime.Variable;
-import com.micaftic.morpher.molang.runtime.binding.ObjectBinding;
-import com.micaftic.morpher.molang.runtime.binding.ValueConversions;
 import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.LivingEntity;
 import org.jetbrains.annotations.Nullable;
@@ -52,70 +45,38 @@ public final class CoreCompatibilityProviders {
         if (entity == null) {
             return defaults;
         }
-        AnimationContext<LivingEntity> animContext = new AnimationContext<>(entity, null, null, null);
-        ExpressionEvaluator<AnimationContext<LivingEntity>> evaluator = ExpressionEvaluator.evaluator(animContext);
         Map<String, MolangValue> sampled = new LinkedHashMap<>(defaults.size());
         for (Map.Entry<String, MolangValue> entry : defaults.entrySet()) {
             String key = entry.getKey();
             MolangValue fallback = entry.getValue();
-            Object binding = resolveBinding(key);
-            if (binding == null) {
-                sampled.put(key, fallback);
-                continue;
+            MolangValue value;
+            try {
+                value = HostMolangBindings.sampleExtensionVar(key, entity);
+            } catch (Throwable ignored) {
+                value = null;
             }
-            sampled.put(key, evaluateAsCoreValue(binding, evaluator, fallback));
+            sampled.put(key, coerceValue(value, fallback));
         }
         return Map.copyOf(sampled);
     }
 
-    private static @Nullable Object resolveBinding(String key) {
-        int dot = key.indexOf('.');
-        if (dot <= 0 || dot + 1 >= key.length()) {
-            return null;
-        }
-        String namespace = key.substring(0, dot);
-        String name = key.substring(dot + 1);
-        ObjectBinding source;
-        try {
-            source = switch (namespace) {
-                case "ctrl" -> CtrlBinding.INSTANCE.get();
-                case "tlm" -> TLMBinding.INSTANCE.get();
-                default -> null;
-            };
-        } catch (org.apache.commons.lang3.concurrent.ConcurrentException ignored) {
-            return null;
-        }
-        return source == null ? null : source.getProperty(name);
-    }
-
-    private static MolangValue evaluateAsCoreValue(
-            Object binding,
-            ExpressionEvaluator<AnimationContext<LivingEntity>> evaluator,
-            MolangValue fallback) {
-        try {
-            Object raw;
-            if (binding instanceof Variable variable) {
-                raw = variable.evaluate(evaluator);
-            } else {
-                raw = binding;
-            }
-            if (raw == null) {
-                return fallback;
-            }
-            if (fallback instanceof MolangValue.BooleanValue) {
-                return MolangValue.bool(ValueConversions.asBoolean(raw));
-            }
-            if (fallback instanceof MolangValue.NumberValue) {
-                double n = ValueConversions.asDouble(raw);
-                return Double.isFinite(n) ? MolangValue.number(n) : fallback;
-            }
-            if (fallback instanceof MolangValue.TextValue) {
-                String text = ValueConversions.asString(raw);
-                return text != null ? MolangValue.text(text) : fallback;
-            }
-            return fallback;
-        } catch (Throwable ignored) {
+    private static MolangValue coerceValue(@Nullable MolangValue value, MolangValue fallback) {
+        if (value == null || value == MolangValue.missing()) {
             return fallback;
         }
+        if (fallback instanceof MolangValue.BooleanValue) {
+            return MolangValue.bool(value.truth());
+        }
+        if (fallback instanceof MolangValue.NumberValue) {
+            double n = value.number();
+            return Double.isFinite(n) ? MolangValue.number(n) : fallback;
+        }
+        if (fallback instanceof MolangValue.TextValue) {
+            if (value instanceof MolangValue.TextValue text && text.value() != null) {
+                return text;
+            }
+            return fallback;
+        }
+        return value;
     }
 }

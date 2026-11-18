@@ -1,13 +1,11 @@
 package com.micaftic.morpher.client.animation;
 
 import com.micaftic.morpher.capability.PlayerCapability;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostEntityFrameState;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.core.compat.parcool.ParcoolCompat;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.EntityFrameStateTracker;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
-import com.micaftic.morpher.geckolib3.util.MovementQuery;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
@@ -53,26 +51,28 @@ public final class ControllerActionResolver {
     }
 
     /** 带帧内缓存的状态解析（Molang / 渲染路径使用）。 */
-    public static String resolve(IContext<LivingEntity> context) {
-        LivingEntity entity = context.entity();
-        AnimatableEntity<?> animatable = context.geoInstance();
-        EntityFrameStateTracker<?> tracker = animatable.getPositionTracker();
+    public static String resolve(HostActionEvent<?> event) {
+        if (event == null || !(event.getAnimatable().getEntity() instanceof LivingEntity entity)) {
+            return PlayerActionState.NONE.animationName();
+        }
+        HostAnimatable<?> animatable = event.getAnimatable();
+        HostEntityFrameState<?> tracker = animatable.getPositionTracker();
         String cachedState = tracker.getCachedControllerState();
         if (cachedState != null) {
             return cachedState;
         }
-        String state = resolve(animatable, entity, context.animationEvent());
+        String state = resolve(animatable, entity, event);
         tracker.setCachedControllerState(state);
         return state;
     }
 
     /** String 兼容层：映射为统一的 {@link PlayerActionState} 后再取动画名。 */
-    public static String resolve(AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
+    public static String resolve(HostAnimatable<?> animatable, LivingEntity entity, HostActionEvent<?> event) {
         return resolveState(animatable, entity, event).animationName();
     }
 
     /** 唯一权威判定：直接返回状态枚举。 */
-    public static PlayerActionState resolveState(AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
+    public static PlayerActionState resolveState(HostAnimatable<?> animatable, LivingEntity entity, HostActionEvent<?> event) {
         if (entity == null || animatable instanceof IPreviewAnimatable || isParcooling(entity)) {
             return PlayerActionState.NONE;
         }
@@ -80,8 +80,8 @@ public final class ControllerActionResolver {
     }
 
     /** 采集帧级动作快照（纯读取，无副作用）。 */
-    public static PlayerActionSnapshot snapshot(AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
-        EntityFrameStateTracker<?> tracker = animatable.getPositionTracker();
+    public static PlayerActionSnapshot snapshot(HostAnimatable<?> animatable, LivingEntity entity, HostActionEvent<?> event) {
+        HostEntityFrameState<?> tracker = animatable.getPositionTracker();
         float groundSpeed = getGroundSpeed(entity, tracker, event);
         float verticalSpeed = getVerticalSpeed(entity, tracker);
         boolean moving = groundSpeed > MIN_MOVEMENT_SPEED;
@@ -170,23 +170,23 @@ public final class ControllerActionResolver {
         return PlayerActionState.IDLE;
     }
 
-    public static boolean isState(String expectedState, AnimatableEntity<?> animatable, LivingEntity entity, AnimationEvent<?> event) {
+    public static boolean isState(String expectedState, HostAnimatable<?> animatable, LivingEntity entity, HostActionEvent<?> event) {
         return expectedState.equals(resolve(animatable, entity, event));
     }
 
-    public static boolean isState(String expectedState, IContext<LivingEntity> context) {
-        return expectedState.equals(resolve(context));
+    public static boolean isState(String expectedState, HostActionEvent<?> event) {
+        return expectedState.equals(resolve(event));
     }
 
-    public static float getGroundSpeed(LivingEntity entity, EntityFrameStateTracker<?> tracker, AnimationEvent<?> event) {
-        return MovementQuery.getGroundSpeed(entity, tracker, event);
+    public static float getGroundSpeed(LivingEntity entity, HostEntityFrameState<?> tracker, HostActionEvent<?> event) {
+        return tracker.getGroundSpeed(entity, event);
     }
 
-    public static float getVerticalSpeed(LivingEntity entity, EntityFrameStateTracker<?> tracker) {
-        return MovementQuery.getVerticalSpeed(entity, tracker);
+    public static float getVerticalSpeed(LivingEntity entity, HostEntityFrameState<?> tracker) {
+        return tracker.getVerticalSpeed(entity);
     }
 
-    public static boolean isFlying(AnimatableEntity<?> animatable, LivingEntity entity) {
+    public static boolean isFlying(HostAnimatable<?> animatable, LivingEntity entity) {
         if (entity.getPose() == Pose.FALL_FLYING && entity.isFallFlying()) {
             return false;
         }

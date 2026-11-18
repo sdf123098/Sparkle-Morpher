@@ -14,7 +14,7 @@ class ClassicHudPoseReuseContractTest {
 
     @Test
     void hudReusesWorldPoseAndKeepsHeadTrackingSeparate() throws IOException {
-        String animatable = RepoSourceLookup.readSource("com/micaftic/morpher/geckolib3/core/AnimatableEntity.java");
+        String animatable = RepoSourceLookup.readSource("com/micaftic/morpher/client/core/HostAnimatable.java");
         assertTrue(animatable.contains("HudAnimationGate.decide(this, event)"),
                 "HUD animation decisions must go through HudAnimationGate");
         assertTrue(animatable.contains("HudPoseCache.applyTo(this)"),
@@ -69,8 +69,8 @@ class ClassicHudPoseReuseContractTest {
 
     @Test
     void modernHudIsGone() throws IOException {
-        String animatable = RepoSourceLookup.readSource("com/micaftic/morpher/geckolib3/core/AnimatableEntity.java");
-        assertFalse(animatable.contains("modernhud"), "AnimatableEntity must not reference the removed modern HUD");
+        String animatable = RepoSourceLookup.readSource("com/micaftic/morpher/client/core/HostAnimatable.java");
+        assertFalse(animatable.contains("modernhud"), "HostAnimatable must not reference the removed modern HUD");
 
         String overlay = RepoSourceLookup.readSource("com/micaftic/morpher/client/renderer/ExtraPlayerOverlay.java");
         assertFalse(overlay.contains("ModernHudRenderer"), "ExtraPlayerOverlay must not reference the removed modern HUD");

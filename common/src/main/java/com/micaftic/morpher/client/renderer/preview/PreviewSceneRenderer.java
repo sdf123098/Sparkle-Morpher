@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.renderer.preview;
 
 import com.micaftic.morpher.client.animation.AnimationTracker;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
+import com.micaftic.morpher.client.core.HostAnimatable;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -140,7 +140,7 @@ public final class PreviewSceneRenderer {
         buffer.addVertex(pose.pose(), x4, y4, z4).setColor(r, g, b, 1.0f).setNormal(pose, nx, ny, nz);
     }
 
-    public static void renderVehicleForAnimation(float yaw, AnimatableEntity animatableEntity, AnimationTracker animationTracker, float partialTick, PoseStack poseStack, EntityRenderDispatcher entityRenderDispatcher, MultiBufferSource.BufferSource bufferSource) throws ExecutionException {
+    public static void renderVehicleForAnimation(float yaw, HostAnimatable<?> animatableEntity, AnimationTracker animationTracker, float partialTick, PoseStack poseStack, EntityRenderDispatcher entityRenderDispatcher, MultiBufferSource.BufferSource bufferSource) throws ExecutionException {
         if (animationTracker == null) {
             return;
         }

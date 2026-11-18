@@ -1,32 +1,83 @@
 package com.micaftic.morpher.client.animation.particle;
 
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
+import com.micaftic.morpher.client.core.HostAnimationAssets;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.client.render.ModelBone;
+import com.micaftic.morpher.resource.pojo.RawYsmModel;
+import dev.spm.core.api.BonePose;
+import dev.spm.core.api.CancellationToken;
+import dev.spm.core.api.ModelDocument;
+import dev.spm.core.api.Skeleton;
+import dev.spm.core.scene.MolangBindings;
+import dev.spm.core.scene.PoseAnimationController;
+import dev.spm.core.scene.PoseAnimationLibrary;
+import dev.spm.core.scene.PoseControllerDefinition;
+import dev.spm.core.scene.SceneInputs;
+import dev.spm.core.scene.ScriptBudget;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class AnimationParticleRuntimeTest {
     @Test
-    void inactiveEventsDoNotEvaluateTheirStartupScript() throws Exception {
-        var calls = new AtomicInteger();
-        com.micaftic.morpher.molang.runtime.Function bump = (context, arguments) -> calls.incrementAndGet();
-        var script = com.micaftic.morpher.molang.MolangEngine.fromCustomBinding(
-                name -> "bump".equals(name) ? bump : null).parse("bump()").getFirst();
-        var arguments = new com.micaftic.morpher.molang.runtime.Function.ArgumentCollection(List.of(
-                com.micaftic.morpher.molang.parser.ast.FloatExpression.ZERO,
-                com.micaftic.morpher.molang.parser.ast.FloatExpression.ZERO, script));
-        var owner = new com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext<net.minecraft.world.entity.Entity>(
-                null, null, null, null);
-        var evaluator = new com.micaftic.morpher.molang.runtime.ExpressionEvaluatorImpl<
-                com.micaftic.morpher.geckolib3.core.molang.context.IContext<net.minecraft.world.entity.Entity>>(owner);
-        var function = new com.micaftic.morpher.client.animation.molang.functions.ysm.AnimationParticleFunction();
-        assertEquals(false, function.eval(evaluator, arguments));
-        assertEquals(0, calls.get());
+    void inactiveEventsDoNotEvaluateOrEmitEffectsWhenDisallowed() {
+        var json = new com.google.gson.JsonObject();
+        var particleEffects = new com.google.gson.JsonObject();
+        var effectObj = new com.google.gson.JsonObject();
+        effectObj.addProperty("effect", "minecraft:smoke");
+        effectObj.addProperty("locator", "hand");
+        effectObj.addProperty("pre_effect_script", "v.started=1;");
+        particleEffects.add("0", effectObj);
+        json.add("particle_effects", particleEffects);
+
+        var raw = new RawYsmModel.RawAnimation();
+        raw.name = "particle_clip";
+        raw.length = 1.0f;
+        raw.loopMode = 0;
+        raw.timelineEvents.addAll(com.micaftic.morpher.resource.AnimationParticleEvents.read(json));
+
+        Skeleton skeleton = new Skeleton(List.of("hand"), new int[]{-1}, new float[]{0f, 0f, 0f});
+        BonePose bindPose = BonePose.identity(1);
+        PoseAnimationLibrary library = HostAnimationAssets.compileLibrary(
+                "test:particle",
+                List.of(new ClipSpec("particle_clip", raw, List.of(), null, false, false)),
+                skeleton,
+                bindPose);
+        var activeState = new ModelDocument.JsonObject(Map.of(
+                "animations", new ModelDocument.JsonArray(List.of(new ModelDocument.JsonString("particle_clip")))));
+        var idleState = new ModelDocument.JsonObject(Map.of(
+                "transitions", new ModelDocument.JsonArray(List.of(
+                        new ModelDocument.JsonObject(Map.of("active", new ModelDocument.JsonString("0")))))));
+        var inactiveCtrlBody = new ModelDocument.JsonObject(Map.of(
+                "initial_state", new ModelDocument.JsonString("idle"),
+                "states", new ModelDocument.JsonObject(Map.of("idle", idleState, "active", activeState))));
+        var inactiveCtrlDef = PoseControllerDefinition.decode(
+                new ModelDocument.JsonObject(Map.of(
+                        "animation_controllers", new ModelDocument.JsonObject(Map.of("main", inactiveCtrlBody)))),
+                "main", library, new ScriptBudget(100_000, 32, new CancellationToken()));
+        var inactiveCtrl = new PoseAnimationController(library, inactiveCtrlDef, bindPose, 4);
+        SceneInputs allowed = new SceneInputs(Map.of(), MolangBindings.empty(), true, SceneInputs.SyncMode.NONE);
+        var inactiveFrame = inactiveCtrl.evaluate(1, 0L, allowed, new ScriptBudget(100_000, 32, new CancellationToken()));
+        assertTrue(inactiveFrame.effects().isEmpty());
+        assertFalse(inactiveFrame.variables().containsKey("started"));
+
+        var activeCtrlBody = new ModelDocument.JsonObject(Map.of(
+                "initial_state", new ModelDocument.JsonString("default"),
+                "states", new ModelDocument.JsonObject(Map.of("default", activeState))));
+        var activeCtrlDef = PoseControllerDefinition.decode(
+                new ModelDocument.JsonObject(Map.of(
+                        "animation_controllers", new ModelDocument.JsonObject(Map.of("main", activeCtrlBody)))),
+                "main", library, new ScriptBudget(100_000, 32, new CancellationToken()));
+        var activeCtrl = new PoseAnimationController(library, activeCtrlDef, bindPose, 4);
+        SceneInputs disallowed = new SceneInputs(Map.of(), MolangBindings.empty(), false, SceneInputs.SyncMode.NONE);
+        var disallowedFrame = activeCtrl.evaluate(1, 0L, disallowed, new ScriptBudget(100_000, 32, new CancellationToken()));
+        assertTrue(disallowedFrame.effects().isEmpty());
     }
 
     @Test
@@ -56,8 +107,8 @@ class AnimationParticleRuntimeTest {
 
     @Test
     void locatorUsesTheCurrentParentPoseAndTheActualRenderRoot() {
-        var root = new GeoBone("root", false, false, false, 0, 0, 0, 0, 0, 0);
-        var hand = new GeoBone("hand", false, false, false, 16, 0, 0, 0, 0, 0);
+        var root = new ModelBone("root", false, false, false, 0, 0, 0, 0, 0, 0);
+        var hand = new ModelBone("hand", false, false, false, 16, 0, 0, 0, 0, 0);
         hand.parentIdx = 0;
         var parameters = new float[24];
         for (int index : new int[]{6, 7, 8, 18, 19, 20}) parameters[index] = 1;

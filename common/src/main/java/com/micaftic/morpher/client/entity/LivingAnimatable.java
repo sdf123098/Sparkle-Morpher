@@ -3,28 +3,29 @@ package com.micaftic.morpher.client.entity;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.animation.BedrockAnimationMapping;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
-import com.micaftic.morpher.client.model.VehicleModelBundle;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.client.render.BuiltModel;
-import com.micaftic.morpher.geckolib3.core.builder.AnimationController;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ControllerSpec;
+import com.micaftic.morpher.client.core.HostEntityModelData;
+import com.micaftic.morpher.client.core.HostMolangScript;
 import com.micaftic.morpher.client.model.ModelAssembly;
-import com.micaftic.morpher.core.bridge.FiguraRuntimeBridge;
-import net.minecraft.client.Minecraft;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
 import com.micaftic.morpher.client.model.ProjectileModelBundle;
-import com.micaftic.morpher.client.upload.UploadManager;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
-import com.micaftic.morpher.geckolib3.core.processor.IBone;
-import com.micaftic.morpher.geckolib3.model.provider.data.EntityModelData;
+import com.micaftic.morpher.client.model.VehicleModelBundle;
+import com.micaftic.morpher.client.render.BuiltModel;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.client.upload.IResourceLocatable;
+import com.micaftic.morpher.client.upload.UploadManager;
+import com.micaftic.morpher.core.bridge.FiguraRuntimeBridge;
 import com.micaftic.morpher.resource.gltf.GltfAnimationController;
 import com.micaftic.morpher.util.data.OrderedStringMap;
+import dev.spm.core.scene.PoseAnimationLibrary;
 import it.unimi.dsi.fastutil.booleans.BooleanArrayList;
 import it.unimi.dsi.fastutil.booleans.BooleanList;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.LivingEntity;
@@ -35,7 +36,7 @@ import org.joml.Vector2f;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity<T> {
+public abstract class LivingAnimatable<T extends LivingEntity> extends SpmEntity<T> {
 
     public String currentTextureName;
 
@@ -45,7 +46,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
 
     private boolean needsInit;
 
-    private IValue playerUpdateIValue;
+    private HostMolangScript playerUpdateIValue;
 
     private final BooleanList updateExpressionArgs;
 
@@ -69,10 +70,10 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     }
 
     @Override
-    public void applyHeadTracking(AnimationEvent<? extends AnimatableEntity<T>> event, boolean wasAnimEvaluated) {
-        AnimatedGeoModel model = getCurrentModel();
+    public void applyHeadTracking(HostActionEvent<? extends HostAnimatable<T>> event, boolean wasAnimEvaluated) {
+        ModelScenePose model = getCurrentModel();
         if (model != null && !model.headBones().isEmpty()) {
-            IBone bone = model.headBones().get(model.headBones().size() - 1);
+            ModelBoneView bone = model.headBones().get(model.headBones().size() - 1);
             if (wasAnimEvaluated) {
                 this.armorBoneOffset.set(bone.getRotationX(), bone.getRotationY());
             }
@@ -81,15 +82,15 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     }
 
     @Override
-    public void applyHudHeadTracking(AnimationEvent<? extends AnimatableEntity<T>> event, float baseRotationX, float baseRotationY) {
+    public void applyHudHeadTracking(HostActionEvent<? extends HostAnimatable<T>> event, float baseRotationX, float baseRotationY) {
         applyHeadTracking(event, baseRotationX, baseRotationY);
     }
 
-    private void applyHeadTracking(AnimationEvent<?> event, float baseRotationX, float baseRotationY) {
-        AnimatedGeoModel model = getCurrentModel();
+    private void applyHeadTracking(HostActionEvent<?> event, float baseRotationX, float baseRotationY) {
+        ModelScenePose model = getCurrentModel();
         if (model != null && !model.headBones().isEmpty()) {
-            IBone bone = model.headBones().get(model.headBones().size() - 1);
-            EntityModelData data = event.getModelData();
+            ModelBoneView bone = model.headBones().get(model.headBones().size() - 1);
+            HostEntityModelData data = event.getModelData();
             bone.setRotationX(baseRotationX + ((float) Math.toRadians(data.headPitch)));
             bone.setRotationY(baseRotationY + ((float) Math.toRadians(data.netHeadYaw)));
         }
@@ -105,9 +106,9 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
 
     @Override
     public void resetHeadTracking(boolean wasAnimEvaluated) {
-        AnimatedGeoModel model = getCurrentModel();
+        ModelScenePose model = getCurrentModel();
         if (model != null && !model.headBones().isEmpty()) {
-            IBone bone = model.headBones().get(model.headBones().size() - 1);
+            ModelBoneView bone = model.headBones().get(model.headBones().size() - 1);
             bone.setRotationX(this.armorBoneOffset.x);
             bone.setRotationY(this.armorBoneOffset.y);
         }
@@ -165,7 +166,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
                     getEntity().getName().getString());
         }
         updateCurrentTexture();
-        List<IValue> values = context.getExpressionCache().getEvents().get(MolangEventDispatcher.PLAYER_UPDATE);
+        List<HostMolangScript> values = context.getExpressionCache().getEvents().get(MolangEventDispatcher.PLAYER_UPDATE);
         if (values != null) {
             this.playerUpdateIValue = MolangEventDispatcher.createUpdateExpression(values, this.updateExpressionArgs);
         } else {
@@ -174,10 +175,10 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
     }
 
     @Override
-    public void setCurrentModel(AnimatedGeoModel model) {
+    public void setCurrentModel(ModelScenePose model) {
         super.setCurrentModel(model);
         if (model != null && !model.headBones().isEmpty()) {
-            IBone bone = model.headBones().get(model.headBones().size() - 1);
+            ModelBoneView bone = model.headBones().get(model.headBones().size() - 1);
             this.armorBoneOffset.set(bone.getRotationX(), bone.getRotationY());
         }
     }
@@ -201,7 +202,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
         }
     }
 
-    public void applyFiguraFrame(float partialTick, @Nullable AnimatedGeoModel model) {
+    public void applyFiguraFrame(float partialTick, @Nullable ModelScenePose model) {
         if (this.figuraBridge != null && !this.forceDisabled) {
             Minecraft mc = Minecraft.getInstance();
             this.figuraBridge.renderAndApply(getEntity(), mc != null && getEntity() == mc.player, partialTick, model);
@@ -228,7 +229,7 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
         super.setupAnim(seekTime, isFirstPerson);
         if (this.needsInit) {
             this.needsInit = false;
-            List<IValue> values = getAnimationExpressions(MolangEventDispatcher.PLAYER_INIT);
+            List<HostMolangScript> values = getAnimationExpressions(MolangEventDispatcher.PLAYER_INIT);
             if (values != null) {
                 executeExpression(MolangEventDispatcher.createInitExpression(values), true, true, null);
             }
@@ -282,19 +283,31 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends GeoEntity
 
     @Override
     @Nullable
-    public Animation getAnimation(String str) {
-        Animation animation = getModelAssembly().getAnimationBundle().getMainAnimations().get(str);
+    public ClipSpec getAnimation(String str) {
+        ClipSpec animation = getModelAssembly().getAnimationBundle().getMainAnimations().get(str);
         if (animation == null) {
-            // Bedrock 动画名兆底：bbmodel 内嵌基岩名动画也能被动作名命中
             animation = BedrockAnimationMapping.findByAction(getModelAssembly().getAnimationBundle().getMainAnimations(), str);
         }
         return animation;
     }
 
-    @Override
     @Nullable
-    public AnimationController getAnimationEntries(String str) {
+    public ControllerSpec getAnimationEntries(String str) {
         return getModelAssembly().getAnimationBundle().getAnimationEntries().get(str);
+    }
+
+    @Override
+    public @Nullable ControllerSpec getControllerSpec(String name) {
+        return getAnimationEntries(name);
+    }
+
+    @Override
+    protected @Nullable PoseAnimationLibrary resolveAnimationLibrary() {
+        ModelAssembly assembly = getModelAssembly();
+        if (assembly == null || assembly.getAnimationBundle() == null) {
+            return null;
+        }
+        return assembly.getAnimationBundle().getMainAnimationLibrary();
     }
 
     public String getCurrentTextureName() {

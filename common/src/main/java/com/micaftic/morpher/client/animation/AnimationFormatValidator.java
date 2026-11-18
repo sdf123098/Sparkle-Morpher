@@ -1,17 +1,17 @@
 package com.micaftic.morpher.client.animation;
 
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
 
 public class AnimationFormatValidator {
-    public static boolean validate(AnimationEvent<?> event, String animationName, int version) {
-        if (version >= 19) { // 对应着ysm file的format version
+    public static boolean validate(HostActionEvent<?> event, String animationName, int version) {
+        if (version >= 19) {
             return true;
         }
-        Animation animation = event.getAnimatable().getAnimation(animationName);
+        ClipSpec animation = event.getAnimatable().getAnimation(animationName);
         if (animation == null) {
             return false;
         }
-        return animation.isFromPrimaryAssembly;
+        return animation.isFromPrimaryAssembly();
     }
 }

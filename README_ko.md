@@ -118,8 +118,8 @@ SPM에는 Better Combat, Curios, Create, Iris/Sodium과 스킨 레이어 렌더�
 
 - **코어 런타임(`2.4.0+`):** 독자 개발한 호스트 중립 Java 17 + Rust SIMD 엔진 **[AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)**(`1.0.0`, MIT)를 기반으로 하며, 모델 파싱(`.ysm`, `.bbmodel`, `.geo.json`, `.gltf`/`.glb`, `.figura`, `v3d`), 애니메이션·Molang 평가, 제한된 순수 Java Lua 5.3 실행 및 CPU/SIMD 스키닝을 담당합니다.
   - `spm-core` 자체는 클린룸으로 구현되었으며 [YesSteveModel/YesSteveModel](https://github.com/YesSteveModel/YesSteveModel)(Apache-2.0, 명세 참조만), [AndreaFrederica/OhMyYesSteveModel](https://github.com/AndreaFrederica/OhMyYesSteveModel)(Apache-2.0, 구형 포맷 명세·알고리즘 출처 기록·Apache-2.0 테스트 벡터), [JannisX11/blockbench](https://github.com/JannisX11/blockbench)(GPL-3.0, 명세 참조만), [KhronosGroup/glTF](https://github.com/KhronosGroup/glTF)(CC-BY-4.0, 명세 참조만), [FiguraMC/Figura](https://github.com/FiguraMC/Figura)(LGPL-2.1 과거 리비전, 명세 참조만)의 명세를 참조합니다(자세한 내용은 `spm-core` 저장소의 `provenance/allowed-sources.json` 및 `THIRD_PARTY_NOTICES.md` 참고).
-- **구버전 기반 저장소(`2.3.2` 이하 및 `2.4.0` 전환기):**
-  - **[OpenYSM](https://github.com/OpenYSM)**(MIT) — SPM `<= 2.3.2`의 기반이 된 원본 Minecraft 커스텀 모델 모드 코드베이스입니다(`2.4.0`에 남아 있는 전환기 클라이언트/GeckoLib3/Molang 연동 코드도 단계적으로 `spm-core`로 대체 중입니다).
+- **구버전 기반 저장소(`2.3.2` 이하):**
+  - **[OpenYSM](https://github.com/OpenYSM)**(MIT) — SPM `<= 2.3.2`의 기반이 된 원본 Minecraft 커스텀 모델 모드 코드베이스입니다(`2.4.0+`에서는 OpenYSM / GeckoLib3 / Molang 구형 코드가 완전히 제거되고 `spm-core`로 대체되었습니다).
   - **[OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)**(MIT) 및 **[OpenYSMDev/openysm.cpp](https://github.com/OpenYSMDev/openysm.cpp)**(MIT, 이전 포크 [sdf123098/openysm.cpp](https://github.com/sdf123098/openysm.cpp)) — `<= 2.3.2`에서 사용한 구형 파서 및 C++ 네이티브 가속 라이브러리이며, `2.4.0+`에서는 `spm-core`로 대체되었습니다.
 - **연계 및 리소스 저장소:**
   - Cloud 백엔드: **[sdf123098/spm-cloud](https://github.com/sdf123098/spm-cloud)**
@@ -127,4 +127,4 @@ SPM에는 Better Combat, Curios, Create, Iris/Sodium과 스킨 레이어 렌더�
 
 ### 라이선스
 
-SPM은 **[All Rights Reserved(ARR) + MIT](LICENSE)** 혼합 라이선스를 사용합니다(SPM `2.4.0+` 자체 코드, UI, GPU/Blaze3D 브리지, Cloud/Peer 클라이언트, 셰이더와 브랜드 에셋은 All Rights Reserved이며, [`spm-core`](https://github.com/AIH-Interactive/spm-core)(`1.0.0`) 및 `2.3.2` 이하·전환기 OpenYSM 파생 부분은 MIT 라이선스가 적용됩니다). 모델 리소스에는 각 제작자의 라이선스와 이용 조건이 적용됩니다.
+SPM은 **[All Rights Reserved(ARR) + MIT](LICENSE)** 혼합 라이선스를 사용합니다(SPM `2.4.0+` 자체 코드, UI, GPU/Blaze3D 브리지, Cloud/Peer 클라이언트, 셰이더와 브랜드 에셋은 All Rights Reserved이며, [`spm-core`](https://github.com/AIH-Interactive/spm-core) 및 구형 `<= 2.3.2` 버전 부분은 MIT 라이선스가 적용됩니다). 모델 리소스에는 각 제작자의 라이선스와 이용 조건이 적용됩니다.

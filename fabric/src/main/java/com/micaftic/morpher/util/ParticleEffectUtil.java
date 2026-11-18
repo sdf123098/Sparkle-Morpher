@@ -1,21 +1,19 @@
 package com.micaftic.morpher.util;
 
-import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
-import com.micaftic.morpher.molang.runtime.ExecutionContext;
-import com.micaftic.morpher.molang.runtime.Function;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import dev.spm.core.scene.MolangValue;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+import java.util.List;
 import java.util.concurrent.Executor;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
 import net.minecraft.commands.arguments.ParticleArgument;
 import net.minecraft.core.particles.ParticleOptions;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -25,7 +23,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.joml.Vector3d;
 
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 @Environment(EnvType.CLIENT)
 public class ParticleEffectUtil {
@@ -41,8 +38,12 @@ public class ParticleEffectUtil {
         spawnParticles(entity, particleId, offset, new Vector3d(), 0, 0, 20, true, random);
     }
 
-    public static boolean handleParticle(ExecutionContext<IContext<Entity>> context, Function.ArgumentCollection arguments, boolean isAbsolute) throws ExecutionException, CommandSyntaxException {
-        String particleId = arguments.getAsString(context, 0);
+    public static boolean handleParticle(Entity entity, List<MolangValue> arguments, boolean isAbsolute, RandomSource random)
+            throws ExecutionException, CommandSyntaxException {
+        if (arguments.isEmpty()) {
+            return false;
+        }
+        String particleId = arguments.get(0) instanceof MolangValue.TextValue text ? text.value() : "";
         if (StringUtils.isBlank(particleId)) {
             return false;
         }
@@ -54,35 +55,17 @@ public class ParticleEffectUtil {
         int lifetime = 20;
         int argCount = arguments.size();
 
-        if (argCount > 1) {
-            offset.x = arguments.getAsDouble(context, 1);
-        }
-        if (argCount > 2) {
-            offset.y = arguments.getAsDouble(context, 2);
-        }
-        if (argCount > 3) {
-            offset.z = arguments.getAsDouble(context, 3);
-        }
-        if (argCount > 4) {
-            delta.x = arguments.getAsDouble(context, 4);
-        }
-        if (argCount > 5) {
-            delta.y = arguments.getAsDouble(context, 5);
-        }
-        if (argCount > 6) {
-            delta.z = arguments.getAsDouble(context, 6);
-        }
-        if (argCount > 7) {
-            speed = arguments.getAsDouble(context, 7);
-        }
-        if (argCount > 8) {
-            count = Math.max(arguments.getAsInt(context, 8), 0);
-        }
-        if (argCount > 9) {
-            lifetime = Math.max(arguments.getAsInt(context, 9), 1);
-        }
+        if (argCount > 1) offset.x = arguments.get(1).number();
+        if (argCount > 2) offset.y = arguments.get(2).number();
+        if (argCount > 3) offset.z = arguments.get(3).number();
+        if (argCount > 4) delta.x = arguments.get(4).number();
+        if (argCount > 5) delta.y = arguments.get(5).number();
+        if (argCount > 6) delta.z = arguments.get(6).number();
+        if (argCount > 7) speed = arguments.get(7).number();
+        if (argCount > 8) count = Math.max((int) arguments.get(8).number(), 0);
+        if (argCount > 9) lifetime = Math.max((int) arguments.get(9).number(), 1);
 
-        spawnParticles(context.entity().entity(), particleId, offset, delta, speed, count, lifetime, isAbsolute, context.entity().random());
+        spawnParticles(entity, particleId, offset, delta, speed, count, lifetime, isAbsolute, random);
         return true;
     }
 
@@ -98,7 +81,7 @@ public class ParticleEffectUtil {
         ParticleEngine particleEngine = Minecraft.getInstance().particleEngine;
 
         if (count == 0) {
-            Vec3 spawnPos = new Vec3(offset.x(), offset.y(), offset.z());
+            Vec3 spawnPos = new Vec3(offset.x, offset.y, offset.z);
             if (!isAbsolute) {
                 if (entity instanceof Player) {
                     spawnPos = spawnPos.yRot((-((Player) entity).yBodyRot) * 0.017453292f);
@@ -110,9 +93,9 @@ public class ParticleEffectUtil {
             double x = entity.getX() + spawnPos.x();
             double y = entity.getY() + spawnPos.y();
             double z = entity.getZ() + spawnPos.z();
-            double velocityX = speed * delta.x();
-            double velocityY = speed * delta.y();
-            double velocityZ = speed * delta.z();
+            double velocityX = speed * delta.x;
+            double velocityY = speed * delta.y;
+            double velocityZ = speed * delta.z;
 
             ((Executor) Minecraft.getInstance()).execute(() -> emitSingleParticle(particleEngine, particleOptions, x, y, z, velocityX, velocityY, velocityZ, lifetime));
             return;
@@ -124,14 +107,14 @@ public class ParticleEffectUtil {
     }
 
     private static void emitParticle(Entity entity, Vector3d offset, Vector3d delta, double speed, int lifetime, ParticleEngine particleEngine, ParticleOptions particleOptions, boolean isAbsolute, RandomSource random) {
-        double spreadX = random.nextGaussian() * delta.x();
-        double spreadY = random.nextGaussian() * delta.y();
-        double spreadZ = random.nextGaussian() * delta.z();
+        double spreadX = random.nextGaussian() * delta.x;
+        double spreadY = random.nextGaussian() * delta.y;
+        double spreadZ = random.nextGaussian() * delta.z;
         double velocityX = random.nextGaussian() * speed;
         double velocityY = random.nextGaussian() * speed;
         double velocityZ = random.nextGaussian() * speed;
 
-        Vec3 spawnPos = new Vec3(offset.x() + spreadX, offset.y() + spreadY, offset.z() + spreadZ);
+        Vec3 spawnPos = new Vec3(offset.x + spreadX, offset.y + spreadY, offset.z + spreadZ);
 
         if (!isAbsolute) {
             spawnPos = spawnPos.yRot((-entity.getYRot()) * 0.017453292f);

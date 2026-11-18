@@ -1,14 +1,12 @@
 package com.micaftic.morpher.core.compat.gun.tacz.fabric;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.core.compat.gun.tacz.ConditionTAC;
 import com.micaftic.morpher.core.compat.gun.tacz.TacAnimationResolver;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.tacz.guns.api.TimelessAPI;
 import com.tacz.guns.api.client.gameplay.IClientPlayerGunOperator;
@@ -16,11 +14,14 @@ import com.tacz.guns.api.entity.IGunOperator;
 import com.tacz.guns.api.item.IGun;
 import com.tacz.guns.api.item.gun.FireMode;
 import com.tacz.guns.resource.index.CommonGunIndex;
+import dev.spm.core.scene.CodedLoopMode;
+import dev.spm.core.scene.MolangValue;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 
@@ -32,34 +33,59 @@ public final class TacCompatImpl {
     }
 
     public static boolean isLoaded() {
-        return FabricLoader.getInstance().isModLoaded(MOD_ID);
+        try {
+            return FabricLoader.getInstance().isModLoaded(MOD_ID);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
-    public static void registerControllerFunctions(CtrlBinding binding) {
+    public static void registerControllerFunctions(HostMolangSink binding) {
         if (!isLoaded()) {
             registerUnavailableFunctions(binding);
             return;
         }
-        binding.livingEntityVar("tac_hold_gun", ctx -> ctx.entity() != null && ctx.entity().getMainHandItem().getItem() instanceof IGun);
-        binding.livingEntityVar("tac_gun_type", ctx -> ctx.entity() == null ? StringPool.EMPTY : getGunType(ctx.entity().getMainHandItem()));
-        binding.livingEntityVar("tac_gun_id", ctx -> ctx.entity() == null ? StringPool.EMPTY : getGunId(ctx.entity().getMainHandItem()));
-        binding.livingEntityVar("tac_is_fire", ctx -> operator(ctx.entity()) != null && operator(ctx.entity()).getSynShootCoolDown() > 0);
-        binding.livingEntityVar("tac_is_aim", ctx -> operator(ctx.entity()) != null && operator(ctx.entity()).getSynAimingProgress() > 0.0F);
-        binding.livingEntityVar("tac_is_reload", ctx -> isReloading(operator(ctx.entity())));
-        binding.livingEntityVar("tac_is_melee", ctx -> operator(ctx.entity()) != null && operator(ctx.entity()).getSynMeleeCoolDown() > 0);
-        binding.livingEntityVar("tac_is_draw", ctx -> operator(ctx.entity()) != null && operator(ctx.entity()).getSynDrawCoolDown() > 0);
-        binding.livingEntityVar("tac_fire_mode", ctx -> {
-            if (ctx.entity() == null) return StringPool.EMPTY;
-            FireMode fireMode = IGun.getMainHandFireMode(ctx.entity());
-            return fireMode == FireMode.UNKNOWN ? StringPool.EMPTY : fireMode.name();
+        binding.var("tac_hold_gun", event -> MolangValue.bool(
+                event.getAnimatable().getEntity() instanceof LivingEntity living && living.getMainHandItem().getItem() instanceof IGun));
+        binding.var("tac_gun_type", event -> MolangValue.text(
+                event.getAnimatable().getEntity() instanceof LivingEntity living ? getGunType(living.getMainHandItem()) : ""));
+        binding.var("tac_gun_id", event -> MolangValue.text(
+                event.getAnimatable().getEntity() instanceof LivingEntity living ? getGunId(living.getMainHandItem()) : ""));
+        binding.var("tac_is_fire", event -> {
+            IGunOperator op = operatorLiving(event);
+            return MolangValue.bool(op != null && op.getSynShootCoolDown() > 0);
+        });
+        binding.var("tac_is_aim", event -> {
+            IGunOperator op = operatorLiving(event);
+            return MolangValue.bool(op != null && op.getSynAimingProgress() > 0.0F);
+        });
+        binding.var("tac_is_reload", event -> MolangValue.bool(isReloading(operatorLiving(event))));
+        binding.var("tac_is_melee", event -> {
+            IGunOperator op = operatorLiving(event);
+            return MolangValue.bool(op != null && op.getSynMeleeCoolDown() > 0);
+        });
+        binding.var("tac_is_draw", event -> {
+            IGunOperator op = operatorLiving(event);
+            return MolangValue.bool(op != null && op.getSynDrawCoolDown() > 0);
+        });
+        binding.var("tac_fire_mode", event -> {
+            if (!(event.getAnimatable().getEntity() instanceof LivingEntity living)) {
+                return MolangValue.text("");
+            }
+            FireMode fireMode = IGun.getMainHandFireMode(living);
+            return MolangValue.text(fireMode == FireMode.UNKNOWN ? "" : fireMode.name());
         });
     }
 
-    /* Gun item rendering remains on the normal hand/locator path. */
-    public static void applyItemTransform(ItemStack stack, AnimatedGeoModel model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
+    private static @Nullable IGunOperator operatorLiving(HostActionEvent<?> event) {
+        return event.getAnimatable().getEntity() instanceof LivingEntity living ? operator(living) : null;
     }
 
-    public static PlayState handleTaczAnimState(LivingEntity entity, AnimationEvent<? extends LivingAnimatable<?>> event, String animation, ILoopType loopType) {
+    /* Gun item rendering remains on the normal hand/locator path. */
+    public static void applyItemTransform(ItemStack stack, ModelScenePose model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
+    }
+
+    public static @Nullable HostPlayState.Decision handleTaczAnimState(LivingEntity entity, HostActionEvent<? extends LivingAnimatable<?>> event, String animation, CodedLoopMode loopType) {
         if (!isLoaded() || IGun.getIGunOrNull(entity.getMainHandItem()) == null) {
             return null;
         }
@@ -68,31 +94,31 @@ public final class TacCompatImpl {
         return event.getAnimatable().getAnimation(animation) == null ? null : setAnimation(event, animation, loopType);
     }
 
-    public static PlayState handleGunHoldAnimState(ItemStack stack, AnimationEvent<? extends LivingAnimatable<?>> event) {
+    public static @Nullable HostPlayState.Decision handleGunHoldAnimState(ItemStack stack, HostActionEvent<? extends LivingAnimatable<?>> event) {
         if (!isLoaded()) {
             return null;
         }
         String type = getGunType(stack);
         LivingEntity entity = event.getAnimatable().getEntity();
         if (type.isEmpty() || entity == null) {
-            return type.isEmpty() ? null : PlayState.STOP;
+            return type.isEmpty() ? null : HostPlayState.Decision.STOP;
         }
         IGunOperator operator = operator(entity);
         if (operator == null) return null;
         String prefix = TacAnimationResolver.holdPrefix(!entity.isSwimming() && entity.getPose() == Pose.SWIMMING,
                 Math.abs(event.getLimbSwingAmount()) > 0.05D, operator.getSynAimingProgress() > 0.0F,
                 entity.onGround() && entity.isSprinting());
-        return playGunAnimation(event, type, prefix, ILoopType.EDefaultLoopTypes.LOOP);
+        return playGunAnimation(event, type, prefix, CodedLoopMode.LOOP);
     }
 
-    public static PlayState handleGunActionAnimState(ItemStack stack, AnimationEvent<? extends LivingAnimatable<?>> event) {
+    public static @Nullable HostPlayState.Decision handleGunActionAnimState(ItemStack stack, HostActionEvent<? extends LivingAnimatable<?>> event) {
         if (!isLoaded()) {
             return null;
         }
         String type = getGunType(stack);
         LivingEntity entity = event.getAnimatable().getEntity();
         if (type.isEmpty() || entity == null) {
-            return type.isEmpty() ? null : PlayState.STOP;
+            return type.isEmpty() ? null : HostPlayState.Decision.STOP;
         }
         IGunOperator operator = operator(entity);
         if (operator == null) return null;
@@ -103,7 +129,7 @@ public final class TacCompatImpl {
         String prefix = TacAnimationResolver.actionPrefix(!entity.isSwimming() && entity.getPose() == Pose.SWIMMING,
                 Math.abs(event.getLimbSwingAmount()) > 0.05D, operator.getSynAimingProgress() > 0.0F,
                 isReloading(operator), operator.getSynMeleeCoolDown() > 0, shootCooldown);
-        return prefix == null ? PlayState.CONTINUE : playGunAnimation(event, type, prefix, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
+        return prefix == null ? HostPlayState.Decision.CONTINUE : playGunAnimation(event, type, prefix, CodedLoopMode.PLAY_ONCE);
     }
 
     public static void handleGunSound(LivingEntity entity, ItemStack stack) {
@@ -120,37 +146,37 @@ public final class TacCompatImpl {
         return gun == null ? null : gun.getGunId(stack);
     }
 
-    private static void registerUnavailableFunctions(CtrlBinding binding) {
-        binding.livingEntityVar("tac_hold_gun", ctx -> false);
-        binding.livingEntityVar("tac_gun_type", ctx -> StringPool.EMPTY);
-        binding.livingEntityVar("tac_gun_id", ctx -> StringPool.EMPTY);
-        binding.livingEntityVar("tac_is_fire", ctx -> false);
-        binding.livingEntityVar("tac_is_aim", ctx -> false);
-        binding.livingEntityVar("tac_is_reload", ctx -> false);
-        binding.livingEntityVar("tac_is_melee", ctx -> false);
-        binding.livingEntityVar("tac_is_draw", ctx -> false);
-        binding.livingEntityVar("tac_fire_mode", ctx -> StringPool.EMPTY);
+    private static void registerUnavailableFunctions(HostMolangSink binding) {
+        binding.var("tac_hold_gun", event -> MolangValue.bool(false));
+        binding.var("tac_gun_type", event -> MolangValue.text(""));
+        binding.var("tac_gun_id", event -> MolangValue.text(""));
+        binding.var("tac_is_fire", event -> MolangValue.bool(false));
+        binding.var("tac_is_aim", event -> MolangValue.bool(false));
+        binding.var("tac_is_reload", event -> MolangValue.bool(false));
+        binding.var("tac_is_melee", event -> MolangValue.bool(false));
+        binding.var("tac_is_draw", event -> MolangValue.bool(false));
+        binding.var("tac_fire_mode", event -> MolangValue.text(""));
     }
 
     private static String getGunType(ItemStack stack) {
         IGun gun = IGun.getIGunOrNull(stack);
         if (gun == null) {
-            return StringPool.EMPTY;
+            return "";
         }
         Optional<CommonGunIndex> index = TimelessAPI.getCommonGunIndex(gun.getGunId(stack));
-        return index.map(CommonGunIndex::getType).orElse(StringPool.EMPTY);
+        return index.map(CommonGunIndex::getType).orElse("");
     }
 
     private static String getGunId(ItemStack stack) {
         IGun gun = IGun.getIGunOrNull(stack);
-        return gun == null ? StringPool.EMPTY : gun.getGunId(stack).toString();
+        return gun == null ? "" : gun.getGunId(stack).toString();
     }
 
     private static IGunOperator operator(LivingEntity entity) {
         return entity instanceof IGunOperator operator ? operator : null;
     }
 
-    private static PlayState playGunAnimation(AnimationEvent<? extends LivingAnimatable<?>> event, String type, String prefix, ILoopType loopType) {
+    private static @Nullable HostPlayState.Decision playGunAnimation(HostActionEvent<? extends LivingAnimatable<?>> event, String type, String prefix, CodedLoopMode loopType) {
         ConditionTAC condition = event.getAnimatable().getModelConfig().getTAC();
         String custom = condition == null ? "" : condition.doTest(event.getAnimatable().getEntity().getMainHandItem(), prefix);
         String animation = TacAnimationResolver.select(prefix, type, custom,
@@ -158,9 +184,9 @@ public final class TacCompatImpl {
         return animation == null ? null : setAnimation(event, animation, loopType);
     }
 
-    private static PlayState setAnimation(AnimationEvent<?> event, String animation, ILoopType loopType) {
+    private static HostPlayState.Decision setAnimation(HostActionEvent<?> event, String animation, CodedLoopMode loopType) {
         event.getController().setAnimation(animation, loopType);
-        return PlayState.CONTINUE;
+        return HostPlayState.Decision.CONTINUE;
     }
 
     private static boolean isReloading(IGunOperator operator) {

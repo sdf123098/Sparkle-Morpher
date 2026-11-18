@@ -1,14 +1,14 @@
 package com.micaftic.morpher.client.animation.particle;
 
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimatable;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
 import org.joml.Matrix4f;
 
 public final class AnimationParticleRuntime {
     private AnimationParticleRuntime() {}
 
-    public static void flush(AnimatableEntity<?> owner, AnimationEvent<?> event,
+    public static void flush(HostAnimatable<?> owner, HostActionEvent<?> event,
                              Matrix4f referencePose, Matrix4f renderedPose) {
         var model = owner.getCurrentModel();
         if (model == null || !model.animationParticles.hasPending()
