@@ -8,12 +8,12 @@ A **client-only Minecraft custom model mod**. Give your character a new look wit
 
 **QQ:** 1104823534 | **Discord:** [Join Discord](https://discord.gg/3KqK7USF39) | **Telegram:** [Join Telegram](https://t.me/sparklemorpher) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
 
-[Quick start](#quick-start) · [Multiplayer](#multiplayer) · [Model formats](#model-formats) · [Features](#features) · [Supported builds](#supported-builds) · [SPM Cloud](#spm-cloud) · [Compatibility](#compatibility) · [FAQ](#faq) · [Credits](#credits)
+[Quick start](#quick-start) · [Multiplayer](#multiplayer) · [Model formats](#model-formats) · [Features](#features) · [Supported builds](#supported-builds) · [SPM Cloud](#spm-cloud) · [Compatibility](#compatibility) · [FAQ](#faq) · [Upstream & license](#credits)
 
 <a id="quick-start"></a>
 ## Quick start
 
-1. Download the build matching your **Minecraft version and loader** from [Releases](https://github.com/sdf123098/Sparkle-Morpher/releases). See the six variants below.
+1. Download the build matching your **Minecraft version and loader** from [Releases](https://github.com/sdf123098/Sparkle-Morpher/releases). See the supported builds below.
 2. Put the SPM `.jar` in your client's `mods` folder. Fabric builds also require Fabric API; install any additional dependencies requested by your chosen release. Launch Minecraft with the matching Fabric or NeoForge profile.
 3. Join a world or server and press **Alt + Y** to open the model panel. Import a local model or choose one from Cloud, then select its texture and settings. Press **Z** to open the animation wheel. Key bindings can be changed in Minecraft's Controls menu.
 4. To share your appearance, both players select the **same Cloud instance**, sign in and bind their current game identities. Select a public Cloud model, or upload your own model and make it public. Check that privacy mode is off. The other SPM client downloads and renders the accessible model automatically.
@@ -39,13 +39,13 @@ Model assets and appearance updates travel between **SPM clients and SPM Cloud**
 
 | Format | Import support |
 |---|---|
-| `.ysm` | YSM models with textures and model-provided animations, parsed and evaluated by the independent `spm-core` engine (versions `2.3.2` and earlier used the OpenYSM/YSMParser pipeline). |
+| `.ysm` | YSM models with textures and model-provided animations, parsed and evaluated by the independent [spm-core](https://github.com/AIH-Interactive/spm-core) engine (versions `2.3.2` and earlier used the OpenYSM/YSMParser pipeline). |
 | `.bbmodel` | Blockbench projects with cube/mesh geometry, bone hierarchies, textures and supported animations. |
 | `.zip` | Content detection for YSM folders, Blockbench model packs, Figura avatar packs and Bedrock model packs. |
 | Bedrock geometry | `.geo.json` / `geometry.json`; Bedrock packs can also contain `.animation.json` files and PNG textures. |
 | `.gltf` / `.glb` | Local glTF model import. Keep external resources referenced by `.gltf` alongside the model. |
 
-Figura pack import reads models, textures, and audio, and runs supported `.lua` scripts via `spm-core`'s bounded pure-Java Lua 5.3 runtime. Importing a format does not imply 1:1 parity with every feature of its original application. Cloud upload and sharing depend on the formats supported by the selected instance.
+Figura pack import reads models, textures, and audio, and runs supported `.lua` scripts via [spm-core](https://github.com/AIH-Interactive/spm-core)'s bounded pure-Java Lua 5.3 runtime. Importing a format does not imply 1:1 parity with every feature of its original application. Cloud upload and sharing depend on the formats supported by the selected instance.
 
 <a id="features"></a>
 ## Features
@@ -112,11 +112,19 @@ Use a provider enabled by your chosen Cloud instance and verify the current game
 English, Chinese, Japanese and Korean follow the same section order, installation steps, multiplayer conditions and build table. Section IDs are shared, so links such as `#multiplayer` work in every language. The requirements are the same whichever translation you read.
 
 <a id="credits"></a>
-## Credits & license
+## Upstream repositories, credits & license
 
-- Core source (`2.4.0+`): powered by the independent **spm-core** (`1.0.0`) Java + Rust SIMD runtime, with the goal of completely replacing legacy OpenYSM code.
-- Legacy versions (`2.3.2` and earlier): releases `<= 2.3.2` remain based on [OpenYSM](https://github.com/OpenYSM) (MIT) and [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser) (MIT).
-- Default model library: [sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model).
-- Blockbench: [JannisX11/Blockbench](https://github.com/JannisX11/blockbench).
+### Core engine & upstream basis
 
-SPM uses a dual **[All Rights Reserved (ARR) & MIT](LICENSE)** license (original SPM `2.4.0+` code and brand assets are All Rights Reserved; `spm-core` (`1.0.0`) and historical `<= 2.3.2` / transitional OpenYSM-derived portions remain MIT). Model assets retain their authors' licenses and usage terms.
+- **Core runtime (`2.4.0+`):** powered by **[AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)** (`1.0.0`, MIT) — an independent, host-neutral Java 17 + Rust SIMD engine for model parsing (`.ysm`, `.bbmodel`, `.geo.json`, `.gltf`/`.glb`, `.figura`, `v3d`), animation/Molang evaluation, bounded pure-Java Lua 5.3 execution, and CPU/SIMD skinning.
+  - `spm-core` itself is clean-room written against format and behavior specifications from [YesSteveModel/YesSteveModel](https://github.com/YesSteveModel/YesSteveModel) (Apache-2.0, specification only), [AndreaFrederica/OhMyYesSteveModel](https://github.com/AndreaFrederica/OhMyYesSteveModel) (Apache-2.0, historical format specs, algorithm provenance, and Apache-2.0 synthetic test vectors), [JannisX11/blockbench](https://github.com/JannisX11/blockbench) (GPL-3.0, specification only), [KhronosGroup/glTF](https://github.com/KhronosGroup/glTF) (CC-BY-4.0, specification only), and [FiguraMC/Figura](https://github.com/FiguraMC/Figura) (LGPL-2.1 historical revision, specification only); see `spm-core`'s `provenance/allowed-sources.json` and `THIRD_PARTY_NOTICES.md`.
+- **Historical upstream lineage (`2.3.2` and earlier / `2.4.0` transition):**
+  - **[OpenYSM](https://github.com/OpenYSM)** (MIT) — the original Minecraft custom-model mod codebase on which SPM `<= 2.3.2` was based (remaining transitional client/GeckoLib3/Molang code in `2.4.0` is being progressively replaced by `spm-core`).
+  - **[OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)** (MIT) & **[OpenYSMDev/openysm.cpp](https://github.com/OpenYSMDev/openysm.cpp)** (MIT; formerly forked at [sdf123098/openysm.cpp](https://github.com/sdf123098/openysm.cpp)) — legacy model parser and C++ native acceleration used in `<= 2.3.2`, superseded in `2.4.0+` by `spm-core`.
+- **Companion & resource repositories:**
+  - Cloud backend: **[sdf123098/spm-cloud](https://github.com/sdf123098/spm-cloud)**
+  - Default model library: **[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)**
+
+### License
+
+SPM uses a dual **[All Rights Reserved (ARR) & MIT](LICENSE)** license (original SPM `2.4.0+` mod code, UI, GPU/Blaze3D bridges, Cloud/Peer client, shaders and brand assets are All Rights Reserved; [`spm-core`](https://github.com/AIH-Interactive/spm-core) (`1.0.0`) and historical `<= 2.3.2` / transitional OpenYSM-derived portions remain MIT). Model assets retain their authors' licenses and usage terms.

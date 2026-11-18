@@ -8,17 +8,17 @@
 
 **QQ:** 1104823534 | **Discord:** [Discord 참여](https://discord.gg/3KqK7USF39) | **Telegram:** [Telegram 참여](https://t.me/sparklemorpher) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **Afdian:** [Micaftic](https://afdian.com/a/Micaftic)
 
-[빠른 시작](#quick-start) · [멀티플레이](#multiplayer) · [모델 형식](#model-formats) · [기능](#features) · [지원 빌드](#supported-builds) · [SPM Cloud](#spm-cloud) · [호환성](#compatibility) · [자주 묻는 질문](#faq) · [크레딧](#credits)
+[빠른 시작](#quick-start) · [멀티플레이](#multiplayer) · [모델 형식](#model-formats) · [기능](#features) · [지원 빌드](#supported-builds) · [SPM Cloud](#spm-cloud) · [호환성](#compatibility) · [자주 묻는 질문](#faq) · [기반 저장소 및 크레딧](#credits)
 
 <a id="quick-start"></a>
 ## 빠른 시작
 
-1. [Releases](https://github.com/sdf123098/Sparkle-Morpher/releases)에서 **Minecraft 버전과 로더**에 맞는 빌드를 다운로드하세요. 아래 표에 여섯 가지 빌드가 나와 있습니다.
+1. [Releases](https://github.com/sdf123098/Sparkle-Morpher/releases)에서 **Minecraft 버전과 로더**에 맞는 빌드를 다운로드하세요. 지원 빌드는 아래 표를 참고하세요.
 2. SPM `.jar`를 클라이언트의 `mods` 폴더에 넣으세요. Fabric 빌드에는 Fabric API도 필요합니다. 선택한 릴리스가 추가 의존성을 요구하면 함께 설치하세요. 해당 Fabric 또는 NeoForge 프로필로 Minecraft를 실행하세요.
 3. 월드나 서버에 접속한 뒤 **Alt + Y**로 모델 패널을 여세요. 로컬 모델을 가져오거나 Cloud 모델을 선택하고 텍스처와 설정을 조정하세요. **Z**로 애니메이션 휠을 열 수 있습니다. 키 설정은 Minecraft의 조작 설정에서 바꿀 수 있습니다.
 4. 외형을 공유하려면 양쪽 모두 **같은 Cloud 인스턴스**를 선택하고 로그인한 뒤 현재 게임 계정을 연동하세요. 공개 Cloud 모델을 선택하거나 자신의 모델을 업로드하고 공개로 설정하세요. 개인정보 보호 모드가 꺼져 있는지도 확인하세요. 상대의 SPM 클라이언트가 접근 가능한 모델을 자동으로 다운로드하고 표시합니다.
 
-로컬 모델은 Cloud를 설정하지 않아도 사용할 수 있습니다. 로컬로 파일을 가져오는 것만으로 모델이 자동 업로드되거나 공유되지는 않습니다.
+ 로컬 모델은 Cloud를 설정하지 않아도 사용할 수 있습니다. 로컬로 파일을 가져오는 것만으로 모델이 자동 업로드되거나 공유되지는 않습니다.
 
 <a id="multiplayer"></a>
 ## 어떤 서버에서든 서로의 모델 보기
@@ -39,13 +39,13 @@ SPM의 모델 공유는 Minecraft 서버의 모드 구성과 독립적으로 작
 
 | 형식 | 가져오기 지원 |
 |---|---|
-| `.ysm` | 텍스처와 모델 자체 애니메이션을 포함한 YSM 모델. 독립 엔진 `spm-core`가 파싱·구동합니다(`2.3.2` 이하 버전은 OpenYSM/YSMParser 기반). |
+| `.ysm` | 텍스처와 모델 자체 애니메이션을 포함한 YSM 모델. 독립 엔진 [spm-core](https://github.com/AIH-Interactive/spm-core)가 파싱·구동합니다(`2.3.2` 이하 버전은 OpenYSM/YSMParser 기반). |
 | `.bbmodel` | Blockbench 프로젝트의 큐브/메시 지오메트리, 본 계층, 텍스처와 지원되는 애니메이션. |
 | `.zip` | 내용을 분석해 YSM 폴더, Blockbench 모델 팩, Figura 아바타 팩과 Bedrock 모델 팩을 구분합니다. |
 | Bedrock 지오메트리 | `.geo.json` / `geometry.json`. Bedrock 팩에는 `.animation.json` 파일과 PNG 텍스처도 포함할 수 있습니다. |
 | `.gltf` / `.glb` | 로컬 glTF 모델 가져오기. `.gltf`가 참조하는 외부 리소스를 모델과 함께 보관하세요. |
 
-Figura 팩에서는 모델·텍스처·오디오를 읽으며 `spm-core`의 제한된 순수 Java Lua 5.3 런타임으로 지원되는 `.lua` 스크립트를 실행할 수 있습니다. 특정 형식을 가져올 수 있다고 해서 원본 프로그램의 모든 기능을 1:1로 지원하는 것은 아닙니다. Cloud 업로드와 공유는 선택한 인스턴스가 지원하는 형식에 따라 달라집니다.
+Figura 팩에서는 모델·텍스처·오디오를 읽으며 [spm-core](https://github.com/AIH-Interactive/spm-core)의 제한된 순수 Java Lua 5.3 런타임으로 지원되는 `.lua` 스크립트를 실행할 수 있습니다. 특정 형식을 가져올 수 있다고 해서 원본 프로그램의 모든 기능을 1:1로 지원하는 것은 아닙니다. Cloud 업로드와 공유는 선택한 인스턴스가 지원하는 형식에 따라 달라집니다.
 
 <a id="features"></a>
 ## 기능
@@ -112,11 +112,19 @@ SPM에는 Better Combat, Curios, Create, Iris/Sodium과 스킨 레이어 렌더�
 영어, 중국어, 일본어와 한국어는 같은 섹션 순서, 설치 절차, 멀티플레이 공유 조건과 빌드 표를 사용합니다. 섹션 ID도 같으므로 `#multiplayer` 같은 링크는 모든 언어에서 사용할 수 있습니다. 어떤 번역을 읽어도 사용 요구 사항은 같습니다.
 
 <a id="credits"></a>
-## 크레딧과 라이선스
+## 기반 저장소, 크레딧 및 라이선스
 
-- 코어 소스 출처(`2.4.0+`): 독자 개발한 **spm-core**(`1.0.0`) Java + Rust SIMD 런타임을 기반으로 전환되었으며, 기존 OpenYSM 레거시 코드를 완전히 대체하는 것을 목표로 합니다.
-- 구버전(`2.3.2` 이하): `2.3.2` 및 이하 버전은 여전히 [OpenYSM](https://github.com/OpenYSM)(MIT)과 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)(MIT)을 기반으로 합니다.
-- 기본 모델 라이브러리: [sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model).
-- Blockbench: [JannisX11/Blockbench](https://github.com/JannisX11/blockbench).
+### 코어 엔진 및 기반 저장소
 
-SPM은 **[All Rights Reserved(ARR) + MIT](LICENSE)** 혼합 라이선스를 사용합니다(SPM `2.4.0+` 자체 코드와 브랜드 에셋은 All Rights Reserved이며, `spm-core`(`1.0.0`) 및 `2.3.2` 이하·전환기 OpenYSM 파생 부분은 MIT 라이선스가 적용됩니다). 모델 리소스에는 각 제작자의 라이선스와 이용 조건이 적용됩니다.
+- **코어 런타임(`2.4.0+`):** 독자 개발한 호스트 중립 Java 17 + Rust SIMD 엔진 **[AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)**(`1.0.0`, MIT)를 기반으로 하며, 모델 파싱(`.ysm`, `.bbmodel`, `.geo.json`, `.gltf`/`.glb`, `.figura`, `v3d`), 애니메이션·Molang 평가, 제한된 순수 Java Lua 5.3 실행 및 CPU/SIMD 스키닝을 담당합니다.
+  - `spm-core` 자체는 클린룸으로 구현되었으며 [YesSteveModel/YesSteveModel](https://github.com/YesSteveModel/YesSteveModel)(Apache-2.0, 명세 참조만), [AndreaFrederica/OhMyYesSteveModel](https://github.com/AndreaFrederica/OhMyYesSteveModel)(Apache-2.0, 구형 포맷 명세·알고리즘 출처 기록·Apache-2.0 테스트 벡터), [JannisX11/blockbench](https://github.com/JannisX11/blockbench)(GPL-3.0, 명세 참조만), [KhronosGroup/glTF](https://github.com/KhronosGroup/glTF)(CC-BY-4.0, 명세 참조만), [FiguraMC/Figura](https://github.com/FiguraMC/Figura)(LGPL-2.1 과거 리비전, 명세 참조만)의 명세를 참조합니다(자세한 내용은 `spm-core` 저장소의 `provenance/allowed-sources.json` 및 `THIRD_PARTY_NOTICES.md` 참고).
+- **구버전 기반 저장소(`2.3.2` 이하 및 `2.4.0` 전환기):**
+  - **[OpenYSM](https://github.com/OpenYSM)**(MIT) — SPM `<= 2.3.2`의 기반이 된 원본 Minecraft 커스텀 모델 모드 코드베이스입니다(`2.4.0`에 남아 있는 전환기 클라이언트/GeckoLib3/Molang 연동 코드도 단계적으로 `spm-core`로 대체 중입니다).
+  - **[OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)**(MIT) 및 **[OpenYSMDev/openysm.cpp](https://github.com/OpenYSMDev/openysm.cpp)**(MIT, 이전 포크 [sdf123098/openysm.cpp](https://github.com/sdf123098/openysm.cpp)) — `<= 2.3.2`에서 사용한 구형 파서 및 C++ 네이티브 가속 라이브러리이며, `2.4.0+`에서는 `spm-core`로 대체되었습니다.
+- **연계 및 리소스 저장소:**
+  - Cloud 백엔드: **[sdf123098/spm-cloud](https://github.com/sdf123098/spm-cloud)**
+  - 기본 모델 라이브러리: **[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)**
+
+### 라이선스
+
+SPM은 **[All Rights Reserved(ARR) + MIT](LICENSE)** 혼합 라이선스를 사용합니다(SPM `2.4.0+` 자체 코드, UI, GPU/Blaze3D 브리지, Cloud/Peer 클라이언트, 셰이더와 브랜드 에셋은 All Rights Reserved이며, [`spm-core`](https://github.com/AIH-Interactive/spm-core)(`1.0.0`) 및 `2.3.2` 이하·전환기 OpenYSM 파생 부분은 MIT 라이선스가 적용됩니다). 모델 리소스에는 각 제작자의 라이선스와 이용 조건이 적용됩니다.

@@ -8,12 +8,12 @@
 
 **QQ:** 1104823534 | **Discord:** [加入 Discord](https://discord.gg/3KqK7USF39) | **Telegram:** [加入 Telegram](https://t.me/sparklemorpher) | **Patreon:** [cw/Soid211](https://www.patreon.com/cw/Soid211) | **爱发电:** [Micaftic](https://afdian.com/a/Micaftic)
 
-[快速开始](#quick-start) · [多人互相可见](#multiplayer) · [模型格式](#model-formats) · [功能](#features) · [支持的构建](#supported-builds) · [SPM Cloud](#spm-cloud) · [兼容性](#compatibility) · [常见问题](#faq) · [致谢](#credits)
+[快速开始](#quick-start) · [多人互相可见](#multiplayer) · [模型格式](#model-formats) · [功能](#features) · [支持的构建](#supported-builds) · [SPM Cloud](#spm-cloud) · [兼容性](#compatibility) · [常见问题](#faq) · [上游仓库与许可](#credits)
 
 <a id="quick-start"></a>
 ## 快速开始
 
-1. 在 [Releases](https://github.com/sdf123098/Sparkle-Morpher/releases) 下载与你的 **Minecraft 版本和加载器**匹配的构建。六种构建见下表。
+1. 在 [Releases](https://github.com/sdf123098/Sparkle-Morpher/releases) 下载与你的 **Minecraft 版本和加载器**匹配的构建。支持的构建见下表。
 2. 将 SPM `.jar` 放入客户端的 `mods` 文件夹。Fabric 构建还需要 Fabric API；如果所选发行包要求其他依赖，请一并安装。使用对应的 Fabric 或 NeoForge 配置启动 Minecraft。
 3. 进入世界或服务器，按 **Alt + Y** 打开模型面板。导入本地模型或选择 Cloud 模型，再选择贴图与设置。按 **Z** 打开动画转盘。按键可在 Minecraft 的控制设置中修改。
 4. 如需互相可见，双方选择**同一个 Cloud 实例**，登录并绑定当前游戏身份。选择公开的 Cloud 模型，或上传自己的模型并设为公开。确认隐私模式已关闭。对方的 SPM 客户端会自动下载并渲染有权访问的模型。
@@ -39,13 +39,13 @@ SPM 的模型共享独立于 Minecraft 服务器的模组配置。无论是原�
 
 | 格式 | 导入支持 |
 |---|---|
-| `.ysm` | 带有贴图和模型动画的 YSM 模型，由独立自研引擎 `spm-core` 解析与驱动（`2.3.2` 及以下版本仍基于 OpenYSM/YSMParser 导入管线）。 |
+| `.ysm` | 带有贴图和模型动画的 YSM 模型，由独立自研引擎 [spm-core](https://github.com/AIH-Interactive/spm-core) 解析与驱动（`2.3.2` 及以下版本仍基于 OpenYSM/YSMParser 导入管线）。 |
 | `.bbmodel` | Blockbench 项目中的立方体/网格几何、骨骼层级、贴图及受支持的动画。 |
 | `.zip` | 按内容识别 YSM 文件夹、Blockbench 模型包、Figura 头像包与 Bedrock 模型包。 |
 | Bedrock 几何 | `.geo.json` / `geometry.json`；Bedrock 模型包还可包含 `.animation.json` 文件与 PNG 贴图。 |
 | `.gltf` / `.glb` | 本地 glTF 模型导入。请保留 `.gltf` 引用的配套外部资源。 |
 
-Figura 包导入可读取模型、贴图与音效，并通过 `spm-core` 内置的有界纯 Java Lua 5.3 运行时执行受支持的 `.lua` 脚本。支持导入某种格式不代表 1:1 覆盖原软件的所有功能。Cloud 上传与共享以所选实例支持的格式为准。
+Figura 包导入可读取模型、贴图与音效，并通过 [spm-core](https://github.com/AIH-Interactive/spm-core) 内置的有界纯 Java Lua 5.3 运行时执行受支持的 `.lua` 脚本。支持导入某种格式不代表 1:1 覆盖原软件的所有功能。Cloud 上传与共享以所选实例支持的格式为准。
 
 <a id="features"></a>
 ## 功能
@@ -112,11 +112,19 @@ SPM 包含 Better Combat、Curios、Create、Iris/Sodium 和皮肤层渲染的�
 英文、中文、日文和韩文采用相同的章节顺序、安装步骤、多人共享条件与构建表。章节 ID 统一，因此 `#multiplayer` 等链接在各语言中均可使用。阅读任何语言版本，使用要求都相同。
 
 <a id="credits"></a>
-## 致谢与许可
+## 上游仓库、致谢与许可
 
-- 核心源代码来源（`2.4.0+`）：切换至自研独立引擎 **spm-core**（`1.0.0`）Java + Rust SIMD 运行时，目标为彻底取代旧版 OpenYSM 遗留代码。
-- 历史版本声明（`2.3.2` 及以下）：`2.3.2` 及其以下历史版本仍然基于 [OpenYSM](https://github.com/OpenYSM)（MIT）与 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）。
-- 默认模型库：[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)。
-- Blockbench：[JannisX11/Blockbench](https://github.com/JannisX11/blockbench)。
+### 核心引擎与上游仓库说明
 
-SPM 采用 **[All Rights Reserved（ARR）+ MIT](LICENSE)** 混合许可证（SPM `2.4.0+` 原创代码与品牌资源保留所有权利 ARR；`spm-core`（`1.0.0`）与 `2.3.2` 及以下 / 过渡期 OpenYSM 衍生遗留部分适用 MIT 许可证）。模型资源遵循各自作者的许可与使用条款。
+- **核心运行时（`2.4.0+`）：**基于独立引擎 **[AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)**（`1.0.0`，MIT）——面向宿主中立的 Java 17 + Rust SIMD 运行时，负责模型解析（`.ysm`、`.bbmodel`、`.geo.json`、`.gltf`/`.glb`、`.figura`、`v3d`）、动画与 Molang 求值、有界纯 Java Lua 5.3 执行以及 CPU/SIMD 骨骼蒙皮计算。
+  - `spm-core` 本身按净室方式编写，仅参考了 [YesSteveModel/YesSteveModel](https://github.com/YesSteveModel/YesSteveModel)（Apache-2.0，仅规范参考）、[AndreaFrederica/OhMyYesSteveModel](https://github.com/AndreaFrederica/OhMyYesSteveModel)（Apache-2.0，历史格式规范、算法来源记录与 Apache-2.0 合成测试向量）、[JannisX11/blockbench](https://github.com/JannisX11/blockbench)（GPL-3.0，仅格式与变换规范）、[KhronosGroup/glTF](https://github.com/KhronosGroup/glTF)（CC-BY-4.0，仅规范参考）和 [FiguraMC/Figura](https://github.com/FiguraMC/Figura)（LGPL-2.1 历史版本，仅规范参考）；完整来源清单见 `spm-core` 仓库的 `provenance/allowed-sources.json` 与 `THIRD_PARTY_NOTICES.md`。
+- **历史版本上游脉络（`2.3.2` 及以下 / `2.4.0` 过渡期）：**
+  - **[OpenYSM](https://github.com/OpenYSM)**（MIT）——SPM `<= 2.3.2` 所基于的原始 Minecraft 自定义模型模组上游代码库（`2.4.0` 中尚未退役的过渡期客户端 / GeckoLib3 / Molang 胶水代码正逐步由 `spm-core` 取代）。
+  - **[OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)**（MIT）与 **[OpenYSMDev/openysm.cpp](https://github.com/OpenYSMDev/openysm.cpp)**（MIT，曾分叉维护于 [sdf123098/openysm.cpp](https://github.com/sdf123098/openysm.cpp)）——`<= 2.3.2` 使用的旧版模型解析器与 C++ 原生加速库，已在 `2.4.0+` 中由 `spm-core` 取代。
+- **配套与资源仓库：**
+  - 云端后端：**[sdf123098/spm-cloud](https://github.com/sdf123098/spm-cloud)**
+  - 默认模型库：**[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)**
+
+### 许可证
+
+SPM 采用 **[All Rights Reserved（ARR）+ MIT](LICENSE)** 混合许可证（SPM `2.4.0+` 原创模组代码、界面、GPU/Blaze3D 渲染桥接、Cloud/Peer 客户端、着色器与品牌资源保留所有权利 ARR；[`spm-core`](https://github.com/AIH-Interactive/spm-core)（`1.0.0`）以及 `2.3.2` 及以下 / 过渡期 OpenYSM 衍生遗留部分适用 MIT 许可证）。模型资源遵循各自作者的许可与使用条款。
