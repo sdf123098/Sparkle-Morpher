@@ -46,7 +46,7 @@ public final class LocalShareSourceResolver {
             for(var dependency : result.dependencies().entries()) resources.put(dependency.relativePath(),
                     dependency.roles().contains(ResourceDependencyManifest.Role.IMAGE) ? PeerAssetManifest.Role.TEXTURE : PeerAssetManifest.Role.BUFFER);
         } else if(lower.endsWith(".ysm")) profile = "ysm-v1";
-        else if(lower.endsWith(".zip")) profile = PeerArchiveProfile.detect(path);
+        else if(lower.endsWith(".zip") || lower.endsWith(".figura")) profile = PeerArchiveProfile.detect(path);
         else if(lower.endsWith(".bbmodel")) profile = "bbmodel-v1";
         else if(lower.endsWith(".geo.json") || lower.endsWith("geometry.json")) profile="bedrock-v1";
         else throw new IOException("Unsupported Peer source format");

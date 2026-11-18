@@ -34,6 +34,10 @@ public final class GltfExtensionRegistry {
         return builder().build();
     }
 
+    boolean isEmpty() {
+        return handlers.isEmpty();
+    }
+
     public static Builder builder() {
         return new Builder();
     }
