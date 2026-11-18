@@ -155,6 +155,9 @@ public class ModelAssembly {
     }
 
     public synchronized void unloadRuntime() {
+        if (this.gltfModel != null) {
+            this.gltfModel.closeCoreBridge();
+        }
         animationBundle = null;
         projectileModels = null;
         vehicleModels = null;

@@ -30,7 +30,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
         if (Files.isDirectory(sourcePath)) {
             // R4.2：folder 源统一走 ModelResourceContainer（懒加载：构造只收集条目清单，读取时实时读文件）
             this.container = ModelResourceContainer.folder(sourcePath);
-        } else if (sourcePath.toString().endsWith(".zip") || sourcePath.toString().endsWith(".ysm")) {
+        } else if (sourcePath.toString().endsWith(".zip") || sourcePath.toString().endsWith(".ysm") || sourcePath.toString().endsWith(".figura")) {
             // R4.2：zip/ysm 统一走 ModelResourceContainer（ZipFile + GBK 回退 + 限额 warn-skip
             // + 模型根探测剥离）。不再使用 zipfs——测试环境与生产路径行为一致。
             this.container = ModelResourceContainer.zip(sourcePath);

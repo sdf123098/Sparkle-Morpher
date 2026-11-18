@@ -1,10 +1,20 @@
 package com.micaftic.morpher.resource.gltf;
 
+import com.micaftic.morpher.core.bridge.SpmGltfBridge;
+import dev.spm.core.api.BoneMatrices;
+import dev.spm.core.api.CancellationToken;
+import dev.spm.core.api.ResourceBudget;
+import dev.spm.core.api.VertexBatch;
+import dev.spm.core.runtime.CpuFrame;
+import dev.spm.core.scene.GltfAnimationLibrary;
+import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Evaluates a glTF scene without knowing anything about Minecraft rendering.
@@ -36,6 +46,42 @@ public final class GltfSceneEvaluator {
             throw new IllegalArgumentException("Invalid glTF animation index: " + animationIndex);
         }
         int nodeCount = model.nodes().size();
+        float animationTime = Float.isFinite(timeSeconds) ? timeSeconds : 0.0f;
+        GltfModel.Animation activeAnimation = animationIndex >= 0 ? model.animations().get(animationIndex) : null;
+        if (activeAnimation != null) {
+            if (loop && activeAnimation.duration() > 0) {
+                animationTime = animationTime % activeAnimation.duration();
+                if (animationTime < 0) animationTime += activeAnimation.duration();
+            } else {
+                animationTime = Math.max(0, Math.min(activeAnimation.duration(), animationTime));
+            }
+            for (GltfModel.Channel channel : activeAnimation.channels()) {
+                GltfModel.Node node = model.nodes().get(channel.nodeIndex());
+                if (channel.path() != GltfModel.Channel.Path.WEIGHTS && node.matrix() != null) {
+                    throw new IllegalArgumentException("Animated matrix nodes are not supported; use TRS transforms: " + node.name());
+                }
+            }
+        }
+
+        SpmGltfBridge.ImportedGltf bridge = model.coreBridge();
+        if (bridge != null && canUseCoreBones(bridge, nodeCount)) {
+            CancellationToken token = new CancellationToken();
+            GltfAnimationLibrary.EvaluatedFrame evaluated = bridge.evaluateAnimation(
+                    activeAnimation != null ? activeAnimation.name() : null,
+                    animationIndex, animationTime, loop, token);
+            BoneMatrices matrices = bridge.evaluateBones(evaluated.pose());
+            Matrix4f[] world = new Matrix4f[nodeCount];
+            float[] rawMatrices = matrices.transforms();
+            for (int i = 0; i < nodeCount; i++) {
+                world[i] = new Matrix4f().set(rawMatrices, i * 16);
+            }
+            Map<String, Vertex[]> morphedVertices = null;
+            if (bridge.hasMorphTargets() || !evaluated.skinState().isEmpty()) {
+                morphedVertices = extractCoreMorphVertices(bridge, evaluated, token);
+            }
+            return new Pose(sceneIndex, animationIndex, animationTime, world, morphedVertices);
+        }
+
         float[][] translations = new float[nodeCount][];
         float[][] rotations = new float[nodeCount][];
         float[][] scales = new float[nodeCount][];
@@ -46,26 +92,17 @@ public final class GltfSceneEvaluator {
             scales[i] = node.scale();
         }
 
-        float animationTime = Float.isFinite(timeSeconds) ? timeSeconds : 0.0f;
-        if (animationIndex >= 0) {
-            GltfModel.Animation animation = model.animations().get(animationIndex);
-            if (loop && animation.duration() > 0) {
-                animationTime = animationTime % animation.duration();
-                if (animationTime < 0) animationTime += animation.duration();
-            } else {
-                animationTime = Math.max(0, Math.min(animation.duration(), animationTime));
-            }
-            for (GltfModel.Channel channel : animation.channels()) {
-                GltfModel.Node node = model.nodes().get(channel.nodeIndex());
-                if (node.matrix() != null) {
-                    throw new IllegalArgumentException("Animated matrix nodes are not supported; use TRS transforms: " + node.name());
-                }
+        if (activeAnimation != null) {
+            for (GltfModel.Channel channel : activeAnimation.channels()) {
                 float[] target = switch (channel.path()) {
                     case TRANSLATION -> translations[channel.nodeIndex()];
                     case ROTATION -> rotations[channel.nodeIndex()];
                     case SCALE -> scales[channel.nodeIndex()];
+                    case WEIGHTS -> null;
                 };
-                sample(channel, animationTime, target);
+                if (target != null) {
+                    sample(channel, animationTime, target);
+                }
             }
         }
 
@@ -74,7 +111,56 @@ public final class GltfSceneEvaluator {
         for (int i = 0; i < nodeCount; i++) {
             computeWorld(i, translations, rotations, scales, world, visitState);
         }
-        return new Pose(sceneIndex, animationIndex, animationTime, world);
+        return new Pose(sceneIndex, animationIndex, animationTime, world, null);
+    }
+
+    private boolean canUseCoreBones(SpmGltfBridge.ImportedGltf bridge, int nodeCount) {
+        if (nodeCount == 0 || bridge.primaryAsset().document().skeleton().boneCount() != nodeCount) {
+            return false;
+        }
+        for (GltfModel.Node node : model.nodes()) {
+            float[] scale = node.scale();
+            if (scale[0] == 0.0f || scale[1] == 0.0f || scale[2] == 0.0f) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Map<String, Vertex[]> extractCoreMorphVertices(
+            SpmGltfBridge.ImportedGltf bridge,
+            GltfAnimationLibrary.EvaluatedFrame evaluated,
+            CancellationToken token) {
+        Map<String, Vertex[]> result = new HashMap<>();
+        try (CpuFrame frame = bridge.renderPoseFrame(
+                evaluated.pose(), evaluated.skinState(), new ResourceBudget(64L << 20), token)) {
+            for (CpuFrame.Mesh mesh : frame.meshes()) {
+                VertexBatch batch = mesh.vertices();
+                int count = batch.vertexCount();
+                float[] pos = batch.positions();
+                float[] norm = batch.normals();
+                float[] uvs = mesh.uvs();
+                int[] rgba = batch.colorsRgba();
+                Vertex[] verts = new Vertex[count];
+                for (int v = 0; v < count; v++) {
+                    int p = v * 3;
+                    int uv = v * 2;
+                    int c = rgba[v];
+                    float r = (c & 0xFF) / 255.0f;
+                    float g = ((c >>> 8) & 0xFF) / 255.0f;
+                    float b = ((c >>> 16) & 0xFF) / 255.0f;
+                    float a = ((c >>> 24) & 0xFF) / 255.0f;
+                    verts[v] = new Vertex(
+                            pos[p], pos[p + 1], pos[p + 2],
+                            norm[p], norm[p + 1], norm[p + 2],
+                            uv + 1 < uvs.length ? uvs[uv] : 0.0f,
+                            uv + 1 < uvs.length ? uvs[uv + 1] : 0.0f,
+                            r, g, b, a);
+                }
+                result.put(mesh.name(), verts);
+            }
+        }
+        return result;
     }
 
     /** Transforms one mesh primitive to world-space vertices using a computed pose. */
@@ -82,6 +168,13 @@ public final class GltfSceneEvaluator {
         GltfModel.Node node = model.nodes().get(nodeIndex);
         if (node.meshIndex() < 0) return new Vertex[0];
         GltfModel.Primitive primitive = model.meshes().get(node.meshIndex()).primitives().get(primitiveIndex);
+        if (pose.coreMorphVertices != null && model.coreBridge() != null) {
+            String coreMeshName = model.coreBridge().resolveNodeMeshName(nodeIndex, primitiveIndex);
+            Vertex[] coreVerts = coreMeshName == null ? null : pose.coreMorphVertices.get(coreMeshName);
+            if (coreVerts != null && coreVerts.length == primitive.vertexCount()) {
+                return coreVerts;
+            }
+        }
         float[] positions = primitive.positions();
         float[] normals = primitive.normals();
         float[] texCoords = primitive.texCoords();
@@ -243,12 +336,15 @@ public final class GltfSceneEvaluator {
         private final int animationIndex;
         private final float timeSeconds;
         private final Matrix4f[] worldMatrices;
+        private final @Nullable Map<String, Vertex[]> coreMorphVertices;
 
-        private Pose(int sceneIndex, int animationIndex, float timeSeconds, Matrix4f[] worldMatrices) {
+        private Pose(int sceneIndex, int animationIndex, float timeSeconds, Matrix4f[] worldMatrices,
+                     @Nullable Map<String, Vertex[]> coreMorphVertices) {
             this.sceneIndex = sceneIndex;
             this.animationIndex = animationIndex;
             this.timeSeconds = timeSeconds;
             this.worldMatrices = worldMatrices;
+            this.coreMorphVertices = coreMorphVertices;
         }
 
         public int sceneIndex() { return sceneIndex; }
