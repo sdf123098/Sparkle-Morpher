@@ -119,4 +119,4 @@ SPM には Better Combat、Curios、Create、Iris/Sodium、スキンレイヤー
 - デフォルトモデルライブラリ：[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)。
 - Blockbench：[JannisX11/Blockbench](https://github.com/JannisX11/blockbench)。
 
-SPM は [MIT](LICENSE) ライセンスです。モデルリソースには各作者のライセンスと利用条件が適用されます。
+SPM は **[All Rights Reserved（ARR）+ MIT](LICENSE)** のハイブリッドライセンスを採用しています（SPM `2.4.0+` の独自コードとブランド素材は All Rights Reserved、`spm-core`（`1.0.0`）および `2.3.2` 以下・移行期の OpenYSM 由来部分は MIT ライセンスとなります）。モデルリソースには各作者のライセンスと利用条件が適用されます。

@@ -119,4 +119,4 @@ SPM에는 Better Combat, Curios, Create, Iris/Sodium과 스킨 레이어 렌더�
 - 기본 모델 라이브러리: [sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model).
 - Blockbench: [JannisX11/Blockbench](https://github.com/JannisX11/blockbench).
 
-SPM은 [MIT](LICENSE) 라이선스입니다. 모델 리소스에는 각 제작자의 라이선스와 이용 조건이 적용됩니다.
+SPM은 **[All Rights Reserved(ARR) + MIT](LICENSE)** 혼합 라이선스를 사용합니다(SPM `2.4.0+` 자체 코드와 브랜드 에셋은 All Rights Reserved이며, `spm-core`(`1.0.0`) 및 `2.3.2` 이하·전환기 OpenYSM 파생 부분은 MIT 라이선스가 적용됩니다). 모델 리소스에는 각 제작자의 라이선스와 이용 조건이 적용됩니다.

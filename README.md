@@ -119,4 +119,4 @@ English, Chinese, Japanese and Korean follow the same section order, installatio
 - Default model library: [sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model).
 - Blockbench: [JannisX11/Blockbench](https://github.com/JannisX11/blockbench).
 
-SPM is licensed under [MIT](LICENSE). Model assets retain their authors' licenses and usage terms.
+SPM uses a dual **[All Rights Reserved (ARR) & MIT](LICENSE)** license (original SPM `2.4.0+` code and brand assets are All Rights Reserved; `spm-core` (`1.0.0`) and historical `<= 2.3.2` / transitional OpenYSM-derived portions remain MIT). Model assets retain their authors' licenses and usage terms.
