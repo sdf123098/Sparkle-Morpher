@@ -1,7 +1,8 @@
 package com.micaftic.morpher.capability;
 
-import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
-import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
+import com.micaftic.morpher.client.ClientModelManager;
+import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
+import com.micaftic.morpher.client.entity.SpmVehicleEntity;
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.fabricmc.api.EnvType;
@@ -14,17 +15,39 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Optional;
 
 @Environment(EnvType.CLIENT)
-public class VehicleCapability extends GeckoVehicleEntity {
+public class VehicleCapability extends SpmVehicleEntity implements com.micaftic.morpher.client.entity.RoamingPropertyHolder {
 
     public static Optional<VehicleCapability> get(Entity entity) {
         return com.micaftic.morpher.capability.fabric.VehicleCapabilityImpl.get(entity);
     }
 
     @Nullable
-    private Int2FloatOpenHashMapStruct floatProperties;
+    private RoamingStruct floatProperties;
 
     public VehicleCapability(Entity entity) {
         super(entity);
+    }
+
+    @Override
+    protected void refreshModel() {
+        ClientModelManager.getModelContext(this.getModelId()).ifPresent(assembly -> {
+            if (this.renderShape == null || this.renderShape.isDefault || assembly != this.renderShape.context) {
+                this.renderShape = buildRenderShape(assembly, false);
+            }
+        });
+        if (this.renderShape != null) {
+            if ((this.renderShape.context != this.modelAssembly || this.renderShape.isDefault != this.loaded) && this.renderShape.isValid()) {
+                this.modelAssembly = this.renderShape.context;
+                this.loaded = this.renderShape.isDefault;
+                onModelLoaded(this.modelAssembly);
+                initAnimationControllers(getAnimationProcessor(), this.modelAssembly.getExpressionCache().getEvents());
+                return;
+            }
+            return;
+        }
+        if (this.modelAssembly != null) {
+            clearModel();
+        }
     }
 
     public void setOwnerModelId(String str) {
@@ -33,19 +56,19 @@ public class VehicleCapability extends GeckoVehicleEntity {
     }
 
     public void setFloatMap(@NotNull Int2FloatOpenHashMap int2FloatOpenHashMap) {
-        this.floatProperties = new Int2FloatOpenHashMapStruct(int2FloatOpenHashMap);
+        this.floatProperties = RoamingStruct.readOnly(int2FloatOpenHashMap);
     }
 
     public void updateFloatMap(@NotNull Int2FloatMap int2FloatMap) {
         if (this.floatProperties == null) {
-            this.floatProperties = new Int2FloatOpenHashMapStruct(new Int2FloatOpenHashMap());
+            this.floatProperties = RoamingStruct.readOnly(new Int2FloatOpenHashMap());
         }
         this.floatProperties.merge(int2FloatMap);
     }
 
     @Override
-    public void setupAnim(float seekTime, boolean isFirstPerson) {
-        super.setupAnim(seekTime, isFirstPerson);
-        getEvaluationContext().setRoamingProperties(this.floatProperties);
+    @Nullable
+    public com.micaftic.morpher.client.animation.molang.struct.RoamingStruct getServerVarContainer() {
+        return this.floatProperties;
     }
 }

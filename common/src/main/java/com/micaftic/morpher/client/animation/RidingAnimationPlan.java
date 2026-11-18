@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.animation;
 
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
 
 import java.util.Collections;
 import java.util.EnumMap;
@@ -37,9 +37,9 @@ public final class RidingAnimationPlan {
         this.selections = Collections.unmodifiableMap(new EnumMap<>(selections));
     }
 
-    public static RidingAnimationPlan analyze(Function<String, Animation> resolver) {
+    public static RidingAnimationPlan analyze(Function<String, ClipSpec> resolver) {
         // Resolve each slot once, including the same aliases used by LivingAnimatable.
-        Map<String, Animation> clips = new java.util.HashMap<>();
+        Map<String, ClipSpec> clips = new java.util.HashMap<>();
         for (String slot : new String[]{"sit", "ride", "ride_pig", "boat"}) {
             clips.put(slot, resolver.apply(slot));
         }
@@ -48,7 +48,7 @@ public final class RidingAnimationPlan {
             Selection selected = new Selection(null, Content.MISSING, false);
             for (int i = 0; i < kind.candidates.length; i++) {
                 String slot = kind.candidates[i];
-                Animation clip = clips.get(slot);
+                ClipSpec clip = clips.get(slot);
                 if (clip != null) {
                     selected = new Selection(slot, content(clip), i != 0);
                     break;
@@ -59,15 +59,11 @@ public final class RidingAnimationPlan {
         return new RidingAnimationPlan(selections);
     }
 
-    private static Content content(Animation animation) {
-        for (var bone : animation.boneAnimations) {
-            if (!bone.rotationKeyFrames.isEmpty() || !bone.positionKeyFrames.isEmpty()
-                    || !bone.scaleKeyFrames.isEmpty()) {
-                return Content.POSE;
-            }
+    private static Content content(ClipSpec animation) {
+        if (animation.hasKeyframes()) {
+            return Content.POSE;
         }
-        return animation.soundKeyFrames.isEmpty() && animation.particleKeyFrames.isEmpty()
-                && animation.customInstructionKeyframes.isEmpty() ? Content.EMPTY : Content.EVENTS_ONLY;
+        return animation.hasEvents() ? Content.EVENTS_ONLY : Content.EMPTY;
     }
 
     public Selection selection(Kind kind) {

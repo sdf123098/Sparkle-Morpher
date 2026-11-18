@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.compat.curios;
 
-import com.micaftic.morpher.geckolib3.core.molang.binding.ContextBinding;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.LivingEntity;
@@ -25,6 +25,6 @@ public final class CuriosCompat {
     public static boolean hasNoTaggedItemInSlot(LivingEntity entity, String str, List<TagKey<Item>> list) { return false;
     }
 
-    public static void registerCuriosItems(ContextBinding binding) {
+    public static void registerCuriosItems(HostMolangSink binding) {
     }
 }

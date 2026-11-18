@@ -1,11 +1,10 @@
 package com.micaftic.morpher.client.entity;
 
-import com.micaftic.morpher.client.event.ClientTickEvent;
-import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.animation.AnimationTracker;
 import com.micaftic.morpher.client.animation.molang.PhysicsManager;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.event.ClientTickEvent;
+import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.util.log.ILogger;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
@@ -30,9 +29,9 @@ public final class PlayerPreviewEntity extends CustomPlayerEntity implements IPr
 
     @Override
     public void resetModel() {
-        this.animationStateMachine.setQueuedAnimation(StringPool.EMPTY);
-        this.animationStateMachine.setCurrentAnimation(StringPool.EMPTY);
-        this.animationStateMachine.setPreviousAnimation(StringPool.EMPTY);
+        this.animationStateMachine.setQueuedAnimation("");
+        this.animationStateMachine.setCurrentAnimation("");
+        this.animationStateMachine.setPreviousAnimation("");
         this.customAnimationActive = false;
         super.resetModel();
     }
@@ -74,7 +73,7 @@ public final class PlayerPreviewEntity extends CustomPlayerEntity implements IPr
     }
 
     @Override
-    public AnimationEvent<?> processAnimationImpl(float partialTick, boolean isFirstPerson) {
+    public HostActionEvent<?> processAnimationImpl(float partialTick, boolean isFirstPerson) {
         Entity entity2 = this.entity;
         if ((entity2 instanceof DummyPlayer) && !((DummyPlayer) entity2).ensureLevel()) {
             return null;
@@ -87,8 +86,8 @@ public final class PlayerPreviewEntity extends CustomPlayerEntity implements IPr
     }
 
     @Override
-    public boolean shouldSkipAnimation(AnimationEvent<?> event) {
-        return event.isFirstPerson();
+    public boolean shouldSkipAnimation(HostActionEvent<?> event) {
+        return false;
     }
 
     @Override

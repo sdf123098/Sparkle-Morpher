@@ -32,7 +32,7 @@
 package org.concentus;
 
 /// <summary>
-/// Struct for Packet Loss Concealment
+/// RoamingStruct for Packet Loss Concealment
 /// </summary>
 class PLCStruct {
 

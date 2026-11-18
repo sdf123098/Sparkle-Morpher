@@ -32,7 +32,7 @@
 package org.concentus;
 
 /// <summary>
-/// Encoder Super Struct
+/// Encoder Super RoamingStruct
 /// </summary>
 class SilkEncoder {
 

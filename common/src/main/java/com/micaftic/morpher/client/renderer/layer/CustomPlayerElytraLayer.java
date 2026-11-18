@@ -2,9 +2,9 @@ package com.micaftic.morpher.client.renderer.layer;
 
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
 import com.micaftic.morpher.core.compat.cosmeticarmorreworked.CosmeticArmorHelper;
-import com.micaftic.morpher.geckolib3.geo.GeoLayerRenderer;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.util.RenderUtils;
+import com.micaftic.morpher.client.renderer.SpmLayerRenderer;
+import com.micaftic.morpher.client.render.ModelScenePose;
+import com.micaftic.morpher.client.renderer.SpmRenderMath;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.model.ElytraModel;
 import net.minecraft.client.model.geom.ModelLayers;
@@ -21,7 +21,7 @@ import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.item.ItemStack;
 import com.mojang.math.Axis;
 
-public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity> {
+public class CustomPlayerElytraLayer extends SpmLayerRenderer<CustomPlayerEntity> {
 
     private static final ResourceLocation WINGS_LOCATION = com.micaftic.morpher.core.api.resource.ResourceApi.nativeId("minecraft", "textures/entity/elytra.png");
 
@@ -35,7 +35,7 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
     public void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLightIn, CustomPlayerEntity entityLivingBaseIn, float limbSwing, float limbSwingAmount, float partialTick, float ageInTicks, float netHeadYaw, float headPitch) {
         LivingEntity entity = entityLivingBaseIn.getEntity();
         ItemStack stack = CosmeticArmorHelper.getElytraItem(entity);
-        AnimatedGeoModel animatedGeoModel = entityLivingBaseIn.getCurrentModel();
+        ModelScenePose animatedGeoModel = entityLivingBaseIn.getCurrentModel();
         boolean hasLocator = animatedGeoModel != null && !animatedGeoModel.elytraBones().isEmpty();
         if (!stack.isEmpty() && animatedGeoModel != null && (hasLocator || isImportedPlayerModel(entityLivingBaseIn))) {
             ResourceLocation cloakTextureLocation = WINGS_LOCATION;
@@ -62,8 +62,8 @@ public class CustomPlayerElytraLayer extends GeoLayerRenderer<CustomPlayerEntity
         }
     }
 
-    public void renderElytra(PoseStack poseStack, AnimatedGeoModel model) {
-        RenderUtils.prepMatrixForLocator(poseStack, model.elytraBones());
+    public void renderElytra(PoseStack poseStack, ModelScenePose model) {
+        SpmRenderMath.prepMatrixForLocator(poseStack, model.elytraBones());
     }
 
     private static boolean isImportedPlayerModel(CustomPlayerEntity customPlayer) {

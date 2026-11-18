@@ -271,6 +271,13 @@ public class InputStateKey {
         recordUsePulse(player, hand);
     }
 
+    public static boolean hasLocalInteractionState() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        return (player != null && isUsePulseValid(player, usePulseHand))
+                || swingPulseTicks > 0
+                || (player != null && (player.isUsingItem() || player.swinging));
+    }
+
     private static InteractionHand resolveClickHand(LocalPlayer player, int button) {
         if (button == 1 && isShield(player.getOffhandItem())) {
             return InteractionHand.OFF_HAND;

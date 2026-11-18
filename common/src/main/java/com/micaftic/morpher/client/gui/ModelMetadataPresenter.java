@@ -3,7 +3,6 @@ package com.micaftic.morpher.client.gui;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.resource.models.AuthorInfo;
 import com.micaftic.morpher.resource.models.Metadata;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.resource.models.MainModelInfo;
 import com.micaftic.morpher.resource.models.ModelPackData;
 import com.google.common.collect.Lists;
@@ -30,7 +29,7 @@ public class ModelMetadataPresenter {
 
     public static String getLocalizedString(ModelPackData modelPackData, String key, @Nullable String defaultValue) {
         if (defaultValue == null) {
-            defaultValue = StringPool.EMPTY;
+            defaultValue = "";
         }
         String selectedLocale = Minecraft.getInstance().getLanguageManager().getSelected();
         Map<String, Map<String, String>> translations = modelPackData.getTranslations();
@@ -84,7 +83,7 @@ public class ModelMetadataPresenter {
 
             String localizedTips = getLocalizedModelStringForLocale(modelAssembly, locale, "metadata.tips", extraInfo.getTips());
             if (StringUtils.isNoneBlank(localizedTips)) {
-                Arrays.stream(localizedTips.replace("\r", StringPool.EMPTY).split("\n")).forEach(tipLine -> {
+                Arrays.stream(localizedTips.replace("\r", "").split("\n")).forEach(tipLine -> {
                     tooltipLines.add(Component.literal(tipLine).withStyle(ChatFormatting.GRAY));
                 });
             }

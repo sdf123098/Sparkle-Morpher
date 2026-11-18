@@ -1,6 +1,6 @@
 package com.micaftic.morpher.client.core;
 
-/** Scalar sampling conventions derived solely from d253 QueryBinding and MolangUtils. */
+/** Scalar sampling conventions for SPM query evaluation. */
 public final class CoreQuerySampling {
     private CoreQuerySampling() { }
     public static double timeOfDay(long timestamp) { return ((float)(timestamp+6000L)/24000)%1; }

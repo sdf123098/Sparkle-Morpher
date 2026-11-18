@@ -1,8 +1,8 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.VehicleCapability;
-import com.micaftic.morpher.client.entity.GeckoVehicleEntity;
-import com.micaftic.morpher.geckolib3.geo.GeoEntityRenderer;
+import com.micaftic.morpher.client.entity.SpmVehicleEntity;
+import com.micaftic.morpher.client.renderer.SpmEntityRenderer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -12,7 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import org.jetbrains.annotations.NotNull;
 
-public class VehicleRenderer extends GeoEntityRenderer<Entity, GeckoVehicleEntity> {
+public class VehicleRenderer extends SpmEntityRenderer<Entity, SpmVehicleEntity> {
     public VehicleRenderer(EntityRendererProvider.Context context) {
         super(context);
     }

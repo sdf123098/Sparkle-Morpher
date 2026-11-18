@@ -64,13 +64,13 @@ public final class MinecraftHostSnapshotSampler {
         query.put("is_alive", entity.isAlive() ? 1.0 : 0.0);
         query.put("is_using_item", entity.isUsingItem() ? 1.0 : 0.0);
         query.put("is_riding", entity.isPassenger() ? 1.0 : 0.0);
-        // d253 QueryBinding intentionally exposes net head yaw under x, pitch under y.
+        // Host query convention exposes net head yaw under x and pitch under y.
         query.put("head_x_rotation", head.queryHeadXRotation());
         query.put("head_y_rotation", head.queryHeadYRotation());
         query.put("time_of_day", CoreQuerySampling.timeOfDay(entity.level().getDayTime()));
         query.put("moon_phase", (double) entity.level().getMoonPhase());
         query.put("life_time", entity.tickCount / 20.0);
-        // Direct d253 QueryBinding getters. Controller completion and local tracker yaw are separate contexts.
+        // Direct world/camera query getters; controller completion and local tracker yaw are separate contexts.
         float partial = client.getTimer().getGameTimeDeltaPartialTick(false);
         query.put("actor_count", (double) client.level.getEntityCount());
         query.put("time_stamp", (double) entity.level().getDayTime());

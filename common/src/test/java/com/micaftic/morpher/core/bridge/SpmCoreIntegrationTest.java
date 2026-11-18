@@ -1,7 +1,7 @@
 package com.micaftic.morpher.core.bridge;
 
 import com.micaftic.morpher.client.render.BuiltModel;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
+import com.micaftic.morpher.client.render.ModelBone;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import dev.spm.core.api.BoneMatrices;
 import dev.spm.core.api.BonePose;
@@ -35,7 +35,7 @@ class SpmCoreIntegrationTest {
 
     @Test
     void builtModelBuildsSkeletonAndEvaluatesThroughComputeProvider() {
-        BuiltModel mesh = new BuiltModel(new GeoBone[0], new String[37][0], new boolean[]{false, false, false},
+        BuiltModel mesh = new BuiltModel(new ModelBone[0], new String[37][0], new boolean[]{false, false, false},
                 new GeometryDescription("geometry.test", 64, 64, 1, 2, new double[]{0, 1, 0}), new boolean[]{false});
         BuiltModel.BakedBone bone = new BuiltModel.BakedBone();
         bone.name = "Head";

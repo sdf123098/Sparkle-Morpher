@@ -15,20 +15,19 @@ modified, sublicensed, or used commercially without prior written permission fro
 the copyright holder.
 
 ================================================================================
-2. MIT License — Historical OpenYSM Portions (<= 2.3.2 / Transition) & spm-core
+2. MIT License — Historical Portions (<= 2.3.2) & spm-core
 ================================================================================
 
 The following components remain licensed under the MIT License (preserving their
 respective copyright and permission notices):
-- Sparkle's Morpher versions 2.3.2 and earlier, and any remaining transitional
-  OpenYSM / OpenYSMDev/YSMParser / GeckoLib3-derived source files (while being
-  phased out and replaced by spm-core).
-- Independent core runtime modules from spm-core (1.0.0) and third-party
-  MIT-licensed dependencies bundled or referenced by the project.
+- Sparkle's Morpher versions 2.3.2 and earlier (historical releases prior to the
+  complete spm-core replacement in 2.4.0+).
+- Independent core runtime modules from spm-core and third-party MIT-licensed
+  dependencies bundled or referenced by the project.
 
 MIT License
 
-Copyright (c) 2026 Marciken and respective upstream OpenYSM / spm-core contributors
+Copyright (c) 2026 Marciken and respective spm-core contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

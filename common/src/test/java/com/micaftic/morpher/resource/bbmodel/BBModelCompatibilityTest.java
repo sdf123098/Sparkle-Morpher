@@ -1,11 +1,14 @@
 package com.micaftic.morpher.resource.bbmodel;
 
-import com.micaftic.morpher.geckolib3.core.keyframe.bone.BoneKeyFrame;
-import com.micaftic.morpher.geckolib3.core.keyframe.bone.BoneKeyFrameProcessor;
-import com.micaftic.morpher.geckolib3.core.keyframe.bone.EasingType;
-import com.micaftic.morpher.geckolib3.core.keyframe.bone.RawBoneKeyFrame;
+import com.micaftic.morpher.client.core.HostAnimationAssets;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
-import org.joml.Vector3f;
+import dev.spm.core.api.BonePose;
+import dev.spm.core.api.CancellationToken;
+import dev.spm.core.api.Skeleton;
+import dev.spm.core.scene.MolangContext;
+import dev.spm.core.scene.PoseAnimationLibrary;
+import dev.spm.core.scene.ScriptBudget;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -296,24 +299,34 @@ public class BBModelCompatibilityTest {
     }
 
     private static void runRuntimeStepKeyframeTest() {
-        RawBoneKeyFrame first = rawFrame(0, EasingType.STEP, 1f);
-        RawBoneKeyFrame second = rawFrame(20, EasingType.LINEAR, 5f);
-        List<BoneKeyFrame> frames = BoneKeyFrameProcessor.process(List.of(first, second), false);
-        Vector3f mid = frames.get(1).evaluate(null, 0.5f);
-        Vector3f end = frames.get(1).evaluate(null, 1.0f);
-        check("runtime: step holds previous value", Math.abs(mid.x - 1f) < 1e-4);
-        check("runtime: step reaches boundary value", Math.abs(end.x - 5f) < 1e-4);
-    }
+        RawYsmModel.RawAnimation rawAnim = new RawYsmModel.RawAnimation();
+        rawAnim.name = "step_test";
+        rawAnim.length = 1.0f;
+        rawAnim.loopMode = 3; // hold_on_last_frame
+        RawYsmModel.RawBoneAnimation boneAnim = new RawYsmModel.RawBoneAnimation();
+        boneAnim.boneName = "head";
+        RawYsmModel.RawKeyframe first = new RawYsmModel.RawKeyframe();
+        first.timestamp = 0.0f;
+        first.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_STEP;
+        first.postData = new Object[]{1.0f, 0.0f, 0.0f};
+        RawYsmModel.RawKeyframe second = new RawYsmModel.RawKeyframe();
+        second.timestamp = 1.0f;
+        second.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
+        second.postData = new Object[]{5.0f, 0.0f, 0.0f};
+        boneAnim.rotation.add(first);
+        boneAnim.rotation.add(second);
+        rawAnim.boneAnimations.add(boneAnim);
 
-    private static RawBoneKeyFrame rawFrame(double tick, EasingType easingType, double value) {
-        RawBoneKeyFrame frame = new RawBoneKeyFrame();
-        frame.startTick = tick;
-        frame.easingType = easingType;
-        frame.preX = value;
-        frame.preY = 0;
-        frame.preZ = 0;
-        frame.contiguous = true;
-        return frame;
+        Skeleton skeleton = new Skeleton(List.of("head"), new int[]{-1}, new float[]{0f, 0f, 0f});
+        BonePose bindPose = BonePose.identity(1);
+        ClipSpec spec = new ClipSpec("step_test", rawAnim, List.of(), null, false, false);
+        PoseAnimationLibrary lib = HostAnimationAssets.compileLibrary("test:step", List.of(spec), skeleton, bindPose);
+        MolangContext ctx = new MolangContext(java.util.Map.of(), java.util.Map.of(), java.util.Map.of(),
+                new ScriptBudget(10_000, 16, new CancellationToken()));
+        BonePose mid = lib.sample("step_test", 0.5, ctx, bindPose);
+        BonePose end = lib.sample("step_test", 1.0, ctx, bindPose);
+        check("runtime: step holds previous value", Math.abs(Math.toDegrees(mid.rotations()[0]) + 1.0) < 1e-3);
+        check("runtime: step reaches boundary value", Math.abs(Math.toDegrees(end.rotations()[0]) + 5.0) < 1e-3);
     }
 
     private static void runTimelineAndEffectConversionTest() {

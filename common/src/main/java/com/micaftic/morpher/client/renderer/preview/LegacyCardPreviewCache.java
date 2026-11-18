@@ -3,7 +3,7 @@ package com.micaftic.morpher.client.renderer.preview;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.core.compat.acceleratedrendering.AcceleratedRenderingCompat;
-import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
+import com.micaftic.morpher.client.renderer.SpmReplacedEntityRenderer;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -43,7 +43,7 @@ final class LegacyCardPreviewCache {
 
     boolean draw(GuiGraphics graphics, int left, int top, int right, int bottom,
                  float originX, float originY, float scale, float tick,
-                 LivingAnimatable<?> entity, GeoReplacedEntityRenderer renderer,
+                 LivingAnimatable<?> entity, SpmReplacedEntityRenderer renderer,
                  boolean fixed, boolean hide, float yaw, Object identity, long revision, boolean refreshAllowed) {
         RenderSystem.assertOnRenderThread();
         if (identity == null || right <= left || bottom <= top || scale <= 0) return false;
@@ -96,7 +96,7 @@ final class LegacyCardPreviewCache {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static void renderLocal(GuiGraphics graphics, Key key, float tick,
-                                    LivingAnimatable<?> entity, GeoReplacedEntityRenderer renderer) {
+                                    LivingAnimatable<?> entity, SpmReplacedEntityRenderer renderer) {
         // Glint and item renderers can hold two consumers simultaneously: never share their builders.
         SequencedMap<RenderType, ByteBufferBuilder> builders = new LinkedHashMap<>() {
             @Override public ByteBufferBuilder get(Object type) {

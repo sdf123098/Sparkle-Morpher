@@ -13,7 +13,6 @@ import com.micaftic.morpher.client.renderer.layer.CustomPlayerItemInHandLayer;
 import com.micaftic.morpher.client.renderer.layer.CustomPlayerParrotLayer;
 import com.micaftic.morpher.client.renderer.hud.HudPoseCache;
 import com.micaftic.morpher.event.api.SpecialPlayerRenderEvent;
-import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -36,7 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-public class CustomPlayerRenderer extends GeoReplacedEntityRenderer<Player, CustomPlayerEntity> {
+public class CustomPlayerRenderer extends SpmReplacedEntityRenderer<Player, CustomPlayerEntity> {
 
     private static final int TEXTURE_EVENT_CACHE_TICKS = 20;
     private static final int MAX_TEXTURE_EVENT_CACHE_SIZE = 256;

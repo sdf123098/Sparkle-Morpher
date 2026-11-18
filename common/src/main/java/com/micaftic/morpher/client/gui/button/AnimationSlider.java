@@ -2,11 +2,10 @@ package com.micaftic.morpher.client.gui.button;
 
 import com.micaftic.morpher.client.motion.ClientMotionSources;
 import com.micaftic.morpher.YesSteveModel;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostMolangRegistry;
+import com.micaftic.morpher.client.core.HostMolangScript;
 import com.micaftic.morpher.client.gui.ISpecialWidget;
-import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
-import com.micaftic.morpher.molang.parser.ParseException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -20,11 +19,11 @@ public class AnimationSlider extends RangedSliderWidget implements ISpecialWidge
 
     private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#.##");
 
-    private final AnimatableEntity<?> model;
+    private final HostAnimatable<?> model;
 
     private final String controllerName;
 
-    public AnimationSlider(int x, int y, Component component, double currentValue, AnimatableEntity<?> animatableEntity, String controllerName, double stepSize, double minValue, double maxValue) {
+    public AnimationSlider(int x, int y, Component component, double currentValue, HostAnimatable<?> animatableEntity, String controllerName, double stepSize, double minValue, double maxValue) {
         super(x, y, 115, 15, component, Component.empty(), minValue, maxValue, currentValue, stepSize, 0, true);
         this.model = animatableEntity;
         this.controllerName = controllerName;
@@ -32,16 +31,17 @@ public class AnimationSlider extends RangedSliderWidget implements ISpecialWidge
 
     @Override
     protected void applyValue() {
-        try {
-            String str = this.controllerName + "=" + getValue();
-            ClientMotionSources.beginEdit(this.model);
-            com.micaftic.morpher.cloud.client.CloudEntityMotionSync.rememberSetting(this.model, this.controllerName, str);
-            this.model.executeExpression(GeckoLibCache.parseSimpleExpression(str), true, false, null);
-            if (!GeckoLibCache.isRoamingVariableAssignment(str)) {
-                ClientMotionSources.expression(this.model, str, java.util.List.of());
-            }
-        } catch (ParseException e) {
-            YesSteveModel.LOGGER.error(e);
+        String str = this.controllerName + "=" + getValue();
+        HostMolangScript script = HostMolangRegistry.parseExpression(str);
+        if (!script.parsedSuccessfully()) {
+            YesSteveModel.LOGGER.error("Failed to parse slider expression '{}': {}", str, script.failure());
+            return;
+        }
+        ClientMotionSources.beginEdit(this.model);
+        com.micaftic.morpher.cloud.client.CloudEntityMotionSync.rememberSetting(this.model, this.controllerName, str);
+        this.model.executeExpression(script, true, false, null);
+        if (!HostMolangRegistry.isRoamingVariableAssignment(str)) {
+            ClientMotionSources.expression(this.model, str, java.util.List.of());
         }
     }
 

@@ -5,12 +5,13 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.RuntimeModelLease;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostMolangRegistry;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
+import com.micaftic.morpher.client.render.BoneIds;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
+import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
@@ -164,16 +165,16 @@ public final class CloudEntityMotionSync {
         if(state==null){state=new Applied(cap);APPLIED.put(id,state);}
         if(cap instanceof MaidCapability maid)maid.applyDisplayMotion(motion.animationKey(),motion.roaming());
         else if(cap instanceof PlayerCapability player){player.awaitAsyncResult();
-            if(!motion.roaming().equals(state.variables)){var values=new Int2FloatOpenHashMap();motion.roaming().forEach((key,value)->values.put(StringPool.computeIfAbsent(key),value.floatValue()));player.updateMolangVars(player.getModelAssembly().getModelData().getHashId(),values);state.variables=motion.roaming();}
+            if(!motion.roaming().equals(state.variables)){var values=new Int2FloatOpenHashMap();motion.roaming().forEach((key,value)->values.put(BoneIds.id(key),value.floatValue()));player.updateMolangVars(player.getModelAssembly().getModelData().getHashId(),values);state.variables=motion.roaming();}
             if(!motion.eventId().equals(state.action)){if(motion.animationKey().isEmpty())player.clearModelSwitch();else player.requestModelSwitch(motion.animationKey());}}
         state.action=motion.eventId();long now=System.currentTimeMillis();
         for(var expression:motion.expressions()){if(!state.expressions.add(expression.eventId())||now-expression.startedAtUnixMs()>30000||expression.startedAtUnixMs()-now>60000)continue;
             try{if(expression.expression().isEmpty()&&cap instanceof PlayerCapability player)player.executeAnimationExpression(new it.unimi.dsi.fastutil.floats.FloatArrayList(expression.values()));
-                else if(!expression.expression().isEmpty())cap.executeExpression(GeckoLibCache.parseSimpleExpression(expression.expression()),true,false,null);
+                else if(!expression.expression().isEmpty())cap.executeExpression(HostMolangRegistry.parseExpression(expression.expression()),true,false,null);
             }catch(Exception error){YesSteveModel.LOGGER.debug("[SPM entity motion] expression ignored",error);}}
         while(state.expressions.size()>128)state.expressions.remove(state.expressions.iterator().next());
     }
-    public static boolean play(AnimatableEntity<?> entity,String key){
+    public static boolean play(HostAnimatable<?> entity,String key){
         if(!(entity instanceof LivingAnimatable<?> cap)||entity.getEntity()==Minecraft.getInstance().player)return false;
         if(!entity.getEntity().level().isClientSide()||!cap.isModelReady())return false;
         tick();
@@ -206,7 +207,7 @@ public final class CloudEntityMotionSync {
         if(player!=null)player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
             "gui.sparkle_morpher.model_panel.setting.local_save_failed"));
     }
-    public static void rememberSetting(AnimatableEntity<?> entity,String control,String expression) {
+    public static void rememberSetting(HostAnimatable<?> entity,String control,String expression) {
         if(!(entity instanceof LivingAnimatable<?> cap))return;
         var key=preferenceKey(cap);if(key==null)return;
         try {
@@ -248,8 +249,8 @@ public final class CloudEntityMotionSync {
                 if(!gate.complete(token,ready||edited,denied,System.nanoTime())||!ready||edited)return;
                 var player=(PlayerCapability)cap;player.awaitAsyncResult();
                 var numbers=new Int2FloatOpenHashMap();
-                variables(cap).forEach((name,value)->numbers.put(StringPool.computeIfAbsent(name),value.floatValue()));
-                saved.variables().forEach((name,value)->numbers.put(StringPool.computeIfAbsent(name),value.floatValue()));
+                variables(cap).forEach((name,value)->numbers.put(BoneIds.id(name),value.floatValue()));
+                saved.variables().forEach((name,value)->numbers.put(BoneIds.id(name),value.floatValue()));
                 player.updateMolangVars(player.getModelAssembly().getModelData().getHashId(),numbers);
                 var owner=new Owner(cap);owner.revision=revisions.get(id);
                 owner.state.roaming(saved.variables());
@@ -257,8 +258,8 @@ public final class CloudEntityMotionSync {
                 if(action.isEmpty())player.clearModelSwitch();else player.requestModelSwitch(action);
                 owner.state.play(player.isModelSwitching()?player.getSelectedModelId():"",System.currentTimeMillis());
                 for(String expression:saved.settings().values())try {
-                    player.executeExpression(GeckoLibCache.parseSimpleExpression(expression),true,false,null);
-                    if(!GeckoLibCache.isRoamingVariableAssignment(expression))owner.state.expression(expression,List.of(),System.currentTimeMillis());
+                    player.executeExpression(HostMolangRegistry.parseExpression(expression),true,false,null);
+                    if(!HostMolangRegistry.isRoamingVariableAssignment(expression))owner.state.expression(expression,List.of(),System.currentTimeMillis());
                 } catch(Exception invalid){YesSteveModel.LOGGER.debug("[SPM fake roulette] outdated control ignored",invalid);}
                 OWN.put(id,owner);retire(id);
                 RENDER.put(id,new Render(cap,cap.getModelId(),owner.state.snapshot()));
@@ -300,9 +301,9 @@ public final class CloudEntityMotionSync {
             }));
         }
     }
-    public static CloudPlayerMotion motion(AnimatableEntity<?> entity){var view=RENDER.get(entity.getEntity().getUUID());return view!=null&&view.cap==entity&&view.model.equals(view.cap.getModelId())?view.motion:null;}
+    public static CloudPlayerMotion motion(HostAnimatable<?> entity){var view=RENDER.get(entity.getEntity().getUUID());return view!=null&&view.cap==entity&&view.model.equals(view.cap.getModelId())?view.motion:null;}
     /** Only explicit editor UI calls this; passive controller and expression evaluation cannot claim publication. */
-    public static void beginEdit(AnimatableEntity<?> entity){
+    public static void beginEdit(HostAnimatable<?> entity){
         if(!(entity instanceof LivingAnimatable<?> cap)||entity.getEntity()==Minecraft.getInstance().player||!cap.isModelReady())return;
         tick();var observed=observation(cap);if(observed==null||!observed.runtimeModelId().equals(cap.getModelId())||OWN.size()>=128&&!OWN.containsKey(entity.getEntity().getUUID()))return;
         UUID id=entity.getEntity().getUUID();Owner owner=OWN.get(id);if(owner!=null&&owner.cap==cap)return;
@@ -313,10 +314,10 @@ public final class CloudEntityMotionSync {
         var cap=capability(entity);var observed=observation(cap);if(observed==null||cap.isForceDisabled()||!cap.isModelReady()||!observed.runtimeModelId().equals(cap.getModelId()))return false;
         return OWN.containsKey(entity.getUUID())||LEDGER.get(context,observed,System.nanoTime())!=null;
     }
-    public static boolean isOwner(AnimatableEntity<?> entity){Owner owner=OWN.get(entity.getEntity().getUUID());return owner!=null&&owner.cap==entity;}
+    public static boolean isOwner(HostAnimatable<?> entity){Owner owner=OWN.get(entity.getEntity().getUUID());return owner!=null&&owner.cap==entity;}
     private static Map<String,Float> variables(LivingAnimatable<?> cap){
         var struct=cap instanceof MaidCapability maid?maid.getServerVarContainer():cap instanceof PlayerCapability player?player.getServerVarContainer():null;
-        return struct instanceof com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct numbers?numbers.snapshotNumbers(32):Map.of();
+        return struct instanceof RoamingStruct numbers?numbers.snapshotNumbers(32):Map.of();
     }
     private static String resolveMaidAction(MaidCapability cap,String key){
         if(key.isEmpty()||cap.getAnimation(key)!=null)return key;
@@ -325,7 +326,7 @@ public final class CloudEntityMotionSync {
         for(var group:groups)if(group!=null)for(var entry:group.entrySet())if(key.equals(entry.getKey())&&entry.getValue()!=null&&cap.getAnimation(entry.getValue())!=null)return entry.getValue();
         return null;
     }
-    public static void controller(AnimatableEntity<?> entity,String name,String state,long started,Map<String,Float> variables){Owner owner=OWN.get(entity.getEntity().getUUID());if(owner!=null&&owner.cap==entity)try{owner.state.controller(name,state,started,variables);}catch(IllegalArgumentException error){YesSteveModel.LOGGER.debug("[SPM entity motion] controller exceeds limits",error);}}
-    public static void expression(AnimatableEntity<?> entity,String expression,List<Float> values){Owner owner=OWN.get(entity.getEntity().getUUID());if(owner!=null&&owner.cap==entity)try{owner.state.expression(expression,values,System.currentTimeMillis());}catch(IllegalArgumentException error){YesSteveModel.LOGGER.debug("[SPM entity motion] expression exceeds limits",error);}}
-    public static void roaming(AnimatableEntity<?> entity,Map<String,Float> values){Owner owner=OWN.get(entity.getEntity().getUUID());if(owner!=null&&owner.cap==entity)try{owner.state.roaming(values);}catch(IllegalArgumentException error){YesSteveModel.LOGGER.debug("[SPM entity motion] variable exceeds limits",error);}}
+    public static void controller(HostAnimatable<?> entity,String name,String state,long started,Map<String,Float> variables){Owner owner=OWN.get(entity.getEntity().getUUID());if(owner!=null&&owner.cap==entity)try{owner.state.controller(name,state,started,variables);}catch(IllegalArgumentException error){YesSteveModel.LOGGER.debug("[SPM entity motion] controller exceeds limits",error);}}
+    public static void expression(HostAnimatable<?> entity,String expression,List<Float> values){Owner owner=OWN.get(entity.getEntity().getUUID());if(owner!=null&&owner.cap==entity)try{owner.state.expression(expression,values,System.currentTimeMillis());}catch(IllegalArgumentException error){YesSteveModel.LOGGER.debug("[SPM entity motion] expression exceeds limits",error);}}
+    public static void roaming(HostAnimatable<?> entity,Map<String,Float> values){Owner owner=OWN.get(entity.getEntity().getUUID());if(owner!=null&&owner.cap==entity)try{owner.state.roaming(values);}catch(IllegalArgumentException error){YesSteveModel.LOGGER.debug("[SPM entity motion] variable exceeds limits",error);}}
 }

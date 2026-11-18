@@ -32,7 +32,7 @@
 package org.concentus;
 
 /// <summary>
-/// Struct for CNG
+/// RoamingStruct for CNG
 /// </summary>
 class CNGState {
 

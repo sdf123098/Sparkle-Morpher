@@ -4,8 +4,8 @@ import com.micaftic.morpher.RuntimeAccelerationLoader;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.client.model.SpecialHandLocatorProfile;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
+import com.micaftic.morpher.client.render.ModelBone;
 import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.geckolib3.geo.render.built.GeoBone;
 import com.micaftic.morpher.resource.ModelOptimizationStats;
 import com.micaftic.morpher.resource.models.GeometryDescription;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
@@ -40,21 +40,21 @@ public final class GeometryBaker {
         stats.textures = textureCount;
         if (rawGeo == null || rawGeo.bones.isEmpty()) {
             boolean[] fallbackArray = scanner != null ? scanner.getResults() : new boolean[Math.max(1, textureCount)];
-            BuiltModel mesh = buildMesh(new GeoBone[0], new HashMap<>(), context, fallbackArray);
+            BuiltModel mesh = buildMesh(new ModelBone[0], new HashMap<>(), context, fallbackArray);
             stats.importBakeMillis = (System.nanoTime() - bakeStart) / 1_000_000L;
             mesh.optimizationStats = stats;
             logModelOptimizationStats(stats);
             return mesh;
         }
 
-        List<GeoBone> geoBones = new ArrayList<>();
+        List<ModelBone> geoBones = new ArrayList<>();
         List<BuiltModel.BakedBone> bakedBones = new ArrayList<>();
         Map<String, String> parentMap = new HashMap<>();
 
         for (RawYsmModel.RawBone rb : rawGeo.bones) {
             stats.bones++;
             parentMap.put(rb.name, rb.parentName);
-            geoBones.add(new GeoBone(rb.name, false, false, false, rb.pivot[0], rb.pivot[1], rb.pivot[2], rb.rotation[0], rb.rotation[1], rb.rotation[2]));
+            geoBones.add(new ModelBone(rb.name, false, false, false, rb.pivot[0], rb.pivot[1], rb.pivot[2], rb.rotation[0], rb.rotation[1], rb.rotation[2]));
 
             BuiltModel.BakedBone bb = new BuiltModel.BakedBone();
             bb.name = rb.name;
@@ -187,7 +187,7 @@ public final class GeometryBaker {
         finalizeOptimizationStats(bakedBones, stats);
 
         boolean[] translucencyArray = scanner != null ? scanner.getResults() : new boolean[Math.max(1, textureCount)];
-        BuiltModel mesh = buildMesh(geoBones.toArray(new GeoBone[0]), parentMap, context, translucencyArray, specialHandLocatorProfile);
+        BuiltModel mesh = buildMesh(geoBones.toArray(new ModelBone[0]), parentMap, context, translucencyArray, specialHandLocatorProfile);
 
         mesh.bakedBones = bakedBones;
         mesh.bakedBoneOrder = BuiltModel.buildParentFirstBoneOrder(bakedBones);
@@ -199,11 +199,11 @@ public final class GeometryBaker {
         return mesh;
     }
 
-    public static BuiltModel buildMesh(GeoBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray) {
+    public static BuiltModel buildMesh(ModelBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray) {
         return buildMesh(bones, parentMap, context, translucencyArray, SpecialHandLocatorProfile.NONE);
     }
 
-    public static BuiltModel buildMesh(GeoBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray, SpecialHandLocatorProfile specialHandLocatorProfile) {
+    public static BuiltModel buildMesh(ModelBone[] bones, Map<String, String> parentMap, GeometryDescription context, boolean[] translucencyArray, SpecialHandLocatorProfile specialHandLocatorProfile) {
         String[][] boneNameArrays = buildBoneNameArrays(parentMap, specialHandLocatorProfile);
         boolean[] flags = new boolean[]{parentMap.containsKey("LeftArm"), parentMap.containsKey("RightArm"), parentMap.containsKey("Background")};
         return new BuiltModel(bones, boneNameArrays, flags, context, translucencyArray);

@@ -25,9 +25,20 @@ public final class PlatformAPIImpl {
     }
 
     public static String getModVersion() {
+        return getModVersion("sparkle_morpher");
+    }
+
+    public static boolean isModLoaded(String modId) {
+        return modId != null && !modId.isEmpty() && FabricLoader.getInstance().isModLoaded(modId);
+    }
+
+    public static String getModVersion(String modId) {
+        if (modId == null || modId.isEmpty()) {
+            return "unknown";
+        }
         try {
             return FabricLoader.getInstance()
-                    .getModContainer("sparkle_morpher")
+                    .getModContainer(modId)
                     .map(c -> c.getMetadata().getVersion().getFriendlyString())
                     .orElse("unknown");
         } catch (Throwable ignored) {

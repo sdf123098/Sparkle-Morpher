@@ -5,10 +5,10 @@ import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
 import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
 import com.micaftic.morpher.client.model.HandLocatorProfile;
-import com.micaftic.morpher.geckolib3.geo.GeoLayerRenderer;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.renderer.SpmLayerRenderer;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
-import com.micaftic.morpher.geckolib3.util.RenderUtils;
+import com.micaftic.morpher.client.renderer.SpmRenderMath;
 import com.micaftic.morpher.util.accessors.BufferSourceAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.ItemInHandRenderer;
@@ -21,7 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import com.mojang.math.Axis;
 import com.micaftic.morpher.util.ItemTagsConstants;
 
-public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEntity> implements HeldItemLayer {
+public class CustomPlayerItemInHandLayer extends SpmLayerRenderer<CustomPlayerEntity> implements HeldItemLayer {
 
     private final ItemInHandRenderer itemRenderer;
 
@@ -32,7 +32,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
     @Override
     public void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLightIn, CustomPlayerEntity entityLivingBaseIn, float limbSwing, float limbSwingAmount, float partialTick, float ageInTicks, float netHeadYaw, float headPitch) {
         LivingEntity entity = entityLivingBaseIn.getEntity();
-        AnimatedGeoModel animatedGeoModel = entityLivingBaseIn.getCurrentModel();
+        ModelScenePose animatedGeoModel = entityLivingBaseIn.getCurrentModel();
         if (animatedGeoModel == null) {
             return;
         }
@@ -78,7 +78,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         }
     }
 
-    public void renderItem(AnimatedGeoModel model, LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, MultiBufferSource multiBufferSource, int i, HandLocatorProfile handLocatorProfile) {
+    public void renderItem(ModelScenePose model, LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, MultiBufferSource multiBufferSource, int i, HandLocatorProfile handLocatorProfile) {
         if (!itemStack.isEmpty()) {
             boolean isLeftHand = humanoidArm == HumanoidArm.LEFT;
             boolean renderedDirectly = false;
@@ -118,16 +118,16 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         }
     }
 
-    public boolean applyItemBoneTransform(HumanoidArm humanoidArm, PoseStack poseStack, AnimatedGeoModel model) {
+    public boolean applyItemBoneTransform(HumanoidArm humanoidArm, PoseStack poseStack, ModelScenePose model) {
         return applyItemBoneTransform(humanoidArm, poseStack, model, ItemStack.EMPTY, HandLocatorProfile.YSM_AUTHORED);
     }
 
-    private boolean applyItemBoneTransform(HumanoidArm humanoidArm, PoseStack poseStack, AnimatedGeoModel model, ItemStack itemStack, HandLocatorProfile handLocatorProfile) {
+    private boolean applyItemBoneTransform(HumanoidArm humanoidArm, PoseStack poseStack, ModelScenePose model, ItemStack itemStack, HandLocatorProfile handLocatorProfile) {
         if (!hasDirectHandAnchor(model, humanoidArm)) {
             return false;
         }
         if (shouldUseSpecialSwordAnchor(itemStack, handLocatorProfile)) {
-            java.util.List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> swordLocator = humanoidArm == HumanoidArm.LEFT ? model.leftSwordBones() : model.rightSwordBones();
+            java.util.List<? extends com.micaftic.morpher.client.render.ModelBoneView> swordLocator = humanoidArm == HumanoidArm.LEFT ? model.leftSwordBones() : model.rightSwordBones();
             if (swordLocator != null && !swordLocator.isEmpty()) {
                 return applyItemBoneTransform(poseStack, swordLocator, handLocatorProfile, true);
             }
@@ -138,22 +138,22 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         return applyItemBoneTransform(poseStack, model.rightHandBones(), handLocatorProfile);
     }
 
-    private boolean applyItemBoneTransform(PoseStack poseStack, java.util.List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> locatorHierarchy, HandLocatorProfile handLocatorProfile) {
+    private boolean applyItemBoneTransform(PoseStack poseStack, java.util.List<? extends com.micaftic.morpher.client.render.ModelBoneView> locatorHierarchy, HandLocatorProfile handLocatorProfile) {
         return applyItemBoneTransform(poseStack, locatorHierarchy, handLocatorProfile, false);
     }
 
-    private boolean applyItemBoneTransform(PoseStack poseStack, java.util.List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> locatorHierarchy, HandLocatorProfile handLocatorProfile, boolean ignoreHiddenLastScale) {
+    private boolean applyItemBoneTransform(PoseStack poseStack, java.util.List<? extends com.micaftic.morpher.client.render.ModelBoneView> locatorHierarchy, HandLocatorProfile handLocatorProfile, boolean ignoreHiddenLastScale) {
         if (locatorHierarchy == null || locatorHierarchy.isEmpty()) {
             return false;
         }
         if (handLocatorProfile.usesEquipmentLocatorTransform()) {
-            RenderUtils.prepMatrixForEquipmentLocator(poseStack, locatorHierarchy);
+            SpmRenderMath.prepMatrixForEquipmentLocator(poseStack, locatorHierarchy);
             return true;
         }
         if (ignoreHiddenLastScale) {
-            return RenderUtils.prepMatrixForLocatorIgnoringHiddenLastScale(poseStack, locatorHierarchy);
+            return SpmRenderMath.prepMatrixForLocatorIgnoringHiddenLastScale(poseStack, locatorHierarchy);
         }
-        return RenderUtils.prepMatrixForLocator(poseStack, locatorHierarchy);
+        return SpmRenderMath.prepMatrixForLocator(poseStack, locatorHierarchy);
     }
 
     private boolean shouldUseSpecialSwordAnchor(ItemStack itemStack, HandLocatorProfile handLocatorProfile) {
@@ -165,20 +165,20 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                 && (itemStack.is(ItemTags.SWORDS) || itemStack.is(ItemTagsConstants.SWORDS));
     }
 
-    private boolean hasHandAnchor(AnimatedGeoModel model, HumanoidArm humanoidArm) {
+    private boolean hasHandAnchor(ModelScenePose model, HumanoidArm humanoidArm) {
         return hasDirectHandAnchor(model, humanoidArm) || hasHandChainAnchor(model, humanoidArm);
     }
 
-    private boolean hasDirectHandAnchor(AnimatedGeoModel model, HumanoidArm humanoidArm) {
+    private boolean hasDirectHandAnchor(ModelScenePose model, HumanoidArm humanoidArm) {
         return humanoidArm == HumanoidArm.LEFT ? !model.leftHandBones().isEmpty() : !model.rightHandBones().isEmpty();
     }
 
-    private boolean hasHandChainAnchor(AnimatedGeoModel model, HumanoidArm humanoidArm) {
+    private boolean hasHandChainAnchor(ModelScenePose model, HumanoidArm humanoidArm) {
         return getHandChains(model, humanoidArm).stream().anyMatch(list -> list != null && !list.isEmpty());
     }
 
-    private java.util.List<java.util.List<com.micaftic.morpher.geckolib3.core.processor.IBone>> getHandChains(AnimatedGeoModel model, HumanoidArm humanoidArm) {
-        return humanoidArm == HumanoidArm.LEFT ? model.leftHandChains() : model.rightHandChain();
+    private java.util.List<java.util.List<com.micaftic.morpher.client.render.ModelBoneView>> getHandChains(ModelScenePose model, HumanoidArm humanoidArm) {
+        return humanoidArm == HumanoidArm.LEFT ? model.leftHandGroupChains() : model.rightHandGroupChains();
     }
 
     private void applyFallbackHandTransform(PoseStack poseStack) {

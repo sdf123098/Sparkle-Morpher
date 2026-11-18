@@ -11,8 +11,8 @@ import java.util.Locale;
 /**
  * The platform-independent representation of the glTF 2.0 core model data.
  *
- * <p>This model deliberately does not depend on Minecraft, GeckoLib, or the
- * existing YSM cube representation.  Rendering and animation can therefore
+ * <p>This model deliberately does not depend on Minecraft or the
+ * YSM cube representation.  Rendering and animation can therefore
  * evolve independently from the legacy import path.</p>
  */
 public final class GltfModel {

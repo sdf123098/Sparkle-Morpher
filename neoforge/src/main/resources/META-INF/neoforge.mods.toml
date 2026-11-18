@@ -14,7 +14,7 @@ logoFile="sparkle_morpher.png"
 credits=""
 authors="Micaftic"
 description='''
-Sparkle's Morpher (花火火的变身器) - Custom player model system for Minecraft, powered by spm-core (versions <= 2.3.2 used OpenYSM).
+Sparkle's Morpher (花火火的变身器) - Custom player model system for Minecraft, powered by spm-core.
 '''
 
 [[mixins]]

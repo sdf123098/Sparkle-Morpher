@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.compat.slashblade;
 
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.entity.LivingEntity;
@@ -17,14 +17,14 @@ public final class SlashBladeRenderer {
     private SlashBladeRenderer() {
     }
 
-    public static void renderOnEntity(LivingEntity entity, AnimatedGeoModel model, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack, float partialTick) {
+    public static void renderOnEntity(LivingEntity entity, ModelScenePose model, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack, float partialTick) {
         if (!SlashBladeModState.LOADED) {
             return;
         }
         SlashBladeBridge.renderMainHandBlade(entity, model, stack, partialTick, poseStack, bufferSource, packedLight);
     }
 
-    public static void renderRightWaist(AnimatedGeoModel model, LivingEntity entity, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack) {
+    public static void renderRightWaist(ModelScenePose model, LivingEntity entity, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack) {
         if (!SlashBladeModState.LOADED) {
             return;
         }

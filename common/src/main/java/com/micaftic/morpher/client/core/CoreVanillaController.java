@@ -5,7 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
-/** d253 CtrlBinding condition order. This is a Host snapshot, not a coded-controller runtime. */
+/** Vanilla action condition priority order for SPM Host snapshots (not a coded-controller runtime). */
 public final class CoreVanillaController {
     private static final String[] ORDER = {"death", "riptide", "sleep", "swim", "climb", "climbing",
             "ladder_up", "ladder_stillness", "ladder_down", "fly", "elytra_fly", "swim_stand",

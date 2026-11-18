@@ -627,7 +627,7 @@ public class BBModelParser {
     }
 
     // ============================================================
-    // AnimationController 解析
+    // ControllerSpec 解析
     // ============================================================
 
     private static BBAnimationController parseAnimationController(JsonObject obj) {

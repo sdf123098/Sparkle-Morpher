@@ -1,7 +1,6 @@
 package com.micaftic.morpher.mixin;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.util.accessors.ProjectileStateAccessor;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -19,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class AbstractArrowEntityMixin implements ProjectileStateAccessor {
 
     @Unique
-    private volatile String ownerMainHandItem = StringPool.EMPTY;
+    private volatile String ownerMainHandItem = "";
 
     @Shadow
     public boolean inGround;
@@ -48,6 +47,6 @@ public class AbstractArrowEntityMixin implements ProjectileStateAccessor {
     @Override
     @Unique
     public void ysm$setDisplayFiringItem(String itemId) {
-        this.ownerMainHandItem = itemId == null ? StringPool.EMPTY : itemId;
+        this.ownerMainHandItem = itemId == null ? "" : itemId;
     }
 }

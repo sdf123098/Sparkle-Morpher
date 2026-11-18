@@ -1,7 +1,7 @@
 package com.micaftic.morpher.capability;
 
-import com.micaftic.morpher.client.entity.GeckoProjectileEntity;
-import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
+import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
+import com.micaftic.morpher.client.entity.SpmProjectileEntity;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -13,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Optional;
 
 @Environment(EnvType.CLIENT)
-public class ProjectileCapability extends GeckoProjectileEntity {
+public class ProjectileCapability extends SpmProjectileEntity {
 
     public static Optional<ProjectileCapability> get(Entity entity) {
         return com.micaftic.morpher.capability.fabric.ProjectileCapabilityImpl.get(entity);
@@ -24,7 +24,7 @@ public class ProjectileCapability extends GeckoProjectileEntity {
     }
 
     @Nullable
-    private Int2FloatOpenHashMapStruct floatProperties;
+    private RoamingStruct floatProperties;
 
     public ProjectileCapability(Projectile projectile) {
         super(projectile);
@@ -37,7 +37,7 @@ public class ProjectileCapability extends GeckoProjectileEntity {
 
     public void setFloatProperties(Int2FloatOpenHashMap int2FloatOpenHashMap) {
         if (int2FloatOpenHashMap != null) {
-            this.floatProperties = new Int2FloatOpenHashMapStruct(int2FloatOpenHashMap);
+            this.floatProperties = RoamingStruct.readOnly(int2FloatOpenHashMap);
         } else {
             this.floatProperties = null;
         }

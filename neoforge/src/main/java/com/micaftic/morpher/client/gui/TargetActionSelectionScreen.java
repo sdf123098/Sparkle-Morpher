@@ -246,7 +246,7 @@ public final class TargetActionSelectionScreen extends Screen {
     }
 
     private void openRoulette(String modelId, com.micaftic.morpher.client.model.ModelAssembly assembly,
-                              com.micaftic.morpher.geckolib3.core.AnimatableEntity<?> target) {
+                              com.micaftic.morpher.client.core.HostAnimatable<?> target) {
         if (assembly == null || !assembly.getPresentationCapabilities().playerActionControlsAvailable()
                 || assembly.getModelData() == null
                 || assembly.getModelData().getModelProperties().getExtraAnimation().isEmpty()) {

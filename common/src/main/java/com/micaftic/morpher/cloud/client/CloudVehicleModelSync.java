@@ -7,7 +7,7 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.client.RuntimeModelLease;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapability;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import com.micaftic.morpher.client.render.BoneIds;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -115,7 +115,7 @@ public final class CloudVehicleModelSync {
         }else if(!old.variables.equals(variables)){cap.awaitAsyncResult();cap.setFloatMap(values(variables));APPLIED.put(entity.getUUID(),new Applied(entity,cap,model,variables,old.lease));}
     }
     private static RuntimeModelLease lease(String model){return model==null?null:ClientModelManager.acquireRuntimeModelLease(model);}
-    private static Int2FloatOpenHashMap values(Map<String,Float> variables){var values=new Int2FloatOpenHashMap();variables.forEach((name,value)->values.put(StringPool.computeIfAbsent(name),value.floatValue()));return values;}
+    private static Int2FloatOpenHashMap values(Map<String,Float> variables){var values=new Int2FloatOpenHashMap();variables.forEach((name,value)->values.put(BoneIds.id(name),value.floatValue()));return values;}
     private static void clear(Entity entity){Applied old=APPLIED.remove(entity.getUUID());if(old!=null){if(old.lease!=null)old.lease.close();old.cap.awaitAsyncResult();old.cap.resetModel();old.cap.setFloatMap(new Int2FloatOpenHashMap());}}
     private static void materialize(CloudPlayerSelection selection){
         if(runtime==null||context==null||IMPORTS.containsKey(selection)||IMPORTS.size()>=128

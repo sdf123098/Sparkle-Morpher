@@ -1,12 +1,11 @@
 package com.micaftic.morpher.client.animation.predicate;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
-import com.micaftic.morpher.client.entity.PlayerGeoEntity;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.entity.SpmPlayerEntity;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import dev.spm.core.scene.CodedLoopMode;
+import com.micaftic.morpher.client.core.HostPlayState;
+import com.micaftic.morpher.client.core.HostActionEvent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
 import com.micaftic.morpher.core.api.item.LanceActionState;
@@ -14,18 +13,18 @@ import com.micaftic.morpher.core.api.item.WeaponActionBridge;
 import com.micaftic.morpher.core.api.item.WeaponActionState;
 import com.micaftic.morpher.core.api.item.WeaponKind;
 
-public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<PlayerGeoEntity> {
+public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<SpmPlayerEntity> {
 
     private static final int LANCE_ATTACK_MARKER = 101;
     private static final int LANCE_USE_MARKER = 102;
 
     @Override
-    public PlayState predicate(AnimationEvent<PlayerGeoEntity> event, ExpressionEvaluator<?> evaluator) {
-        PlayerGeoEntity animatable = event.getAnimatable();
+    public HostPlayState.Decision predicate(HostActionEvent<SpmPlayerEntity> event) {
+        SpmPlayerEntity animatable = event.getAnimatable();
         LocalPlayer player = animatable.getEntity();
         WeaponActionState state = WeaponActionBridge.get(player, event.getPartialTick());
         if (state.kind() != WeaponKind.LANCE) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
 
         LanceActionState lance = state.lance();
@@ -34,7 +33,7 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<P
                 event.getController().stopTransition();
             }
             String animation = selectAnimation(animatable, selectChargeNames(lance));
-            return playIfPresent(event, animation, ILoopType.EDefaultLoopTypes.LOOP);
+            return playIfPresent(event, animation, CodedLoopMode.LOOP);
         }
 
         if (lance.jabbing() || lance.lunging()) {
@@ -44,17 +43,17 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<P
             String animation = lance.lunging()
                     ? selectAnimation(animatable, "lance_lunge", "lance_jab", "swing:lance")
                     : selectAnimation(animatable, "lance_jab", "swing:lance");
-            return playIfPresent(event, animation, ILoopType.EDefaultLoopTypes.PLAY_ONCE);
+            return playIfPresent(event, animation, CodedLoopMode.PLAY_ONCE);
         }
 
         if (!lance.holding()) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
 
         String animation = lance.riding()
                 ? selectAnimation(animatable, "lance_riding_idle", "lance_stand", "hold_mainhand:lance")
                 : selectAnimation(animatable, "lance_stand", "hold_mainhand:lance");
-        return playIfPresent(event, animation, ILoopType.EDefaultLoopTypes.LOOP);
+        return playIfPresent(event, animation, CodedLoopMode.LOOP);
     }
 
     private String[] selectChargeNames(LanceActionState lance) {
@@ -67,9 +66,9 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<P
         return new String[]{"lance_charge", "use_mainhand:lance"};
     }
 
-    private String selectAnimation(PlayerGeoEntity entity, String... animationNames) {
+    private String selectAnimation(SpmPlayerEntity entity, String... animationNames) {
         for (String animationName : animationNames) {
-            Animation animation = entity.getAnimation(animationName);
+            ClipSpec animation = entity.getAnimation(animationName);
             if (animation != null && !animation.isEmpty()) {
                 return animationName;
             }
@@ -77,9 +76,9 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<P
         return null;
     }
 
-    private PlayState playIfPresent(AnimationEvent<PlayerGeoEntity> event, String animationName, ILoopType loopType) {
+    private HostPlayState.Decision playIfPresent(HostActionEvent<SpmPlayerEntity> event, String animationName, CodedLoopMode loopType) {
         if (animationName == null) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         return IAnimationPredicate.playAnimationWithLoop(event, animationName, loopType);
     }

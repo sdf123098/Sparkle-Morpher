@@ -59,17 +59,17 @@ public class ReplacePlayerHandRenderEvent {
             return rendered;
         }
         if (assembly.getAnimationBundle() == null) {
-            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_NO_ANIMATION_BUNDLE, capability.getModelId(), "geckolib", null);
+            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_NO_ANIMATION_BUNDLE, capability.getModelId(), "spm", null);
             return false;
         }
         boolean armBoneExists = hasArmBone(arm, assembly.getAnimationBundle().getArmModel());
         if (!armBoneExists) {
-            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_NO_ARM_BONE, capability.getModelId(), "geckolib", false);
+            FirstPersonRenderDiagnostics.report(arm, Outcome.SKIPPED_NO_ARM_BONE, capability.getModelId(), "spm", false);
             return false;
         }
         boolean rendered = renderHand(localPlayer, assembly, capability, arm, poseStack, bufferSource, packedLight);
         if (rendered) {
-            FirstPersonRenderDiagnostics.report(arm, Outcome.REPLACED, capability.getModelId(), "geckolib", true);
+            FirstPersonRenderDiagnostics.report(arm, Outcome.REPLACED, capability.getModelId(), "spm", true);
         }
         return rendered;
     }
@@ -87,7 +87,7 @@ public class ReplacePlayerHandRenderEvent {
         } catch (Exception e) {
             YesSteveModel.LOGGER.warn("Failed to render custom hand model for arm {}, falling back to vanilla", arm, e);
             FirstPersonRenderDiagnostics.report(arm, Outcome.FAILED_EXCEPTION, capability.getModelId(),
-                    assembly.isGltf() ? "gltf" : "geckolib", null);
+                    assembly.isGltf() ? "gltf" : "spm", null);
             return false;
         }
     }

@@ -1,16 +1,15 @@
 package com.micaftic.morpher.core.compat.touhoulittlemaid;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
 
 public final class MaidRouletteAnimationPredicate implements IAnimationPredicate<MaidCapability> {
     @Override
-    public PlayState predicate(AnimationEvent<MaidCapability> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<MaidCapability> event) {
         String animation = event.getAnimatable().getRouletteAnimation();
         return animation == null || animation.isBlank()
-                ? PlayState.STOP
+                ? HostPlayState.Decision.STOP
                 : IAnimationPredicate.predicate(event, animation);
     }
 }

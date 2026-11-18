@@ -1,11 +1,11 @@
 package com.micaftic.morpher.core.compat.slashblade;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import dev.spm.core.scene.CodedLoopMode;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
@@ -29,7 +29,7 @@ public final class SlashBladeCompat {
         return SlashBladeModState.LOADED && SlashBladeBridge.isSlashBladeItem(itemStack);
     }
 
-    public static String getComboAnimName(AnimationEvent<? extends LivingAnimatable<?>> event) {
+    public static String getComboAnimName(HostActionEvent<? extends LivingAnimatable<?>> event) {
         if (!SlashBladeModState.LOADED || event == null || event.getAnimatable() == null) {
             return "";
         }
@@ -37,18 +37,18 @@ public final class SlashBladeCompat {
     }
 
     @Nullable
-    public static PlayState handleSlashBladeAnim(LivingEntity livingEntity, AnimationEvent<? extends LivingAnimatable<?>> event, String str, ILoopType loopType) {
+    public static HostPlayState.Decision handleSlashBladeAnim(LivingEntity livingEntity, HostActionEvent<? extends LivingAnimatable<?>> event, String str, CodedLoopMode loopType) {
         if (!SlashBladeModState.LOADED) {
             return null;
         }
         return SlashBladeBridge.handleSlashBladeAnim(livingEntity, event, str, loopType);
     }
 
-    public static void registerControllerFunctions(CtrlBinding ctrlBinding) {
+    public static void registerControllerFunctions(HostMolangSink sink) {
         if (SlashBladeModState.LOADED) {
-            SlashBladeBridge.registerBindings(ctrlBinding);
+            SlashBladeBridge.registerBindings(sink);
         } else {
-            ctrlBinding.livingEntityVar("slashblade_animation", it -> StringPool.EMPTY);
+            sink.var("slashblade_animation", event -> MolangValue.text(""));
         }
     }
 

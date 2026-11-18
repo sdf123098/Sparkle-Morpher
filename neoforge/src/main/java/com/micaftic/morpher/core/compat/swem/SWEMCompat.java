@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.compat.swem;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.LivingEntity;
 
 public final class SWEMCompat {
@@ -15,6 +16,8 @@ public final class SWEMCompat {
         return null;
     }
 
-    public static void registerControllerFunctions(CtrlBinding ctrlBinding) {
+    public static void registerControllerFunctions(HostMolangSink sink) {
+        sink.var("swem_is_ride", event -> MolangValue.bool(false));
+        sink.var("swem_state", event -> MolangValue.text(""));
     }
 }

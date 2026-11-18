@@ -1,16 +1,17 @@
 package com.micaftic.morpher.core.compat.slashblade;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.core.processor.IBone;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.util.RenderUtils;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.render.ModelScenePose;
+import com.micaftic.morpher.client.renderer.SpmRenderMath;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import dev.spm.core.scene.CodedLoopMode;
+import dev.spm.core.scene.MolangValue;
 import mods.flammpfeil.slashblade.capability.slashblade.BladeStateAccess;
 import mods.flammpfeil.slashblade.capability.slashblade.ISlashBladeState;
 import mods.flammpfeil.slashblade.client.renderer.CarryType;
@@ -117,7 +118,7 @@ public final class SlashBladeBridge {
     }
 
     @Nullable
-    public static PlayState handleSlashBladeAnim(LivingEntity livingEntity, AnimationEvent<? extends LivingAnimatable<?>> event, String stateAnimation, ILoopType loopType) {
+    public static HostPlayState.Decision handleSlashBladeAnim(LivingEntity livingEntity, HostActionEvent<? extends LivingAnimatable<?>> event, String stateAnimation, CodedLoopMode loopType) {
         String comboName = getComboAnimationName(livingEntity);
         if (comboName.isEmpty() || comboName.equals(stateAnimation)) {
             return null;
@@ -129,14 +130,17 @@ public final class SlashBladeBridge {
         int formatVersion = animatable.getModelAssembly() != null && animatable.getModelAssembly().getModelData() != null
             ? animatable.getModelAssembly().getModelData().getFormatVersion()
             : 0;
-        return IAnimationPredicate.playAnimationWithValid(event, comboName, ILoopType.EDefaultLoopTypes.PLAY_ONCE, formatVersion);
+        return IAnimationPredicate.playAnimationWithValid(event, comboName, CodedLoopMode.PLAY_ONCE, formatVersion);
     }
 
-    public static void registerBindings(CtrlBinding ctrlBinding) {
-        ctrlBinding.livingEntityVar("slashblade_animation", ctx -> getComboAnimationName(ctx.entity()));
+    public static void registerBindings(HostMolangSink sink) {
+        sink.var("slashblade_animation", event -> MolangValue.text(
+                event.getAnimatable().getEntity() instanceof LivingEntity living
+                        ? getComboAnimationName(living)
+                        : ""));
     }
 
-    public static void renderMainHandBlade(LivingEntity livingEntity, AnimatedGeoModel model, ItemStack itemStack,
+    public static void renderMainHandBlade(LivingEntity livingEntity, ModelScenePose model, ItemStack itemStack,
                                            float partialTick, PoseStack poseStack, MultiBufferSource bufferSource,
                                            int packedLight) {
         Optional<ISlashBladeState> stateOptional = BladeStateAccess.of(itemStack);
@@ -243,23 +247,23 @@ public final class SlashBladeBridge {
         }
     }
 
-    private static boolean renderAttachedToModel(LivingEntity livingEntity, AnimatedGeoModel model, ItemStack itemStack,
+    private static boolean renderAttachedToModel(LivingEntity livingEntity, ModelScenePose model, ItemStack itemStack,
                                                   ISlashBladeState state, float partialTick, PoseStack poseStack,
                                                   MultiBufferSource bufferSource, int packedLight) {
         if (model == null) {
             return false;
         }
-        List<IBone> bladeLocator = model.bladeBones().isEmpty() ? model.leftHandBones() : model.bladeBones();
+        List<ModelBoneView> bladeLocator = model.bladeBones().isEmpty() ? model.leftHandBones() : model.bladeBones();
         if (bladeLocator.isEmpty()) {
             return false;
         }
-        List<IBone> sheathLocator = model.sheathBones().isEmpty() ? bladeLocator : model.sheathBones();
+        List<ModelBoneView> sheathLocator = model.sheathBones().isEmpty() ? bladeLocator : model.sheathBones();
         ResourceLocation textureLocation = state.getTexture().orElse(DefaultResources.resourceDefaultTexture);
         WavefrontObject obj = BladeModelManager.getInstance()
                 .getModel(state.getModel().orElse(DefaultResources.resourceDefaultModel));
 
         try (MSAutoCloser ignored = MSAutoCloser.pushMatrix(poseStack)) {
-            RenderUtils.prepMatrixForLocator(poseStack, bladeLocator);
+            SpmRenderMath.prepMatrixForLocator(poseStack, bladeLocator);
             poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
             poseStack.scale((float) MODEL_SCALE_BASE, (float) MODEL_SCALE_BASE, (float) MODEL_SCALE_BASE);
             String part = state.isBroken() ? "blade_damaged" : "blade";
@@ -269,7 +273,7 @@ public final class SlashBladeBridge {
         }
 
         try (MSAutoCloser ignored = MSAutoCloser.pushMatrix(poseStack)) {
-            RenderUtils.prepMatrixForLocator(poseStack, sheathLocator);
+            SpmRenderMath.prepMatrixForLocator(poseStack, sheathLocator);
             poseStack.mulPose(Axis.ZP.rotationDegrees(180.0f));
             poseStack.scale((float) MODEL_SCALE_BASE, (float) MODEL_SCALE_BASE, (float) MODEL_SCALE_BASE);
             BladeRenderState.renderOverrided(itemStack, obj, "sheath", textureLocation, poseStack, bufferSource, packedLight);

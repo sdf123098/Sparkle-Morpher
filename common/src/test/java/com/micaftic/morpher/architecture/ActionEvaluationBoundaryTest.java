@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 1.2.4（§14.2）：动画求值边界 —— 基础动作求值核心不得引用 network / upload 类型。
  *
- * <p>纯求值类（快照采集、状态映射、动画选择）只允许读取 entity 并返回 PlayState，
+ * <p>纯求值类（快照采集、状态映射、动画选择）只允许读取 entity 并返回 HostPlayState.Decision，
  * 不得直接发包或触发上传副作用；网络同步（{@code network.sync.PlayerStateSynchronizer}、
  * {@code ysm.sync}）与上传协调只存在于各自显式调用点，后续版本（1.2.5 RenderContext）
  * 再统一收敛渲染副作用。

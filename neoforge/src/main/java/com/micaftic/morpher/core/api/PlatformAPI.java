@@ -13,9 +13,20 @@ public final class PlatformAPI {
     public static LoaderKind loaderKind() { return LoaderKind.NEOFORGE; }
 
     public static String getModVersion() {
+        return getModVersion("sparkle_morpher");
+    }
+
+    public static boolean isModLoaded(String modId) {
+        return modId != null && !modId.isEmpty() && net.neoforged.fml.ModList.get().isLoaded(modId);
+    }
+
+    public static String getModVersion(String modId) {
+        if (modId == null || modId.isEmpty()) {
+            return "unknown";
+        }
         try {
             return net.neoforged.fml.ModList.get()
-                    .getModContainerById("sparkle_morpher")
+                    .getModContainerById(modId)
                     .map(c -> c.getModInfo().getVersion().toString())
                     .orElse("unknown");
         } catch (Throwable ignored) {

@@ -10,8 +10,8 @@ import com.micaftic.morpher.client.gui.custom.configs.RangeConfig;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
 import com.micaftic.morpher.client.renderer.RendererManager;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.renderer.SpmReplacedEntityRenderer;
 import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -39,7 +39,7 @@ public class ModelSettingsScreen extends OptionScreen {
 
     private final ModelAssembly modelAssembly;
 
-    private final AnimatableEntity<?> animatable;
+    private final HostAnimatable<?> animatable;
 
     @Nullable
     private final String initialGroupId;
@@ -77,11 +77,11 @@ public class ModelSettingsScreen extends OptionScreen {
 
     private int draggingButton = -1;
 
-    public ModelSettingsScreen(ModelAssembly modelAssembly, AnimatableEntity<?> animatable, @Nullable Screen parent, @Nullable String initialGroupId) {
+    public ModelSettingsScreen(ModelAssembly modelAssembly, HostAnimatable<?> animatable, @Nullable Screen parent, @Nullable String initialGroupId) {
         this(modelAssembly, animatable, parent, initialGroupId, true);
     }
 
-    public ModelSettingsScreen(ModelAssembly modelAssembly, AnimatableEntity<?> animatable, @Nullable Screen parent, @Nullable String initialGroupId, boolean renderPreview) {
+    public ModelSettingsScreen(ModelAssembly modelAssembly, HostAnimatable<?> animatable, @Nullable Screen parent, @Nullable String initialGroupId, boolean renderPreview) {
         super(Component.translatable("gui.sparkle_morpher.model_settings.title"), parent);
         this.modelAssembly = modelAssembly;
         this.animatable = animatable;
@@ -384,7 +384,7 @@ public class ModelSettingsScreen extends OptionScreen {
         try {
             float cx = (previewLeft + previewRight) / 2.0f + offsetX;
             float cy = previewTop + (previewBottom - previewTop) * 0.65f + offsetY;
-            ModelPreviewRenderer.renderEntityPreview(cx, cy, zoom, pitch, yaw, partialTick, (com.micaftic.morpher.geckolib3.core.AnimatableEntity) la, RendererManager.getPlayerRenderer(), false);
+            ModelPreviewRenderer.renderEntityPreview(cx, cy, zoom, pitch, yaw, partialTick, la, RendererManager.getPlayerRenderer(), false);
         } finally {
             g.disableScissor();
         }

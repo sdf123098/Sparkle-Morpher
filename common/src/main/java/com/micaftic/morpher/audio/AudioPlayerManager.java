@@ -1,7 +1,7 @@
 package com.micaftic.morpher.audio;
 
+import com.micaftic.morpher.client.core.HostAnimatable;
 import com.micaftic.morpher.config.ModSoundEvents;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceMap;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
@@ -20,7 +20,7 @@ public class AudioPlayerManager {
 
     private final ReferenceArrayList<IAudioPlayer> playerList = new ReferenceArrayList<>(0);
 
-    public boolean playSound(AnimatableEntity<?> entity, int soundId, String soundName, boolean forceReplace, @Nullable Consumer<YSMTickableSoundInstance> callback) {
+    public boolean playSound(HostAnimatable<?> entity, int soundId, String soundName, boolean forceReplace, @Nullable Consumer<YSMTickableSoundInstance> callback) {
         YSMTickableSoundInstance soundInstance;
         if (soundName.contains(":")) {
             ResourceLocation resourceLocationTryParse = com.micaftic.morpher.core.api.resource.ResourceApi.parseNative(soundName);

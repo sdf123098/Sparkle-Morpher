@@ -1,10 +1,10 @@
 package com.micaftic.morpher.core.compat.gun.swarfare;
 
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import dev.spm.core.scene.CodedLoopMode;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
@@ -28,19 +28,19 @@ public final class SWarfareCompat {
         return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.isPlayerAiming(player);
     }
 
-    public static void applyGunTransform(ItemStack stack, AnimatedGeoModel model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
+    public static void applyGunTransform(ItemStack stack, ModelScenePose model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
         com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.applyGunTransform(stack, model, entity, poseStack, packedLightIn, partialTicks);
     }
 
-    public static PlayState handleTaczAnim(LivingEntity entity, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event, String str, ILoopType loopType) {
+    public static HostPlayState.Decision handleTaczAnim(LivingEntity entity, HostActionEvent<? extends LivingAnimatable<? extends LivingEntity>> event, String str, CodedLoopMode loopType) {
         return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.handleTaczAnim(entity, event, str, loopType);
     }
 
-    public static PlayState handleGunHoldAnim(ItemStack stack, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
+    public static HostPlayState.Decision handleGunHoldAnim(ItemStack stack, HostActionEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
         return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.handleGunHoldAnim(stack, event);
     }
 
-    public static PlayState handleGunActionAnim(ItemStack stack, AnimationEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
+    public static HostPlayState.Decision handleGunActionAnim(ItemStack stack, HostActionEvent<? extends LivingAnimatable<? extends LivingEntity>> event) {
         return com.micaftic.morpher.core.compat.gun.swarfare.fabric.SWarfareCompatImpl.handleGunActionAnim(stack, event);
     }
 

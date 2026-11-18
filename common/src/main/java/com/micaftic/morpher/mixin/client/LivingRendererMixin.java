@@ -1,6 +1,6 @@
 package com.micaftic.morpher.mixin.client;
 
-import com.micaftic.morpher.geckolib3.extended.LivingEntityRendererAccessor;
+import com.micaftic.morpher.client.renderer.LivingEntityRendererAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderer;

@@ -12,13 +12,12 @@ import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
 import com.micaftic.morpher.client.render.PlayerFrameSnapshot;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.core.processor.IBone;
-import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
-import com.micaftic.morpher.molang.runtime.Struct;
+import com.micaftic.morpher.client.render.ModelScenePose;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.render.BoneIds;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
 import com.micaftic.morpher.network.ClientNetworkBridge;
 
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
@@ -53,7 +52,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
 
     private int currentModelHashId;
 
-    private Struct serverVarContainer;
+    private RoamingStruct serverVarContainer;
 
     private boolean pendingLocalSettingsRestore;
 
@@ -79,7 +78,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
     }
 
     @Nullable
-    public Struct getServerVarContainer() {
+    public RoamingStruct getServerVarContainer() {
         return this.serverVarContainer;
     }
 
@@ -201,7 +200,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
     }
 
     @Override
-    public void setCurrentModel(AnimatedGeoModel model) {
+    public void setCurrentModel(ModelScenePose model) {
         super.setCurrentModel(model);
         MolangVarHolder varHolder = this.molangVarsMap.get(this.currentModelHashId);
         if (isLocalPlayerModel()) {
@@ -213,7 +212,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
             return;
         }
         if (varHolder != null && varHolder.currentVars != null) {
-            this.serverVarContainer = new Int2FloatOpenHashMapStruct(varHolder.currentVars);
+            this.serverVarContainer = RoamingStruct.readOnly(varHolder.currentVars);
             return;
         }
         this.serverVarContainer = null;
@@ -222,10 +221,10 @@ public final class PlayerCapability extends CustomPlayerEntity {
     @Override
     public void setupAnim(float seekTime, boolean isFirstPerson) {
         super.setupAnim(seekTime, isFirstPerson);
-        if (this.pendingLocalSettingsRestore && this.serverVarContainer instanceof RoamingStruct roamingStruct) {
+        if (this.pendingLocalSettingsRestore && this.serverVarContainer != null && this.serverVarContainer.isWritable()) {
             this.pendingLocalSettingsRestore = false;
-            var restore = LocalModelSettingsStore.restoreExpression(this.localSettingsModelId, roamingStruct);
-            if (restore != null) executeExpression(restore, true, true, null);
+            var restore = LocalModelSettingsStore.restoreTask(this.localSettingsModelId, this.serverVarContainer);
+            if (restore != null) restore.run();
         }
     }
 
@@ -241,9 +240,9 @@ public final class PlayerCapability extends CustomPlayerEntity {
     }
 
     @Override
-    public void applyHeadTracking(AnimationEvent<? extends AnimatableEntity<Player>> event, boolean wasAnimEvaluated) {
+    public void applyHeadTracking(HostActionEvent<? extends HostAnimatable<Player>> event, boolean wasAnimEvaluated) {
         super.applyHeadTracking(event, wasAnimEvaluated);
-        AnimatedGeoModel model2 = getCurrentModel();
+        ModelScenePose model2 = getCurrentModel();
         if (model2 != null && isLocalPlayerModel()) {
             // A full-body first-person mod can render the local player from either animation pass.
             // Always derive head visibility from the actual camera state so the camera never ends
@@ -256,7 +255,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
                 if (model2.viewLocatorBone() != null) {
                     FirstPersonCompat.setCameraDistance(model2.viewLocatorBone().getPivotY() * getWidthScale());
                 } else if (wasAnimEvaluated && !model2.headBones().isEmpty()) {
-                    IBone bone = model2.headBones().get(model2.headBones().size() - 1);
+                    ModelBoneView bone = model2.headBones().get(model2.headBones().size() - 1);
                     FirstPersonCompat.setCameraDistance(bone == null ? 24.0f : bone.getPivotY() * getWidthScale());
                 }
             }
@@ -266,7 +265,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
     @Override
     public void resetHeadTracking(boolean wasAnimEvaluated) {
         super.resetHeadTracking(wasAnimEvaluated);
-        AnimatedGeoModel model2 = getCurrentModel();
+        ModelScenePose model2 = getCurrentModel();
         if (model2 != null && isLocalPlayerModel()) {
             if (model2.allHeadBone() != null) {
                 model2.allHeadBone().setHidden(false);
@@ -294,7 +293,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
         varHolder.currentVars = int2FloatOpenHashMap;
         varHolder.applyPendingDeltas();
         if (i == this.currentModelHashId) {
-            this.serverVarContainer = new Int2FloatOpenHashMapStruct(int2FloatOpenHashMap);
+            this.serverVarContainer = RoamingStruct.readOnly(int2FloatOpenHashMap);
         }
     }
 
@@ -333,11 +332,11 @@ public final class PlayerCapability extends CustomPlayerEntity {
 
     public void tickAnimations() {
         if (isLocalPlayerModel() && this.currentModelHashId != 0) {
-            Struct struct = this.serverVarContainer;
+            RoamingStruct struct = this.serverVarContainer;
             if (struct instanceof RoamingStruct roamingStruct) {
                 java.util.Map<String, Float> current = new java.util.HashMap<>();
                 roamingStruct.forEachVar(name -> {
-                    Object value = roamingStruct.getProperty(StringPool.computeIfAbsent(name));
+                    Object value = roamingStruct.getProperty(BoneIds.id(name));
                     if (current.size() < RoamingStruct.MAX_VARS && !name.isBlank()
                             && name.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH && value instanceof Number number
                             && Float.isFinite(number.floatValue())) current.put(name, number.floatValue());
@@ -349,7 +348,7 @@ public final class PlayerCapability extends CustomPlayerEntity {
                     applyMolangDelta(syncBatch.modelHashId(), syncBatch.changedVariables());
                     java.util.Map<String, Float> changes = new java.util.HashMap<>();
                     for (Int2FloatMap.Entry entry : syncBatch.changedVariables().int2FloatEntrySet()) {
-                        String name = StringPool.getString(entry.getIntKey());
+                        String name = BoneIds.name(entry.getIntKey());
                         if (!name.isBlank() && name.length() <= RoamingStruct.MAX_VAR_NAME_LENGTH
                                 && Float.isFinite(entry.getFloatValue())) changes.put(name, entry.getFloatValue());
                     }

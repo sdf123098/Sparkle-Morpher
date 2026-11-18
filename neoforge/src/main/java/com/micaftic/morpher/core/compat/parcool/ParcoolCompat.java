@@ -1,8 +1,8 @@
 package com.micaftic.morpher.core.compat.parcool;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
 import net.minecraft.world.entity.player.Player;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -11,11 +11,6 @@ import java.util.function.BiFunction;
 
 /**
  * NeoForge ParCool compatibility facade.
- *
- * <p>The real bridge lives in the neoforge source set
- * ({@link com.micaftic.morpher.core.compat.parcool.ParcoolCompatImpl}); this
- * common class keeps the call sites (animation manager / resolver / bindings)
- * independent of the optional mod.</p>
  */
 public final class ParcoolCompat {
 
@@ -30,7 +25,7 @@ public final class ParcoolCompat {
         return ParcoolCompatImpl.getInCompatibleInfo();
     }
 
-    public static Optional<BiFunction<String, CustomPlayerEntity, IAnimationController<CustomPlayerEntity>>> getControllerFactory() {
+    public static Optional<BiFunction<String, CustomPlayerEntity, HostControllerSlot<CustomPlayerEntity>>> getControllerFactory() {
         return ParcoolCompatImpl.getControllerFactory();
     }
 
@@ -42,7 +37,7 @@ public final class ParcoolCompat {
         return ParcoolCompatImpl.getActionName(player);
     }
 
-    public static void registerBindings(CtrlBinding binding) {
+    public static void registerBindings(HostMolangSink binding) {
         ParcoolCompatImpl.registerBindings(binding);
     }
 }

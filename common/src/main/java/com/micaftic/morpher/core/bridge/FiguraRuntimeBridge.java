@@ -1,9 +1,9 @@
 package com.micaftic.morpher.core.bridge;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.core.processor.IBone;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.render.BoneIds;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import dev.spm.core.api.BonePose;
 import dev.spm.core.api.CancellationToken;
 import dev.spm.core.api.DecodePolicy;
@@ -109,7 +109,7 @@ public final class FiguraRuntimeBridge implements AutoCloseable {
     }
 
     public @Nullable FiguraFrame renderAndApply(LivingEntity entity, boolean isHost, float partialTick,
-                                                @Nullable AnimatedGeoModel geoModel) {
+                                                @Nullable ModelScenePose geoModel) {
         if (failed || entity == null) {
             return null;
         }
@@ -130,7 +130,7 @@ public final class FiguraRuntimeBridge implements AutoCloseable {
         }
     }
 
-    private void applyPoses(Map<String, BonePose> poses, AnimatedGeoModel geoModel) {
+    private void applyPoses(Map<String, BonePose> poses, ModelScenePose geoModel) {
         for (Map.Entry<String, BonePose> entry : poses.entrySet()) {
             Skeleton skeleton = skeletonsByKey.get(entry.getKey());
             if (skeleton == null) continue;
@@ -142,7 +142,7 @@ public final class FiguraRuntimeBridge implements AutoCloseable {
             boolean[] ownHidden = pose.ownHidden();
             boolean[] childHidden = pose.childrenHidden();
             for (int i = 0; i < names.size(); i++) {
-                IBone bone = geoModel.bones().get(StringPool.computeIfAbsent(names.get(i)));
+                ModelBoneView bone = geoModel.getBone(BoneIds.id(names.get(i)));
                 if (bone == null) continue;
                 int v = i * 3;
                 bone.setRotationX(bone.getRotationX() + rots[v]);
@@ -155,7 +155,8 @@ public final class FiguraRuntimeBridge implements AutoCloseable {
                 bone.setScaleY(bone.getScaleY() * scales[v + 1]);
                 bone.setScaleZ(bone.getScaleZ() * scales[v + 2]);
                 if (ownHidden[i] || childHidden[i]) {
-                    bone.setHidden(ownHidden[i], childHidden[i]);
+                    bone.setCubesHidden(ownHidden[i]);
+                    bone.setChildrenHidden(childHidden[i]);
                 }
             }
         }

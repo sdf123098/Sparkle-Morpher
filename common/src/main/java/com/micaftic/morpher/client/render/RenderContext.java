@@ -53,7 +53,7 @@ public final class RenderContext {
             ThreadLocal.withInitial(RenderScope::world);
 
     /**
-     * 物理域（路线图 §21）：决定 {@code GeoEntity} 使用哪套 {@code PhysicsManager}，
+     * 物理域（路线图 §21）：决定 {@code SpmEntity} 使用哪套 {@code PhysicsManager}，
      * 替代散落的 {@code ModelPreviewRenderer} 全局 flag 读取。优先级与历史行为一致。
      */
     public enum PhysicsDomain {

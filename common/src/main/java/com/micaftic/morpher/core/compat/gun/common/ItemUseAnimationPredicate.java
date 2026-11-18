@@ -3,9 +3,8 @@ package com.micaftic.morpher.core.compat.gun.common;
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -16,21 +15,21 @@ import java.util.Objects;
 
 public class ItemUseAnimationPredicate implements IAnimationPredicate<LivingAnimatable<?>> {
     @Override
-    public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<LivingAnimatable<?>> event) {
         LivingEntity livingEntity = (LivingEntity) ((LivingAnimatable) event.getAnimatable()).getEntity();
         if (livingEntity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         ItemStack itemInHand = livingEntity.getItemInHand(InteractionHand.MAIN_HAND);
-        PlayState taczPlayState = TacCompat.handleGunActionAnimState(itemInHand, event);
+        HostPlayState.Decision taczPlayState = TacCompat.handleGunActionAnimState(itemInHand, event);
         if (taczPlayState != null) {
             return taczPlayState;
         }
         if (!livingEntity.swinging && !livingEntity.isUsingItem()) {
-            PlayState playState = SWarfareCompat.handleGunActionAnim(itemInHand, event);
-            return Objects.requireNonNullElse(playState, PlayState.STOP);
+            HostPlayState.Decision playState = SWarfareCompat.handleGunActionAnim(itemInHand, event);
+            return Objects.requireNonNullElse(playState, HostPlayState.Decision.STOP);
         }
-        return PlayState.STOP;
+        return HostPlayState.Decision.STOP;
     }
 
     public static boolean isLoaded() {

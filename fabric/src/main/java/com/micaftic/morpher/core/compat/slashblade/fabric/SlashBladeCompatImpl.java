@@ -1,13 +1,14 @@
 package com.micaftic.morpher.core.compat.slashblade.fabric;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import dev.spm.core.scene.CodedLoopMode;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 public final class SlashBladeCompatImpl {
 
@@ -22,16 +23,20 @@ public final class SlashBladeCompatImpl {
         return false;
     }
 
-    public static String getComboAnimName(AnimationEvent<? extends LivingAnimatable<?>> event) {
+    public static String getComboAnimName(HostActionEvent<? extends LivingAnimatable<?>> event) {
         return "";
     }
 
-    public static PlayState handleSlashBladeAnim(LivingEntity livingEntity, AnimationEvent<? extends LivingAnimatable<?>> event, String str, ILoopType loopType) {
+    public static @Nullable HostPlayState.Decision handleSlashBladeAnim(
+            LivingEntity livingEntity,
+            HostActionEvent<? extends LivingAnimatable<?>> event,
+            String animation,
+            CodedLoopMode loopType) {
         return null;
     }
 
-    public static void registerControllerFunctions(CtrlBinding ctrlBinding) {
-        ctrlBinding.livingEntityVar("slashblade_animation", it -> StringPool.EMPTY);
+    public static void registerControllerFunctions(HostMolangSink sink) {
+        sink.var("slashblade_animation", event -> MolangValue.text(""));
     }
 
     public static boolean hasNewApi() {

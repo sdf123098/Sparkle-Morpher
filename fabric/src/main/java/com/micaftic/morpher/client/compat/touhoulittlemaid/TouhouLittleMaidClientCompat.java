@@ -1,11 +1,11 @@
 package com.micaftic.morpher.client.compat.touhoulittlemaid;
 
-import com.micaftic.morpher.client.animation.molang.TLMBinding;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.client.model.PlayerModelBundle;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
+import com.micaftic.morpher.client.model.PlayerModelBundle;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 
@@ -25,11 +25,11 @@ public final class TouhouLittleMaidClientCompat {
     private TouhouLittleMaidClientCompat() {
     }
 
-    public static void registerMaidAnimStates(TLMBinding tlmBinding) {
-        com.micaftic.morpher.client.compat.touhoulittlemaid.fabric.TouhouLittleMaidClientCompatImpl.registerMaidAnimStates(tlmBinding);
+    public static void registerMaidAnimStates(HostMolangSink sink) {
+        com.micaftic.morpher.client.compat.touhoulittlemaid.fabric.TouhouLittleMaidClientCompatImpl.registerMaidAnimStates(sink);
     }
 
-    public static PlayState handleMaidInteraction(AnimationEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, Entity entity) {
+    public static HostPlayState.Decision handleMaidInteraction(HostActionEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, Entity entity) {
         return com.micaftic.morpher.client.compat.touhoulittlemaid.fabric.TouhouLittleMaidClientCompatImpl.handleMaidInteraction(event, livingEntity, entity);
     }
 

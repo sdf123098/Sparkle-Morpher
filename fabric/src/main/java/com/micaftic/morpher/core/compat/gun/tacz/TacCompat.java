@@ -1,12 +1,12 @@
 package com.micaftic.morpher.core.compat.gun.tacz;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -20,23 +20,23 @@ public final class TacCompat {
         return com.micaftic.morpher.core.compat.gun.tacz.fabric.TacCompatImpl.isLoaded();
     }
 
-    public static void registerControllerFunctions(CtrlBinding binding) {
+    public static void registerControllerFunctions(HostMolangSink binding) {
         com.micaftic.morpher.core.compat.gun.tacz.fabric.TacCompatImpl.registerControllerFunctions(binding);
     }
 
-    public static void applyItemTransform(ItemStack stack, AnimatedGeoModel model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
+    public static void applyItemTransform(ItemStack stack, ModelScenePose model, LivingEntity entity, PoseStack poseStack, int packedLightIn, float partialTicks) {
         com.micaftic.morpher.core.compat.gun.tacz.fabric.TacCompatImpl.applyItemTransform(stack, model, entity, poseStack, packedLightIn, partialTicks);
     }
 
-    public static PlayState handleTaczAnimState(LivingEntity entity, AnimationEvent<? extends LivingAnimatable<?>> event, String animation, ILoopType loopType) {
+    public static HostPlayState.Decision handleTaczAnimState(LivingEntity entity, HostActionEvent<? extends LivingAnimatable<?>> event, String animation, CodedLoopMode loopType) {
         return com.micaftic.morpher.core.compat.gun.tacz.fabric.TacCompatImpl.handleTaczAnimState(entity, event, animation, loopType);
     }
 
-    public static PlayState handleGunHoldAnimState(ItemStack stack, AnimationEvent<? extends LivingAnimatable<?>> event) {
+    public static HostPlayState.Decision handleGunHoldAnimState(ItemStack stack, HostActionEvent<? extends LivingAnimatable<?>> event) {
         return com.micaftic.morpher.core.compat.gun.tacz.fabric.TacCompatImpl.handleGunHoldAnimState(stack, event);
     }
 
-    public static PlayState handleGunActionAnimState(ItemStack stack, AnimationEvent<? extends LivingAnimatable<?>> event) {
+    public static HostPlayState.Decision handleGunActionAnimState(ItemStack stack, HostActionEvent<? extends LivingAnimatable<?>> event) {
         return com.micaftic.morpher.core.compat.gun.tacz.fabric.TacCompatImpl.handleGunActionAnimState(stack, event);
     }
 

@@ -1,22 +1,21 @@
 package com.micaftic.morpher.client.animation.predicate;
 
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
-import com.micaftic.morpher.client.entity.GeckoProjectileEntity;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
+import com.micaftic.morpher.client.entity.SpmProjectileEntity;
 import com.micaftic.morpher.util.accessors.ProjectileStateAccessor;
 import net.minecraft.world.entity.projectile.Projectile;
 
-public class ProjectileAnimationPredicate implements IAnimationPredicate<GeckoProjectileEntity> {
+public class ProjectileAnimationPredicate implements IAnimationPredicate<SpmProjectileEntity> {
 
     public static final String[] ENVIRONMENT_STATES = {"water", "ground", "fly", "fire"};
 
     @Override
-    public PlayState predicate(AnimationEvent<GeckoProjectileEntity> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<SpmProjectileEntity> event) {
         Projectile projectile = event.getAnimatable().getEntity();
         if (projectile == null) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         if (projectile.isInWater()) {
             return IAnimationPredicate.predicate(event, "water");

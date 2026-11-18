@@ -20,7 +20,7 @@ class SlashBladeModelAttachmentContractTest {
         assertTrue(bridgeSource.contains("model.bladeBones()"));
         assertTrue(bridgeSource.contains("model.leftHandBones()"));
         assertTrue(bridgeSource.contains("model.sheathBones()"));
-        assertTrue(bridgeSource.contains("RenderUtils.prepMatrixForLocator"));
+        assertTrue(bridgeSource.contains("SpmRenderMath.prepMatrixForLocator"));
         assertTrue(bridgeSource.contains("poseStack.scale((float) MODEL_SCALE_BASE"));
     }
 }

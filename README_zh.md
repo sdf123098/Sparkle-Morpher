@@ -118,8 +118,8 @@ SPM 包含 Better Combat、Curios、Create、Iris/Sodium 和皮肤层渲染的�
 
 - **核心运行时（`2.4.0+`）：**基于独立引擎 **[AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)**（`1.0.0`，MIT）——面向宿主中立的 Java 17 + Rust SIMD 运行时，负责模型解析（`.ysm`、`.bbmodel`、`.geo.json`、`.gltf`/`.glb`、`.figura`、`v3d`）、动画与 Molang 求值、有界纯 Java Lua 5.3 执行以及 CPU/SIMD 骨骼蒙皮计算。
   - `spm-core` 本身按净室方式编写，仅参考了 [YesSteveModel/YesSteveModel](https://github.com/YesSteveModel/YesSteveModel)（Apache-2.0，仅规范参考）、[AndreaFrederica/OhMyYesSteveModel](https://github.com/AndreaFrederica/OhMyYesSteveModel)（Apache-2.0，历史格式规范、算法来源记录与 Apache-2.0 合成测试向量）、[JannisX11/blockbench](https://github.com/JannisX11/blockbench)（GPL-3.0，仅格式与变换规范）、[KhronosGroup/glTF](https://github.com/KhronosGroup/glTF)（CC-BY-4.0，仅规范参考）和 [FiguraMC/Figura](https://github.com/FiguraMC/Figura)（LGPL-2.1 历史版本，仅规范参考）；完整来源清单见 `spm-core` 仓库的 `provenance/allowed-sources.json` 与 `THIRD_PARTY_NOTICES.md`。
-- **历史版本上游脉络（`2.3.2` 及以下 / `2.4.0` 过渡期）：**
-  - **[OpenYSM](https://github.com/OpenYSM)**（MIT）——SPM `<= 2.3.2` 所基于的原始 Minecraft 自定义模型模组上游代码库（`2.4.0` 中尚未退役的过渡期客户端 / GeckoLib3 / Molang 胶水代码正逐步由 `spm-core` 取代）。
+- **历史版本说明（`2.3.2` 及以下）：**
+  - **[OpenYSM](https://github.com/OpenYSM)**（MIT）——SPM `<= 2.3.2` 所基于的原始上游代码库（自 `2.4.0+` 起，OpenYSM / GeckoLib3 / Molang 相关遗留代码已全量移除并替换为 `spm-core`）。
   - **[OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)**（MIT）与 **[OpenYSMDev/openysm.cpp](https://github.com/OpenYSMDev/openysm.cpp)**（MIT，曾分叉维护于 [sdf123098/openysm.cpp](https://github.com/sdf123098/openysm.cpp)）——`<= 2.3.2` 使用的旧版模型解析器与 C++ 原生加速库，已在 `2.4.0+` 中由 `spm-core` 取代。
 - **配套与资源仓库：**
   - 云端后端：**[sdf123098/spm-cloud](https://github.com/sdf123098/spm-cloud)**
@@ -127,4 +127,4 @@ SPM 包含 Better Combat、Curios、Create、Iris/Sodium 和皮肤层渲染的�
 
 ### 许可证
 
-SPM 采用 **[All Rights Reserved（ARR）+ MIT](LICENSE)** 混合许可证（SPM `2.4.0+` 原创模组代码、界面、GPU/Blaze3D 渲染桥接、Cloud/Peer 客户端、着色器与品牌资源保留所有权利 ARR；[`spm-core`](https://github.com/AIH-Interactive/spm-core)（`1.0.0`）以及 `2.3.2` 及以下 / 过渡期 OpenYSM 衍生遗留部分适用 MIT 许可证）。模型资源遵循各自作者的许可与使用条款。
+SPM 采用 **[All Rights Reserved（ARR）+ MIT](LICENSE)** 混合许可证（SPM `2.4.0+` 原创模组代码、界面、GPU/Blaze3D 渲染桥接、Cloud/Peer 客户端、着色器与品牌资源保留所有权利 ARR；[`spm-core`](https://github.com/AIH-Interactive/spm-core) 以及历史 `<= 2.3.2` 版本部分适用 MIT 许可证）。模型资源遵循各自作者的许可与使用条款。

@@ -253,6 +253,13 @@ public class InputStateKey {
         return swingPulseSequence;
     }
 
+    public static boolean hasLocalInteractionState() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        return (player != null && isUsePulseValid(player, usePulseHand))
+                || swingPulseTicks > 0
+                || (player != null && (player.isUsingItem() || player.swinging));
+    }
+
     private static void triggerHandAnimation(int button, int action) {
         if (button != 0 && button != 1) {
             return;

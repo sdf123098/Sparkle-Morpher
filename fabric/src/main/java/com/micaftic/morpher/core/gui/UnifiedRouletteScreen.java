@@ -15,8 +15,8 @@ import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.config.GeneralConfig;
 import com.micaftic.morpher.core.api.client.KeyMappingFactory;
 import com.micaftic.morpher.core.gpu.Pie;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.render.BoneIds;
 import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import net.minecraft.ChatFormatting;
@@ -59,7 +59,7 @@ import com.micaftic.morpher.util.AnimationRouletteDebugLog;
 public class UnifiedRouletteScreen extends Screen {
 
     private static final LinkedList<Pair<String, Integer>> navigationStack = Lists.newLinkedList();
-    private static String lastModelId = StringPool.EMPTY;
+    private static String lastModelId = "";
 
     // ---- Custom roulette layout (persistent across screen rebuilds) ----
     private static OrderedStringMap<String, String> customRootProperties = null;
@@ -85,10 +85,10 @@ public class UnifiedRouletteScreen extends Screen {
     private final OrderedStringMap<String, String> currentProperties;
     private final Map<String, ExtraAnimationButtons> renderGroups;
     private final Map<String, OrderedStringMap<String, String>> textProperties;
-    private final AnimatableEntity<?> animatableModel;
+    private final HostAnimatable<?> animatableModel;
     private final ModelAssembly renderContext;
 
-    public UnifiedRouletteScreen(String modelId, ModelAssembly modelAssembly, AnimatableEntity<?> animatable) {
+    public UnifiedRouletteScreen(String modelId, ModelAssembly modelAssembly, HostAnimatable<?> animatable) {
         super(Component.translatable("gui.sparkle_morpher.roulette.title"));
         this.renderContext = modelAssembly;
         this.animatableModel = animatable;
@@ -124,7 +124,7 @@ public class UnifiedRouletteScreen extends Screen {
         var modelProperties = modelData == null ? null : modelData.getModelProperties();
         if (modelProperties == null || !modelAssembly.getPresentationCapabilities().playerActionControlsAvailable()) {
             navigationStack.clear();
-            navigationStack.add(MutablePair.of(StringPool.EMPTY, 0));
+            navigationStack.add(MutablePair.of("", 0));
             this.currentNavEntry = navigationStack.peekLast();
             this.textProperties = Map.of();
             this.renderGroups = Map.of();
@@ -135,7 +135,7 @@ public class UnifiedRouletteScreen extends Screen {
                 ? customClassify
                 : modelProperties.getExtraAnimationClassify();
         this.renderGroups = modelProperties.getExtraAnimationButtons();
-        if (navigationStack.isEmpty()) navigationStack.add(MutablePair.of(StringPool.EMPTY, 0));
+        if (navigationStack.isEmpty()) navigationStack.add(MutablePair.of("", 0));
         this.currentNavEntry = navigationStack.peekLast();
         if (this.textProperties.containsKey(this.currentNavEntry.getLeft())) {
             this.currentProperties = this.textProperties.get(this.currentNavEntry.getLeft());
@@ -144,7 +144,7 @@ public class UnifiedRouletteScreen extends Screen {
                     ? customRoot
                     : modelProperties.getExtraAnimation();
             navigationStack.clear();
-            navigationStack.add(MutablePair.of(StringPool.EMPTY, this.currentNavEntry.getRight()));
+            navigationStack.add(MutablePair.of("", this.currentNavEntry.getRight()));
             this.currentNavEntry = navigationStack.peekLast();
         }
     }
@@ -165,7 +165,7 @@ public class UnifiedRouletteScreen extends Screen {
      */
     public static void setInitialSubmenu(String submenuKey) {
         navigationStack.clear();
-        navigationStack.add(MutablePair.of(StringPool.EMPTY, 0));
+        navigationStack.add(MutablePair.of("", 0));
         if (submenuKey != null && !submenuKey.isEmpty()) {
             navigationStack.addLast(MutablePair.of(submenuKey, 0));
         }

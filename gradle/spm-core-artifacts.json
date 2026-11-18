@@ -1,25 +1,25 @@
 {
-  "sourceRevision": "166402d4707e01b17a9b87a8631e18768eb3c1eb",
-  "version": "1.0.0",
-  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/467545c855509ce32a870b3d185d3a1b361fc086/",
-  "artifactCommit": "467545c855509ce32a870b3d185d3a1b361fc086",
-  "manifestSha256": "81dc40e7b792893c8c5fcfe974136ea0795baad70dd37b211ff242ebbb77edf6",
+  "sourceRevision": "f0cfd9d7136dc5a28f3059d4209654923a5a5be8",
+  "version": "0.1.0-preview.f0cfd9d7136d",
+  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/c737dcbc40e638b7d5ae53aa03fcb9b1a8138303/",
+  "artifactCommit": "c737dcbc40e638b7d5ae53aa03fcb9b1a8138303",
+  "manifestSha256": "b21f2584df04e222f236ce6087270685ec09e5cc7d81986b1fb5fe9f5c57cd37",
   "sha256": {
     "acceleration-api": "03a4f23aa6700818d25e063ec265690e3dfa4b835a0b1352e33a60a6adb92fc8",
     "api": "3a2c098023d3e5ea175f66282333201f5f852ed13be9e8f93e77f89c59fe819d",
     "codec": "498a04601872f1acf6a92c8f08724c0d0329080ded73a1b76e3c0a033ad58035",
     "format-bbmodel": "9cd0d0232b878a5cd072a214f2e47861aec91d0cf00a782177ac4932332ee142",
-    "format-bedrock": "a43b339ed7343d5d3e006f2f586f7735e3b194671cd667f334766bd5ba8790d9",
+    "format-bedrock": "000dc2ec2b9263fe6be3d1ba19ce5c107419c1a0b9e28f0aa1f767ee44cb7bb9",
     "format-common": "22e8367333cd7c27a74416206a80e423a3c40b900491f26aba94aec9032d8598",
     "format-figura": "5a18cb6c999b6fba5ceefa9c80ede8a6258d728970c522fd2fc121a90ed15df9",
     "format-gltf": "779361e5aabf8b846d34b4f7ba99c8b5d011b280aa8b68d522ab17dba9eb8898",
     "format-v3d": "f3f710cc6a907d83c53d7d12b51d77d5576f6338933cce1dc00435cd182345d8",
     "format-ysm": "0eec5f9ec65f4f8bc0c3885c51d735542a1fb252ff3dfafbbcc0680fd5a01af2",
     "native-jni": "54dd6eff3c91615461169f851fb20b047911a01c07974bd12b79a612ce985ba6",
-    "parser": "6f7fb5c37dc5c26ee22a9b15d3dace08d63588c97cdc2d7d61b8a94b45339522",
+    "parser": "b18e75bb87b422b86c8c988dfdbdd2c80c0f900c03a4ace1dde317ab971980a7",
     "render-cpu": "47beba46922f446cefb723bdb2fc9603aaa07382638b5e8088c351f709b11a9e",
     "runtime": "bfae10da933f853ce848825a0a7a4b2443c7fcbb7f09da19b7b34fbbdb4ee156",
-    "scene": "84590d54ea4adb08e8f94cdde0e44d32ade0c6ca384816bdadf7cdf4ed68ba9e",
+    "scene": "356ba176bd353a3a514df965944ebba3766c2761c5623384a25cfc529de03703",
     "script-lua": "feb6ba198ffc7d639d046d32573dcd725e29d1bca89e37da4303a481f349f3bd"
   }
 }

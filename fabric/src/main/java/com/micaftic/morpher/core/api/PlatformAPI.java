@@ -25,4 +25,12 @@ public final class PlatformAPI {
     public static String getModVersion() {
         return com.micaftic.morpher.core.api.fabric.PlatformAPIImpl.getModVersion();
     }
+
+    public static boolean isModLoaded(String modId) {
+        return com.micaftic.morpher.core.api.fabric.PlatformAPIImpl.isModLoaded(modId);
+    }
+
+    public static String getModVersion(String modId) {
+        return com.micaftic.morpher.core.api.fabric.PlatformAPIImpl.getModVersion(modId);
+    }
 }

@@ -1,7 +1,7 @@
 package com.micaftic.morpher.capability;
 
-import com.micaftic.morpher.client.entity.GeckoProjectileEntity;
-import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
+import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
+import com.micaftic.morpher.client.entity.SpmProjectileEntity;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.neoforged.api.distmarker.Dist;import net.neoforged.api.distmarker.OnlyIn;import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -11,7 +11,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Optional;
 
 @OnlyIn(Dist.CLIENT)
-public class ProjectileCapability extends GeckoProjectileEntity {
+public class ProjectileCapability extends SpmProjectileEntity {
 
     private static final java.util.Map<Entity, java.lang.ref.WeakReference<ProjectileCapability>> STORE = new java.util.WeakHashMap<>();
 
@@ -29,7 +29,7 @@ public class ProjectileCapability extends GeckoProjectileEntity {
     }
 
     @Nullable
-    private Int2FloatOpenHashMapStruct floatProperties;
+    private RoamingStruct floatProperties;
 
     public ProjectileCapability(Projectile projectile) {
         super(projectile);
@@ -42,7 +42,7 @@ public class ProjectileCapability extends GeckoProjectileEntity {
 
     public void setFloatProperties(Int2FloatOpenHashMap int2FloatOpenHashMap) {
         if (int2FloatOpenHashMap != null) {
-            this.floatProperties = new Int2FloatOpenHashMapStruct(int2FloatOpenHashMap);
+            this.floatProperties = RoamingStruct.readOnly(int2FloatOpenHashMap);
         } else {
             this.floatProperties = null;
         }

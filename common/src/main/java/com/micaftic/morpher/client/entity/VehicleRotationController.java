@@ -1,42 +1,21 @@
 package com.micaftic.morpher.client.entity;
 
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.core.HostPlayState;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.core.compat.immersiveaircraft.ImmersiveAirCraftCompat;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
-import com.micaftic.morpher.geckolib3.core.snapshot.BoneTopLevelSnapshot;
-import com.micaftic.morpher.geckolib3.core.controller.BoneTransformProvider;
-import com.micaftic.morpher.geckolib3.core.util.TransitionVector3f;
-import com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext;
 import com.micaftic.morpher.core.compat.simpleplanes.SimplePlanesCompat;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 
-import java.util.List;
-import java.util.function.Consumer;
+public class VehicleRotationController extends HostControllerSlot<SpmVehicleEntity> {
 
-public class VehicleRotationController implements IAnimationController<GeckoVehicleEntity> {
+    private @Nullable Vector3f vehicleRotation;
 
-    private final String modelId;
-
-    private final GeckoVehicleEntity entity;
-
-    private final ExpressionTransformProvider transformProvider = new ExpressionTransformProvider();
-
-    private BoneTopLevelSnapshot boneTarget;
-
-    private TransitionVector3f vehicleRotation;
-
-    public VehicleRotationController(GeckoVehicleEntity entity, String str) {
-        this.modelId = str;
-        this.entity = entity;
-    }
-
-    @Override
-    public String getName() {
-        return this.modelId;
+    public VehicleRotationController(SpmVehicleEntity entity, String name) {
+        super(entity, name, 0.0f, (event, animatable) -> HostPlayState.Decision.STOP);
     }
 
     @Override
@@ -50,55 +29,24 @@ public class VehicleRotationController implements IAnimationController<GeckoVehi
     }
 
     @Override
-    public void init(List<BoneTopLevelSnapshot> list, Object2ReferenceMap<String, List<IValue>> object2ReferenceMap) {
-        this.boneTarget = list.isEmpty() ? null : list.get(0);
-    }
-
-    @Override
-    public void process(AnimationEvent<GeckoVehicleEntity> event, ExpressionEvaluator<AnimationContext<?>> evaluator, boolean isFirstPerson) {
-        ImmersiveAirCraftCompat.getAircraftRotation(event).or(() -> {
-            return SimplePlanesCompat.getSimplePlanesRotation(event);
-        }).ifPresent(vector3f -> {
-            this.vehicleRotation = new TransitionVector3f(vector3f);
-            this.vehicleRotation.setPercentCompleted(0.0f);
-        });
-    }
-
-    @Override
-    public void forEachTransform(Consumer<BoneTransformProvider> consumer) {
-        if (this.boneTarget != null && this.vehicleRotation != null) {
-            consumer.accept(this.transformProvider);
+    public void applyProceduralPose(HostActionEvent<SpmVehicleEntity> event, ModelScenePose pose) {
+        this.vehicleRotation = null;
+        ImmersiveAirCraftCompat.getAircraftRotation(event)
+                .or(() -> SimplePlanesCompat.getSimplePlanesRotation(event))
+                .ifPresent(vector3f -> this.vehicleRotation = new Vector3f(vector3f));
+        if (this.vehicleRotation != null && !pose.getOrderedBones().isEmpty()) {
+            ModelBoneView root = pose.getOrderedBones().getFirst();
+            Vector3f init = root.getInitialRotation();
+            root.setRotation(
+                    init.x + this.vehicleRotation.x,
+                    init.y + this.vehicleRotation.y,
+                    init.z + this.vehicleRotation.z);
         }
     }
 
     @Override
     public void reset() {
-        this.boneTarget = null;
+        super.reset();
         this.vehicleRotation = null;
-    }
-
-    private class ExpressionTransformProvider implements BoneTransformProvider {
-        private ExpressionTransformProvider() {
-        }
-
-        @Override
-        public BoneTopLevelSnapshot getBoneTarget() {
-            return VehicleRotationController.this.boneTarget;
-        }
-
-        @Override
-        public TransitionVector3f getRotation(ExpressionEvaluator<AnimationContext<?>> evaluator) {
-            return VehicleRotationController.this.vehicleRotation;
-        }
-
-        @Override
-        public TransitionVector3f getPosition(ExpressionEvaluator<AnimationContext<?>> evaluator) {
-            return null;
-        }
-
-        @Override
-        public TransitionVector3f getScale(ExpressionEvaluator<AnimationContext<?>> evaluator) {
-            return null;
-        }
     }
 }

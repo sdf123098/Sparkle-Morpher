@@ -3,15 +3,14 @@ package com.micaftic.morpher.client.animation.predicate;
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.animation.condition.ConditionHold;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
+import dev.spm.core.scene.CodedLoopMode;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.LivingEntityFrameState;
 import com.micaftic.morpher.client.model.ModelActionProfile;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.CrossbowItem;
@@ -21,15 +20,15 @@ import org.apache.commons.lang3.StringUtils;
 
 public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatable<?>> {
     @Override
-    public PlayState predicate(AnimationEvent<LivingAnimatable<?>> event, ExpressionEvaluator<?> evaluator) {
+    public HostPlayState.Decision predicate(HostActionEvent<LivingAnimatable<?>> event) {
         LivingEntity entity = event.getAnimatable().getEntity();
         if (entity == null || (event.getAnimatable() instanceof IPreviewAnimatable)) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         ModelAssembly modelAssembly = event.getAnimatable().getModelAssembly();
         PlayerModelBundle animationBundle = modelAssembly == null ? null : modelAssembly.getAnimationBundle();
         if (animationBundle == null || animationBundle.getActionProfile() == ModelActionProfile.VANILLA_HUMANOID) {
-            return PlayState.STOP;
+            return HostPlayState.Decision.STOP;
         }
         ItemStack itemInHand = entity.getItemInHand(InteractionHand.OFF_HAND);
         LivingEntityFrameState<?> frameState = ((LivingAnimatable) event.getAnimatable()).getPositionTracker();
@@ -37,19 +36,19 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
             frameState.setHandItemsForAnimation(itemInHand, InteractionHand.OFF_HAND);
             event.getController().stopTransition();
         }
-        if (!checkSwingAndUse(entity, InteractionHand.OFF_HAND)) return PlayState.PAUSE;
+        if (!checkSwingAndUse(entity, InteractionHand.OFF_HAND)) return HostPlayState.Decision.PAUSE;
         int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
         if (itemInHand.is(Items.CROSSBOW) && CrossbowItem.isCharged(itemInHand)) {
-            return IAnimationPredicate.playAnimationWithValid(event, "hold_offhand:charged_crossbow", ILoopType.EDefaultLoopTypes.LOOP, i);
+            return IAnimationPredicate.playAnimationWithValid(event, "hold_offhand:charged_crossbow", CodedLoopMode.LOOP, i);
         }
         ConditionHold conditionHold = event.getAnimatable().getModelConfig().getHoldOffhand();
         if (conditionHold != null) {
             String str = conditionHold.doTest(entity, InteractionHand.OFF_HAND);
             if (StringUtils.isNoneBlank(str)) {
-                return IAnimationPredicate.playAnimationWithValid(event, str, ILoopType.EDefaultLoopTypes.LOOP, i);
+                return IAnimationPredicate.playAnimationWithValid(event, str, CodedLoopMode.LOOP, i);
             }
         }
-        return PlayState.STOP;
+        return HostPlayState.Decision.STOP;
     }
 
     private boolean isSameItem(ItemStack stack, LivingEntityFrameState<?> frameState, InteractionHand hand) {

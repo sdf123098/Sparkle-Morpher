@@ -1,45 +1,49 @@
 package com.micaftic.morpher.util;
 
-import com.micaftic.morpher.core.compat.oculus.OculusCompat;
-import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
-import com.micaftic.morpher.client.render.RenderContext;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.molang.context.IContext;
+import com.micaftic.morpher.client.core.HostAnimatable;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
+import com.micaftic.morpher.client.render.RenderContext;
+import com.micaftic.morpher.client.renderer.ModelPreviewRenderer;
+import com.micaftic.morpher.core.compat.oculus.OculusCompat;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 
 public final class CameraUtil {
-    public static int getCameraType(IContext<? extends Entity> IContext) {
-        if (IContext.entity() == Minecraft.getInstance().player
-                && IContext.entity() == Minecraft.getInstance().getCameraEntity()
+
+    private CameraUtil() {
+    }
+
+    public static int getCameraType(HostAnimatable<?> animatable) {
+        return getCameraType(animatable != null ? animatable.getEntity() : null);
+    }
+
+    public static int getCameraType(Entity entity) {
+        if (entity != null
+                && entity == Minecraft.getInstance().player
+                && entity == Minecraft.getInstance().getCameraEntity()
                 && hasCameraContext()) {
-            return IContext.mc().options.getCameraType().ordinal();
+            return Minecraft.getInstance().options.getCameraType().ordinal();
         }
         return CameraType.THIRD_PERSON_FRONT.ordinal();
     }
 
-    public static boolean isFirstPerson(AnimatableEntity<? extends Entity> animatableEntity) {
-        return animatableEntity.getEntity() == Minecraft.getInstance().player
-                && animatableEntity.getEntity() == Minecraft.getInstance().getCameraEntity()
-                && hasCameraContext() && !OculusCompat.isPBRActive() && Minecraft.getInstance().options.getCameraType().ordinal() == CameraType.FIRST_PERSON.ordinal();
+    public static boolean isFirstPerson(HostAnimatable<? extends Entity> animatable) {
+        return animatable.getEntity() == Minecraft.getInstance().player
+                && animatable.getEntity() == Minecraft.getInstance().getCameraEntity()
+                && hasCameraContext()
+                && !OculusCompat.isPBRActive()
+                && Minecraft.getInstance().options.getCameraType().isFirstPerson();
     }
 
     private static boolean hasCameraContext() {
-        // GUI/PIP work can run while world or optional first-person flags are set.
-        // These previews always need the complete model, including its head.
         if (RenderContext.isAnyPreview() || RenderContext.isPaperDoll()) {
             return false;
         }
         return ModelPreviewRenderer.isWorldRender() || ModelPreviewRenderer.isFirstPerson();
     }
 
-    public static boolean isThirdPerson(IContext<? extends Entity> IContext) {
-        return isThirdPersonModel(IContext.geoInstance());
-    }
-
-    public static boolean isThirdPersonModel(AnimatableEntity<?> model) {
+    public static boolean isThirdPersonModel(HostAnimatable<?> model) {
         return (model instanceof IPreviewAnimatable) || ModelPreviewRenderer.isPreview();
     }
 }

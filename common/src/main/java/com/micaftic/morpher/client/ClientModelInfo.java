@@ -1,11 +1,11 @@
 package com.micaftic.morpher.client;
 
-import com.micaftic.morpher.geckolib3.file.ModelExtraResourcesFile;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ExtraResourceBundleSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ProjectileBundleSpec;
+import com.micaftic.morpher.client.core.HostAnimationAssets.VehicleBundleSpec;
+import com.micaftic.morpher.client.model.MainModelData;
 import com.micaftic.morpher.client.texture.OuterFileTexture;
 import com.micaftic.morpher.model.format.ModelMetadata;
-import com.micaftic.morpher.client.model.MainModelData;
-import com.micaftic.morpher.geckolib3.file.VehicleModelFiles;
-import com.micaftic.morpher.geckolib3.file.ProjectileModelFiles;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
@@ -14,11 +14,11 @@ public final class ClientModelInfo {
 
     private final MainModelData mainModelData;
 
-    private final ProjectileModelFiles[] projectileModelFiles;
+    private final ProjectileBundleSpec[] projectileModelFiles;
 
-    private final VehicleModelFiles[] vehicleModelFiles;
+    private final VehicleBundleSpec[] vehicleModelFiles;
 
-    private final ModelExtraResourcesFile extraResources;
+    private final ExtraResourceBundleSpec extraResources;
 
     @NotNull
     private final ModelMetadata info;
@@ -27,7 +27,14 @@ public final class ClientModelInfo {
 
     private final Map<String, OuterFileTexture> guiTextures;
 
-    public ClientModelInfo(MainModelData mainModelData, ProjectileModelFiles[] projectileModelFiles, VehicleModelFiles[] vehicleModelFiles, ModelExtraResourcesFile extraResources, @NotNull ModelMetadata info, Map<String, OuterFileTexture> avatarTextures, Map<String, OuterFileTexture> guiTextures) {
+    public ClientModelInfo(
+            MainModelData mainModelData,
+            ProjectileBundleSpec[] projectileModelFiles,
+            VehicleBundleSpec[] vehicleModelFiles,
+            ExtraResourceBundleSpec extraResources,
+            @NotNull ModelMetadata info,
+            Map<String, OuterFileTexture> avatarTextures,
+            Map<String, OuterFileTexture> guiTextures) {
         this.mainModelData = mainModelData;
         this.projectileModelFiles = projectileModelFiles;
         this.vehicleModelFiles = vehicleModelFiles;
@@ -41,15 +48,15 @@ public final class ClientModelInfo {
         return this.mainModelData;
     }
 
-    public ProjectileModelFiles[] getExtraItemModels() {
+    public ProjectileBundleSpec[] getExtraItemModels() {
         return this.projectileModelFiles;
     }
 
-    public VehicleModelFiles[] getVehicleModelFiles() {
+    public VehicleBundleSpec[] getVehicleModelFiles() {
         return this.vehicleModelFiles;
     }
 
-    public ModelExtraResourcesFile getExtraResources() {
+    public ExtraResourceBundleSpec getExtraResources() {
         return this.extraResources;
     }
 

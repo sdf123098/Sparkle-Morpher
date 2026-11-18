@@ -32,7 +32,7 @@
 package org.concentus;
 
 /// <summary>
-/// Struct for TOC (Table of Contents)
+/// RoamingStruct for TOC (Table of Contents)
 /// </summary>
 class TOCStruct {
 
