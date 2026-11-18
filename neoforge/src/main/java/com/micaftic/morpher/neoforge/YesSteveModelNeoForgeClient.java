@@ -19,6 +19,7 @@ public final class YesSteveModelNeoForgeClient {
 
     public static void init(IEventBus modBus, ModContainer container) {
         TouhouLittleMaidClientCompat.initOfficialCompat();
+        CoreSceneNeoForgeLifecycle.register(modBus);
         container.registerExtensionPoint(IConfigScreenFactory.class, (modContainer, parent) -> ModernPlayerModelScreen.settings(parent));
         NeoForgeClientEventBridge.register(modBus);
     }

@@ -1,0 +1,7 @@
+{
+  "origin": "Independently authored synthetic SPM Core Host smoke fixture, 2026-11-07",
+  "license": "MIT",
+  "third_party_model_content": false,
+  "purpose": ["named clip", "own function", "init/update/defer/sync hooks", "sneak query", "vanilla sound and particle return values"],
+  "game_acceptance": "Not established by this file's existence; requires both loader game runs"
+}
