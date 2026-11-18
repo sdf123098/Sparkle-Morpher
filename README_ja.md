@@ -39,13 +39,13 @@ SPM のモデル共有は Minecraft サーバーの MOD 構成から独立して
 
 | 形式 | インポート対応 |
 |---|---|
-| `.ysm` | テクスチャとモデル付属アニメーションを含む YSM モデル。OpenYSM/YSMParser ベースのインポート処理を使用します。 |
+| `.ysm` | テクスチャとモデル付属アニメーションを含む YSM モデル。独立エンジン `spm-core` により解析・評価されます（`2.3.2` 以前のバージョンは OpenYSM/YSMParser ベース）。 |
 | `.bbmodel` | Blockbench プロジェクトのキューブ/メッシュ、ボーン階層、テクスチャ、対応するアニメーション。 |
 | `.zip` | 内容から YSM フォルダー、Blockbench モデルパック、Figura アバターパック、Bedrock モデルパックを判別します。 |
 | Bedrock ジオメトリ | `.geo.json` / `geometry.json`。Bedrock パックには `.animation.json` ファイルや PNG テクスチャも含められます。 |
 | `.gltf` / `.glb` | glTF モデルのローカルインポート。`.gltf` が参照する外部リソースも一緒に保存してください。 |
 
-Figura パックからはモデルとテクスチャを読み込みます。Figura Lua の実行環境は提供しません。形式のインポートに対応していても、元のアプリケーションの全機能に対応するとは限りません。Cloud へのアップロードと共有は、選択したインスタンスが対応する形式に依存します。
+Figura パックではモデル・テクスチャ・音声を読み込み、`spm-core` の制限付き純 Java Lua 5.3 ランタイムで対応する `.lua` スクリプトを実行できます。形式のインポートに対応していても、元のアプリケーションの全機能を 1:1 で再現するとは限りません。Cloud へのアップロードと共有は、選択したインスタンスが対応する形式に依存します。
 
 <a id="features"></a>
 ## 機能
@@ -114,8 +114,8 @@ SPM には Better Combat、Curios、Create、Iris/Sodium、スキンレイヤー
 <a id="credits"></a>
 ## 謝辞とライセンス
 
-- [OpenYSM](https://github.com/OpenYSM)（MIT）を基に開発。
-- YSM モデルの解析に [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）を使用。
+- コアソース由来（`2.4.0+`）：独立開発した **spm-core**（`1.0.0`）Java + Rust SIMD ランタイムを中核とし、旧 OpenYSM 由来コードの完全な置き換えを目指しています。
+- 旧バージョン（`2.3.2` 以下）：`2.3.2` 以下のバージョンは引き続き [OpenYSM](https://github.com/OpenYSM)（MIT）および [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）に基づいています。
 - デフォルトモデルライブラリ：[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)。
 - Blockbench：[JannisX11/Blockbench](https://github.com/JannisX11/blockbench)。
 

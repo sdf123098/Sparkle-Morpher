@@ -39,13 +39,13 @@ SPM 的模型共享独立于 Minecraft 服务器的模组配置。无论是原�
 
 | 格式 | 导入支持 |
 |---|---|
-| `.ysm` | 带有贴图和模型动画的 YSM 模型，使用基于 OpenYSM/YSMParser 的导入管线。 |
+| `.ysm` | 带有贴图和模型动画的 YSM 模型，由独立自研引擎 `spm-core` 解析与驱动（`2.3.2` 及以下版本仍基于 OpenYSM/YSMParser 导入管线）。 |
 | `.bbmodel` | Blockbench 项目中的立方体/网格几何、骨骼层级、贴图及受支持的动画。 |
 | `.zip` | 按内容识别 YSM 文件夹、Blockbench 模型包、Figura 头像包与 Bedrock 模型包。 |
 | Bedrock 几何 | `.geo.json` / `geometry.json`；Bedrock 模型包还可包含 `.animation.json` 文件与 PNG 贴图。 |
 | `.gltf` / `.glb` | 本地 glTF 模型导入。请保留 `.gltf` 引用的配套外部资源。 |
 
-Figura 包导入读取模型与贴图，不提供 Figura Lua 运行环境。支持导入某种格式不代表支持原软件的所有功能。Cloud 上传与共享以所选实例支持的格式为准。
+Figura 包导入可读取模型、贴图与音效，并通过 `spm-core` 内置的有界纯 Java Lua 5.3 运行时执行受支持的 `.lua` 脚本。支持导入某种格式不代表 1:1 覆盖原软件的所有功能。Cloud 上传与共享以所选实例支持的格式为准。
 
 <a id="features"></a>
 ## 功能
@@ -114,8 +114,8 @@ SPM 包含 Better Combat、Curios、Create、Iris/Sodium 和皮肤层渲染的�
 <a id="credits"></a>
 ## 致谢与许可
 
-- 基于 [OpenYSM](https://github.com/OpenYSM)（MIT）开发。
-- 使用 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）进行 YSM 模型解析。
+- 核心源代码来源（`2.4.0+`）：切换至自研独立引擎 **spm-core**（`1.0.0`）Java + Rust SIMD 运行时，目标为彻底取代旧版 OpenYSM 遗留代码。
+- 历史版本声明（`2.3.2` 及以下）：`2.3.2` 及其以下历史版本仍然基于 [OpenYSM](https://github.com/OpenYSM)（MIT）与 [OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)（MIT）。
 - 默认模型库：[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)。
 - Blockbench：[JannisX11/Blockbench](https://github.com/JannisX11/blockbench)。
 
