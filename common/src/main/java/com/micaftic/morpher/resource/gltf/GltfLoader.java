@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.micaftic.morpher.core.bridge.SpmGltfBridge;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -85,7 +86,8 @@ public final class GltfLoader {
         byte[] source = readLimited(normalized, DEFAULT_RESOURCE_LIMITS.maxSourceBytes(), "glTF source");
         verifyUnchanged(normalized, before, "glTF source");
         ParsedContainer container = parseContainer(source, normalized.getFileName().toString());
-        return new Parser(container.json(), root, container.bin(), extensions, DEFAULT_RESOURCE_LIMITS).parseWithManifest(source);
+        return new Parser(container.json(), root, normalized.getFileName().toString(),
+                container.bin(), extensions, DEFAULT_RESOURCE_LIMITS).parseWithManifest(source);
     }
 
     /** Strong source identity for catalog invalidation, including every contained external buffer/image. */
@@ -191,9 +193,10 @@ public final class GltfLoader {
         if (source == null) throw error("glTF source is missing");
         if (limits == null) throw new NullPointerException("resource limits must not be null");
         if (source.length > limits.maxSourceBytes()) throw error("glTF source exceeds the size limit: " + source.length);
-        ParsedContainer container = parseContainer(source, name == null ? "model.gltf" : name);
+        String sourceName = name == null ? "model.gltf" : name;
+        ParsedContainer container = parseContainer(source, sourceName);
         Path resolvedRoot = baseDirectory == null ? null : baseDirectory.toRealPath();
-        return new Parser(container.json(), resolvedRoot,
+        return new Parser(container.json(), resolvedRoot, sourceName,
                 container.bin(), extensions, limits).parseWithManifest(source);
     }
 
@@ -256,6 +259,7 @@ public final class GltfLoader {
     private static final class Parser {
         private final JsonObject root;
         private final Path baseDirectory;
+        private final String sourceName;
         private final byte[] glbBin;
         private final GltfExtensionRegistry extensions;
         private final ResourceLimits limits;
@@ -268,7 +272,7 @@ public final class GltfLoader {
         private final List<JsonObject> nodeObjects = new ArrayList<>();
         private final List<Integer> parentIndices = new ArrayList<>();
 
-        private Parser(String json, Path baseDirectory, byte[] glbBin, GltfExtensionRegistry extensions,
+        private Parser(String json, Path baseDirectory, String sourceName, byte[] glbBin, GltfExtensionRegistry extensions,
                        ResourceLimits limits) throws GltfParseException {
             try {
                 JsonElement parsed = JsonParser.parseString(json);
@@ -280,6 +284,7 @@ public final class GltfLoader {
                 throw error("Invalid glTF JSON: " + e.getMessage());
             }
             this.baseDirectory = baseDirectory;
+            this.sourceName = sourceName == null ? "model.gltf" : sourceName;
             this.glbBin = glbBin;
             this.extensions = extensions == null ? GltfExtensionRegistry.coreOnly() : extensions;
             this.limits = limits;
@@ -305,6 +310,9 @@ public final class GltfLoader {
             checkIndex(defaultScene, scenes.size(), "scene", true);
             GltfModel model = new GltfModel(string(asset(), "generator", null), scenes, defaultScene, nodes, meshes,
                     materials, images, textures, skins, animations);
+            if (!meshes.isEmpty()) {
+                model.attachCoreBridge(SpmGltfBridge.tryParse(sourceBytes, sourceName, baseDirectory, !extensions.isEmpty()));
+            }
             ResourceDependencyManifest manifest = dependencies.build();
             return new GltfLoadResult(model, manifest, manifest.contentFingerprint(sourceBytes));
         }
@@ -440,7 +448,6 @@ public final class GltfLoader {
                 if (primitives == null || primitives.size() == 0) throw error("Mesh " + i + " has no primitives");
                 List<GltfModel.Primitive> parsed = new ArrayList<>();
                 for (int p = 0; p < primitives.size(); p++) parsed.add(parsePrimitive(primitives.get(p).getAsJsonObject(), i, p));
-                if (mesh.has("weights") || mesh.has("targets")) throw error("Morph targets are not supported (mesh " + i + ")");
                 result.add(new GltfModel.Mesh(string(mesh, "name", null), parsed));
             }
             return result;
@@ -449,7 +456,6 @@ public final class GltfLoader {
         private GltfModel.Primitive parsePrimitive(JsonObject primitive, int meshIndex, int primitiveIndex) throws GltfParseException {
             int mode = integer(primitive, "mode", MODE_TRIANGLES);
             if (mode != MODE_TRIANGLES) throw error("Only TRIANGLES primitives are supported (mesh " + meshIndex + ", primitive " + primitiveIndex + ")");
-            if (primitive.has("targets")) throw error("Morph targets are not supported (mesh " + meshIndex + ")");
             JsonObject attributes = object(primitive, "attributes", true);
             int positionAccessor = requiredInt(attributes, "POSITION", "primitive POSITION");
             float[] positions = readFloat(positionAccessor, "VEC3", false);
@@ -599,6 +605,7 @@ public final class GltfLoader {
                             case "translation" -> GltfModel.Channel.Path.TRANSLATION;
                             case "rotation" -> GltfModel.Channel.Path.ROTATION;
                             case "scale" -> GltfModel.Channel.Path.SCALE;
+                            case "weights" -> GltfModel.Channel.Path.WEIGHTS;
                             default -> throw error("Unsupported animation path in animation " + i);
                         };
                     } catch (GltfParseException e) {
@@ -609,17 +616,27 @@ public final class GltfLoader {
                     GltfModel.Channel.Interpolation interpolation;
                     if (interpolationName.equals("LINEAR")) interpolation = GltfModel.Channel.Interpolation.LINEAR;
                     else if (interpolationName.equals("STEP")) interpolation = GltfModel.Channel.Interpolation.STEP;
-                    else throw error("Only LINEAR and STEP animation interpolation are supported");
+                    else if (interpolationName.equals("CUBICSPLINE")) interpolation = GltfModel.Channel.Interpolation.CUBICSPLINE;
+                    else throw error("Only LINEAR, STEP, and CUBICSPLINE animation interpolation are supported");
                     int input = requiredInt(sampler, "input", "animation sampler");
                     int output = requiredInt(sampler, "output", "animation sampler");
                     float[] times = readFloat(input, "SCALAR", false);
-                    String outputType = path == GltfModel.Channel.Path.ROTATION ? "VEC4" : "VEC3";
+                    int keyMult = interpolation == GltfModel.Channel.Interpolation.CUBICSPLINE ? 3 : 1;
+                    String outputType = switch (path) {
+                        case ROTATION -> "VEC4";
+                        case WEIGHTS -> "SCALAR";
+                        default -> "VEC3";
+                    };
                     float[] outputValues = readFloat(output, outputType, false);
-                    int components = outputType.equals("VEC4") ? 4 : 3;
-                    if (times.length == 0 || outputValues.length != times.length * components) {
+                    int components = switch (path) {
+                        case ROTATION -> 4;
+                        case WEIGHTS -> times.length == 0 ? 0 : outputValues.length / (times.length * keyMult);
+                        default -> 3;
+                    };
+                    if (times.length == 0 || components <= 0
+                            || outputValues.length != times.length * keyMult * components) {
                         throw error("Animation input/output counts do not match");
                     }
-                    if (outputValues.length != times.length * components) throw error("Animation output count does not match input count");
                     for (float time : times) duration = Math.max(duration, time);
                     parsedChannels.add(new GltfModel.Channel(node, path, interpolation, times, outputValues, components));
                 }
