@@ -538,7 +538,7 @@
   "gui.sparkle_morpher.model_panel.setting.lazy_model_loading": "Tải mô hình theo yêu cầu",
   "gui.sparkle_morpher.model_panel.setting.cloud_cdn_cache": "Tăng tốc bộ nhớ đệm Cloud CDN",
   "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache": "Bộ nhớ đệm đĩa Cloud",
-  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "Dung lượng bộ nhớ đệm đĩa",
+  "gui.sparkle_morpher.model_panel.setting.cloud_disk_cache_size": "Dung lượng bộ nhớ đệm đĩa Cloud",
   "message.sparkle_morpher.privacy_mode.enabled": "Đã bật chế độ riêng tư. Đồng bộ mô hình máy chủ và mọi lưu lượng từ máy khách tới máy chủ của Sparkle Morpher đều bị chặn.",
   "message.sparkle_morpher.privacy_mode.reconnect": "Chế độ riêng tư sẽ duy trì cho đến khi bạn ngắt kết nối. Kết nối lại để tiếp tục đồng bộ máy chủ.",
   "gui.sparkle_morpher.model_panel.model.on_demand": "Tải khi dùng lần đầu",
@@ -1361,5 +1361,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "Đồng bộ hóa đám mây: Đồng bộ hóa mô hình, kết cấu và hoạt ảnh",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "Đồng bộ hóa đám mây: Đồng bộ hóa mô hình và kết cấu; nâng cấp phần phụ trợ để đồng bộ hóa hình ảnh động",
   "gui.sparkle_morpher.cloud_player.publish_failed": "Xuất bản trên đám mây không thành công: %s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "Truy vấn đám mây không thành công: %s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "Truy vấn đám mây không thành công: %s",
+  "gui.sparkle_morpher.acceleration.auto": "Tăng tốc GPU + SIMD (Mạnh)",
+  "gui.sparkle_morpher.acceleration.auto.desc": "Sử dụng cố định chính sách Mạnh sẵn có. Các tùy chọn Vulkan vẫn khả dụng ở bên dưới."
 }

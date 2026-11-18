@@ -1361,5 +1361,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "クラウド同期: モデル、テクスチャ、アニメーションが同期されます",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "クラウド同期: モデルとテクスチャが同期されます。アニメーションを同期するためにバックエンドをアップグレードする",
   "gui.sparkle_morpher.cloud_player.publish_failed": "クラウド公開に失敗しました: %s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "クラウド クエリが失敗しました: %s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "クラウド クエリが失敗しました: %s",
+  "gui.sparkle_morpher.acceleration.auto": "GPU＋SIMD アクセラレーション（積極的）",
+  "gui.sparkle_morpher.acceleration.auto.desc": "従来の積極的ポリシーを固定で使用します。Vulkan の設定は下部に残されています。"
 }
