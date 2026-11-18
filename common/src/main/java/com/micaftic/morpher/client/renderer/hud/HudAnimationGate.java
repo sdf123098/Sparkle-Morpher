@@ -4,9 +4,9 @@ import com.micaftic.morpher.client.gui.HudLayoutScreen;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.render.RenderContext;
 import com.micaftic.morpher.config.ExtraPlayerRenderConfig;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.Minecraft;
 
@@ -37,7 +37,7 @@ public final class HudAnimationGate {
         return scheduled || (RenderContext.isOldHud() && decision == Decision.FULL_EVAL);
     }
 
-    public static Decision decide(AnimatableEntity<?> animatable, AnimationEvent<?> event) {
+    public static Decision decide(HostAnimatable<?> animatable, HostActionEvent<?> event) {
         if (!RenderContext.isOldHud()
                 || animatable.getEntity() != Minecraft.getInstance().player) {
             return Decision.FULL_EVAL;
@@ -46,7 +46,7 @@ public final class HudAnimationGate {
         if (InputUtil.getCurrentScreen() instanceof HudLayoutScreen) {
             return Decision.FULL_EVAL;
         }
-        AnimatedGeoModel currentModel = animatable.getCurrentModel();
+        ModelScenePose currentModel = animatable.getCurrentModel();
         float partialTick = event.getPartialTick();
         if (REUSE_WORLD_POSE_ENABLED && HudPoseCache.canReuse(animatable, partialTick)) {
             return Decision.REUSE_WORLD_POSE;
@@ -73,22 +73,22 @@ public final class HudAnimationGate {
         return Decision.HOLD_SAMPLED_POSE;
     }
 
-    public static void captureSample(AnimatableEntity<?> animatable) {
+    public static void captureSample(HostAnimatable<?> animatable) {
         if (isHudSampleOwner(animatable) && animatable instanceof LivingAnimatable<?> living) {
             captureSample(animatable, living.getHeadBaseRotationX(), living.getHeadBaseRotationY());
         }
     }
 
-    public static void captureSample(AnimatableEntity<?> animatable, float headBaseX, float headBaseY) {
-        AnimatedGeoModel model = animatable.getCurrentModel();
+    public static void captureSample(HostAnimatable<?> animatable, float headBaseX, float headBaseY) {
+        ModelScenePose model = animatable.getCurrentModel();
         if (isHudSampleOwner(animatable) && model != null) {
             SAMPLED_POSE.capture(animatable, model, model.getMatrixData(), model.getAbsPivotData(),
                     headBaseX, headBaseY);
         }
     }
 
-    public static boolean restoreSample(AnimatableEntity<?> animatable) {
-        AnimatedGeoModel model = animatable.getCurrentModel();
+    public static boolean restoreSample(HostAnimatable<?> animatable) {
+        ModelScenePose model = animatable.getCurrentModel();
         return isHudSampleOwner(animatable) && model != null
                 && SAMPLED_POSE.restore(animatable, model, model.getMatrixData(), model.getAbsPivotData());
     }
@@ -96,14 +96,14 @@ public final class HudAnimationGate {
     public static float sampleHeadBaseX() { return SAMPLED_POSE.headBaseX(); }
     public static float sampleHeadBaseY() { return SAMPLED_POSE.headBaseY(); }
 
-    public static void invalidate(AnimatableEntity<?> animatable) {
+    public static void invalidate(HostAnimatable<?> animatable) {
         if (SAMPLED_POSE.owns(animatable)) {
             SAMPLED_POSE.invalidate();
             nextSampleNanos = 0;
         }
     }
 
-    private static boolean isHudSampleOwner(AnimatableEntity<?> animatable) {
+    private static boolean isHudSampleOwner(HostAnimatable<?> animatable) {
         return RenderContext.isOldHud() && animatable.getEntity() == Minecraft.getInstance().player;
     }
 

@@ -8,6 +8,6 @@ dependencies {
 }
 
 // R1.3：删除失效的 compileNative 任务（if(true) return false 永不执行）。
-// native 构建/校验属于 openysm.cpp 仓库与 gradle/verify-native-abi.gradle，不在此处。
+// native 构建/校验属于 spm-core 仓库与 gradle/verify-native-abi.gradle，不在此处。
 // 注意：本文件当前未被 settings.gradle include（common 源码经 fabric sourceSets 挂靠），
 // 保留 dependencies 声明仅作参考。

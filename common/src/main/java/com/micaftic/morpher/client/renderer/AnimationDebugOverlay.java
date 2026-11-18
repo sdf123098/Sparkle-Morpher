@@ -6,8 +6,8 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.animation.molang.MolangWatchRegistry;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.MaidCapabilityBridge;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
-import com.micaftic.morpher.client.entity.GeoEntity;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -33,7 +33,7 @@ public class AnimationDebugOverlay {
 
     private static final MolangWatchRegistry MOLANG_WATCH = new MolangWatchRegistry();
     private static final ReferenceArrayList<String> DEBUG_LINES = new ReferenceArrayList<>();
-    private static WeakReference<GeoEntity<?>> activeModel = null;
+    private static WeakReference<SpmEntity<?>> activeModel = null;
 
     public static HudOverlay createOverlay() {
         return (GuiGraphicsExtractor guiGraphics, Font font, float partialTick, int screenWidth, int screenHeight) -> {
@@ -79,7 +79,7 @@ public class AnimationDebugOverlay {
             capability = VehicleCapability.get(entity);
         }
         return capability.map(cap -> {
-            setActiveModel((GeoEntity<?>) cap);
+            setActiveModel((SpmEntity<?>) cap);
             return true;
         }).orElseGet(() -> {
             clearActiveModel();
@@ -87,7 +87,7 @@ public class AnimationDebugOverlay {
         });
     }
 
-    public static void setActiveModel(GeoEntity<?> geoEntity) {
+    public static void setActiveModel(SpmEntity<?> geoEntity) {
         clearActiveModel();
         activeModel = new WeakReference<>(geoEntity);
         geoEntity.setBoneLookup(MOLANG_WATCH);
@@ -103,7 +103,7 @@ public class AnimationDebugOverlay {
 
     public static void clearActiveModel() {
         if (activeModel != null) {
-            GeoEntity<?> geoEntity = activeModel.get();
+            SpmEntity<?> geoEntity = activeModel.get();
             if (geoEntity != null) {
                 geoEntity.setBoneLookup(null);
             }
@@ -124,9 +124,9 @@ public class AnimationDebugOverlay {
     }
 
     @Nullable
-    public static GeoEntity<?> getActiveModel() {
+    public static SpmEntity<?> getActiveModel() {
         if (activeModel != null) {
-            GeoEntity<?> geoEntity = activeModel.get();
+            SpmEntity<?> geoEntity = activeModel.get();
             if (geoEntity != null && geoEntity.isDebugMode()) {
                 return geoEntity;
             }
@@ -137,7 +137,7 @@ public class AnimationDebugOverlay {
     }
 
     public static void renderOverlay(Font font, GuiGraphicsExtractor guiGraphics, int screenWidth, int screenHeight) {
-        GeoEntity<?> geoEntity = getActiveModel();
+        SpmEntity<?> geoEntity = getActiveModel();
         if (geoEntity == null) {
             return;
         }
@@ -146,7 +146,7 @@ public class AnimationDebugOverlay {
             renderDebugOverlay(font, guiGraphics, currentY, molangKey, molangValue, screenWidth, screenHeight);
         });
         DEBUG_LINES.forEach(str3 -> {
-            IAnimationController controller = geoEntity.getAnimationData().getAnimationControllerByName(str3);
+            HostControllerSlot<?> controller = geoEntity.getControllerSlot(str3);
             renderDebugOverlay(font, guiGraphics, currentY, str3, controller != null ? controller.getCurrentAnimation() : "(N/A)", screenWidth, screenHeight);
         });
     }

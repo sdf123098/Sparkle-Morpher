@@ -14,8 +14,10 @@ class WorldModelSubmitContextContractTest {
     @Test
     void deferredGeometryRestoresSubmitContextForBackendSelection() throws IOException {
         String source = Files.readString(findRepoFile(
-                Path.of("common", "src", "main", "java", "com", "micaftic", "morpher", "geckolib3", "geo", "IGeoRenderer.java"),
-                Path.of("src", "main", "java", "com", "micaftic", "morpher", "geckolib3", "geo", "IGeoRenderer.java")));
+                Path.of("fabric", "src", "main", "java", "com", "micaftic", "morpher", "client", "renderer", "ISpmRenderer.java"),
+                Path.of("neoforge", "src", "main", "java", "com", "micaftic", "morpher", "client", "renderer", "ISpmRenderer.java"),
+                Path.of("common", "src", "main", "java", "com", "micaftic", "morpher", "client", "renderer", "ISpmRenderer.java"),
+                Path.of("src", "main", "java", "com", "micaftic", "morpher", "client", "renderer", "ISpmRenderer.java")));
 
         assertTrue(source.contains("renderSubmittedGeometry(collector, buffer, pose"),
                 "deferred geometry must retain the collector that recorded it");

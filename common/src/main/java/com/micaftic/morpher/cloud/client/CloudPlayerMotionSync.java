@@ -3,11 +3,11 @@ package com.micaftic.morpher.cloud.client;
 import com.micaftic.morpher.YesSteveModel;
 import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.PrivacyMode;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.core.HostMolangRegistry;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
+import com.micaftic.morpher.client.render.BoneIds;
 import com.micaftic.morpher.core.model.CloudAssetIdentity;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.resource.GeckoLibCache;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
@@ -31,7 +31,7 @@ public final class CloudPlayerMotionSync {
         Applied(PlayerCapability cap) { this.cap = cap; this.model = cap.getModelId(); }
     }
     private CloudPlayerMotionSync() {}
-    private static boolean local(AnimatableEntity<?> entity) {
+    private static boolean local(HostAnimatable<?> entity) {
         return entity instanceof CustomPlayerEntity custom && custom.isLocalPlayerModel()
                 && entity.getEntity() == Minecraft.getInstance().player;
     }
@@ -43,12 +43,12 @@ public final class CloudPlayerMotionSync {
         try { change.run(); }
         catch (IllegalArgumentException unsupported) { YesSteveModel.LOGGER.debug("[SM][CloudMotion] value exceeds protocol limits: {}", unsupported.getMessage()); }
     }
-    public static void play(AnimatableEntity<?> entity, String key) {
+    public static void play(HostAnimatable<?> entity, String key) {
         if (!(entity instanceof CustomPlayerEntity custom)) return;
         custom.requestModelSwitch(key);
         if (local(entity)) { ensureModel(custom.getModelId()); changeOwn(() -> OWN.play(custom.isModelSwitching() ? custom.getSelectedModelId() : "", System.currentTimeMillis())); }
     }
-    public static void stop(AnimatableEntity<?> entity) {
+    public static void stop(HostAnimatable<?> entity) {
         if (!(entity instanceof CustomPlayerEntity custom)) return;
         custom.clearModelSwitch();
         if (local(entity)) { ensureModel(custom.getModelId()); changeOwn(() -> OWN.stop(System.currentTimeMillis())); }
@@ -56,11 +56,11 @@ public final class CloudPlayerMotionSync {
     public static void roaming(PlayerCapability cap, Map<String, Float> changes) {
         if (!local(cap)) return; ensureModel(cap.getModelId()); changeOwn(() -> OWN.roaming(changes));
     }
-    public static void expression(AnimatableEntity<?> entity, String expression, List<Float> values) {
+    public static void expression(HostAnimatable<?> entity, String expression, List<Float> values) {
         if (!local(entity)) return;
         ensureModel(((CustomPlayerEntity) entity).getModelId()); changeOwn(() -> OWN.expression(expression, values, System.currentTimeMillis()));
     }
-    public static void controller(AnimatableEntity<?> entity, String name, String state, long started, Map<String, Float> variables) {
+    public static void controller(HostAnimatable<?> entity, String name, String state, long started, Map<String, Float> variables) {
         if (!local(entity) || !CloudAssetIdentity.isRuntimeModelId(((CustomPlayerEntity) entity).getModelId())) return;
         ensureModel(((CustomPlayerEntity) entity).getModelId());
         try { OWN.controller(name, state, started, variables); }
@@ -77,13 +77,13 @@ public final class CloudPlayerMotionSync {
             cap.advanceCloudMotion();
         });
     }
-    public static CloudPlayerMotion motion(AnimatableEntity<?> entity) {
+    public static CloudPlayerMotion motion(HostAnimatable<?> entity) {
         if ((!com.micaftic.morpher.core.network.NetworkAccess.allowsCloud() || PrivacyMode.isActive()) || !(entity instanceof CustomPlayerEntity custom)) return null;
         if (local(entity)) return snapshot(custom.getModelId());
         UUID uuid = entity.getEntity().getUUID();
         return custom.getModelId().equals(MODELS.get(uuid)) ? PEERS.get(uuid) : null;
     }
-    public static boolean isOwner(AnimatableEntity<?> entity) { return local(entity); }
+    public static boolean isOwner(HostAnimatable<?> entity) { return local(entity); }
     public static boolean receive(Player player, CloudPlayerSelection selection) {
         UUID uuid = player.getUUID(); String model = selection.runtimeModelId();
         if (selection.appearanceRevision() > 0 && !PEERS.receive(uuid, selection.appearanceRevision(), selection.motion())) return false;
@@ -109,7 +109,7 @@ public final class CloudPlayerMotionSync {
             }
             if (!motion.roaming().equals(applied.roaming)) {
                 Int2FloatOpenHashMap vars = new Int2FloatOpenHashMap();
-                motion.roaming().forEach((name, value) -> vars.put(StringPool.computeIfAbsent(name), value.floatValue()));
+                motion.roaming().forEach((name, value) -> vars.put(BoneIds.id(name), value.floatValue()));
                 cap.updateMolangVars(cap.getModelAssembly().getModelData().getHashId(), vars);
                 applied.roaming = motion.roaming();
             }
@@ -123,7 +123,7 @@ public final class CloudPlayerMotionSync {
                 if (now - event.startedAtUnixMs() > 30000 || event.startedAtUnixMs() - now > 60000) continue;
                 try {
                     if (event.expression().isEmpty()) cap.executeAnimationExpression(new it.unimi.dsi.fastutil.floats.FloatArrayList(event.values()));
-                    else cap.executeExpression(GeckoLibCache.parseSimpleExpression(event.expression()), true, false, null);
+                    else cap.executeExpression(HostMolangRegistry.parseExpression(event.expression()), true, false, null);
                 } catch (Exception failure) { YesSteveModel.LOGGER.warn("[SM][CloudMotion] expression ignored: {}", failure.toString()); }
             }
             while (applied.expressions.size() > 128) applied.expressions.remove(applied.expressions.iterator().next());

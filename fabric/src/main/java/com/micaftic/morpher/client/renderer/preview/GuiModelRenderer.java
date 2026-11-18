@@ -5,9 +5,9 @@ import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.render.RenderContext;
 import com.micaftic.morpher.client.render.RenderPass;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.renderer.SpmReplacedEntityRenderer;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.geo.GeoReplacedEntityRenderer;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -56,11 +56,11 @@ public final class GuiModelRenderer {
         return null;
     }
 
-    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment) {
+    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, SpmReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment) {
         renderLivingEntityPreview(guiGraphics, left, top, right, bottom, originX, originY, scale, partialTick, animatable, renderer, disablePreviewRotation, hideEquipment, Integer.MIN_VALUE, Integer.MIN_VALUE);
     }
 
-    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, int mouseX, int mouseY) {
+    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, TAnimatable animatable, SpmReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment, int mouseX, int mouseY) {
         if (guiGraphics == null || animatable == null || right <= left || bottom <= top || scale <= 0.0f) {
             return;
         }
@@ -86,10 +86,10 @@ public final class GuiModelRenderer {
      * <p>供 GUI 预览（本类）与 HUD 小人预览共用，使请求类型保持私有、调用方无需
      * 触碰排队细节。{@code options} 承载小人专属的 head mode / 载具对齐。</p>
      */
-    public static void enqueueLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, GeoReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options) {
+    public static void enqueueLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, SpmReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options) {
         enqueueStaticLivingPreview(guiGraphics,left,top,right,bottom,originX,originY,scale,partialTick,animatable,renderer,disablePreviewRotation,hideEquipment,previewYaw,previewPitch,extraPlayer,options,null);
     }
-    public static void enqueueStaticLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, GeoReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options,Object staticKey) {
+    public static void enqueueStaticLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, SpmReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options,Object staticKey) {
         EntityRenderState state = new EntityRenderState();
         PreviewRenderBridge.markStatic(state,staticKey);
         PreviewRenderBridge.enqueue(state, new LivingGuiPreviewRequest(
@@ -113,7 +113,7 @@ public final class GuiModelRenderer {
     public static void clearCardPreviews() { NativeCardPreviewCache.clear(); }
 
     /** Queues a refresh when admitted, otherwise composites the last rendered card without an entity. */
-    public static boolean enqueueCachedLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, GeoReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options, Object stableKey, long revision, boolean refreshAllowed) {
+    public static boolean enqueueCachedLivingPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float partialTick, LivingAnimatable<?> animatable, SpmReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options, Object stableKey, long revision, boolean refreshAllowed) {
         if (guiGraphics == null || stableKey == null || right <= left || bottom <= top || scale <= 0.0f) return false;
         boolean refresh = refreshAllowed && animatable != null && renderer != null;
         Object cacheKey = NativeCardPreviewCache.reserve(stableKey, right-left, bottom-top, refresh);
@@ -141,7 +141,7 @@ public final class GuiModelRenderer {
         return getExtraPlayerHeadYawOffsetO(entity);
     }
 
-    public static void renderEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
+    public static void renderEntityPreview(GuiGraphicsExtractor guiGraphics, int left, int top, int right, int bottom, float originX, float originY, float scale, float pitch, float yaw, float partialTick, HostAnimatable animatableEntity, SpmReplacedEntityRenderer renderer, boolean renderGround) {
         if (guiGraphics == null || animatableEntity == null || right <= left || bottom <= top || scale <= 0.0f) {
             return;
         }
@@ -189,7 +189,7 @@ public final class GuiModelRenderer {
         private final float offsetY;
         private final float partialTick;
         private final LivingAnimatable<?> animatable;
-        private final GeoReplacedEntityRenderer renderer;
+        private final SpmReplacedEntityRenderer renderer;
         private final boolean disablePreviewRotation;
         private final boolean hideEquipment;
         private final float previewYaw;
@@ -197,7 +197,7 @@ public final class GuiModelRenderer {
         private final boolean extraPlayer;
         private final DollOptions options;
 
-        private LivingGuiPreviewRequest(float offsetX, float offsetY, float partialTick, LivingAnimatable<?> animatable, GeoReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options) {
+        private LivingGuiPreviewRequest(float offsetX, float offsetY, float partialTick, LivingAnimatable<?> animatable, SpmReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options) {
             this.offsetX = offsetX;
             this.offsetY = offsetY;
             this.partialTick = partialTick;
@@ -223,11 +223,11 @@ public final class GuiModelRenderer {
         private final float pitch;
         private final float yaw;
         private final float partialTick;
-        private final AnimatableEntity animatableEntity;
-        private final GeoReplacedEntityRenderer renderer;
+        private final HostAnimatable animatableEntity;
+        private final SpmReplacedEntityRenderer renderer;
         private final boolean renderGround;
 
-        private FreeGuiPreviewRequest(float offsetX, float offsetY, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
+        private FreeGuiPreviewRequest(float offsetX, float offsetY, float pitch, float yaw, float partialTick, HostAnimatable animatableEntity, SpmReplacedEntityRenderer renderer, boolean renderGround) {
             this.offsetX = offsetX;
             this.offsetY = offsetY;
             this.pitch = pitch;
@@ -245,7 +245,7 @@ public final class GuiModelRenderer {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static void renderLivingGuiPreview(PoseStack poseStack, float offsetX, float offsetY, float partialTick, LivingAnimatable animatable, GeoReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options, SubmitNodeCollector collector, MultiBufferSource.BufferSource bufferSource) {
+    private static void renderLivingGuiPreview(PoseStack poseStack, float offsetX, float offsetY, float partialTick, LivingAnimatable animatable, SpmReplacedEntityRenderer renderer, boolean disablePreviewRotation, boolean hideEquipment, float previewYaw, float previewPitch, boolean extraPlayer, DollOptions options, SubmitNodeCollector collector, MultiBufferSource.BufferSource bufferSource) {
         ItemStack[] savedEquipment;
         boolean previousPreviewMode = isPreview();
         boolean previousExtraPlayerMode = isExtraPlayer();
@@ -333,7 +333,7 @@ public final class GuiModelRenderer {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static void renderFreeGuiPreview(PoseStack poseStack, float offsetX, float offsetY, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround, MultiBufferSource.BufferSource bufferSource) {
+    private static void renderFreeGuiPreview(PoseStack poseStack, float offsetX, float offsetY, float pitch, float yaw, float partialTick, HostAnimatable animatableEntity, SpmReplacedEntityRenderer renderer, boolean renderGround, MultiBufferSource.BufferSource bufferSource) {
         boolean previousPreviewMode = isPreview();
         setPreviewMode(true);
         LivingEntity livingEntity = (LivingEntity) animatableEntity.getEntity();
@@ -423,7 +423,7 @@ public final class GuiModelRenderer {
     }
 
     @SuppressWarnings("unchecked") // Renderer and entity are paired by the preview request.
-    public static void renderEntityPreview(float x, float y, float scale, float pitch, float yaw, float partialTick, AnimatableEntity animatableEntity, GeoReplacedEntityRenderer renderer, boolean renderGround) {
+    public static void renderEntityPreview(float x, float y, float scale, float pitch, float yaw, float partialTick, HostAnimatable animatableEntity, SpmReplacedEntityRenderer renderer, boolean renderGround) {
         if (!PreviewRenderBridge.isDirectGuiPreviewSupported()) {
             return;
         }
@@ -533,7 +533,7 @@ public final class GuiModelRenderer {
         setPreviewMode(false);
     }
 
-    private static AnimationTracker getPreviewAnimationTracker(AnimatableEntity animatableEntity) {
+    private static AnimationTracker getPreviewAnimationTracker(HostAnimatable animatableEntity) {
         if (animatableEntity instanceof IPreviewAnimatable previewAnimatable) {
             return previewAnimatable.getAnimationStateMachine();
         }
@@ -545,7 +545,7 @@ public final class GuiModelRenderer {
     }
 
     // 模型预览页面（旧直取 BufferSource 路径：MC 26.x 恒不可用，保留兼容签名）
-    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(float x, float y, float scale, float partialTick, TAnimatable animatable, GeoReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment) {
+    public static <T extends LivingEntity, TAnimatable extends LivingAnimatable<T>> void renderLivingEntityPreview(float x, float y, float scale, float partialTick, TAnimatable animatable, SpmReplacedEntityRenderer<T, TAnimatable> renderer, boolean disablePreviewRotation, boolean hideEquipment) {
         if (!PreviewRenderBridge.isDirectGuiPreviewSupported()) {
             return;
         }

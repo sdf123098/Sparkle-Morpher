@@ -1,11 +1,11 @@
 package com.micaftic.morpher.client.renderer.hud;
 
 import com.micaftic.morpher.client.animation.debug.AnimationFrameProfiler;
-import com.micaftic.morpher.client.entity.GeoEntity;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.render.RenderContext;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.util.CameraUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
@@ -26,7 +26,7 @@ public final class HudPoseCache {
 
     private static volatile boolean valid;
     private static Entity owner;
-    private static AnimatedGeoModel model;
+    private static ModelScenePose model;
     private static String modelId;
     private static int tickCount;
     private static int renderFrameId = -1;
@@ -42,7 +42,7 @@ public final class HudPoseCache {
     private HudPoseCache() {
     }
 
-    public static void publish(AnimatableEntity<?> animatable, float worldPartialTick) {
+    public static void publish(HostAnimatable<?> animatable, float worldPartialTick) {
         Entity entity = animatable.getEntity();
         if (entity == null
                 || entity != Minecraft.getInstance().player
@@ -58,7 +58,7 @@ public final class HudPoseCache {
             invalidate();
             return;
         }
-        AnimatedGeoModel currentModel = animatable.getCurrentModel();
+        ModelScenePose currentModel = animatable.getCurrentModel();
         if (currentModel == null
                 || animatable.getLastAnimationEvaluationFrameId() != AnimationFrameProfiler.getRenderFrameId()
                 || animatable.getLastAnimationEvaluationModel() != currentModel
@@ -92,12 +92,12 @@ public final class HudPoseCache {
         valid = true;
     }
 
-    public static boolean canReuse(AnimatableEntity<?> animatable, float hudPartialTick) {
+    public static boolean canReuse(HostAnimatable<?> animatable, float hudPartialTick) {
         if (!valid || renderFrameId != AnimationFrameProfiler.getRenderFrameId()) {
             return false;
         }
         Entity entity = animatable.getEntity();
-        AnimatedGeoModel currentModel = animatable.getCurrentModel();
+        ModelScenePose currentModel = animatable.getCurrentModel();
         return entity != null
                 && entity == owner
                 && currentModel != null
@@ -110,8 +110,8 @@ public final class HudPoseCache {
                 && currentModel.getAbsPivotData().length == absPivotLength;
     }
 
-    public static boolean applyTo(AnimatableEntity<?> animatable) {
-        AnimatedGeoModel currentModel = animatable.getCurrentModel();
+    public static boolean applyTo(HostAnimatable<?> animatable) {
+        ModelScenePose currentModel = animatable.getCurrentModel();
         if (!valid || currentModel == null || renderFrameId != AnimationFrameProfiler.getRenderFrameId()
                 || animatable.getEntity() != owner || currentModel != model
                 || !Objects.equals(modelIdOf(animatable), modelId)
@@ -147,7 +147,7 @@ public final class HudPoseCache {
         return Mth.clamp(value, 0.0f, 1.0f);
     }
 
-    private static String modelIdOf(AnimatableEntity<?> animatable) {
-        return animatable instanceof GeoEntity<?> geo ? geo.getModelId() : null;
+    private static String modelIdOf(HostAnimatable<?> animatable) {
+        return animatable instanceof SpmEntity<?> geo ? geo.getModelId() : null;
     }
 }

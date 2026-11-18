@@ -1,8 +1,8 @@
 package com.micaftic.morpher.client.animation.molang;
 
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
-import it.unimi.dsi.fastutil.objects.ObjectListIterator;
+import com.micaftic.morpher.client.core.HostMolangScript;
+import dev.spm.core.scene.MolangContext;
+import dev.spm.core.scene.MolangValue;
 import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 
 import java.text.DecimalFormat;
@@ -19,32 +19,32 @@ public class MolangWatchRegistry {
         POST_ANIMATION
     }
 
-    public void addWatch(EvaluationPhase phase, String str, IValue value) {
-        this.entries.add(new WatchEntry(str, value, phase));
+    public void addWatch(EvaluationPhase phase, String label, HostMolangScript value) {
+        this.entries.add(new WatchEntry(label, value, phase));
     }
 
-    public void removeWatch(String str) {
-        this.entries.removeIf(entry -> entry.label.equals(str));
+    public void removeWatch(String label) {
+        this.entries.removeIf(entry -> entry.label.equals(label));
     }
 
     public void clearAll() {
         this.entries.clear();
     }
 
-    public void evauatePreAnimation(ExpressionEvaluator<?> evaluator) {
-        ObjectListIterator it = this.entries.iterator();
-        while (it.hasNext()) {
-            WatchEntry entry = (WatchEntry) it.next();
+    public void evaluatePreAnimation(MolangContext context) {
+        for (int i = 0; i < this.entries.size(); i++) {
+            WatchEntry entry = this.entries.get(i);
             if (entry.phase == EvaluationPhase.PRE_ANIMATION) {
-                entry.evaluate(evaluator);
+                entry.evaluate(context);
             }
         }
     }
 
-    public void evaluatePostAnimation(ExpressionEvaluator<?> evaluator) {
-        for (WatchEntry entry : this.entries) {
+    public void evaluatePostAnimation(MolangContext context) {
+        for (int i = 0; i < this.entries.size(); i++) {
+            WatchEntry entry = this.entries.get(i);
             if (entry.phase == EvaluationPhase.POST_ANIMATION) {
-                entry.evaluate(evaluator);
+                entry.evaluate(context);
             }
         }
     }
@@ -55,47 +55,35 @@ public class MolangWatchRegistry {
         }
     }
 
-    private static class WatchEntry {
-
+    private static final class WatchEntry {
         private final String label;
-
-        private final IValue value;
-
+        private final HostMolangScript value;
         private final EvaluationPhase phase;
-
         private volatile String resultValue;
 
-        public WatchEntry(String label, IValue iValue, EvaluationPhase phase) {
+        private WatchEntry(String label, HostMolangScript value, EvaluationPhase phase) {
             this.label = label;
-            this.value = iValue;
+            this.value = value;
             this.phase = phase;
         }
 
-        public void evaluate(ExpressionEvaluator<?> evaluator) {
+        private void evaluate(MolangContext context) {
             try {
-                Object objEvalUnsafe = this.value.evalUnsafe(evaluator);
-                if (objEvalUnsafe == null) {
+                MolangValue result = this.value.evaluateValue(context);
+                if (result == null || result == MolangValue.missing()) {
                     this.resultValue = "null";
-                } else if (objEvalUnsafe instanceof Number) {
-                    this.resultValue = MolangWatchRegistry.DECIMAL_FORMAT.format(objEvalUnsafe);
+                } else if (result instanceof MolangValue.BooleanValue boolValue) {
+                    this.resultValue = Boolean.toString(boolValue.value());
+                } else if (result instanceof MolangValue.TextValue textValue) {
+                    this.resultValue = textValue.value();
+                } else if (result instanceof MolangValue.NumberValue numValue) {
+                    this.resultValue = MolangWatchRegistry.DECIMAL_FORMAT.format(numValue.value());
                 } else {
-                    this.resultValue = objEvalUnsafe.toString();
+                    this.resultValue = result.toString();
                 }
             } catch (Throwable th) {
                 this.resultValue = "Error: " + th.getMessage();
             }
-        }
-
-        public String getResultValue() {
-            return this.resultValue;
-        }
-
-        public String getLabel() {
-            return this.label;
-        }
-
-        public EvaluationPhase getPhase() {
-            return this.phase;
         }
     }
 }

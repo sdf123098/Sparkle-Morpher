@@ -1,11 +1,11 @@
 package com.micaftic.morpher.client.model.processor;
 
-import com.micaftic.morpher.client.entity.GeoEntity;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import com.micaftic.morpher.client.model.ModelResourceBundle;
 
 import java.util.function.Predicate;
 
-public interface ModelProcessor<T extends GeoEntity<?>, TModel> {
+public interface ModelProcessor<T extends SpmEntity<?>, TModel> {
     ControllerFactory<T> process(TModel modelData, ModelResourceBundle resourceBundle);
 
     default ModelProcessor<T, TModel> withFilter(Predicate<T> predicate) {

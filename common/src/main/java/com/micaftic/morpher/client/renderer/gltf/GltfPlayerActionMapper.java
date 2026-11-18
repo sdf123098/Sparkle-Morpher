@@ -12,7 +12,7 @@ import net.minecraft.world.entity.player.Player;
 /**
  * glTF 独立渲染管线与 SparkleMorpher 统一动作判定（1.2.4 {@link ControllerActionResolver}）之间的映射。
  *
- * <p>glTF 模型不经过 {@code PlayerModelBundle} / geckolib 控制器，渲染侧只能拿到原始
+ * <p>glTF 模型不经过 {@code PlayerModelBundle} / SPM 控制器，渲染侧只能拿到原始
  * {@link LivingEntity}。本类把实体状态轻量采集为 {@link PlayerActionSnapshot}（速度用
  * {@code getDeltaMovement()}，无 {@code EntityFrameStateTracker}），复用
  * {@link ControllerActionResolver#resolveState} 得到统一的 {@link PlayerActionState}，
@@ -51,7 +51,7 @@ public final class GltfPlayerActionMapper {
         };
     }
 
-    /** 轻量动作判定：复用统一快照 → 状态映射，不经过 geckolib 追踪器。 */
+    /** 轻量动作判定：复用统一快照 → 状态映射，不经过 SPM 控制器追踪器。 */
     public static PlayerActionState resolveAction(LivingEntity entity) {
         if (entity == null) {
             return PlayerActionState.NONE;

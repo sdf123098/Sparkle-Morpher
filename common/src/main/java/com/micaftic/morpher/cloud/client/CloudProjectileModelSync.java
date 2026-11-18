@@ -6,7 +6,7 @@ import com.micaftic.morpher.client.ClientModelManager;
 import com.micaftic.morpher.client.PrivacyMode;
 import com.micaftic.morpher.client.projectile.ProjectileDisplayRuntime;
 import com.micaftic.morpher.client.projectile.ProjectileDisplaySnapshot;
-import com.micaftic.morpher.molang.runtime.Int2FloatOpenHashMapStruct;
+import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -185,7 +185,7 @@ public final class CloudProjectileModelSync {
         var direction = player.getLookAngle();
         var struct = cap.getServerVarContainer();
         try {
-            Map<String, Float> variables = struct instanceof Int2FloatOpenHashMapStruct numbers
+            Map<String, Float> variables = struct instanceof RoamingStruct numbers
                     ? numbers.snapshotNumbers(32)
                     : CloudPlayerMotionSync.snapshot(cap.getModelId()).roaming();
             return new Ticket(displayContext, new ProjectileFiringCandidates.Firing(player.getUUID(),

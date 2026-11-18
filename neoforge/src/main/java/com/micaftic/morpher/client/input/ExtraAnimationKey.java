@@ -6,7 +6,6 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.event.AnimationLockEvent;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.gui.UnifiedRouletteScreen;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import com.micaftic.morpher.resource.models.ModelProperties;
 import com.micaftic.morpher.util.InputUtil;
 import com.micaftic.morpher.util.data.OrderedStringMap;

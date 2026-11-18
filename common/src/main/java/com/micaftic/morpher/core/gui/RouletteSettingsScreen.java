@@ -3,7 +3,7 @@ package com.micaftic.morpher.core.gui;
 import com.micaftic.morpher.client.gui.CustomRouletteEditorScreen;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.config.GeneralConfig;
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
+import com.micaftic.morpher.client.core.HostAnimatable;
 import com.micaftic.morpher.util.InputUtil;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
@@ -15,10 +15,10 @@ public final class RouletteSettingsScreen extends Screen {
     private final Screen parent;
     private final String modelId;
     private final ModelAssembly assembly;
-    private final AnimatableEntity<?> target;
+    private final HostAnimatable<?> target;
     private int rowOffset;
     private int visibleRows(){var c=IndependentPanelChrome.of(width,height);return Math.max(1,Math.min(5,(c.bottom()-30-(c.top()+76))/rowStride()));}
-    public RouletteSettingsScreen(Screen parent,String id,ModelAssembly assembly,AnimatableEntity<?> target){super(Component.translatable("gui.sparkle_morpher.roulette.settings.title"));this.parent=parent;modelId=id;this.assembly=assembly;this.target=target;}
+    public RouletteSettingsScreen(Screen parent,String id,ModelAssembly assembly,HostAnimatable<?> target){super(Component.translatable("gui.sparkle_morpher.roulette.settings.title"));this.parent=parent;modelId=id;this.assembly=assembly;this.target=target;}
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float pt){
         var c=IndependentPanelChrome.of(width,height);RoulettePanelStyle.glassPanel(g,c.left(),c.top(),c.right()-c.left(),c.bottom()-c.top());int x=c.contentLeft(),w=c.contentRight()-x,y=c.top()+42;
         IndependentPanelChrome.text(g,font,title,x,c.top()+15,1.1f,RoulettePanelStyle.TEXT);

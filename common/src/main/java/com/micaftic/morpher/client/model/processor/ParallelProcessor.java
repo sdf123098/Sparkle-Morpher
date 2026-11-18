@@ -1,10 +1,10 @@
 package com.micaftic.morpher.client.model.processor;
 
-import com.micaftic.morpher.client.model.ModelResourceBundle;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
-import com.micaftic.morpher.client.entity.GeoEntity;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.entity.SpmEntity;
 import com.micaftic.morpher.client.model.AnimationDataProvider;
+import com.micaftic.morpher.client.model.ModelResourceBundle;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMaps;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceRBTreeMap;
@@ -13,7 +13,7 @@ import org.apache.commons.lang3.function.TriFunction;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
-public class ParallelProcessor<T extends GeoEntity<?>, TModel> implements ModelProcessor<T, TModel> {
+public class ParallelProcessor<T extends SpmEntity<?>, TModel> implements ModelProcessor<T, TModel> {
 
     private final String prefix;
 
@@ -27,9 +27,9 @@ public class ParallelProcessor<T extends GeoEntity<?>, TModel> implements ModelP
 
     private final AnimationDataProvider<TModel> animationDataProvider;
 
-    private final TriFunction<String, T, String, IAnimationController<T>> controllerFactory;
+    private final TriFunction<String, T, String, HostControllerSlot<T>> controllerFactory;
 
-    public ParallelProcessor(String prefix, String slotName, boolean allowExtraSlots, AnimationDataProvider<TModel> animationDataProvider, TriFunction<String, T, String, IAnimationController<T>> controllerFactory) {
+    public ParallelProcessor(String prefix, String slotName, boolean allowExtraSlots, AnimationDataProvider<TModel> animationDataProvider, TriFunction<String, T, String, HostControllerSlot<T>> controllerFactory) {
         this.prefix = prefix;
         this.slotName = slotName;
         if (allowExtraSlots) {
@@ -52,7 +52,7 @@ public class ParallelProcessor<T extends GeoEntity<?>, TModel> implements ModelP
                 matchedSlots.put(entry.getKey(), null);
             }
         });
-        Object2ReferenceMap<String, Animation> animations = this.animationDataProvider.getAnimations(modelData, resourceBundle);
+        Object2ReferenceMap<String, ClipSpec> animations = this.animationDataProvider.getAnimations(modelData, resourceBundle);
         Object2ReferenceMaps.fastForEach(resourceBundle.getEvents(), event -> {
             if (this.controllerEntryMatcher.test(event.getKey())) {
                 String controllerName = event.getKey().replace("_ctrl_", ".");
@@ -72,7 +72,7 @@ public class ParallelProcessor<T extends GeoEntity<?>, TModel> implements ModelP
             }
         });
         Object2ReferenceMaps.fastForEach(animations, animEntry -> {
-            if (!animEntry.getValue().isEmpty() && this.animationNameMatcher.test(animEntry.getKey())) {
+            if (animEntry.getValue().hasKeyframes() && this.animationNameMatcher.test(animEntry.getKey())) {
                 matchedSlots.put(String.format("%s.%s_%s", this.prefix, this.slotName, animEntry.getKey().substring(this.slotName.length())), animEntry.getKey());
             }
         });

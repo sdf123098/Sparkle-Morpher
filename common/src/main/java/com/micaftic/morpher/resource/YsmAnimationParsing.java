@@ -1,6 +1,5 @@
 package com.micaftic.morpher.resource;
 
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;

@@ -1,12 +1,12 @@
 package com.micaftic.morpher.client.entity;
 
+import com.micaftic.morpher.client.core.HostEntityFrameState;
 import com.micaftic.morpher.core.compat.immersivemelodies.ImmersiveMelodiesCompat;
-import com.micaftic.morpher.geckolib3.core.EntityFrameStateTracker;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
-public class LivingEntityFrameState<T extends LivingEntity> extends EntityFrameStateTracker<T> {
+public class LivingEntityFrameState<T extends LivingEntity> extends HostEntityFrameState<T> {
 
     private final ImmersiveMelodiesCompat.ImmersiveMelodiesData imData;
 

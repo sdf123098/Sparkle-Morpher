@@ -43,32 +43,29 @@ class FirstPersonHudTest(unittest.TestCase):
                 public static boolean isPreview(){return com.micaftic.morpher.client.render.RenderContext.isModelPreview();}
                 public static boolean isFirstPerson(){return com.micaftic.morpher.client.render.RenderContext.isFirstPerson() || com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat.active;}
             }""",
-            BASE+"geckolib3.core.AnimatableEntity": """public class AnimatableEntity<T extends net.minecraft.world.entity.Entity> {
-                public T entity; public com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel model=new com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel();
+            BASE+"client.render.ModelScenePose": """public class ModelScenePose {
+                public float[] matrices={0,0,0,0}, pivots={0};
+                public float[] getMatrixData(){return matrices;} public float[] getAbsPivotData(){return pivots;}
+            }""",
+            BASE+"client.core.HostActionEvent": "public class HostActionEvent<T> {public float getPartialTick(){return 0.5f;} }",
+            BASE+"client.core.HostAnimatable": """public class HostAnimatable<T extends net.minecraft.world.entity.Entity> {
+                public T entity; public com.micaftic.morpher.client.render.ModelScenePose model=new com.micaftic.morpher.client.render.ModelScenePose();
                 public T getEntity(){return entity;}
-                public com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel getCurrentModel(){return model;}
+                public com.micaftic.morpher.client.render.ModelScenePose getCurrentModel(){return model;}
                 public int getLastAnimationEvaluationFrameId(){return 1;}
-                public com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel getLastAnimationEvaluationModel(){return model;}
+                public com.micaftic.morpher.client.render.ModelScenePose getLastAnimationEvaluationModel(){return model;}
                 public float getLastAnimationEvaluationSeekTime(){return 0;}
                 public float getSeekTime(){return 0;}
             }""",
             BASE+"client.entity.IPreviewAnimatable": "public interface IPreviewAnimatable {}",
-            BASE+"client.entity.LivingAnimatable": """public class LivingAnimatable<T extends net.minecraft.world.entity.Entity> extends com.micaftic.morpher.geckolib3.core.AnimatableEntity<T> {
+            BASE+"client.entity.LivingAnimatable": """public class LivingAnimatable<T extends net.minecraft.world.entity.Entity> extends com.micaftic.morpher.client.core.HostAnimatable<T> {
                 public float getHeadBaseRotationX(){return 0;} public float getHeadBaseRotationY(){return 0;}
             }""",
-            BASE+"client.entity.GeoEntity": "public class GeoEntity<T extends net.minecraft.world.entity.Entity> extends LivingAnimatable<T> { public String getModelId(){return \"model\";} }",
+            BASE+"client.entity.SpmEntity": "public class SpmEntity<T extends net.minecraft.world.entity.Entity> extends LivingAnimatable<T> { public String getModelId(){return \"model\";} }",
             BASE+"client.animation.debug.AnimationFrameProfiler": "public class AnimationFrameProfiler {public static int getRenderFrameId(){return 1;} }",
-            BASE+"geckolib3.geo.animated.AnimatedGeoModel": """public class AnimatedGeoModel {
-                public float[] matrices={0,0,0,0}, pivots={0};
-                public float[] getMatrixData(){return matrices;} public float[] getAbsPivotData(){return pivots;}
-            }""",
-            BASE+"geckolib3.core.molang.context.IContext": """public interface IContext<T extends net.minecraft.world.entity.Entity> {
-                T entity(); net.minecraft.client.Minecraft mc(); com.micaftic.morpher.geckolib3.core.AnimatableEntity<T> geoInstance();
-            }""",
             BASE+"client.gui.HudLayoutScreen": "public class HudLayoutScreen {}",
             BASE+"util.InputUtil": "public class InputUtil {public static Object getCurrentScreen(){return null;} }",
             BASE+"config.ExtraPlayerRenderConfig": "public class ExtraPlayerRenderConfig {public static Value CLASSIC_HUD_ANIMATION_SAMPLE_FPS=new Value();public static class Value {public int get(){return 60;}} }",
-            BASE+"geckolib3.core.event.predicate.AnimationEvent": "public class AnimationEvent<T> {public float getPartialTick(){return 0.5f;} }",
         }
         for name, body in sources.items():
             package, simple = name.rsplit(".", 1)
@@ -86,23 +83,16 @@ class FirstPersonHudTest(unittest.TestCase):
             import com.micaftic.morpher.client.renderer.hud.HudPoseCache;
             import com.micaftic.morpher.client.renderer.hud.HudAnimationGate;
             import com.micaftic.morpher.client.renderer.hud.HudAnimationGate.Decision;
-            import com.micaftic.morpher.client.entity.GeoEntity;
+            import com.micaftic.morpher.client.entity.SpmEntity;
             import com.micaftic.morpher.util.CameraUtil;
             import com.micaftic.morpher.core.compat.firstperson.FirstPersonCompat;
             import net.minecraft.client.*;
             import net.minecraft.world.entity.Entity;
             public class Harness {
                 static void check(boolean v,String message){if(!v)throw new AssertionError(message);}
-                static com.micaftic.morpher.geckolib3.core.molang.context.IContext<Entity> context(GeoEntity<Entity> body){
-                    return new com.micaftic.morpher.geckolib3.core.molang.context.IContext<>(){
-                        public Entity entity(){return body.entity;}
-                        public Minecraft mc(){return Minecraft.getInstance();}
-                        public GeoEntity<Entity> geoInstance(){return body;}
-                    };
-                }
                 public static void main(String[] args){
                     Minecraft mc=Minecraft.getInstance();
-                    GeoEntity<Entity> body=new GeoEntity<>(); body.entity=mc.player;
+                    SpmEntity<Entity> body=new SpmEntity<>(); body.entity=mc.player;
                     ModelPreviewRenderer.world=true;
                     if(args[0].equals("cache")){
                         mc.options.type=CameraType.THIRD_PERSON_BACK;
@@ -116,12 +106,12 @@ class FirstPersonHudTest(unittest.TestCase):
                         check(!HudPoseCache.applyTo(body),"rejected pose must not be applied to the HUD");
                     } else if(args[0].equals("camera")){
                         check(CameraUtil.isFirstPerson(body),"world body head must remain hidden in first person");
-                        check(CameraUtil.getCameraType(context(body))==CameraType.FIRST_PERSON.ordinal(),"world Molang perspective must stay first person");
+                        check(CameraUtil.getCameraType(body)==CameraType.FIRST_PERSON.ordinal(),"world Molang perspective must stay first person");
                         FirstPersonCompat.active=true;
                         for(RenderPass pass:new RenderPass[]{RenderPass.OLD_HUD,RenderPass.GUI_PREVIEW,RenderPass.PAPER_DOLL}){
                             RenderContext.enter(pass);
                             check(!CameraUtil.isFirstPerson(body),pass+" must not inherit camera head hiding");
-                            check(CameraUtil.getCameraType(context(body))==CameraType.THIRD_PERSON_FRONT.ordinal(),pass+" Molang expressions must see the full model perspective");
+                            check(CameraUtil.getCameraType(body)==CameraType.THIRD_PERSON_FRONT.ordinal(),pass+" Molang expressions must see the full model perspective");
                         }
                         RenderContext.enter(RenderPass.FIRST_PERSON);
                         RenderContext.setModelPreview(true);

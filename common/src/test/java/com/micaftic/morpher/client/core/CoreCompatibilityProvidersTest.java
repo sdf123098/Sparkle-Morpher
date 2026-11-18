@@ -1,7 +1,5 @@
 package com.micaftic.morpher.client.core;
 
-import com.micaftic.morpher.geckolib3.core.molang.MolangParser;
-import com.micaftic.morpher.geckolib3.core.molang.value.MolangValue;
 import dev.spm.core.api.CancellationToken;
 import dev.spm.core.scene.MolangContext;
 import dev.spm.core.scene.MolangProgram;
@@ -12,7 +10,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Verifies Host compatibility providers cover all 12 integrations and MolangValue exposes spm-core MolangProgram. */
+/** Verifies Host compatibility providers cover all 12 integrations and HostMolangScript compiles spm-core MolangProgram. */
 final class CoreCompatibilityProvidersTest {
 
     @Test
@@ -34,10 +32,9 @@ final class CoreCompatibilityProvidersTest {
     }
 
     @Test
-    void molangValueCompilesSpmCoreProgramForBoundedExpressions() throws Exception {
-        var parser = new MolangParser(Map.of());
-        MolangValue value = (MolangValue) parser.parseExpressionUnsafe("math.clamp(math.sin(30) * 10, 0, 8)", false);
-        MolangProgram program = value.coreProgram();
+    void hostMolangScriptCompilesSpmCoreProgramForBoundedExpressions() throws Exception {
+        HostMolangScript script = HostMolangScript.compile("math.clamp(math.sin(30) * 10, 0, 8)");
+        MolangProgram program = script.coreProgram();
         assertNotNull(program);
         double evaluated = program.evaluate(new MolangContext(
                 Map.of(), Map.of(), Map.of(), new ScriptBudget(10_000, 16, new CancellationToken())));

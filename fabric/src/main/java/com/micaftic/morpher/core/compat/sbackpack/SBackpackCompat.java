@@ -1,6 +1,6 @@
 package com.micaftic.morpher.core.compat.sbackpack;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import org.apache.commons.lang3.tuple.Pair;
@@ -24,7 +24,7 @@ public final class SBackpackCompat {
         return com.micaftic.morpher.core.compat.sbackpack.fabric.SBackpackCompatImpl.getInCompatibleInfo();
     }
 
-    public static void registerControllerFunctions(CtrlBinding binding) {
+    public static void registerControllerFunctions(HostMolangSink binding) {
         com.micaftic.morpher.core.compat.sbackpack.fabric.SBackpackCompatImpl.registerControllerFunctions(binding);
     }
 

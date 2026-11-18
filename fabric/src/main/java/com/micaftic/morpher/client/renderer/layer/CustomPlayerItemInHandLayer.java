@@ -8,11 +8,12 @@ import com.micaftic.morpher.client.entity.CustomPlayerEntity;
 import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.model.HandLocatorProfile;
 import com.micaftic.morpher.core.api.item.WeaponKind;
-import com.micaftic.morpher.geckolib3.geo.GeoLayerRenderer;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
+import com.micaftic.morpher.client.render.ModelBoneView;
+import com.micaftic.morpher.client.render.ModelScenePose;
+import com.micaftic.morpher.client.renderer.SpmLayerRenderer;
+import com.micaftic.morpher.client.renderer.SpmRenderMath;
 import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.client.renderer.SubmitRenderContext;
-import com.micaftic.morpher.geckolib3.util.RenderUtils;
 // Legacy BufferSource flush hooks do not apply to the submit collector path.
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.item.ItemModelResolver;
@@ -30,7 +31,7 @@ import net.minecraft.world.item.component.KineticWeapon;
 import com.mojang.math.Axis;
 import com.micaftic.morpher.util.ItemTagsConstants;
 
-public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEntity> implements HeldItemLayer {
+public class CustomPlayerItemInHandLayer extends SpmLayerRenderer<CustomPlayerEntity> implements HeldItemLayer {
 
     // 原版装备（bbmodel）矛使用姿态参数：改这里只影响 bbmodel
     private static final float EQUIPMENT_SPEAR_TIRED_TIP_PLANE_ROLL_DEGREES = 90.0f;
@@ -62,7 +63,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
     @Override
     public void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLightIn, CustomPlayerEntity entityLivingBaseIn, float limbSwing, float limbSwingAmount, float partialTick, float ageInTicks, float netHeadYaw, float headPitch) {
         LivingEntity entity = entityLivingBaseIn.getEntity();
-        AnimatedGeoModel animatedGeoModel = entityLivingBaseIn.getCurrentModel();
+        ModelScenePose animatedGeoModel = entityLivingBaseIn.getCurrentModel();
         if (animatedGeoModel == null) {
             return;
         }
@@ -104,7 +105,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         }
     }
 
-    public void renderItem(AnimatedGeoModel model, LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, MultiBufferSource multiBufferSource, int i, float partialTick, HandLocatorProfile handLocatorProfile) {
+    public void renderItem(ModelScenePose model, LivingEntity livingEntity, ItemStack itemStack, ItemDisplayContext itemDisplayContext, HumanoidArm humanoidArm, PoseStack poseStack, MultiBufferSource multiBufferSource, int i, float partialTick, HandLocatorProfile handLocatorProfile) {
         if (!itemStack.isEmpty()) {
             float inheritedItemScale = BowItemScale.largestAxisScale(poseStack.last().pose());
             boolean isLeftHand = humanoidArm == HumanoidArm.LEFT;
@@ -138,7 +139,7 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
                 renderedDirectly = true;
             }
             if (!renderedDirectly) {
-                (isLeftHand ? model.leftHandChains() : model.rightHandChains()).forEach(list -> {
+                (isLeftHand ? model.leftHandGroupChains() : model.rightHandGroupChains()).forEach(list -> {
                     poseStack.pushPose();
                     if (list != null && !list.isEmpty() && applyItemLocatorTransform(itemStack, poseStack, list, handLocatorProfile)) {
                         applyFallbackHandTransform(itemStack, poseStack, false, vanillaEquipment);
@@ -389,16 +390,16 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         return humanoidArm == HumanoidArm.LEFT ? ItemDisplayContext.THIRD_PERSON_LEFT_HAND : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND;
     }
 
-    private boolean hasHandAnchor(AnimatedGeoModel model, HumanoidArm humanoidArm) {
+    private boolean hasHandAnchor(ModelScenePose model, HumanoidArm humanoidArm) {
         return hasDirectHandAnchor(model, humanoidArm) || hasHandChainAnchor(model, humanoidArm);
     }
 
-    private boolean hasDirectHandAnchor(AnimatedGeoModel model, HumanoidArm humanoidArm) {
+    private boolean hasDirectHandAnchor(ModelScenePose model, HumanoidArm humanoidArm) {
         return humanoidArm == HumanoidArm.LEFT ? !model.leftHandBones().isEmpty() : !model.rightHandBones().isEmpty();
     }
 
-    private boolean hasHandChainAnchor(AnimatedGeoModel model, HumanoidArm humanoidArm) {
-        return (humanoidArm == HumanoidArm.LEFT ? model.leftHandChains() : model.rightHandChains())
+    private boolean hasHandChainAnchor(ModelScenePose model, HumanoidArm humanoidArm) {
+        return (humanoidArm == HumanoidArm.LEFT ? model.leftHandGroupChains() : model.rightHandGroupChains())
                 .stream()
                 .anyMatch(list -> list != null && !list.isEmpty());
     }
@@ -411,16 +412,16 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         }
     }
 
-    public boolean applyItemBoneTransform(HumanoidArm humanoidArm, PoseStack poseStack, AnimatedGeoModel model) {
+    public boolean applyItemBoneTransform(HumanoidArm humanoidArm, PoseStack poseStack, ModelScenePose model) {
         return applyItemBoneTransform(humanoidArm, poseStack, model, ItemStack.EMPTY, HandLocatorProfile.YSM_AUTHORED);
     }
 
-    private boolean applyItemBoneTransform(HumanoidArm humanoidArm, PoseStack poseStack, AnimatedGeoModel model, ItemStack itemStack, HandLocatorProfile handLocatorProfile) {
+    private boolean applyItemBoneTransform(HumanoidArm humanoidArm, PoseStack poseStack, ModelScenePose model, ItemStack itemStack, HandLocatorProfile handLocatorProfile) {
         if (!hasDirectHandAnchor(model, humanoidArm)) {
             return false;
         }
         if (shouldUseSpecialSwordAnchor(itemStack, handLocatorProfile)) {
-            java.util.List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> swordLocator = humanoidArm == HumanoidArm.LEFT ? model.leftSwordBones() : model.rightSwordBones();
+            java.util.List<? extends ModelBoneView> swordLocator = humanoidArm == HumanoidArm.LEFT ? model.leftSwordBones() : model.rightSwordBones();
             if (swordLocator != null && !swordLocator.isEmpty()) {
                 return applyItemLocatorTransform(itemStack, poseStack, swordLocator, handLocatorProfile, true);
             }
@@ -431,22 +432,22 @@ public class CustomPlayerItemInHandLayer extends GeoLayerRenderer<CustomPlayerEn
         return applyItemLocatorTransform(itemStack, poseStack, model.rightHandBones(), handLocatorProfile);
     }
 
-    private boolean applyItemLocatorTransform(ItemStack itemStack, PoseStack poseStack, java.util.List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> locatorHierarchy, HandLocatorProfile handLocatorProfile) {
+    private boolean applyItemLocatorTransform(ItemStack itemStack, PoseStack poseStack, java.util.List<? extends ModelBoneView> locatorHierarchy, HandLocatorProfile handLocatorProfile) {
         return applyItemLocatorTransform(itemStack, poseStack, locatorHierarchy, handLocatorProfile, false);
     }
 
-    private boolean applyItemLocatorTransform(ItemStack itemStack, PoseStack poseStack, java.util.List<? extends com.micaftic.morpher.geckolib3.core.processor.IBone> locatorHierarchy, HandLocatorProfile handLocatorProfile, boolean ignoreHiddenLastScale) {
+    private boolean applyItemLocatorTransform(ItemStack itemStack, PoseStack poseStack, java.util.List<? extends ModelBoneView> locatorHierarchy, HandLocatorProfile handLocatorProfile, boolean ignoreHiddenLastScale) {
         if (locatorHierarchy == null || locatorHierarchy.isEmpty()) {
             return false;
         }
         if (handLocatorProfile.usesEquipmentLocatorTransform()) {
-            RenderUtils.prepMatrixForEquipmentLocator(poseStack, locatorHierarchy);
+            SpmRenderMath.prepMatrixForEquipmentLocator(poseStack, locatorHierarchy);
             return true;
         }
         if (ignoreHiddenLastScale) {
-            return RenderUtils.prepMatrixForLocatorIgnoringHiddenLastScale(poseStack, locatorHierarchy);
+            return SpmRenderMath.prepMatrixForLocatorIgnoringHiddenLastScale(poseStack, locatorHierarchy);
         }
-        return RenderUtils.prepMatrixForLocator(poseStack, locatorHierarchy);
+        return SpmRenderMath.prepMatrixForLocator(poseStack, locatorHierarchy);
     }
 
     private boolean shouldUseSpecialSwordAnchor(ItemStack itemStack, HandLocatorProfile handLocatorProfile) {

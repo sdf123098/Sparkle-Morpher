@@ -1,8 +1,9 @@
 package com.micaftic.morpher.core.compat.carryon;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.Optional;
@@ -17,7 +18,7 @@ public final class CarryOnCompat {
         return false;
     }
 
-    public static Optional<BiFunction<String, CustomPlayerEntity, IAnimationController<CustomPlayerEntity>>> getControllerFactory() {
+    public static Optional<BiFunction<String, CustomPlayerEntity, HostControllerSlot<CustomPlayerEntity>>> getControllerFactory() {
         return Optional.empty();
     }
 
@@ -25,6 +26,8 @@ public final class CarryOnCompat {
         return false;
     }
 
-    public static void registerBindings(CtrlBinding binding) {
+    public static void registerBindings(HostMolangSink binding) {
+        binding.var("carryon_type", event -> MolangValue.text(""));
+        binding.var("carryon_is_princess", event -> MolangValue.bool(false));
     }
 }

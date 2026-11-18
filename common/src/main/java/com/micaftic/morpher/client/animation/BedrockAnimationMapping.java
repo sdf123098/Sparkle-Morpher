@@ -1,8 +1,7 @@
 package com.micaftic.morpher.client.animation;
 
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
-import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -126,7 +125,7 @@ public final class BedrockAnimationMapping {
     }
 
     /** 运行时兜底：动作名查不到时，按候选 Bedrock 动画名反查（bbmodel 内嵌基岩名动画）。 */
-    public static Animation findByAction(Object2ReferenceMap<String, Animation> animations, String action) {
+    public static <T> @Nullable T findByAction(Map<String, T> animations, String action) {
         if (animations == null || action == null) {
             return null;
         }
@@ -135,7 +134,7 @@ public final class BedrockAnimationMapping {
             return null;
         }
         for (String candidate : candidates) {
-            Animation found = animations.get(candidate);
+            T found = animations.get(candidate);
             if (found != null) {
                 return found;
             }

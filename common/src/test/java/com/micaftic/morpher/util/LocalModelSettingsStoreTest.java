@@ -1,20 +1,14 @@
 package com.micaftic.morpher.util;
 
 import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
-import com.micaftic.morpher.geckolib3.core.molang.MolangParser;
-import com.micaftic.morpher.geckolib3.core.molang.context.AnimationContext;
-import com.micaftic.morpher.geckolib3.core.molang.storage.VariableStorage;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
-import com.micaftic.morpher.molang.runtime.ExpressionEvaluator;
+import com.micaftic.morpher.client.render.BoneIds;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Path;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,7 +20,7 @@ class LocalModelSettingsStoreTest {
     @Test
     void switchingModelsRestoresTheirOwnTextureWithoutDroppingClothing() {
         Path file = directory.resolve("settings.json");
-        int dress = StringPool.computeIfAbsent("dress");
+        int dress = BoneIds.id("dress");
         Int2FloatOpenHashMap changes = new Int2FloatOpenHashMap();
         changes.put(dress, 2f);
         LocalModelSettingsStore.save(file, "model/a", changes);
@@ -41,23 +35,18 @@ class LocalModelSettingsStoreTest {
     }
 
     @Test
-    void restoredClothingWinsOverQueuedPlayerInitDefaults() throws Exception {
+    void restoredClothingWinsOverQueuedPlayerInitDefaults() {
         Path file = directory.resolve("settings.json");
-        int dress = StringPool.computeIfAbsent("dress");
+        int dress = BoneIds.id("dress");
         Int2FloatOpenHashMap changes = new Int2FloatOpenHashMap();
         changes.put(dress, 2f);
         LocalModelSettingsStore.save(file, "model/a", changes);
         RoamingStruct returned = new RoamingStruct(42, null);
-        VariableStorage storage = new VariableStorage();
-        storage.setScoped(StringPool.computeIfAbsent("roaming"), returned);
-        AnimationContext<?> context = new AnimationContext<>(null, null, null, null);
-        context.setStorage(storage);
-        var evaluator = ExpressionEvaluator.evaluator(context);
-        var queued = new ArrayList<IValue>();
-        // PLAYER_INIT is queued by LivingAnimatable before PlayerCapability restores preferences.
-        queued.add(new MolangParser(Map.of()).parseExpressionUnsafe("v.roaming.dress=0;", false));
-        queued.add(LocalModelSettingsStore.restoreExpression(file, "model/a", returned));
-        for (IValue expression : queued) expression.evalUnsafe(evaluator);
+        var queued = new ArrayList<Runnable>();
+        // PLAYER_INIT initializes default roaming values before PlayerCapability restores preferences.
+        queued.add(() -> returned.putProperty(dress, 0f));
+        queued.add(LocalModelSettingsStore.restoreTask(file, "model/a", returned));
+        for (Runnable task : queued) task.run();
 
         assertEquals(2f, returned.getProperty(dress));
     }
@@ -65,7 +54,7 @@ class LocalModelSettingsStoreTest {
     @Test
     void switchingBeforeTheNextTickSavesPendingOutfitToItsOriginalModel() {
         Path file = directory.resolve("settings.json");
-        int dress = StringPool.computeIfAbsent("dress");
+        int dress = BoneIds.id("dress");
         RoamingStruct leaving = new RoamingStruct(42, null);
         leaving.putProperty(dress, 3f);
         // The selected model may already be B when the render state for A is reset.
@@ -88,25 +77,25 @@ class LocalModelSettingsStoreTest {
     void doesNotQueueRestorationWithoutValidSavedRoaming() throws Exception {
         Path file = directory.resolve("settings.json");
         RoamingStruct target = new RoamingStruct(42, null);
-        assertNull(LocalModelSettingsStore.restoreExpression(file, "model/a", target));
+        assertNull(LocalModelSettingsStore.restoreTask(file, "model/a", target));
         LocalModelSettingsStore.saveTexture(file, "model/a", "red");
-        assertNull(LocalModelSettingsStore.restoreExpression(file, "model/a", target));
+        assertNull(LocalModelSettingsStore.restoreTask(file, "model/a", target));
         Files.writeString(file, "{\"models\":{\"model/a\":{\"\":2,\"invalid\":{},\"nonfinite\":\"NaN\"}}}");
-        assertNull(LocalModelSettingsStore.restoreExpression(file, "model/a", target));
+        assertNull(LocalModelSettingsStore.restoreTask(file, "model/a", target));
     }
 
     @Test
     void queuedRestorationCapturesValuesBeforeLaterModelChanges() {
         Path file = directory.resolve("settings.json");
-        int dress = StringPool.computeIfAbsent("dress");
+        int dress = BoneIds.id("dress");
         Int2FloatOpenHashMap changes = new Int2FloatOpenHashMap();
         changes.put(dress, 2f);
         LocalModelSettingsStore.save(file, "model/a", changes);
         RoamingStruct target = new RoamingStruct(42, null);
-        IValue restore = LocalModelSettingsStore.restoreExpression(file, "model/a", target);
+        Runnable restore = LocalModelSettingsStore.restoreTask(file, "model/a", target);
         changes.put(dress, 5f);
         LocalModelSettingsStore.save(file, "model/a", changes);
-        restore.evalUnsafe(null);
+        restore.run();
         assertEquals(2f, target.getProperty(dress));
     }
 }

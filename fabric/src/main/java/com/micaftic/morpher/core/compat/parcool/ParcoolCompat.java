@@ -1,8 +1,8 @@
 package com.micaftic.morpher.core.compat.parcool;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostControllerSlot;
+import com.micaftic.morpher.client.core.HostMolangSink;
 import com.micaftic.morpher.client.entity.CustomPlayerEntity;
-import com.micaftic.morpher.geckolib3.core.controller.IAnimationController;
 import net.minecraft.world.entity.player.Player;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -22,7 +22,7 @@ public final class ParcoolCompat {
         return com.micaftic.morpher.core.compat.parcool.fabric.ParcoolCompatImpl.getInCompatibleInfo();
     }
 
-    public static Optional<BiFunction<String, CustomPlayerEntity, IAnimationController<CustomPlayerEntity>>> getControllerFactory() {
+    public static Optional<BiFunction<String, CustomPlayerEntity, HostControllerSlot<CustomPlayerEntity>>> getControllerFactory() {
         return com.micaftic.morpher.core.compat.parcool.fabric.ParcoolCompatImpl.getControllerFactory();
     }
 
@@ -34,7 +34,7 @@ public final class ParcoolCompat {
         return com.micaftic.morpher.core.compat.parcool.fabric.ParcoolCompatImpl.getActionName(player);
     }
 
-    public static void registerBindings(CtrlBinding binding) {
+    public static void registerBindings(HostMolangSink binding) {
         com.micaftic.morpher.core.compat.parcool.fabric.ParcoolCompatImpl.registerBindings(binding);
     }
 }

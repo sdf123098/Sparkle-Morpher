@@ -1,7 +1,7 @@
 package com.micaftic.morpher.client.renderer;
 
 import com.micaftic.morpher.capability.ProjectileCapability;
-import com.micaftic.morpher.client.entity.GeckoProjectileEntity;
+import com.micaftic.morpher.client.entity.SpmProjectileEntity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import com.micaftic.morpher.client.renderer.MultiBufferSource;
@@ -12,7 +12,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.projectile.Projectile;
 import org.jetbrains.annotations.NotNull;
 
-public class ProjectileRenderer extends AbstractProjectileRenderer<Projectile, GeckoProjectileEntity> {
+public class ProjectileRenderer extends AbstractProjectileRenderer<Projectile, SpmProjectileEntity> {
     @Override
     public EntityRenderState createRenderState() { return new EntityRenderState(); }
 

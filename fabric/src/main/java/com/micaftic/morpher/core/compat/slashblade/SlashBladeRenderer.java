@@ -1,8 +1,8 @@
 package com.micaftic.morpher.core.compat.slashblade;
 
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.mojang.blaze3d.vertex.PoseStack;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.micaftic.morpher.client.renderer.MultiBufferSource;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
@@ -11,11 +11,11 @@ public final class SlashBladeRenderer {
     private SlashBladeRenderer() {
     }
 
-    public static void renderOnEntity(LivingEntity entity, AnimatedGeoModel model, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack, float partialTick) {
+    public static void renderOnEntity(LivingEntity entity, ModelScenePose model, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack, float partialTick) {
         com.micaftic.morpher.core.compat.slashblade.fabric.SlashBladeRendererImpl.renderOnEntity(entity, model, poseStack, bufferSource, packedLight, stack, partialTick);
     }
 
-    public static void renderRightWaist(AnimatedGeoModel model, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack) {
+    public static void renderRightWaist(ModelScenePose model, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, ItemStack stack) {
         com.micaftic.morpher.core.compat.slashblade.fabric.SlashBladeRendererImpl.renderRightWaist(model, poseStack, bufferSource, packedLight, stack);
     }
 }

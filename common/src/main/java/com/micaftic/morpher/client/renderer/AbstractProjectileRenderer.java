@@ -1,14 +1,10 @@
 package com.micaftic.morpher.client.renderer;
 
-import com.micaftic.morpher.geckolib3.core.AnimatableEntity;
 import com.micaftic.morpher.client.ClientModelManager;
-import com.micaftic.morpher.client.entity.GeoEntity;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.util.Color;
-import com.micaftic.morpher.geckolib3.geo.IGeoRenderer;
-import com.micaftic.morpher.geckolib3.geo.animated.AnimatedGeoModel;
-import com.micaftic.morpher.geckolib3.util.EModelRenderCycle;
-import com.micaftic.morpher.geckolib3.util.IRenderCycle;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostAnimatable;
+import com.micaftic.morpher.client.entity.SpmEntity;
+import com.micaftic.morpher.client.render.ModelScenePose;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
@@ -25,13 +21,13 @@ import org.jetbrains.annotations.NotNull;
 import org.joml.Matrix4f;
 import com.mojang.math.Axis;
 
-public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T extends AnimatableEntity<TEntity>> extends EntityRenderer<TEntity, EntityRenderState> implements IGeoRenderer<T> {
+public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T extends HostAnimatable<TEntity>> extends EntityRenderer<TEntity, EntityRenderState> implements ISpmRenderer<T> {
 
     public Matrix4f modelViewMatrix;
 
     public Matrix4f projectionMatrix;
 
-    private IRenderCycle renderState;
+    private RenderCycle renderState;
 
     public MultiBufferSource bufferSource;
 
@@ -39,12 +35,12 @@ public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T e
         super(context);
         this.modelViewMatrix = new Matrix4f();
         this.projectionMatrix = new Matrix4f();
-        this.renderState = EModelRenderCycle.INITIAL;
+        this.renderState = RenderCycle.INITIAL;
         this.bufferSource = null;
     }
 
     public void render(T animatable, float entityYaw, float partialTick, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
-        AnimationEvent<?> event = animatable.processAnimation(partialTick);
+        HostActionEvent<?> event = animatable.processAnimation(partialTick);
         Minecraft minecraft = Minecraft.getInstance();
         if (event != null && minecraft.player != null) {
             Projectile projectile = animatable.getEntity();
@@ -52,13 +48,13 @@ public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T e
             boolean zShouldEntityAppearGlowing = minecraft.shouldEntityAppearGlowing(projectile);
             RenderType renderType = getRenderType(animatable.getTextureLocation(), isVisible, zShouldEntityAppearGlowing, animatable.getCurrentModel().getGeoModel().isTranslucentTexture(0));
             if (renderType != null && (isVisible || zShouldEntityAppearGlowing)) {
-                Color color = getRenderColor(animatable, partialTick, poseStack, bufferSource, null, packedLight);
-                AnimatedGeoModel model = animatable.getCurrentModel();
-                if (animatable instanceof GeoEntity<?> geoEntity) {
+                int argb = getRenderColor(animatable, partialTick, poseStack, bufferSource, null, packedLight);
+                ModelScenePose model = animatable.getCurrentModel();
+                if (animatable instanceof SpmEntity<?> geoEntity) {
                     ClientModelManager.markModelUsed(geoEntity.getModelId());
                 }
                 this.modelViewMatrix = new Matrix4f(poseStack.last().pose());
-                setCurrentModelRenderCycle(EModelRenderCycle.INITIAL);
+                setCurrentModelRenderCycle(RenderCycle.INITIAL);
                 poseStack.pushPose();
                 poseStack.rotate(Axis.YP.rotationDegrees(projectile.getYRot(partialTick) - 90.0f));
                 float xRot = projectile.getXRot(partialTick);
@@ -66,7 +62,13 @@ public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T e
                     xRot += 90.0f;
                 }
                 poseStack.rotate(Axis.ZP.rotationDegrees(xRot));
-                renderWithBoneAndRenderType(model, animatable, partialTick, renderType, poseStack, bufferSource, 0, null, packedLight, getPackedLight(projectile, 0.0f), color.getRed() / 255.0f, color.getGreen() / 255.0f, color.getBlue() / 255.0f, color.getAlpha() / 255.0f);
+                renderWithBoneAndRenderType(
+                        model, animatable, partialTick, renderType, poseStack, bufferSource, 0, null,
+                        packedLight, getPackedLight(projectile, 0.0f),
+                        ((argb >>> 16) & 0xFF) / 255.0f,
+                        ((argb >>> 8) & 0xFF) / 255.0f,
+                        (argb & 0xFF) / 255.0f,
+                        ((argb >>> 24) & 0xFF) / 255.0f);
                 com.micaftic.morpher.client.animation.particle.AnimationParticleRuntime.flush(animatable, event, this.modelViewMatrix, poseStack.last().pose());
                 poseStack.popPose();
             }
@@ -78,7 +80,7 @@ public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T e
     @Override
     public void renderEarly(T animatable, PoseStack poseStack, float partialTick, MultiBufferSource bufferSource, VertexConsumer buffer, int packedLight, int packedOverlayIn, float red, float green, float blue, float alpha) {
         this.projectionMatrix = new Matrix4f(poseStack.last().pose());
-        IGeoRenderer.super.renderEarly(animatable, poseStack, partialTick, bufferSource, buffer, packedLight, packedOverlayIn, red, green, blue, alpha);
+        ISpmRenderer.super.renderEarly(animatable, poseStack, partialTick, bufferSource, buffer, packedLight, packedOverlayIn, red, green, blue, alpha);
     }
 
     public static int getPackedLight(Entity entity, float u) {
@@ -87,12 +89,12 @@ public abstract class AbstractProjectileRenderer<TEntity extends Projectile, T e
 
     @Override
     @NotNull
-    public IRenderCycle getCurrentModelRenderCycle() {
+    public RenderCycle getCurrentModelRenderCycle() {
         return this.renderState;
     }
 
     @Override
-    public void setCurrentModelRenderCycle(IRenderCycle cycle) {
+    public void setCurrentModelRenderCycle(RenderCycle cycle) {
         this.renderState = cycle;
     }
 

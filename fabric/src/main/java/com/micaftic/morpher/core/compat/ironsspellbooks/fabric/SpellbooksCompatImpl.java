@@ -1,11 +1,12 @@
 package com.micaftic.morpher.core.compat.ironsspellbooks.fabric;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
+import dev.spm.core.scene.MolangValue;
 import net.minecraft.world.entity.LivingEntity;
+import org.jetbrains.annotations.Nullable;
 
 public final class SpellbooksCompatImpl {
 
@@ -16,11 +17,11 @@ public final class SpellbooksCompatImpl {
         return false;
     }
 
-    public static void registerBindings(CtrlBinding binding) {
-        binding.clientPlayerEntityVar("iss_animation", ctx -> StringPool.EMPTY);
+    public static void registerBindings(HostMolangSink binding) {
+        binding.var("iss_animation", event -> MolangValue.text(""));
     }
 
-    public static PlayState resolvePlayState(AnimationEvent<LivingAnimatable<?>> event, LivingEntity entity) {
+    public static @Nullable HostPlayState.Decision resolvePlayState(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity) {
         return null;
     }
 }

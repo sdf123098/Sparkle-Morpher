@@ -1,6 +1,5 @@
 package com.micaftic.morpher.util;
 
-import com.micaftic.morpher.geckolib3.core.molang.util.StringPool;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -19,7 +18,7 @@ public class YSMComponentHelper {
     }
 
     public static Object createLiteralComponent(@Nullable String str) {
-        return Component.literal(str == null ? StringPool.EMPTY : str);
+        return Component.literal(str == null ? "" : str);
     }
 
     public static Object appendComponents(Object obj, Object obj2) {

@@ -118,8 +118,8 @@ English, Chinese, Japanese and Korean follow the same section order, installatio
 
 - **Core runtime (`2.4.0+`):** powered by **[AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)** (`1.0.0`, MIT) — an independent, host-neutral Java 17 + Rust SIMD engine for model parsing (`.ysm`, `.bbmodel`, `.geo.json`, `.gltf`/`.glb`, `.figura`, `v3d`), animation/Molang evaluation, bounded pure-Java Lua 5.3 execution, and CPU/SIMD skinning.
   - `spm-core` itself is clean-room written against format and behavior specifications from [YesSteveModel/YesSteveModel](https://github.com/YesSteveModel/YesSteveModel) (Apache-2.0, specification only), [AndreaFrederica/OhMyYesSteveModel](https://github.com/AndreaFrederica/OhMyYesSteveModel) (Apache-2.0, historical format specs, algorithm provenance, and Apache-2.0 synthetic test vectors), [JannisX11/blockbench](https://github.com/JannisX11/blockbench) (GPL-3.0, specification only), [KhronosGroup/glTF](https://github.com/KhronosGroup/glTF) (CC-BY-4.0, specification only), and [FiguraMC/Figura](https://github.com/FiguraMC/Figura) (LGPL-2.1 historical revision, specification only); see `spm-core`'s `provenance/allowed-sources.json` and `THIRD_PARTY_NOTICES.md`.
-- **Historical upstream lineage (`2.3.2` and earlier / `2.4.0` transition):**
-  - **[OpenYSM](https://github.com/OpenYSM)** (MIT) — the original Minecraft custom-model mod codebase on which SPM `<= 2.3.2` was based (remaining transitional client/GeckoLib3/Molang code in `2.4.0` is being progressively replaced by `spm-core`).
+- **Historical upstream lineage (`2.3.2` and earlier):**
+  - **[OpenYSM](https://github.com/OpenYSM)** (MIT) — the original Minecraft custom-model mod codebase on which SPM `<= 2.3.2` was based (all OpenYSM/GeckoLib3/Molang code has been completely removed in `2.4.0+` and replaced by `spm-core`).
   - **[OpenYSMDev/YSMParser](https://github.com/OpenYSMDev/YSMParser)** (MIT) & **[OpenYSMDev/openysm.cpp](https://github.com/OpenYSMDev/openysm.cpp)** (MIT; formerly forked at [sdf123098/openysm.cpp](https://github.com/sdf123098/openysm.cpp)) — legacy model parser and C++ native acceleration used in `<= 2.3.2`, superseded in `2.4.0+` by `spm-core`.
 - **Companion & resource repositories:**
   - Cloud backend: **[sdf123098/spm-cloud](https://github.com/sdf123098/spm-cloud)**
@@ -127,4 +127,4 @@ English, Chinese, Japanese and Korean follow the same section order, installatio
 
 ### License
 
-SPM uses a dual **[All Rights Reserved (ARR) & MIT](LICENSE)** license (original SPM `2.4.0+` mod code, UI, GPU/Blaze3D bridges, Cloud/Peer client, shaders and brand assets are All Rights Reserved; [`spm-core`](https://github.com/AIH-Interactive/spm-core) (`1.0.0`) and historical `<= 2.3.2` / transitional OpenYSM-derived portions remain MIT). Model assets retain their authors' licenses and usage terms.
+SPM uses a dual **[All Rights Reserved (ARR) & MIT](LICENSE)** license (original SPM `2.4.0+` mod code, UI, GPU/Blaze3D bridges, Cloud/Peer client, shaders and brand assets are All Rights Reserved; [`spm-core`](https://github.com/AIH-Interactive/spm-core) and historical `<= 2.3.2` portions remain MIT). Model assets retain their authors' licenses and usage terms.

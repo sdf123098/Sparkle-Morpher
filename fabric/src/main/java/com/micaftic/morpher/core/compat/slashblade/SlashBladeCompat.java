@@ -1,12 +1,13 @@
 package com.micaftic.morpher.core.compat.slashblade;
 
-import com.micaftic.morpher.client.animation.molang.CtrlBinding;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
-import com.micaftic.morpher.geckolib3.core.builder.ILoopType;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.enums.PlayState;
+import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 public final class SlashBladeCompat {
 
@@ -21,16 +22,20 @@ public final class SlashBladeCompat {
         return com.micaftic.morpher.core.compat.slashblade.fabric.SlashBladeCompatImpl.isSlashBladeItem(itemStack);
     }
 
-    public static String getComboAnimName(AnimationEvent<? extends LivingAnimatable<?>> event) {
+    public static String getComboAnimName(HostActionEvent<? extends LivingAnimatable<?>> event) {
         return com.micaftic.morpher.core.compat.slashblade.fabric.SlashBladeCompatImpl.getComboAnimName(event);
     }
 
-    public static PlayState handleSlashBladeAnim(LivingEntity livingEntity, AnimationEvent<? extends LivingAnimatable<?>> event, String str, ILoopType loopType) {
-        return com.micaftic.morpher.core.compat.slashblade.fabric.SlashBladeCompatImpl.handleSlashBladeAnim(livingEntity, event, str, loopType);
+    public static @Nullable HostPlayState.Decision handleSlashBladeAnim(
+            LivingEntity livingEntity,
+            HostActionEvent<? extends LivingAnimatable<?>> event,
+            String animation,
+            CodedLoopMode loopType) {
+        return com.micaftic.morpher.core.compat.slashblade.fabric.SlashBladeCompatImpl.handleSlashBladeAnim(livingEntity, event, animation, loopType);
     }
 
-    public static void registerControllerFunctions(CtrlBinding ctrlBinding) {
-        com.micaftic.morpher.core.compat.slashblade.fabric.SlashBladeCompatImpl.registerControllerFunctions(ctrlBinding);
+    public static void registerControllerFunctions(HostMolangSink sink) {
+        com.micaftic.morpher.core.compat.slashblade.fabric.SlashBladeCompatImpl.registerControllerFunctions(sink);
     }
 
     public static boolean hasNewApi() {

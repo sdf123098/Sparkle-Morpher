@@ -1,10 +1,9 @@
 package com.micaftic.morpher.client.model;
 
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.file.AnimationFile;
+import com.micaftic.morpher.client.core.HostAnimationAssets.AnimationClipSet;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
 import com.micaftic.morpher.resource.bundle.AnimationMapper;
-import com.micaftic.morpher.resource.YSMFolderDeserializer;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceMap;
@@ -22,13 +21,13 @@ public final class BuiltinDefaultActionPreset {
     private static final String BASE_PATH = "/assets/sparkle_morpher/action_presets/ysm/animations/";
     private static final Map<String, String> PLAYER_ANIMATION_FILES = createPlayerAnimationFiles();
 
-    private static volatile Map<String, AnimationFile> playerAnimations;
+    private static volatile Map<String, AnimationClipSet> playerAnimations;
 
     private BuiltinDefaultActionPreset() {
     }
 
-    public static Map<String, AnimationFile> playerAnimations() {
-        Map<String, AnimationFile> cached = playerAnimations;
+    public static Map<String, AnimationClipSet> playerAnimations() {
+        Map<String, AnimationClipSet> cached = playerAnimations;
         if (cached == null) {
             synchronized (BuiltinDefaultActionPreset.class) {
                 cached = playerAnimations;
@@ -41,9 +40,9 @@ public final class BuiltinDefaultActionPreset {
         return cached;
     }
 
-    public static Object2ReferenceMap<String, Animation> mainAnimations() {
-        Object2ReferenceLinkedOpenHashMap<String, Animation> animations = new Object2ReferenceLinkedOpenHashMap<>();
-        for (Map.Entry<String, AnimationFile> entry : playerAnimations().entrySet()) {
+    public static Object2ReferenceMap<String, ClipSpec> mainAnimations() {
+        Object2ReferenceLinkedOpenHashMap<String, ClipSpec> animations = new Object2ReferenceLinkedOpenHashMap<>();
+        for (Map.Entry<String, AnimationClipSet> entry : playerAnimations().entrySet()) {
             if (!"fp_arm".equals(entry.getKey())) {
                 animations.putAll(entry.getValue().getAnimations());
             }
@@ -51,16 +50,16 @@ public final class BuiltinDefaultActionPreset {
         return Object2ReferenceMaps.unmodifiable(animations);
     }
 
-    public static Object2ReferenceMap<String, Animation> armAnimations() {
-        AnimationFile armFile = playerAnimations().get("fp_arm");
+    public static Object2ReferenceMap<String, ClipSpec> armAnimations() {
+        AnimationClipSet armFile = playerAnimations().get("fp_arm");
         if (armFile == null) {
             return Object2ReferenceMaps.emptyMap();
         }
         return Object2ReferenceMaps.unmodifiable(new Object2ReferenceLinkedOpenHashMap<>(armFile.getAnimations()));
     }
 
-    private static Map<String, AnimationFile> loadPlayerAnimations() {
-        LinkedHashMap<String, AnimationFile> result = new LinkedHashMap<>();
+    private static Map<String, AnimationClipSet> loadPlayerAnimations() {
+        LinkedHashMap<String, AnimationClipSet> result = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : PLAYER_ANIMATION_FILES.entrySet()) {
             byte[] data = readResource(BASE_PATH + entry.getValue());
             if (data == null) {
@@ -69,13 +68,13 @@ public final class BuiltinDefaultActionPreset {
             }
             try {
                 RawYsmModel.RawAnimationFile rawFile = com.micaftic.morpher.resource.YsmAnimationParsing.parseAnimationFile(data);
-                Map<String, Animation> animations = AnimationMapper.buildAnimations(rawFile, false);
+                Map<String, ClipSpec> animations = AnimationMapper.buildAnimations(rawFile, false);
                 animations.values().forEach(animation -> {
-                    if (animation.sourceKey == null) {
-                        animation.sourceKey = entry.getKey();
+                    if (animation.sourceKey() == null) {
+                        animation.setSourceKey(entry.getKey());
                     }
                 });
-                result.put(entry.getKey(), new AnimationFile(animations));
+                result.put(entry.getKey(), new AnimationClipSet(animations));
             } catch (Exception e) {
                 YesSteveModel.LOGGER.warn("[SM] Failed to load builtin default action preset file {}", entry.getValue(), e);
             }

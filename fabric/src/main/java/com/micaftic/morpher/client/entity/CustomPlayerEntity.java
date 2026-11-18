@@ -1,15 +1,15 @@
 package com.micaftic.morpher.client.entity;
 
 import com.micaftic.morpher.cloud.client.CloudPlayerMotionSync;
-import com.micaftic.morpher.geckolib3.core.controller.controllers.UnifiedPlayerActionController;
+import com.micaftic.morpher.client.animation.controller.UnifiedPlayerActionController;
 import com.micaftic.morpher.client.animation.molang.MolangEventDispatcher;
+import com.micaftic.morpher.client.animation.molang.struct.RoamingStruct;
+import com.micaftic.morpher.client.core.HostActionEvent;
+import com.micaftic.morpher.client.core.HostMolangScript;
+import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.core.compat.oculus.OculusCompat;
-import com.micaftic.morpher.geckolib3.core.event.predicate.AnimationEvent;
-import com.micaftic.morpher.geckolib3.core.molang.value.IValue;
-import com.micaftic.morpher.geckolib3.core.enums.AnimationState;
 import com.micaftic.morpher.resource.models.ModelProperties;
-import com.micaftic.morpher.molang.runtime.Struct;
 import com.micaftic.morpher.util.data.OrderedStringMap;
 import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import net.minecraft.client.player.LocalPlayer;
@@ -31,7 +31,7 @@ public abstract class CustomPlayerEntity extends LivingAnimatable<Player> implem
 
     public boolean isDisabled;
 
-    private List<IValue> syncIValues;
+    private List<HostMolangScript> syncIValues;
 
     public CustomPlayerEntity(Player player, boolean isLocalPlayer, boolean isActive) {
         super(player, isActive);
@@ -65,13 +65,13 @@ public abstract class CustomPlayerEntity extends LivingAnimatable<Player> implem
     }
 
     @Override
-    public boolean shouldSkipAnimation(AnimationEvent<?> event) {
+    public boolean shouldSkipAnimation(HostActionEvent<?> event) {
         return event.isFirstPerson() || (!this.isLocalPlayer && OculusCompat.isPBRActive());
     }
 
     @Override
     @Nullable
-    public Struct getServerVarContainer() {
+    public RoamingStruct getServerVarContainer() {
         return null;
     }
 
@@ -174,7 +174,7 @@ public abstract class CustomPlayerEntity extends LivingAnimatable<Player> implem
     @Override
     public void afterSetupAnim(float seekTime, boolean isFirstPerson) {
         super.afterSetupAnim(seekTime, isFirstPerson);
-        if (this.isLocalPlayer && isModelSwitching() && !isDisabledState() && getAnimationState(getCapControllerKey()) == AnimationState.IDLE) {
+        if (this.isLocalPlayer && isModelSwitching() && !isDisabledState() && getAnimationState(getCapControllerKey()) == HostPlayState.State.IDLE) {
             CloudPlayerMotionSync.stop(this);
         }
     }

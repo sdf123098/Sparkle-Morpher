@@ -2,8 +2,8 @@ package com.micaftic.morpher.resource.bundle;
 
 import com.google.gson.*;
 import com.micaftic.morpher.YesSteveModel;
-import com.micaftic.morpher.geckolib3.core.builder.Animation;
-import com.micaftic.morpher.geckolib3.file.AnimationFile;
+import com.micaftic.morpher.client.core.HostAnimationAssets.AnimationClipSet;
+import com.micaftic.morpher.client.core.HostAnimationAssets.ClipSpec;
 import com.micaftic.morpher.resource.pojo.RawYsmModel;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -47,16 +47,19 @@ public final class KipfelCompatibility {
         return candidate && VERIFIED.contains(fingerprint(raw));
     }
 
-    public static void bind(RawYsmModel raw, Map<String, AnimationFile> files, String modelId) {
+    public static void bind(RawYsmModel raw, Map<String, AnimationClipSet> files, String modelId) {
         if (!matches(raw)) return;
         int tagged = 0;
-        for(AnimationFile file : files.values()) {
-            for(Animation animation : file.getAnimations().values()) {
-                if (PROGRAMS.contains(animation.animationName)) {
+        for (AnimationClipSet file : files.values()) {
+            for (ClipSpec animation : file.getAnimations().values()) {
+                if (PROGRAMS.contains(animation.name())) {
                     // Only the three verified state-updater timelines; never external events.
-                    animation.customInstructionKeyframes.clear();
+                    animation.clearTimelineEvents();
                 }
-                if (OUTPUTS.contains(animation.animationName)) { animation.stableKipfelAttachments = true; tagged++; }
+                if (OUTPUTS.contains(animation.name())) {
+                    animation.setStableKipfelAttachments(true);
+                    tagged++;
+                }
             }
         }
         YesSteveModel.LOGGER.info("[SM-PHYSICS] model={} fingerprint={} profile=kipfel-stable-v1 outputs={}",modelId,fingerprint(raw),tagged);

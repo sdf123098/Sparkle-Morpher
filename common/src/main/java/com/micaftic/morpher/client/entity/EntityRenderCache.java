@@ -10,9 +10,9 @@ import java.lang.ref.WeakReference;
 
 public class EntityRenderCache {
 
-    private static final ReferenceArrayList<WeakReference<GeoEntity<?>>> weakRefs = new ReferenceArrayList<>(64);
+    private static final ReferenceArrayList<WeakReference<SpmEntity<?>>> weakRefs = new ReferenceArrayList<>(64);
 
-    public static void register(GeoEntity<?> entity) {
+    public static void register(SpmEntity<?> entity) {
         weakRefs.add(new WeakReference<>(entity));
     }
 
@@ -21,9 +21,9 @@ public class EntityRenderCache {
             return;
         }
         AnimationFrameProfiler.beginRenderFrame(partialTick);
-        ObjectListIterator<WeakReference<GeoEntity<?>>> it = weakRefs.iterator();
+        ObjectListIterator<WeakReference<SpmEntity<?>>> it = weakRefs.iterator();
         while (it.hasNext()) {
-            GeoEntity geoEntity = (GeoEntity) ((WeakReference<?>) it.next()).get();
+            SpmEntity geoEntity = (SpmEntity) ((WeakReference<?>) it.next()).get();
             if (geoEntity == null) {
                 it.remove();
             } else if (!geoEntity.isDebugMode()) {
@@ -42,9 +42,9 @@ public class EntityRenderCache {
 
     public static boolean isModelAssemblyInUse(ModelAssembly assembly) {
         if (assembly == null) return false;
-        ObjectListIterator<WeakReference<GeoEntity<?>>> it = weakRefs.iterator();
+        ObjectListIterator<WeakReference<SpmEntity<?>>> it = weakRefs.iterator();
         while (it.hasNext()) {
-            GeoEntity<?> geoEntity = it.next().get();
+            SpmEntity<?> geoEntity = it.next().get();
             if (geoEntity == null) {
                 it.remove();
             } else if (geoEntity.referencesModelAssembly(assembly)) {

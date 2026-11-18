@@ -1,6 +1,7 @@
 package com.micaftic.morpher.core.compat.curios;
 
-import com.micaftic.morpher.geckolib3.core.molang.binding.ContextBinding;
+import com.micaftic.morpher.client.core.HostMolangSink;
+import dev.spm.core.scene.MolangValue;
 import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.LivingEntity;
@@ -17,18 +18,22 @@ public final class CuriosCompat {
         return false;
     }
 
-    public static boolean hasItemInSlot(LivingEntity livingEntity, String str, ReferenceOpenHashSet<Item> set) {
+    public static boolean hasItemInSlot(LivingEntity livingEntity, String slot, ReferenceOpenHashSet<Item> set) {
         return false;
     }
 
-    public static boolean hasTaggedItemInSlot(LivingEntity livingEntity, String str, List<TagKey<Item>> list) {
+    public static boolean hasTaggedItemInSlot(LivingEntity livingEntity, String slot, List<TagKey<Item>> list) {
         return false;
     }
 
-    public static boolean hasNoTaggedItemInSlot(LivingEntity entity, String str, List<TagKey<Item>> list) {
+    public static boolean hasNoTaggedItemInSlot(LivingEntity entity, String slot, List<TagKey<Item>> list) {
         return false;
     }
 
-    public static void registerCuriosItems(ContextBinding binding) {
+    public static void registerCuriosItems(HostMolangSink binding) {
+        binding.function("has_any_curios", (event, args) -> MolangValue.bool(false));
+        binding.function("has_any_curios_with_all_tags", (event, args) -> MolangValue.bool(false));
+        binding.function("has_any_curios_with_any_tag", (event, args) -> MolangValue.bool(false));
+        binding.var("dump_curios", event -> MolangValue.missing());
     }
 }
