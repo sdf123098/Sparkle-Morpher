@@ -18,6 +18,10 @@ public final class CoreCompatibilityDefaults {
     private static final Map<Integration, Map<String, MolangValue>> ABSENT = defaults();
     private CoreCompatibilityDefaults() { }
 
+    public static Map<String, MolangValue> defaultValuesFor(Integration integration) {
+        return ABSENT.get(Objects.requireNonNull(integration));
+    }
+
     /** Every integration needs an explicit loader-sampled fact. PRESENT requires a complete,
      * already-sampled getter map from its Host provider; this method never invokes a provider.
      * Functions (including Curios placeholders) are a separate contract, not getter slots.
