@@ -175,9 +175,9 @@ public class AnimationContext<TEntity> implements IContext<TEntity>, com.micafti
     public Object callFunction(ExecutionContext<?> context, IValue value, List<?> list) {
         if (this.storage.getLocalVariables().pushScope(list)) {
             try {
-                Object objMo1908xe6e508ff = value.evalSafe((ExpressionEvaluator) context);
+                Object result = value.evalSafe((ExpressionEvaluator) context);
                 this.storage.getLocalVariables().popScope();
-                return objMo1908xe6e508ff;
+                return result;
             } catch (Throwable th) {
                 this.storage.getLocalVariables().popScope();
                 throw th;
@@ -190,9 +190,9 @@ public class AnimationContext<TEntity> implements IContext<TEntity>, com.micafti
     public Object callFunctionWithArgs(ExecutionContext<?> context, IValue value, Function.ArgumentCollection arguments) {
         if (this.storage.getLocalVariables().pushScopeWithArgs(context, arguments)) {
             try {
-                Object objMo1908xe6e508ff = value.evalSafe((ExpressionEvaluator) context);
+                Object result = value.evalSafe((ExpressionEvaluator) context);
                 this.storage.getLocalVariables().popScope();
-                return objMo1908xe6e508ff;
+                return result;
             } catch (Throwable th) {
                 this.storage.getLocalVariables().popScope();
                 throw th;
