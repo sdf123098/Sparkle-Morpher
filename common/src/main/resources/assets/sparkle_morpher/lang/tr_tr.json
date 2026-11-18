@@ -1361,5 +1361,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "Bulut senkronizasyonu: Model, doku ve animasyon senkronize edildi",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "Bulut senkronizasyonu: Model ve doku senkronize edildi; animasyonları senkronize etmek için arka ucu yükseltin",
   "gui.sparkle_morpher.cloud_player.publish_failed": "Bulut yayınlama başarısız oldu: %s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "Bulut sorgusu başarısız oldu: %s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "Bulut sorgusu başarısız oldu: %s",
+  "gui.sparkle_morpher.acceleration.auto": "GPU + SIMD hızlandırma (Agresif)",
+  "gui.sparkle_morpher.acceleration.auto.desc": "Yerleşik Agresif ilkesini kullanır. Vulkan seçenekleri aşağıda kullanılabilir olmaya devam eder."
 }
