@@ -1,6 +1,6 @@
 modLoader = "javafml"
 loaderVersion = "${loader_version_range}"
-license = "MIT"
+license = "All Rights Reserved & MIT"
 issueTrackerURL="https://github.com/sdf123098/Sparkle-Morpher/issues"
 logoFile="sparkle_morpher.png"
 
@@ -14,7 +14,7 @@ logoFile="sparkle_morpher.png"
 credits=""
 authors="Micaftic"
 description='''
-Sparkle's Morpher (花火火的变身器) - Custom player model system for Minecraft.
+Sparkle's Morpher (花火火的变身器) - Custom player model system for Minecraft, powered by spm-core (versions <= 2.3.2 used OpenYSM).
 '''
 
 [[mixins]]

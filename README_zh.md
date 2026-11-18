@@ -119,4 +119,4 @@ SPM 包含 Better Combat、Curios、Create、Iris/Sodium 和皮肤层渲染的�
 - 默认模型库：[sdf123098/YSM-Model](https://github.com/sdf123098/YSM-Model)。
 - Blockbench：[JannisX11/Blockbench](https://github.com/JannisX11/blockbench)。
 
-SPM 使用 [MIT](LICENSE) 许可证。模型资源遵循各自作者的许可与使用条款。
+SPM 采用 **[All Rights Reserved（ARR）+ MIT](LICENSE)** 混合许可证（SPM `2.4.0+` 原创代码与品牌资源保留所有权利 ARR；`spm-core`（`1.0.0`）与 `2.3.2` 及以下 / 过渡期 OpenYSM 衍生遗留部分适用 MIT 许可证）。模型资源遵循各自作者的许可与使用条款。

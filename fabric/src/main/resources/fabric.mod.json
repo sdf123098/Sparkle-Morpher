@@ -10,7 +10,7 @@
     "sources": "https://github.com/sdf123098/Sparkle-Morpher",
     "issues": "https://github.com/sdf123098/Sparkle-Morpher/issues"
   },
-  "license": "MIT",
+  "license": ["All-Rights-Reserved", "MIT"],
   "icon": "sparkle_morpher.png",
   "environment": "client",
   "entrypoints": {
