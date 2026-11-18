@@ -1361,5 +1361,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "Хмарна синхронізація: модель, текстура й анімація синхронізуються",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "Хмарна синхронізація: модель і текстура синхронізовані; оновіть серверну частину для синхронізації анімацій",
   "gui.sparkle_morpher.cloud_player.publish_failed": "Помилка публікації в хмарі: %s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "Помилка хмарного запиту: %s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "Помилка хмарного запиту: %s",
+  "gui.sparkle_morpher.acceleration.auto": "Прискорення GPU + SIMD (Агресивний)",
+  "gui.sparkle_morpher.acceleration.auto.desc": "Використовує встановлену політику «Агресивний». Параметри Vulkan залишаються доступними нижче."
 }

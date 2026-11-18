@@ -1361,5 +1361,7 @@
   "gui.sparkle_morpher.cloud_player.synced_all": "Sincronización en la nube: modelo, textura y animación sincronizados",
   "gui.sparkle_morpher.cloud_player.synced_without_motion": "Sincronización en la nube: modelo y textura sincronizados; actualizar el backend para sincronizar animaciones",
   "gui.sparkle_morpher.cloud_player.publish_failed": "Error en la publicación en la nube: %s",
-  "gui.sparkle_morpher.cloud_player.query_failed": "Error en la consulta en la nube: %s"
+  "gui.sparkle_morpher.cloud_player.query_failed": "Error en la consulta en la nube: %s",
+  "gui.sparkle_morpher.acceleration.auto": "Aceleración GPU + SIMD (Agresivo)",
+  "gui.sparkle_morpher.acceleration.auto.desc": "Usa la política Agresivo establecida. Las opciones de Vulkan siguen disponibles abajo."
 }
