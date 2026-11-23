@@ -146,4 +146,102 @@ final class SpmCoreBoneMatrixWriterTest {
         }
         assertEquals(24.0f, fallbackState[1], 1e-3f);
     }
+
+    /**
+     * Loads the native library when {@code -Dspm.native.library} points at one.
+     *
+     * <p>The host's own loader only runs inside the mod, so a unit test that wants to exercise the
+     * native path has to bind the library itself. Passing nothing is the normal case and leaves the
+     * test on the Java path.
+     */
+    private static void loadNativeIfAvailable() {
+        String library = System.getProperty("spm.native.library");
+        if (library == null || library.isBlank()) {
+            return;
+        }
+        try {
+            java.nio.file.Path path = java.nio.file.Path.of(library);
+            String hash = java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256")
+                            .digest(java.nio.file.Files.readAllBytes(path)));
+            dev.spm.core.nativejni.NativeTransforms.load(path, hash);
+        } catch (Exception alreadyLoadedOrMissing) {
+            // A second `load` of the same library is refused by the provider; that is fine, the
+            // native methods are already bound.
+        }
+    }
+
+    /**
+     * The native packed path and the Java writer must produce the same records.
+     *
+     * <p>The native path is an optimisation, so it must be invisible in the output. This runs the
+     * same frame through both and compares the buffers. The comparison is by tolerance rather than
+     * byte for byte because the two implementations group their trigonometry differently, which can
+     * differ by about one ULP; both are inside the documented precision budget.
+     *
+     * <p>Order matters: the Java reference has to be produced <em>before</em> the library is bound,
+     * because the writer makes exactly one compile attempt per model and latches the outcome. If the
+     * library were loaded first, the "reference" would come from the native path as well and the
+     * comparison would be vacuous.
+     *
+     * <p>When the native library is not loaded the test still runs and simply returns: the Java
+     * path is the contract, and it has already been exercised by the assertions above.
+     */
+    @Test
+    void theNativePackedPathAgreesWithTheJavaWriter() {
+        BuiltModel model = twoBoneModel(true);
+        float[] params = new float[3 * 12];
+        params[2] = (float) (Math.PI / 2.0);
+        params[4] = 8.0f;
+        params[6] = 1.0f;
+        params[7] = 1.0f;
+        params[8] = 1.0f;
+        params[11] = 1.0f;
+        params[12 + 6] = 1.0f;
+        params[12 + 7] = 1.0f;
+        params[12 + 8] = 1.0f;
+        params[12 + 11] = 1.0f;
+        params[24 + 6] = 1.0f;
+        params[24 + 7] = 1.0f;
+        params[24 + 8] = 1.0f;
+        params[24 + 9] = 1.0f;
+        params[24 + 11] = 1.0f;
+
+        Matrix4f rootPose = new Matrix4f().translate(1.0f, 2.0f, 3.0f);
+        Matrix3f rootNormal = new Matrix3f().identity();
+        int bytes = 3 * 144;
+
+        // Java reference first: no library is bound yet, so this is the contract implementation.
+        ByteBuffer reference = ByteBuffer.allocateDirect(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        assertTrue(SpmCoreBoneMatrixWriter.writeEvaluated(model, rootPose, rootNormal, params,
+                new float[3 * 4], 0x00F0, reference, true));
+
+        BuiltModel.ComputeCache cache = model.ensureComputeCache();
+        assertNotNull(cache);
+        // Re-arm the per-model compile latch so the library bound below is actually picked up.
+        cache.closePacked();
+        loadNativeIfAvailable();
+        dev.spm.core.nativejni.NativePackedBoneEvaluator evaluator = cache.packedEvaluator();
+        if (evaluator == null) {
+            // No native build on this machine; the Java path is the contract and already ran.
+            return;
+        }
+        assertEquals(3, evaluator.boneCount());
+        System.out.println("[test] native packed path engaged for " + evaluator.boneCount() + " bones");
+        try {
+            ByteBuffer nativeOut = ByteBuffer.allocateDirect(bytes).order(ByteOrder.LITTLE_ENDIAN);
+            assertTrue(SpmCoreBoneMatrixWriter.writeEvaluated(model, rootPose, rootNormal, params,
+                    new float[3 * 4], 0x00F0, nativeOut, true));
+            for (int i = 0; i < bytes; i += 4) {
+                float expected = reference.getFloat(i);
+                float actual = nativeOut.getFloat(i);
+                float error = Math.abs(actual - expected) / Math.max(Math.abs(expected), 1f);
+                assertTrue(error <= 1e-4f,
+                        "native and Java records differ by " + error + " at byte " + i
+                                + ": " + expected + " vs " + actual);
+            }
+        } finally {
+            cache.closePacked();
+        }
+    }
 }

@@ -111,10 +111,74 @@ public class BuiltModel {
 
     public static final class ComputeCache {
         public final Skeleton skeleton;
+        public final int[] parents;
+        public final float[] pivots;
+        /** One entry per bone: {@code 0} normal, {@code 1} full-bright. */
+        private final int[] glow;
         private final @Nullable PartBatch[] partBatches = new PartBatch[4];
 
-        ComputeCache(Skeleton skeleton) {
+        /**
+         * The native compiled-skeleton lease, or {@code null} when the native path is unavailable.
+         *
+         * <p>Compiled once, on the first attempt, and reused for the life of the model. The native
+         * side encodes a generation into the handle, so a stale handle from a model that was
+         * unloaded and reloaded cannot resolve to a different skeleton: it reports
+         * {@code InvalidHandle} instead of returning another model's matrices.
+         */
+        private @Nullable dev.spm.core.nativejni.NativePackedBoneEvaluator packedEvaluator;
+        /** Whether the evaluator has already been requested, so a failure is not retried per frame. */
+        private boolean packedAttempted;
+        /**
+         * Direct scratch for the native locator write-back.
+         *
+         * <p>The native entry writes locators into a direct buffer; this is that buffer, reused
+         * across frames so a frame allocates nothing. It is only consulted when the caller passes a
+         * Java state array, which is then updated from it for exactly the bones that requested a
+         * locator.
+         */
+        private @Nullable java.nio.ByteBuffer packedState;
+
+        ComputeCache(Skeleton skeleton, int[] parents, float[] pivots, int[] glow) {
             this.skeleton = skeleton;
+            this.parents = parents;
+            this.pivots = pivots;
+            this.glow = glow;
+        }
+
+        /**
+         * The native evaluator for this model, compiling it on first use.
+         *
+         * <p>Returns {@code null} when the native library is not loaded, when the platform has no
+         * native build, or when the native side rejected the skeleton. In every one of those cases
+         * the caller keeps using the Java writer, which produces identical records.
+         */
+        public synchronized dev.spm.core.nativejni.@Nullable NativePackedBoneEvaluator packedEvaluator() {
+            if (!packedAttempted) {
+                packedAttempted = true;
+                packedEvaluator = com.micaftic.morpher.core.acceleration.NativeRuntimeSupport
+                        .compilePacked(parents, pivots, glow);
+            }
+            return packedEvaluator;
+        }
+
+        /** Direct locator scratch sized for {@code boneCount}, allocated once. */
+        public synchronized @Nullable java.nio.ByteBuffer packedState(int boneCount) {
+            int bytes = Math.multiplyExact(boneCount, 16);
+            if (packedState == null || packedState.capacity() < bytes) {
+                packedState = java.nio.ByteBuffer.allocateDirect(bytes)
+                        .order(java.nio.ByteOrder.nativeOrder());
+            }
+            return packedState;
+        }
+
+        /** Releases the native skeleton. Safe to call more than once. */
+        public synchronized void closePacked() {
+            if (packedEvaluator != null) {
+                packedEvaluator.close();
+                packedEvaluator = null;
+            }
+            packedState = null;
+            packedAttempted = false;
         }
 
         public @Nullable PartBatch batchForMask(List<BakedBone> bones, int[] order, int renderPartMask) {
@@ -325,6 +389,7 @@ public class BuiltModel {
         List<String> names = new ArrayList<>(count);
         int[] parents = new int[count];
         float[] pivots = new float[count * 3];
+        int[] glow = new int[count];
         for (int i = 0; i < count; i++) {
             BakedBone bone = bakedBones.get(i);
             String base = (bone.name == null || bone.name.isBlank()) ? "bone" : bone.name;
@@ -334,9 +399,10 @@ public class BuiltModel {
             pivots[i * 3] = bone.pivotX * 0.0625f;
             pivots[i * 3 + 1] = bone.pivotY * 0.0625f;
             pivots[i * 3 + 2] = bone.pivotZ * 0.0625f;
+            glow[i] = bone.glow ? 1 : 0;
         }
         Skeleton skeleton = new Skeleton(names, parents, pivots);
-        computeCache = new ComputeCache(skeleton);
+        computeCache = new ComputeCache(skeleton, parents, pivots, glow);
         return computeCache;
     }
 
