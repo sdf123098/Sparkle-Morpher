@@ -24,6 +24,18 @@ public final class NativeRuntimeSupport {
         return JAVA_PROVIDER;
     }
 
+    /**
+     * Always {@code null}: the CurseForge distribution ships no native library.
+     *
+     * <p>The method exists so the shared bone-matrix writer can ask for a compiled-skeleton
+     * evaluator without knowing which variant it was built against. Returning {@code null} keeps
+     * that writer on its Java implementation, which produces the same records.
+     */
+    public static dev.spm.core.nativejni.NativePackedBoneEvaluator compilePacked(
+            int[] parents, float[] pivots, int[] glow) {
+        return null;
+    }
+
     public static boolean isAvailable() {
         return true;
     }

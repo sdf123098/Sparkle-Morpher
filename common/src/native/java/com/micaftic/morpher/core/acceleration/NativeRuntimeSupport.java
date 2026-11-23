@@ -375,6 +375,33 @@ public final class NativeRuntimeSupport {
         return computeProvider;
     }
 
+    /**
+     * Compiles a packed-skeleton evaluator for a model, or returns {@code null} when the native
+     * path is not available.
+     *
+     * <p>This is an optimisation, never a requirement: a {@code null} return means the caller keeps
+     * using {@code SpmCoreBoneMatrixWriter}'s Java implementation, which produces the same records.
+     * The handle it returns is generation-encoded on the native side, so a model that is unloaded
+     * and later reloaded can never pick up a stale handle by accident.
+     *
+     * @param parents one entry per bone: the parent index, or {@code -1} for a root
+     * @param pivots three floats per bone, already scaled by {@code 0.0625}
+     * @param glow one entry per bone: {@code 0} normal, {@code 1} full-bright
+     */
+    public static dev.spm.core.nativejni.NativePackedBoneEvaluator compilePacked(
+            int[] parents, float[] pivots, int[] glow) {
+        try {
+            return dev.spm.core.nativejni.NativePackedBoneEvaluator.compile(parents, pivots, glow);
+        } catch (Throwable th) {
+            // Two cases land here and both mean "keep using the Java writer": the provider is not
+            // ready (the library is absent or refused to load), or the native side rejected this
+            // particular skeleton. The caller latches the attempt, so this is logged once per
+            // model rather than once per frame.
+            LOGGER.debug("Native packed skeleton unavailable; keeping the Java bone writer", th);
+            return null;
+        }
+    }
+
     public static boolean isAvailable() {
         return available;
     }

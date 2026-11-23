@@ -52,6 +52,11 @@ test {
     useJUnitPlatform()
     // jdk.zipfs 不在默认 ALL-DEFAULT 解析集（java.se 闭包不含），.ysm 容器解析需要 jar: FileSystem
     jvmArgs "--add-modules", "jdk.zipfs"
+    // A unit-test JVM does not run the mod's native loader, so the native packed-bone path is only
+    // exercised when a build is handed one explicitly. The release path passes nothing and the
+    // tests stay on the Java writer, which is the contract.
+    def nativeLibrary = providers.gradleProperty('spmNativeLibrary')
+    if (nativeLibrary.isPresent()) systemProperty 'spm.native.library', nativeLibrary.get()
 }
 
 // Public release artifacts are compile-only: TaCZ stays optional and is never bundled.
