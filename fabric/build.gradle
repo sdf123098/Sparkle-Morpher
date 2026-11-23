@@ -38,6 +38,11 @@ sourceSets {
 test {
     useJUnitPlatform()
     maxHeapSize = '1G'
+    // A unit-test JVM does not run the mod's native loader, so the native packed-bone path is only
+    // exercised when a build is handed one explicitly. The release path passes nothing and the
+    // tests stay on the Java writer, which is the contract.
+    def nativeLibrary = providers.gradleProperty('spmNativeLibrary')
+    if (nativeLibrary.isPresent()) systemProperty 'spm.native.library', nativeLibrary.get()
 }
 
 

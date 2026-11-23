@@ -1,9 +1,9 @@
 {
-  "sourceRevision": "f0cfd9d7136dc5a28f3059d4209654923a5a5be8",
-  "version": "1.0.0",
-  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/56c4ff57ec8a1a88bdacf7cf1691a91ddb1b6b50/",
-  "artifactCommit": "56c4ff57ec8a1a88bdacf7cf1691a91ddb1b6b50",
-  "manifestSha256": "36449d32ae08f54690a78e60c62a738ee763a989bc215705f8ce21b0be2ca5cf",
+  "sourceRevision": "b43108bbe5d0905b509140823acf757fe4388642",
+  "version": "1.1.0",
+  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/0e7b189b75da3dc81ff9572d98f6276ac03103c2/",
+  "artifactCommit": "0e7b189b75da3dc81ff9572d98f6276ac03103c2",
+  "manifestSha256": "523f48d8061fe989e5da4c8049e2d599129098ed545c04719d88dc463e3199c8",
   "sha256": {
     "acceleration-api": "30463582cfcf933741b679ebc0f174ec5d7d278debfd882aac843b438ef856cd",
     "api": "c5495f8ba46131ec1ecb4b9b67ceb3ce19262d9774a5c5482d549a8ba048abdc",
@@ -15,7 +15,7 @@
     "format-gltf": "7828341e995dd295b75cf6bc641971e1f4e150d276686b77f90d0eee1c9aeb74",
     "format-v3d": "e2d3d3e55fd79837452a42013dc228dac54df3f99f2e94b67f2fe877aa4e571e",
     "format-ysm": "cb7022f3bc49819c4f31eaaf75275863c1413bde734511f704707cc57e540cfd",
-    "native-jni": "def47b844ec69c9d9c870790908c1b2fc21c5ddf746f34fee1eac3053dce2595",
+    "native-jni": "aa7e91c5a4909ea67cfe7773630ee25beb623908b70dd3b45b7d514b42878621",
     "parser": "44b5ed52cf0b0928cd287e52a411421c2c6ff37a2826dc11a5712d086e3d985f",
     "render-cpu": "df5d9676d25fb331864432f3b0b0a1260a9907e3dd81c28694fd696cd8f239d1",
     "runtime": "b58981c4796c1ce1e97a5b74be30486d4bf22de17a62f22f09b0404d86235476",

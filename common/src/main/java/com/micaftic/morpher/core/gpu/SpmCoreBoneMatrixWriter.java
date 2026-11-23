@@ -8,6 +8,7 @@ import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.List;
 
 /**
@@ -20,6 +21,13 @@ public final class SpmCoreBoneMatrixWriter {
     public static final int FULL_BRIGHT_LIGHT = 0xF000F0;
 
     private static final ThreadLocal<Scratch> SCRATCH = ThreadLocal.withInitial(Scratch::new);
+    /**
+     * The 25-float root pose and normal the native entry takes, reused across frames.
+     *
+     * <p>A thread-local rather than a field because the render thread is the only writer, and a
+     * per-frame allocation here would defeat the point of the zero-copy path.
+     */
+    private static final ThreadLocal<float[]> ROOT_SCRATCH = ThreadLocal.withInitial(() -> new float[25]);
 
     private SpmCoreBoneMatrixWriter() {
     }
@@ -156,6 +164,15 @@ public final class SpmCoreBoneMatrixWriter {
         if (cache == null) {
             return false;
         }
+        // The native packed path writes the same 144-byte records straight into `out`, so it is
+        // tried first and the Java writer below stays as the reference implementation and the
+        // fallback. It returns false when the native library is absent, when the platform has no
+        // native build, or when the frame is rejected — in every case the Java path then runs and
+        // produces identical bytes.
+        if (writeEvaluatedNative(cache, boneCount, rootPose, rootNormal, boneParams, stateBuffer,
+                packedLight, out, floatTail)) {
+            return true;
+        }
         BoneMatrices matrices;
         try {
             BonePose pose = toBonePose(model.bakedBones, boneParams);
@@ -206,6 +223,118 @@ public final class SpmCoreBoneMatrixWriter {
 
         out.flip();
         return true;
+    }
+
+    /**
+     * Writes the packed records through the native compiled-skeleton evaluator.
+     *
+     * <p>This is the fast path: the skeleton is compiled once per model, and each frame the native
+     * side rebuilds the matrices and writes the 144-byte records straight into {@code out}, so a
+     * frame allocates nothing and copies nothing. The Java writer below remains the reference
+     * implementation and the fallback.
+     *
+     * <p>Returns {@code false} — never throws — when the native path cannot serve this frame, so
+     * the caller can fall through to Java. That covers a missing library, a platform without a
+     * native build, a skeleton the native side rejected, and a frame the native side refused.
+     *
+     * <p>{@code persistentOutput} is deliberately {@code false}: the native side remembers, per
+     * compiled skeleton, that "the parameters did not change, so {@code out} is still correct", and
+     * that memory cannot tell two different output buffers apart. The same model is written into
+     * more than one buffer per frame depending on the render path, so claiming persistence here
+     * would let one of them keep records from an older frame. A caller that owns a buffer across
+     * frames has to opt in explicitly.
+     *
+     * @param floatTail {@code true} for the Blaze3D SSBO float tail, {@code false} for the OpenGL
+     *     int tail
+     */
+    private static boolean writeEvaluatedNative(
+            BuiltModel.ComputeCache cache,
+            int boneCount,
+            Matrix4f rootPose,
+            Matrix3f rootNormal,
+            float[] boneParams,
+            float[] stateBuffer,
+            int packedLight,
+            ByteBuffer out,
+            boolean floatTail
+    ) {
+        dev.spm.core.nativejni.NativePackedBoneEvaluator evaluator = cache.packedEvaluator();
+        if (evaluator == null || evaluator.boneCount() != boneCount) {
+            return false;
+        }
+        // The native entry writes little-endian records, so a big-endian view would be misread.
+        if (out.order() != ByteOrder.LITTLE_ENDIAN) {
+            return false;
+        }
+        // The root pose and normal are 25 floats: a 4x4 pose followed by a 3x3 normal matrix.
+        float[] root = ROOT_SCRATCH.get();
+        root[0] = rootPose.m00();
+        root[1] = rootPose.m01();
+        root[2] = rootPose.m02();
+        root[3] = rootPose.m03();
+        root[4] = rootPose.m10();
+        root[5] = rootPose.m11();
+        root[6] = rootPose.m12();
+        root[7] = rootPose.m13();
+        root[8] = rootPose.m20();
+        root[9] = rootPose.m21();
+        root[10] = rootPose.m22();
+        root[11] = rootPose.m23();
+        root[12] = rootPose.m30();
+        root[13] = rootPose.m31();
+        root[14] = rootPose.m32();
+        root[15] = rootPose.m33();
+        root[16] = rootNormal.m00();
+        root[17] = rootNormal.m01();
+        root[18] = rootNormal.m02();
+        root[19] = rootNormal.m10();
+        root[20] = rootNormal.m11();
+        root[21] = rootNormal.m12();
+        root[22] = rootNormal.m20();
+        root[23] = rootNormal.m21();
+        root[24] = rootNormal.m22();
+
+        // Locators are only requested when the caller wants them, and the native side writes them
+        // into a direct buffer that is then copied back for exactly the bones that asked.
+        ByteBuffer state = stateBuffer == null ? null : cache.packedState(boneCount);
+        int flags = (floatTail
+                ? dev.spm.core.nativejni.NativePackedBoneEvaluator.FLOAT_TAIL
+                : dev.spm.core.nativejni.NativePackedBoneEvaluator.INT_TAIL)
+                | (dev.spm.core.nativejni.NativePackedBoneEvaluator.PASS_ALL << 1);
+        try {
+            evaluator.evaluate(root, boneParams, out, state, flags,
+                    dev.spm.core.acceleration.Isa.AUTO, false, packedLight);
+        } catch (RuntimeException rejected) {
+            // A rejected frame leaves `out` untouched, so the Java path can still fill it.
+            return false;
+        }
+        if (state != null) {
+            copyLocators(state, boneParams, stateBuffer, boneCount);
+        }
+        return true;
+    }
+
+    /**
+     * Copies the native locator results back into the caller's Java state array.
+     *
+     * <p>Only the bones that asked for a locator are touched, matching the Java writer: a bone
+     * whose {@code boneParams[i*12+11]} is not {@code 1} leaves its slot alone, so a caller that
+     * pre-fills the array keeps its values.
+     */
+    private static void copyLocators(ByteBuffer state, float[] boneParams, float[] stateBuffer,
+                                     int boneCount) {
+        for (int i = 0; i < boneCount; i++) {
+            if (boneParams[i * 12 + 11] != 1.0f) {
+                continue;
+            }
+            int off = i * 4;
+            if (off + 2 >= stateBuffer.length) {
+                continue;
+            }
+            stateBuffer[off] = state.getFloat(i * 16);
+            stateBuffer[off + 1] = state.getFloat(i * 16 + 4);
+            stateBuffer[off + 2] = state.getFloat(i * 16 + 8);
+        }
     }
 
     private static void writeTail(ByteBuffer out, int light, boolean hidden, boolean floatTail) {

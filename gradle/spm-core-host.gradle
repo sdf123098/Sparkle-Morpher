@@ -2,6 +2,21 @@
 def corePin = new groovy.json.JsonSlurper().parse(rootProject.file('gradle/spm-core-artifacts.json'))
 def coreVersion = corePin.version.toString()
 def repositoryUri = corePin.repository.toString()
+// Local override for developing against an unpublished Core build. `-PspmCoreLocalRepo=<path>`
+// points the exclusive `dev.spm.core` content at a local Maven tree (for example
+// `spm-core/build/candidate-maven`) and `-PspmCoreLocalVersion=<v>` selects the version inside it.
+// Both are opt-in: with neither set, resolution is exactly the pinned remote artifact, so a
+// release build cannot accidentally pick up a developer's local tree.
+//
+// The version property is deliberately *not* named `spmCoreVersion`: that name is already used by
+// the Core build itself, and passing it here would be silently shadowed.
+def localCoreRepo = project.findProperty('spmCoreLocalRepo')?.toString()
+def localCoreVersion = project.findProperty('spmCoreLocalVersion')?.toString()
+if (localCoreRepo != null) {
+    coreVersion = localCoreVersion ?: coreVersion
+    repositoryUri = rootProject.uri(localCoreRepo).toString()
+    logger.lifecycle("spm-core: resolving ${coreVersion} from local repository ${repositoryUri}")
+}
 repositories {
     exclusiveContent {
         forRepository {
@@ -41,6 +56,13 @@ def verifyCore = tasks.register('verifySpmCoreArtifacts') {
     inputs.file(rootProject.file('gradle/spm-core-artifacts.json'))
     inputs.files(verificationArtifacts)
     doLast {
+        if (localCoreRepo != null) {
+            // A local Core tree is by definition not the pinned artifact, so its hashes cannot
+            // match. The override is explicit and logged; the release path below still enforces
+            // the pin whenever no override is given.
+            logger.lifecycle("spm-core: skipping artifact hash verification for local override ${coreVersion}")
+            return
+        }
         def actual = verificationArtifacts.files.collectEntries { artifact ->
             [(artifact.name): java.security.MessageDigest.getInstance('SHA-256').digest(artifact.bytes).encodeHex().toString()]
         }
