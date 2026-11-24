@@ -1,9 +1,9 @@
 {
-  "sourceRevision": "b43108bbe5d0905b509140823acf757fe4388642",
-  "version": "1.1.0",
-  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/0e7b189b75da3dc81ff9572d98f6276ac03103c2/",
-  "artifactCommit": "0e7b189b75da3dc81ff9572d98f6276ac03103c2",
-  "manifestSha256": "523f48d8061fe989e5da4c8049e2d599129098ed545c04719d88dc463e3199c8",
+  "sourceRevision": "3cffa18799a4caff1a6147fa9c0202add60cfa98",
+  "version": "1.3.0",
+  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/893a29580f6e7df7c60ff12f905707c73fd16e3e/",
+  "artifactCommit": "893a29580f6e7df7c60ff12f905707c73fd16e3e",
+  "manifestSha256": "34e777dd336d1799343089f910ba6594dcaafaa634ddde5675d749bf9cc1e654",
   "sha256": {
     "acceleration-api": "30463582cfcf933741b679ebc0f174ec5d7d278debfd882aac843b438ef856cd",
     "api": "c5495f8ba46131ec1ecb4b9b67ceb3ce19262d9774a5c5482d549a8ba048abdc",
