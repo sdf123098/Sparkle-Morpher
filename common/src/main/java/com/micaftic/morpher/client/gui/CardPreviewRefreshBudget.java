@@ -9,7 +9,11 @@ final class CardPreviewRefreshBudget {
     private long workNanos;
 
     void beginFrame(long now,int visibleSlots){
-        slots=Math.max(0,visibleSlots);updates=0;workNanos=0;
+        beginFrame(now, visibleSlots, 0L);
+    }
+    void beginFrame(long now,int visibleSlots,long previousRenderNanos){
+        slots=Math.max(0,visibleSlots);updates=0;
+        workNanos=previousRenderNanos>MAX_WORK_NANOS?Math.min(MAX_WORK_NANOS,previousRenderNanos-MAX_WORK_NANOS):0L;
         start=slots==0?0:Math.floorMod(cursor,slots);
         cursor=slots==0?0:(start+MAX_REFRESHES)%slots;
     }

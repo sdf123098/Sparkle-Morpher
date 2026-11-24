@@ -2,8 +2,6 @@ package com.micaftic.morpher.core.gpu;
 
 import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.client.renderer.WorldRenderState;
-import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.SmGraphicsBackendDetector;
 import com.mojang.blaze3d.opengl.GlSampler;
 import com.mojang.blaze3d.opengl.GlTexture;
@@ -26,18 +24,13 @@ import org.lwjgl.opengl.*;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.Executor;
 
 public final class GpuRenderPath {
-    private static final float[] rootPoseScratch = new float[16];
-    private static final float[] rootNormalScratch = new float[9];
     private static final float[] projScratch = new float[16];
     private static final Matrix4f projMVScratch = new Matrix4f();
     private static final Vector3f[] currentLights = new Vector3f[2];
     private static final GpuMeshRegistry<GpuMesh> MESH_REGISTRY = new GpuMeshRegistry<>();
-    private static final Matrix4f pivotAbsScratchMat = new Matrix4f();
-    private static int[] pivotAbsPathScratch = new int[64];
     private static final float[] fogColorScratch = new float[4];
     private static final Vector3f light0Scratch = new Vector3f(0.2f, 1.0f, -0.7f).normalize();
     private static final Vector3f light1Scratch = new Vector3f(-0.2f, 1.0f, 0.7f).normalize();
@@ -541,90 +534,6 @@ public final class GpuRenderPath {
 
         int maxMipLevel() {
             return baseMipLevel + mipLevels - 1;
-        }
-    }
-
-    private static void updatePivotAbsStateBuffer(BuiltModel model, float[] boneParams, float[] stateBuffer) {
-        if (stateBuffer == null || boneParams == null) return;
-        if (model.bakedBones == null || model.bakedBones.isEmpty()) return;
-
-        int boneCount = model.bakedBones.size();
-
-        for (int i = 0; i < boneCount; i++) {
-            int pOffset = i * 12;
-            if (pOffset + 11 >= boneParams.length) break;
-
-            float unk3 = boneParams[pOffset + 11];
-            if (unk3 != 1.0f) continue;
-
-            int sOffset = i * 4;
-            if (sOffset + 2 >= stateBuffer.length) continue;
-
-            computeOnePivotAbs(i, model.bakedBones, boneParams, stateBuffer, sOffset);
-        }
-    }
-
-    private static void computeOnePivotAbs(int targetIdx, List<BuiltModel.BakedBone> bones, float[] boneParams, float[] stateBuffer, int stateOffset) {
-        int depth = 0;
-        int idx = targetIdx;
-
-        while (idx != -1) {
-            if (depth >= pivotAbsPathScratch.length) {
-                int[] newPath = new int[pivotAbsPathScratch.length * 2];
-                System.arraycopy(pivotAbsPathScratch, 0, newPath, 0, pivotAbsPathScratch.length);
-                pivotAbsPathScratch = newPath;
-            }
-
-            pivotAbsPathScratch[depth++] = idx;
-            idx = bones.get(idx).parentIdx;
-        }
-
-        Matrix4f localMat = pivotAbsScratchMat.identity();
-        boolean isVisible = true;
-
-        for (int p = depth - 1; p >= 0; p--) {
-            int boneIdx = pivotAbsPathScratch[p];
-            BuiltModel.BakedBone bone = bones.get(boneIdx);
-
-            int pOffset = boneIdx * 12;
-            if (pOffset + 11 >= boneParams.length) return;
-
-            float animRx = boneParams[pOffset];
-            float animRy = boneParams[pOffset + 1];
-            float animRz = boneParams[pOffset + 2];
-            float animTx = boneParams[pOffset + 3];
-            float animTy = boneParams[pOffset + 4];
-            float animTz = boneParams[pOffset + 5];
-            float animSx = boneParams[pOffset + 6];
-            float animSy = boneParams[pOffset + 7];
-            float animSz = boneParams[pOffset + 8];
-
-        if (animSx == 0.0f || animSy == 0.0f || animSz == 0.0f) {
-                isVisible = false;
-            }
-
-            if (!isVisible) {
-                return;
-            }
-
-            localMat.translate((bone.pivotX - animTx) * 0.0625f, (bone.pivotY + animTy) * 0.0625f, (bone.pivotZ + animTz) * 0.0625f);
-
-            localMat.rotateZ(animRz);
-            localMat.rotateY(animRy);
-            localMat.rotateX(animRx);
-
-            if (animSx != 1.0f || animSy != 1.0f || animSz != 1.0f) {
-                localMat.scale(animSx, animSy, animSz);
-            }
-
-            if (boneIdx == targetIdx) {
-                stateBuffer[stateOffset] = -localMat.m30() * 16.0f;
-                stateBuffer[stateOffset + 1] = localMat.m31() * 16.0f;
-                stateBuffer[stateOffset + 2] = localMat.m32() * 16.0f;
-                return;
-            }
-
-            localMat.translate(-bone.pivotX / 16.0f, -bone.pivotY / 16.0f, -bone.pivotZ / 16.0f);
         }
     }
 }

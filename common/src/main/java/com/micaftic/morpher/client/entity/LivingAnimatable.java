@@ -227,16 +227,9 @@ public abstract class LivingAnimatable<T extends LivingEntity> extends SpmEntity
     @Override
     public void setupAnim(float seekTime, boolean isFirstPerson) {
         super.setupAnim(seekTime, isFirstPerson);
-        if (this.needsInit) {
-            this.needsInit = false;
-            List<HostMolangScript> values = getAnimationExpressions(MolangEventDispatcher.PLAYER_INIT);
-            if (values != null) {
-                executeExpression(MolangEventDispatcher.createInitExpression(values), true, true, null);
-            }
-        }
-        if (this.playerUpdateIValue != null) {
+        this.needsInit = false;
+        if (this.playerUpdateIValue != null && !this.updateExpressionArgs.isEmpty()) {
             this.updateExpressionArgs.set(0, isFirstPerson);
-            executeExpression(this.playerUpdateIValue, true, true, null);
         }
     }
 

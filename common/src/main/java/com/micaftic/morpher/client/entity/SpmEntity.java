@@ -124,6 +124,13 @@ public abstract class SpmEntity<T extends Entity> extends HostAnimatable<T> {
         return this.modelAssembly;
     }
 
+    @Override
+    public @org.jetbrains.annotations.Nullable com.micaftic.morpher.resource.models.ModelProperties resolveModelProperties() {
+        return this.modelAssembly != null && this.modelAssembly.getModelData() != null
+                ? this.modelAssembly.getModelData().getModelProperties()
+                : null;
+    }
+
     public final boolean referencesModelAssembly(ModelAssembly assembly) {
         return assembly != null && (this.modelAssembly == assembly
                 || (this.renderShape != null && this.renderShape.context == assembly));

@@ -111,6 +111,7 @@ public class BuiltModel {
 
     public static final class ComputeCache {
         public final Skeleton skeleton;
+        public final int[] evaluationOrder;
         public final int[] parents;
         public final float[] pivots;
         /** One entry per bone: {@code 0} normal, {@code 1} full-bright. */
@@ -140,6 +141,7 @@ public class BuiltModel {
 
         ComputeCache(Skeleton skeleton, int[] parents, float[] pivots, int[] glow) {
             this.skeleton = skeleton;
+            this.evaluationOrder = skeleton.evaluationOrder();
             this.parents = parents;
             this.pivots = pivots;
             this.glow = glow;
@@ -216,6 +218,9 @@ public class BuiltModel {
 
     public static class BakedQuad {
         public final float[] packedPositions = new float[12];
+        public final float[] soaX = new float[4];
+        public final float[] soaY = new float[4];
+        public final float[] soaZ = new float[4];
         public final float[] packedUvs = new float[8];
         public float normalX, normalY, normalZ;
 
@@ -230,6 +235,9 @@ public class BuiltModel {
             packedPositions[posOffset] = x;
             packedPositions[posOffset + 1] = y;
             packedPositions[posOffset + 2] = z;
+            soaX[index] = x;
+            soaY[index] = y;
+            soaZ[index] = z;
             int uvOffset = index * 2;
             packedUvs[uvOffset] = u;
             packedUvs[uvOffset + 1] = v;

@@ -64,12 +64,41 @@ public class LivingEntityFrameState<T extends LivingEntity> extends HostEntityFr
         return changed;
     }
 
+    private float lastVanillaSwingProgress = -1.0f;
+    private boolean lastVanillaSwinging;
+
     public boolean markSwingPulseProcessed(int sequence) {
         if (sequence <= 0 || this.processedSwingPulseSequence == sequence) {
             return false;
         }
         this.processedSwingPulseSequence = sequence;
         return true;
+    }
+
+    public boolean consumeVanillaSwingRestart(boolean vanillaSwinging, float vanillaSwingProgress, boolean suppressInitialStart) {
+        if (!vanillaSwinging) {
+            this.lastVanillaSwinging = false;
+            this.lastVanillaSwingProgress = -1.0f;
+            return false;
+        }
+        float clamped = Float.isFinite(vanillaSwingProgress)
+                ? Math.max(0.0f, Math.min(1.0f, vanillaSwingProgress))
+                : 0.0f;
+        boolean started = !this.lastVanillaSwinging;
+        boolean wrapped = this.lastVanillaSwinging
+                && this.lastVanillaSwingProgress >= 0.0f
+                && clamped + 0.25f < this.lastVanillaSwingProgress;
+        this.lastVanillaSwinging = true;
+        this.lastVanillaSwingProgress = clamped;
+        if (wrapped) {
+            return true;
+        }
+        return started && !suppressInitialStart;
+    }
+
+    public void resetVanillaSwingTracking() {
+        this.lastVanillaSwinging = false;
+        this.lastVanillaSwingProgress = -1.0f;
     }
 
     public ImmersiveMelodiesCompat.ImmersiveMelodiesData getImmersiveMelodiesData() {

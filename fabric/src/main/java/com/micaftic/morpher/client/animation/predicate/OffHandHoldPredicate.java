@@ -37,20 +37,18 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
             frameState.setHandItemsForAnimation(itemInHand, InteractionHand.OFF_HAND);
             event.getController().stopTransition();
         }
-        if (!checkSwingAndUse(entity, InteractionHand.OFF_HAND)) return HostPlayState.Decision.PAUSE;
-        int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
-
+        if (!checkSwingAndUse(event, entity, InteractionHand.OFF_HAND)) return HostPlayState.Decision.PAUSE;
         if (itemInHand.is(Items.CROSSBOW) && CrossbowItem.isCharged(itemInHand)) {
-            return IAnimationPredicate.playAnimationWithValid(event, "hold_offhand:charged_crossbow", CodedLoopMode.LOOP, i);
+            return IAnimationPredicate.playContinuousAnimation(event, "hold_offhand:charged_crossbow");
         }
         ConditionHold conditionHold = event.getAnimatable().getModelConfig().getHoldOffhand();
         if (conditionHold != null) {
             String str = conditionHold.doTest(entity, InteractionHand.OFF_HAND);
             if (StringUtils.isNoneBlank(str)) {
-                if ("hold_offhand:lance".equals(str)) {
-                    return IAnimationPredicate.playAnimationWithValid(event, str, CodedLoopMode.HOLD_ON_LAST_FRAME, i);
-                }
-                return IAnimationPredicate.playAnimationWithValid(event, str, CodedLoopMode.LOOP, i);
+                CodedLoopMode fallback = "hold_offhand:lance".equals(str)
+                        ? CodedLoopMode.HOLD_ON_LAST_FRAME
+                        : CodedLoopMode.LOOP;
+                return IAnimationPredicate.playContinuousAnimation(event, str, fallback);
             }
         }
         return HostPlayState.Decision.STOP;
@@ -64,10 +62,25 @@ public class OffHandHoldPredicate implements IAnimationPredicate<LivingAnimatabl
         return ItemStack.matches(stack, preItem);
     }
 
-    private boolean checkSwingAndUse(LivingEntity entity, InteractionHand hand) {
-        if (entity.swinging && entity.swingingArm == hand) {
+    private boolean checkSwingAndUse(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand) {
+        if (shouldPauseForSwing(event, entity, hand)) {
             return false;
         }
-        return !entity.isUsingItem() || entity.getUsedItemHand() != hand;
+        return !InputStateKey.isUsingItem(entity, hand);
+    }
+
+    private static boolean shouldPauseForSwing(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand) {
+        if (!InputStateKey.isSwinging(entity, hand)) {
+            return false;
+        }
+        if (InputStateKey.isVanillaSwinging(entity, hand) || InputStateKey.getLocalSwingPulseAge() <= 1) {
+            return true;
+        }
+        for (var slot : event.getAnimatable().getControllerSlots()) {
+            if ("player.swing".equals(slot.getName())) {
+                return slot.isPlaying();
+            }
+        }
+        return false;
     }
 }
