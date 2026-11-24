@@ -47,10 +47,13 @@ public final class NativeRuntimeSupport {
         WINDOWS_X86("windows-x86", "spm_core_native.dll", Path.of(System.getProperty("java.io.tmpdir"), "spm")),
         LINUX_X64("linux-x64", "libspm_core_native.so", Path.of(System.getProperty("user.home"), ".spm")),
         LINUX_ARM64("linux-arm64", "libspm_core_native.so", Path.of(System.getProperty("user.home"), ".spm")),
+        LINUX_RISCV64("linux-riscv64", "libspm_core_native.so", Path.of(System.getProperty("user.home"), ".spm")),
+        LINUX_LOONGARCH64("linux-loongarch64", "libspm_core_native.so", Path.of(System.getProperty("user.home"), ".spm")),
         MACOS_X64("macos-x64", "libspm_core_native.dylib", Path.of(System.getProperty("user.home"), ".spm")),
         MACOS_ARM64("macos-arm64", "libspm_core_native.dylib", Path.of(System.getProperty("user.home"), ".spm")),
          WINDOWS_ARM64("windows-arm64", "spm_core_native.dll", Path.of(System.getProperty("java.io.tmpdir"), "spm")),
-        ANDROID_ARM64("android-arm64", "libspm_core_native.so", null);
+        ANDROID_ARM64("android-arm64", "libspm_core_native.so", null),
+        ANDROID_ARM32("android-arm32", "libspm_core_native.so", null);
 
         final String resDir;
         final String fileName;
@@ -169,7 +172,7 @@ public final class NativeRuntimeSupport {
     private static @Nullable Path extractLibPath(TargetPlatform platform, NativeArtifact artifact,
                                                  Supplier<Path> configDirSupplier) throws IOException {
         Path storageDir = platform.defaultStorage;
-        if (platform == TargetPlatform.ANDROID_ARM64) {
+        if (platform == TargetPlatform.ANDROID_ARM64 || platform == TargetPlatform.ANDROID_ARM32) {
             String androidRuntime = System.getenv("MOD_ANDROID_RUNTIME");
             if (androidRuntime == null) {
                 setUnsupportedLauncherError();
@@ -255,6 +258,10 @@ public final class NativeRuntimeSupport {
     private static @Nullable TargetPlatform resolvePlatform() {
         boolean isX86_64 = "amd64".equals(SystemUtils.OS_ARCH) || "x86_64".equals(SystemUtils.OS_ARCH);
         boolean isAarch64 = "aarch64".equals(SystemUtils.OS_ARCH) || "arm64".equals(SystemUtils.OS_ARCH);
+        boolean isRiscv64 = "riscv64".equals(SystemUtils.OS_ARCH) || "riscv64gc".equals(SystemUtils.OS_ARCH);
+        boolean isLoongArch64 = "loongarch64".equals(SystemUtils.OS_ARCH) || "loong64".equals(SystemUtils.OS_ARCH);
+        boolean isArm32 = "arm".equals(SystemUtils.OS_ARCH) || "armv7".equals(SystemUtils.OS_ARCH)
+                || "armv7l".equals(SystemUtils.OS_ARCH) || "armv8l".equals(SystemUtils.OS_ARCH);
 
         if (SystemUtils.IS_OS_WINDOWS) {
             // Windows on ARM is a distinct platform, not a 32-bit x86 host: falling through to
@@ -269,11 +276,20 @@ public final class NativeRuntimeSupport {
             if (libc == LibcType.GNU) {
                 if (isX86_64) return TargetPlatform.LINUX_X64;
                 if (isAarch64) return TargetPlatform.LINUX_ARM64;
+                // 信创 hosts: RISC-V and LoongArch. Both run a scalar kernel, which is still a
+                // real speedup over the Java writer; there is no vector kernel for either.
+                if (isRiscv64) return TargetPlatform.LINUX_RISCV64;
+                if (isLoongArch64) return TargetPlatform.LINUX_LOONGARCH64;
                 setUnsupportedPlatformError("Linux (Unsupported Architecture: " + SystemUtils.OS_ARCH + ")");
                 return null;
             }
             if (libc == LibcType.BIONIC) {
-                return isAarch64 ? TargetPlatform.ANDROID_ARM64 : null;
+                if (isAarch64) return TargetPlatform.ANDROID_ARM64;
+                // 32-bit Android (armeabi-v7a) is a real target with its own cross-compiled
+                // library. Any other BIONIC architecture has no build, so it keeps falling back to
+                // the Java writer rather than being handed a library it cannot map.
+                if (isArm32) return TargetPlatform.ANDROID_ARM32;
+                return null;
             }
             setUnsupportedPlatformError("Linux (Unknown Libc)");
             return null;
