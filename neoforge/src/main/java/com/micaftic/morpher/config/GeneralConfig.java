@@ -207,7 +207,7 @@ public class GeneralConfig {
                 .defineEnum("GraphicsBackendMode", SmRenderBackendMode.AUTO);
         DISABLE_RAW_OPENGL_ON_NON_OPENGL = builder.comment("Prevent raw OpenGL probes/renderers when Minecraft is not using an OpenGL backend.")
                 .define("DisableRawOpenGlOnNonOpenGl", true);
-        ENABLE_OPENGL_LEGACY_GPU_RENDERER = builder.comment("Use the raw OpenGL model renderer when the detected backend is OpenGL and UseGpuRenderer is enabled. Native SIMD computes the per-frame GPU bone buffer; Java remains the failure fallback.")
+        ENABLE_OPENGL_LEGACY_GPU_RENDERER = builder.comment("Use the raw OpenGL model renderer when the detected backend is OpenGL and UseGpuRenderer is enabled. Zero-allocation SpmCoreBoneMatrixWriter computes the per-frame GPU SSBO bone buffer.")
                 .define("EnableOpenGlLegacyGpuRenderer", true);
         ENABLE_OPENGL_GUI_BLUR = builder.comment("Allow raw OpenGL GUI blur/shader effects on OpenGL. Disabled by default for Vulkan compatibility.")
                 .define("EnableOpenGlGuiBlur", false);
@@ -217,8 +217,8 @@ public class GeneralConfig {
                 .define("EnableBlaze3DRouletteRenderer", false);
         ENABLE_BLAZE3D_IN_PIPELINE_DRAW = builder.comment("Draw Blaze3D GPU-skinned models inside Minecraft's own frame graph: the draw is registered during the submit phase and executed by a SparkleMorpher frame-graph pass right after the always-on-top pass, so pass ordering, resource lifetimes and barriers stay managed by the engine. Off by default: it still needs in-game validation and currently covers only plain third-person world render (no preview, first person, shader packs, glowing entities, transparent textures or glow-split passes).")
                 .define("EnableBlaze3DInPipelineDraw", false);
-        builder.comment("Native SIMD renderer policy. AGGRESSIVE prefers the spm-core native SIMD renderer whenever the native runtime is loaded and the compatibility renderer is disabled (intended default). SAFE keeps the conservative 26.x gates. OFF always uses the Java fallback. SAFE and OFF are retained as kill switches.");
-        NATIVE_SIMD_POLICY = builder.defineEnum("NativeSimdPolicy", NativeSimdPolicy.AGGRESSIVE);
+        builder.comment("Native SIMD renderer policy. OFF uses the direct Java/GPU path without per-frame off-heap vertex marshaling (default). SAFE and AGGRESSIVE opt back into native CPU vertex transformation.");
+        NATIVE_SIMD_POLICY = builder.defineEnum("NativeSimdPolicy", NativeSimdPolicy.OFF);
         builder.comment("Compare Java and native model state to hunt mismatches without changing the rendered path. OFF disables. LOG_MISMATCH logs a compact summary. STRICT_FALLBACK disables Native SIMD for the session on mismatch. CRASH_TEST throws on mismatch (development only).");
         NATIVE_SIMD_VALIDATION_MODE = builder.defineEnum("NativeSimdValidationMode", NativeSimdValidationMode.OFF);
         builder.comment("Render ysmGlow bones with normal entity lighting while a shader pack is active.");

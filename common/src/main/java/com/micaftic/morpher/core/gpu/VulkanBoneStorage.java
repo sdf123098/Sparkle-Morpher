@@ -26,6 +26,8 @@ public final class VulkanBoneStorage {
     private static final java.util.concurrent.atomic.AtomicLong usageMappings = new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong storageLayouts = new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong storageWrites = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong ssboDraws = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong completedSsboDraws = new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong nativeDraws = new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong completedNativeDraws = new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.Map<String, java.util.concurrent.atomic.AtomicLong> drawPhases = new java.util.concurrent.ConcurrentSkipListMap<>();
@@ -69,6 +71,8 @@ public final class VulkanBoneStorage {
         }
     }
 
+    public static void ssboDrawSubmitted() { ssboDraws.incrementAndGet(); }
+    public static void ssboDrawCompleted() { completedSsboDraws.incrementAndGet(); }
     public static void nativeDrawSubmitted() { nativeDraws.incrementAndGet(); }
     public static void nativeDrawCompleted() { completedNativeDraws.incrementAndGet(); }
     public static void drawPhase(String phase) {
@@ -76,8 +80,12 @@ public final class VulkanBoneStorage {
     }
     public static String diagnostics() {
         return "native_buffer_mappings=" + usageMappings.get() + " storage_layouts=" + storageLayouts.get()
-                + " storage_descriptor_writes=" + storageWrites.get() + " simd_gpu_draws=" + nativeDraws.get()
-                + " fence_completed_simd_snapshots=" + completedNativeDraws.get() + " draw_phases=" + drawPhases;
+                + " storage_descriptor_writes=" + storageWrites.get()
+                + " ssbo_gpu_draws=" + ssboDraws.get()
+                + " fence_completed_ssbo_snapshots=" + completedSsboDraws.get()
+                + " simd_gpu_draws=" + nativeDraws.get()
+                + " fence_completed_simd_snapshots=" + completedNativeDraws.get()
+                + " draw_phases=" + drawPhases;
     }
 
     /** Returns the SPIR-V word offset of our real SSBO's binding decoration. */

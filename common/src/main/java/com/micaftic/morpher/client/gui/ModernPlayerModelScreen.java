@@ -1182,7 +1182,7 @@ public class ModernPlayerModelScreen extends Screen {
         if (gridMode(w, h) == ModelPickerLayout.GridMode.CARDS) {
             ModelPickerLayout.Cards cards = ModelPickerLayout.cards(w, h, visible.size(), denseModelToolbar());
             ensureCardPool(cards.capacity());
-            cardFrameNanos=System.nanoTime();cardRefreshBudget.beginFrame(cardFrameNanos,page.end()-page.start());
+            cardFrameNanos=System.nanoTime();cardRefreshBudget.beginFrame(cardFrameNanos,page.end()-page.start(),com.micaftic.morpher.client.renderer.preview.NativeCardPreviewCache.consumePrepareNanos());
             for (int i = page.start(); i < page.end(); i++) {
                 int slot = i - page.start();
                 int cx = x + cards.originX(w) + cards.columnX(w,slot % cards.cols());
@@ -1449,7 +1449,7 @@ public class ModernPlayerModelScreen extends Screen {
         int y0 = y + m.originY(h);
         Set<String> starred = starModels();
         ensureCardPool(m.capacity());
-        cardFrameNanos=System.nanoTime();cardRefreshBudget.beginFrame(cardFrameNanos,Math.min(m.capacity(),entries.size()-start));
+        cardFrameNanos=System.nanoTime();cardRefreshBudget.beginFrame(cardFrameNanos,Math.min(m.capacity(),entries.size()-start),com.micaftic.morpher.client.renderer.preview.NativeCardPreviewCache.consumePrepareNanos());
         int hoverIndex = -1;
         for (int i = 0; i < m.capacity() && start + i < entries.size(); i++) {
             int r = i / m.cols();
@@ -1775,6 +1775,13 @@ public class ModernPlayerModelScreen extends Screen {
             this.previewTextureId = textureId;
         }
         if (this.previewEntity.isModelReady()) {
+            var props = assembly.getModelData().getModelProperties();
+            var mainKeys = assembly.getAnimationBundle().getMainAnimations().keySet();
+            String previewAnim = ModelCardArtwork.previewAnimation(props == null ? null : props.getPreviewAnimation(), mainKeys);
+            if (previewAnim.isEmpty() && mainKeys.contains("idle")) {
+                previewAnim = "idle";
+            }
+            this.previewEntity.getAnimationStateMachine().setQueuedAnimation(previewAnim);
             try {
                 float scale = Math.max(8.0f, h * 0.43f)*detailZoom;
                 int previewCenterX = x + w / 2;
@@ -1811,7 +1818,7 @@ public class ModernPlayerModelScreen extends Screen {
         this.controller.requestResourcePreviews(visible, selectedResource());
         ensureCardPool(grid.capacity());
         cardFrameNanos = System.nanoTime();
-        cardRefreshBudget.beginFrame(cardFrameNanos, visible.size());
+        cardRefreshBudget.beginFrame(cardFrameNanos, visible.size(), com.micaftic.morpher.client.renderer.preview.NativeCardPreviewCache.consumePrepareNanos());
 
         drawText(g, Component.literal(trim(Component.translatable("gui.sparkle_morpher.resource_station.title").getString()
                 + " · " + (isMainlandResourceMode() ? resourceString("mode.mainland") : resourceString("mode.global")), layout.contentWidth)), layout.contentLeft, layout.top + 6);

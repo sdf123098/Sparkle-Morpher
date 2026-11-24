@@ -364,12 +364,21 @@ public final class HostAnimationAssets {
 
         public @Nullable PoseControllerDefinition compile(PoseAnimationLibrary library, boolean mergeMultilineExpr) {
             try {
-                ModelDocument.JsonObject json = controllerToCoreJson(this.raw, mergeMultilineExpr, false);
+                ModelDocument.JsonObject json = controllerToCoreJson(this.raw, mergeMultilineExpr, false, false, library);
                 ScriptBudget budget = new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken());
                 return PoseControllerDefinition.decode(json, this.name, library, budget);
-            } catch (RuntimeException ex) {
-                YesSteveModel.LOGGER.warn("[SM-ANIM] Failed to compile controller '{}': {}", this.name, ex.getMessage());
-                return null;
+            } catch (RuntimeException firstFailure) {
+                try {
+                    ModelDocument.JsonObject fallbackJson = controllerToCoreJson(this.raw, mergeMultilineExpr, true, true, library);
+                    ScriptBudget budget = new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken());
+                    PoseControllerDefinition def = PoseControllerDefinition.decode(fallbackJson, this.name, library, budget);
+                    YesSteveModel.LOGGER.warn("[SM-ANIM] Recovered controller '{}' after legacy Molang/clip normalization ({})",
+                            this.name, firstFailure.getMessage());
+                    return def;
+                } catch (RuntimeException ex) {
+                    YesSteveModel.LOGGER.warn("[SM-ANIM] Failed to compile controller '{}': {}", this.name, ex.getMessage());
+                    return null;
+                }
             }
         }
     }
@@ -508,41 +517,80 @@ public final class HostAnimationAssets {
                     AnimationDecodeLimits.localYsm());
         }
         try {
-            ModelDocument doc = buildModelDocument(identity, clips, skeleton, bindPose, false);
+            ModelDocument doc = buildModelDocument(identity, clips, skeleton, bindPose, false, false);
             return PoseAnimationLibrary.fromModel(
                     doc,
                     new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
                     AnimationDecodeLimits.localYsm());
         } catch (RuntimeException bulkFailure) {
-            List<ClipSpec> safeClips = new ArrayList<>(clips.size());
+            try {
+                ModelDocument normalizedDoc = buildModelDocument(identity, clips, skeleton, bindPose, true, false);
+                PoseAnimationLibrary normalizedLib = PoseAnimationLibrary.fromModel(
+                        normalizedDoc,
+                        new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
+                        AnimationDecodeLimits.localYsm());
+                YesSteveModel.LOGGER.warn(
+                        "[SM-ANIM] Normalized legacy Molang in '{}' after bulk decode failure: {}",
+                        identity, bulkFailure.getMessage());
+                return normalizedLib;
+            } catch (RuntimeException ignored) {
+            }
+
+            List<ClipSpec> keptClips = new ArrayList<>(clips.size());
+            boolean useSanitized = false;
             for (ClipSpec clip : clips) {
                 try {
-                    ModelDocument single = buildModelDocument(identity, List.of(clip), skeleton, bindPose, false);
+                    ModelDocument single = buildModelDocument(identity, List.of(clip), skeleton, bindPose, true, false);
                     PoseAnimationLibrary.fromModel(
                             single,
                             new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
                             AnimationDecodeLimits.localYsm());
-                    safeClips.add(clip);
+                    keptClips.add(clip);
                 } catch (RuntimeException clipFailure) {
-                    YesSteveModel.LOGGER.warn(
-                            "[SM-ANIM] Sanitizing animation '{}' in '{}' after Core decode error: {}",
-                            clip.name(), identity, clipFailure.getMessage());
-                    safeClips.add(clip);
+                    try {
+                        ModelDocument singleSanitized = buildModelDocument(identity, List.of(clip), skeleton, bindPose, true, true);
+                        PoseAnimationLibrary.fromModel(
+                                singleSanitized,
+                                new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
+                                AnimationDecodeLimits.localYsm());
+                        keptClips.add(clip);
+                        useSanitized = true;
+                        YesSteveModel.LOGGER.warn(
+                                "[SM-ANIM] Sanitizing animation '{}' in '{}' after Core decode error: {}",
+                                clip.name(), identity, clipFailure.getMessage());
+                    } catch (RuntimeException unrecoverable) {
+                        YesSteveModel.LOGGER.warn(
+                                "[SM-ANIM] Skipping unrecoverable animation '{}' in '{}': {}",
+                                clip.name(), identity, unrecoverable.getMessage());
+                    }
                 }
             }
-            try {
-                ModelDocument sanitizedDoc = buildModelDocument(identity, safeClips, skeleton, bindPose, true);
-                return PoseAnimationLibrary.fromModel(
-                        sanitizedDoc,
-                        new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
-                        AnimationDecodeLimits.localYsm());
-            } catch (RuntimeException fatal) {
-                YesSteveModel.LOGGER.warn("[SM-ANIM] Falling back to empty PoseAnimationLibrary for '{}'", identity, fatal);
-                return PoseAnimationLibrary.fromModel(
-                        emptyModelDocument(identity, skeleton, bindPose),
-                        new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
-                        AnimationDecodeLimits.localYsm());
+            if (!keptClips.isEmpty()) {
+                try {
+                    ModelDocument filteredDoc = buildModelDocument(identity, keptClips, skeleton, bindPose, true, useSanitized);
+                    return PoseAnimationLibrary.fromModel(
+                            filteredDoc,
+                            new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
+                            AnimationDecodeLimits.localYsm());
+                } catch (RuntimeException sanitizedFailure) {
+                    YesSteveModel.LOGGER.warn(
+                            "[SM-ANIM] Sanitized clip batch failed for '{}' ({}); retrying with full sanitization",
+                            identity, sanitizedFailure.getMessage());
+                    try {
+                        ModelDocument strictDoc = buildModelDocument(identity, keptClips, skeleton, bindPose, true, true);
+                        return PoseAnimationLibrary.fromModel(
+                                strictDoc,
+                                new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
+                                AnimationDecodeLimits.localYsm());
+                    } catch (RuntimeException fatal) {
+                        YesSteveModel.LOGGER.warn("[SM-ANIM] Falling back to empty PoseAnimationLibrary for '{}'", identity, fatal);
+                    }
+                }
             }
+            return PoseAnimationLibrary.fromModel(
+                    emptyModelDocument(identity, skeleton, bindPose),
+                    new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
+                    AnimationDecodeLimits.localYsm());
         }
     }
 
@@ -557,8 +605,9 @@ public final class HostAnimationAssets {
             Collection<ClipSpec> clips,
             Skeleton skeleton,
             BonePose bindPose,
+            boolean normalizeLegacy,
             boolean sanitizeInvalidExpressions) {
-        Map<String, ModelDocument.JsonValue> animEntries = new LinkedHashMap<>(clips.size());
+        Map<String, ModelDocument.JsonValue> animEntries = new LinkedHashMap<>(clips.size() + 1);
         for (ClipSpec clip : clips) {
             if (animEntries.size() >= 1024) {
                 break;
@@ -567,7 +616,12 @@ public final class HostAnimationAssets {
             if (clipName == null || clipName.isBlank()) {
                 continue;
             }
-            animEntries.put(clipName, rawAnimationToJson(clip.raw(), sanitizeInvalidExpressions));
+            animEntries.put(clipName, rawAnimationToJson(clip.raw(), normalizeLegacy, sanitizeInvalidExpressions));
+        }
+        // Bedrock / YSM controllers frequently reference implicit "empty" state clip.
+        if (animEntries.size() < 1024) {
+            animEntries.putIfAbsent("empty", new ModelDocument.JsonObject(Map.of(
+                    "loop", new ModelDocument.JsonString("play_once"))));
         }
         Map<String, ModelDocument.JsonValue> root = new LinkedHashMap<>();
         root.put("animations", new ModelDocument.JsonObject(animEntries));
@@ -576,7 +630,10 @@ public final class HostAnimationAssets {
                 new ModelDocument.JsonObject(root));
     }
 
-    private static ModelDocument.JsonObject rawAnimationToJson(RawYsmModel.RawAnimation ra, boolean sanitizeInvalid) {
+    private static ModelDocument.JsonObject rawAnimationToJson(
+            RawYsmModel.RawAnimation ra,
+            boolean normalizeLegacy,
+            boolean sanitizeInvalid) {
         Map<String, ModelDocument.JsonValue> map = new LinkedHashMap<>();
         if (Float.isInfinite(ra.length)) {
             map.put("animation_length", new ModelDocument.JsonString("Infinity"));
@@ -593,7 +650,7 @@ public final class HostAnimationAssets {
         if (ra.blendWeight instanceof Number n && Double.isFinite(n.doubleValue())) {
             map.put("blend_weight", new ModelDocument.JsonNumber(n.doubleValue()));
         } else if (ra.blendWeight instanceof String s && !s.isBlank()) {
-            map.put("blend_weight", safeExprJson(s, sanitizeInvalid));
+            map.put("blend_weight", safeExprJson(s, normalizeLegacy, sanitizeInvalid));
         }
 
         if (ra.boneAnimations != null && !ra.boneAnimations.isEmpty()) {
@@ -604,13 +661,13 @@ public final class HostAnimationAssets {
                 }
                 Map<String, ModelDocument.JsonValue> channels = new LinkedHashMap<>();
                 if (!ba.rotation.isEmpty()) {
-                    channels.put("rotation", keyframesToJson(ba.rotation, sanitizeInvalid));
+                    channels.put("rotation", keyframesToJson(ba.rotation, normalizeLegacy, sanitizeInvalid));
                 }
                 if (!ba.position.isEmpty()) {
-                    channels.put("position", keyframesToJson(ba.position, sanitizeInvalid));
+                    channels.put("position", keyframesToJson(ba.position, normalizeLegacy, sanitizeInvalid));
                 }
                 if (!ba.scale.isEmpty()) {
-                    channels.put("scale", keyframesToJson(ba.scale, sanitizeInvalid));
+                    channels.put("scale", keyframesToJson(ba.scale, normalizeLegacy, sanitizeInvalid));
                 }
                 if (!channels.isEmpty()) {
                     bonesMap.put(ba.boneName, new ModelDocument.JsonObject(channels));
@@ -645,12 +702,17 @@ public final class HostAnimationAssets {
                     if (event == null || event.isBlank()) {
                         continue;
                     }
-                    ModelDocument.JsonObject particleObj = tryDecodeLoweredParticle(event, sanitizeInvalid);
+                    ModelDocument.JsonObject particleObj = tryDecodeLoweredParticle(event, normalizeLegacy, sanitizeInvalid);
                     if (particleObj != null) {
                         particlesByTime.computeIfAbsent(timeKey, k -> new ArrayList<>()).add(particleObj);
                     } else {
-                        timelineByTime.computeIfAbsent(timeKey, k -> new ArrayList<>())
-                                .add(safeExprJson(event, sanitizeInvalid));
+                        String normalizedTimeline = normalizeLegacy
+                                ? sanitizeTimelineScript(event, sanitizeInvalid)
+                                : event;
+                        if (normalizedTimeline != null && !normalizedTimeline.isBlank()) {
+                            timelineByTime.computeIfAbsent(timeKey, k -> new ArrayList<>())
+                                    .add(new ModelDocument.JsonString(normalizedTimeline));
+                        }
                     }
                 }
             }
@@ -674,7 +736,10 @@ public final class HostAnimationAssets {
         return new ModelDocument.JsonObject(map);
     }
 
-    private static ModelDocument.JsonValue keyframesToJson(List<RawYsmModel.RawKeyframe> frames, boolean sanitizeInvalid) {
+    private static ModelDocument.JsonValue keyframesToJson(
+            List<RawYsmModel.RawKeyframe> frames,
+            boolean normalizeLegacy,
+            boolean sanitizeInvalid) {
         Map<String, ModelDocument.JsonValue> map = new LinkedHashMap<>(frames.size());
         for (RawYsmModel.RawKeyframe rk : frames) {
             String timeKey = formatTimeKey(rk.timestamp);
@@ -689,10 +754,10 @@ public final class HostAnimationAssets {
             };
             Map<String, ModelDocument.JsonValue> entry = new LinkedHashMap<>(4);
             if (rk.hasPreData) {
-                entry.put("pre", vectorToJson(rk.preData, sanitizeInvalid));
-                entry.put("post", vectorToJson(rk.postData, sanitizeInvalid));
+                entry.put("pre", vectorToJson(rk.preData, normalizeLegacy, sanitizeInvalid));
+                entry.put("post", vectorToJson(rk.postData, normalizeLegacy, sanitizeInvalid));
             } else {
-                entry.put("vector", vectorToJson(rk.postData, sanitizeInvalid));
+                entry.put("vector", vectorToJson(rk.postData, normalizeLegacy, sanitizeInvalid));
             }
             if (!"linear".equals(lerpMode)) {
                 entry.put("lerp_mode", new ModelDocument.JsonString(lerpMode));
@@ -702,7 +767,10 @@ public final class HostAnimationAssets {
         return new ModelDocument.JsonObject(map);
     }
 
-    private static ModelDocument.JsonValue vectorToJson(Object[] data, boolean sanitizeInvalid) {
+    private static ModelDocument.JsonValue vectorToJson(
+            Object[] data,
+            boolean normalizeLegacy,
+            boolean sanitizeInvalid) {
         if (data == null || data.length < 3) {
             return new ModelDocument.JsonVector3(0.0f, 0.0f, 0.0f);
         }
@@ -716,7 +784,7 @@ public final class HostAnimationAssets {
             if (v instanceof Number n && Double.isFinite(n.doubleValue())) {
                 list.add(new ModelDocument.JsonNumber(n.doubleValue()));
             } else if (v instanceof String s && !s.isBlank()) {
-                list.add(safeExprJson(s, sanitizeInvalid));
+                list.add(safeExprJson(s, normalizeLegacy, sanitizeInvalid));
             } else {
                 list.add(new ModelDocument.JsonNumber(0.0));
             }
@@ -724,17 +792,207 @@ public final class HostAnimationAssets {
         return new ModelDocument.JsonArray(list);
     }
 
-    private static ModelDocument.JsonValue safeExprJson(String source, boolean sanitizeInvalid) {
+    private static ModelDocument.JsonValue safeExprJson(
+            String source,
+            boolean normalizeLegacy,
+            boolean sanitizeInvalid) {
+        String prepared = normalizeLegacy ? normalizeLegacyMolang(source) : source;
         if (!sanitizeInvalid) {
-            return new ModelDocument.JsonString(source);
+            return new ModelDocument.JsonString(prepared);
         }
-        HostMolangScript compiled = HostMolangScript.compile(source);
+        HostMolangScript compiled = HostMolangScript.compile(prepared);
         return compiled.parsedSuccessfully()
-                ? new ModelDocument.JsonString(source)
+                ? new ModelDocument.JsonString(prepared)
                 : new ModelDocument.JsonNumber(0.0);
     }
 
-    private static @Nullable ModelDocument.JsonObject tryDecodeLoweredParticle(String event, boolean sanitizeInvalid) {
+    private static @Nullable String sanitizeTimelineScript(String source, boolean sanitizeInvalid) {
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        List<String> statements = splitStatements(source);
+        StringBuilder out = new StringBuilder();
+        for (String rawStmt : statements) {
+            String trimmed = rawStmt.trim();
+            if (trimmed.isEmpty() || isLegacyFoldMarker(trimmed)) {
+                continue;
+            }
+            String normalized = normalizeLegacyMolang(trimmed);
+            if (normalized.isBlank() || isLegacyFoldMarker(normalized)) {
+                continue;
+            }
+            if (sanitizeInvalid && !HostMolangScript.compile(normalized).parsedSuccessfully()) {
+                continue;
+            }
+            if (!out.isEmpty()) {
+                out.append('\n');
+            }
+            out.append(normalized);
+            if (!normalized.endsWith(";")) {
+                out.append(';');
+            }
+        }
+        return out.isEmpty() ? null : out.toString();
+    }
+
+    private static boolean isLegacyFoldMarker(String stmt) {
+        // Blockbench / YSM timeline collapsible group markers (`[;`, `];`, `['name';`)
+        // and standalone string-literal comment lines (`'...';`, even with unescaped inner `'`).
+        if ("[".equals(stmt) || "]".equals(stmt) || stmt.startsWith("[")) {
+            return true;
+        }
+        return stmt.startsWith("'") && (stmt.endsWith("'") || stmt.endsWith("';"));
+    }
+
+    private static List<String> splitStatements(String source) {
+        List<String> out = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (c == '\'' && (i == 0 || source.charAt(i - 1) != '\\')) {
+                inQuotes = !inQuotes;
+            }
+            if (c == ';' && !inQuotes) {
+                out.add(current.toString());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        if (!current.isEmpty()) {
+            out.add(current.toString());
+        }
+        return out;
+    }
+
+    static String normalizeLegacyMolang(String source) {
+        if (source == null || source.isBlank()) {
+            return source == null ? "" : source;
+        }
+        String s = replaceOutsideSingleQuotes(source, true);
+        // Balance parentheses per `;`-delimited statement.
+        List<String> stmts = splitStatements(s);
+        if (stmts.size() <= 1) {
+            String balanced = balanceParens(s);
+            return source.endsWith(";") && !balanced.trim().endsWith(";") ? balanced + ";" : balanced;
+        }
+        StringBuilder rebuilt = new StringBuilder(s.length() + 8);
+        for (int idx = 0; idx < stmts.size(); idx++) {
+            String balanced = balanceParens(stmts.get(idx).trim());
+            if (balanced.isEmpty()) {
+                continue;
+            }
+            if (!rebuilt.isEmpty()) {
+                rebuilt.append(";\n");
+            }
+            rebuilt.append(balanced);
+        }
+        if (source.trim().endsWith(";") && !rebuilt.isEmpty() && rebuilt.charAt(rebuilt.length() - 1) != ';') {
+            rebuilt.append(';');
+        }
+        return rebuilt.toString();
+    }
+
+    private static String replaceOutsideSingleQuotes(String source, boolean replaceEntitiesAndPlaceholders) {
+        StringBuilder out = new StringBuilder(source.length());
+        boolean inQuotes = false;
+        int len = source.length();
+        for (int i = 0; i < len; ) {
+            char c = source.charAt(i);
+            if (c == '\'' && (i == 0 || source.charAt(i - 1) != '\\')) {
+                inQuotes = !inQuotes;
+                out.append(c);
+                i++;
+                continue;
+            }
+            if (inQuotes || !replaceEntitiesAndPlaceholders) {
+                out.append(c);
+                i++;
+                continue;
+            }
+            if (c == '&') {
+                if (regionMatchesIgnoreCase(source, i, "&lt;=")) { out.append("<="); i += 5; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&gt;=")) { out.append(">="); i += 5; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&lt=")) { out.append("<="); i += 4; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&gt=")) { out.append(">="); i += 4; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&lt;")) { out.append('<'); i += 4; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&gt;")) { out.append('>'); i += 4; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&lt")) { out.append('<'); i += 3; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&gt")) { out.append('>'); i += 3; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&amp;&amp;")) { out.append("&&"); i += 10; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&amp&amp")) { out.append("&&"); i += 8; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&amp;")) { out.append('&'); i += 5; continue; }
+                if (regionMatchesIgnoreCase(source, i, "&amp")) { out.append('&'); i += 4; continue; }
+            }
+            if (c == '{') {
+                int close = source.indexOf('}', i + 1);
+                if (close > i + 1 && close - i <= 24) {
+                    boolean isPlaceholder = true;
+                    for (int j = i + 1; j < close; j++) {
+                        char pc = source.charAt(j);
+                        if (!Character.isLetterOrDigit(pc) && pc != '_') {
+                            isPlaceholder = false;
+                            break;
+                        }
+                    }
+                    if (isPlaceholder) {
+                        out.append('0');
+                        i = close + 1;
+                        continue;
+                    }
+                }
+            }
+            if ((c == 'N' || c == 'n') && i + 3 <= len && regionMatchesIgnoreCase(source, i, "NaN")) {
+                char prev = i > 0 ? source.charAt(i - 1) : ' ';
+                char next = i + 3 < len ? source.charAt(i + 3) : ' ';
+                if (!Character.isLetterOrDigit(prev) && prev != '_' && prev != '.'
+                        && !Character.isLetterOrDigit(next) && next != '_') {
+                    out.append('0');
+                    i += 3;
+                    continue;
+                }
+            }
+            out.append(c);
+            i++;
+        }
+        return out.toString();
+    }
+
+    private static boolean regionMatchesIgnoreCase(String s, int offset, String literal) {
+        return offset + literal.length() <= s.length()
+                && s.regionMatches(true, offset, literal, 0, literal.length());
+    }
+
+    private static String balanceParens(String stmt) {
+        int depth = 0;
+        boolean inQuotes = false;
+        StringBuilder out = new StringBuilder(stmt.length() + 4);
+        for (int i = 0; i < stmt.length(); i++) {
+            char c = stmt.charAt(i);
+            if (c == '\'' && (i == 0 || stmt.charAt(i - 1) != '\\')) {
+                inQuotes = !inQuotes;
+            }
+            if (!inQuotes) {
+                if (c == '(') {
+                    depth++;
+                } else if (c == ')') {
+                    if (depth == 0) {
+                        continue;
+                    }
+                    depth--;
+                }
+            }
+            out.append(c);
+        }
+        while (depth-- > 0) {
+            out.append(')');
+        }
+        return out.toString();
+    }
+
+    private static @Nullable ModelDocument.JsonObject tryDecodeLoweredParticle(
+            String event, boolean normalizeLegacy, boolean sanitizeInvalid) {
         String trimmed = event.trim();
         if (!trimmed.startsWith(PARTICLE_PREFIX)) {
             return null;
@@ -762,7 +1020,7 @@ public final class HostAnimationAssets {
                 obj.put("locator", new ModelDocument.JsonString(locator));
             }
             if (!preScript.isEmpty()) {
-                obj.put("pre_effect_script", safeExprJson(preScript, sanitizeInvalid));
+                obj.put("pre_effect_script", safeExprJson(preScript, normalizeLegacy, sanitizeInvalid));
             }
             return new ModelDocument.JsonObject(obj);
         } catch (IllegalArgumentException ignored) {
@@ -774,34 +1032,60 @@ public final class HostAnimationAssets {
             RawYsmModel.RawAnimationController rac,
             boolean mergeMultilineExpr,
             boolean sanitizeInvalid) {
+        return controllerToCoreJson(rac, mergeMultilineExpr, false, sanitizeInvalid, null);
+    }
+
+    private static ModelDocument.JsonObject controllerToCoreJson(
+            RawYsmModel.RawAnimationController rac,
+            boolean mergeMultilineExpr,
+            boolean normalizeLegacy,
+            boolean sanitizeInvalid,
+            @Nullable PoseAnimationLibrary library) {
         Map<String, ModelDocument.JsonValue> statesJson = new LinkedHashMap<>();
+        boolean hasEmptyClip = library != null && library.hasClip("empty");
         for (RawYsmModel.RawControllerState rs : rac.states) {
             Map<String, ModelDocument.JsonValue> stateObj = new LinkedHashMap<>();
             if (!rs.animations.isEmpty()) {
                 List<ModelDocument.JsonValue> anims = new ArrayList<>(rs.animations.size());
                 for (Map.Entry<String, String> entry : rs.animations) {
+                    String animName = entry.getKey();
+                    if (library != null && !library.hasClip(animName)) {
+                        if (hasEmptyClip) {
+                            YesSteveModel.LOGGER.warn(
+                                    "[SM-ANIM] Controller '{}' state '{}' references missing animation '{}'; substituting 'empty'",
+                                    rac.animationName, rs.name, animName);
+                            animName = "empty";
+                        } else {
+                            YesSteveModel.LOGGER.warn(
+                                    "[SM-ANIM] Controller '{}' state '{}' references missing animation '{}'; skipping entry",
+                                    rac.animationName, rs.name, animName);
+                            continue;
+                        }
+                    }
                     if (entry.getValue() == null || entry.getValue().isBlank()) {
-                        anims.add(new ModelDocument.JsonString(entry.getKey()));
+                        anims.add(new ModelDocument.JsonString(animName));
                     } else {
                         anims.add(new ModelDocument.JsonObject(Map.of(
-                                entry.getKey(), safeExprJson(entry.getValue(), sanitizeInvalid))));
+                                animName, safeExprJson(entry.getValue(), normalizeLegacy, sanitizeInvalid))));
                     }
                 }
-                stateObj.put("animations", new ModelDocument.JsonArray(anims));
+                if (!anims.isEmpty()) {
+                    stateObj.put("animations", new ModelDocument.JsonArray(anims));
+                }
             }
             if (!rs.transitions.isEmpty()) {
                 List<ModelDocument.JsonValue> trans = new ArrayList<>(rs.transitions.size());
                 for (Map.Entry<String, String> entry : rs.transitions) {
                     trans.add(new ModelDocument.JsonObject(Map.of(
-                            entry.getKey(), safeExprJson(entry.getValue(), sanitizeInvalid))));
+                            entry.getKey(), safeExprJson(entry.getValue(), normalizeLegacy, sanitizeInvalid))));
                 }
                 stateObj.put("transitions", new ModelDocument.JsonArray(trans));
             }
             if (!rs.onEntry.isEmpty()) {
-                stateObj.put("on_entry", scriptListToJson(rs.onEntry, mergeMultilineExpr, sanitizeInvalid));
+                stateObj.put("on_entry", scriptListToJson(rs.onEntry, mergeMultilineExpr, normalizeLegacy, sanitizeInvalid));
             }
             if (!rs.onExit.isEmpty()) {
-                stateObj.put("on_exit", scriptListToJson(rs.onExit, mergeMultilineExpr, sanitizeInvalid));
+                stateObj.put("on_exit", scriptListToJson(rs.onExit, mergeMultilineExpr, normalizeLegacy, sanitizeInvalid));
             }
             if (!rs.soundEffects.isEmpty()) {
                 List<ModelDocument.JsonValue> sounds = new ArrayList<>(rs.soundEffects.size());
@@ -823,14 +1107,21 @@ public final class HostAnimationAssets {
     }
 
     private static ModelDocument.JsonArray scriptListToJson(
-            List<String> lines, boolean mergeMultilineExpr, boolean sanitizeInvalid) {
+            List<String> lines,
+            boolean mergeMultilineExpr,
+            boolean normalizeLegacy,
+            boolean sanitizeInvalid) {
         List<ModelDocument.JsonValue> out = new ArrayList<>();
         if (mergeMultilineExpr) {
             String merged = String.join("\n", lines);
-            out.add(safeExprJson(merged, sanitizeInvalid));
+            String cleaned = normalizeLegacy ? sanitizeTimelineScript(merged, sanitizeInvalid) : merged;
+            out.add(new ModelDocument.JsonString(cleaned != null ? cleaned : "0;"));
         } else {
             for (String line : lines) {
-                out.add(safeExprJson(line, sanitizeInvalid));
+                String cleaned = normalizeLegacy ? sanitizeTimelineScript(line, sanitizeInvalid) : line;
+                if (cleaned != null) {
+                    out.add(new ModelDocument.JsonString(cleaned));
+                }
             }
         }
         return new ModelDocument.JsonArray(out);

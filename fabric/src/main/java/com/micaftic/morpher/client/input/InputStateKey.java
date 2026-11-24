@@ -210,6 +210,34 @@ public class InputStateKey {
         return 0.0f;
     }
 
+    public static boolean isVanillaSwinging(LivingEntity entity, InteractionHand hand) {
+        if (entity == null || entity.isSleeping()) {
+            return false;
+        }
+        if (hand == InteractionHand.MAIN_HAND && isUsingLocalOffhandShield(entity)) {
+            return false;
+        }
+        if (entity.swinging && entity.swingingArm == hand) {
+            return true;
+        }
+        return !isLocalPlayer(entity) && hand == InteractionHand.MAIN_HAND && entity.getAttackAnim(0.0f) > 0.0f;
+    }
+
+    public static boolean isVanillaAnyHandSwinging(LivingEntity entity) {
+        return isVanillaSwinging(entity, InteractionHand.MAIN_HAND)
+                || isVanillaSwinging(entity, InteractionHand.OFF_HAND);
+    }
+
+    public static float getVanillaAttackProgress(LivingEntity entity, float partialTick) {
+        if (entity == null || entity.isSleeping() || isUsingLocalOffhandShield(entity)) {
+            return 0.0f;
+        }
+        if (entity.swinging || !isLocalPlayer(entity)) {
+            return entity.getAttackAnim(partialTick);
+        }
+        return 0.0f;
+    }
+
     public static boolean isSwinging(LivingEntity entity, InteractionHand hand) {
         if (entity == null || entity.isSleeping()) {
             return false;
