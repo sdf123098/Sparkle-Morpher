@@ -1,65 +1,86 @@
 {
   "formatVersion": 1,
   "abi": 1,
-  "version": "1.2.0",
-  "source": "AIH-Interactive/spm-core@8f3fff766b5b0ee807e2fb3647d5bb37cf98e3ff",
-  "comment": "spm-core 1.2.0 native SIMD compute kernels (Rust). Verified via native-manifest SHA-256 and JNI ABI markers.",
+  "version": "1.3.0",
+  "source": "AIH-Interactive/spm-core@3cffa18799a4caff1a6147fa9c0202add60cfa98",
+  "comment": "spm-core 1.3.0 native SIMD compute kernels (Rust, with aarch64 NEON packed kernels and 11 targets). Verified via native-manifest SHA-256 and JNI ABI markers.",
   "artifacts": [
     {
       "platform": "windows-x64",
       "filename": "spm_core_native.dll",
-      "sha256": "A8385E602779B9E620CDAC9394AAF1EA9AB6928AAC1C0CECEDA7E770CD179B4F",
+      "sha256": "9B5AAD7EC12B343D30FB070843F8F74C4700BEE1F4B61D9D908E2A62FCBD695D",
       "abi": 1,
-      "version": "1.2.0"
+      "version": "1.3.0"
     },
     {
       "platform": "windows-x86",
       "filename": "spm_core_native.dll",
-      "sha256": "8A60DA9BCD4EDEE5CA15AA9955D29DD11B7189EA8AD8585403A05FA465F0CCD8",
+      "sha256": "869A1526E1D11048453FB061624B364922C5F3E399D291846E5AE2D66E770C56",
       "abi": 1,
-      "version": "1.2.0"
-    },
-    {
-      "platform": "linux-x64",
-      "filename": "libspm_core_native.so",
-      "sha256": "347BB6B66A640B52BCE5B03EFB037BBE318FD836182729A5E605850049DFACB1",
-      "abi": 1,
-      "version": "1.2.0"
-    },
-    {
-      "platform": "linux-arm64",
-      "filename": "libspm_core_native.so",
-      "sha256": "227E4629F3B490465B6CD8DEA7A606777FE747B0D7EA2F3FED26BCF1A0C477A2",
-      "abi": 1,
-      "version": "1.2.0"
-    },
-    {
-      "platform": "macos-x64",
-      "filename": "libspm_core_native.dylib",
-      "sha256": "AB25DFBEB971846B9DC6C065B981AF90B0C655C9CF247FC4D6BE1CB7C0A37F94",
-      "abi": 1,
-      "version": "1.2.0"
-    },
-    {
-      "platform": "macos-arm64",
-      "filename": "libspm_core_native.dylib",
-      "sha256": "FE403FA6705903725B26CFFD3608BE1EE2FD6026635210736E92D7BA832F6108",
-      "abi": 1,
-      "version": "1.2.0"
-    },
-    {
-      "platform": "android-arm64",
-      "filename": "libspm_core_native.so",
-      "sha256": "9C17E19589920653BE8B64A23D59E0CDE5327CBFE166FFE288914DB90B95A697",
-      "abi": 1,
-      "version": "1.2.0"
+      "version": "1.3.0"
     },
     {
       "platform": "windows-arm64",
       "filename": "spm_core_native.dll",
-      "sha256": "4450CFCC7D74644E7A14FDBB0F3B7ED6DDA107EBFE22D9C88AA29286BCFA6A7A",
+      "sha256": "65B8E26126508FC7520E3073CBB7001646024667B1FDBA193861BFFAC35A25DC",
       "abi": 1,
-      "version": "1.2.0"
+      "version": "1.3.0"
+    },
+    {
+      "platform": "linux-x64",
+      "filename": "libspm_core_native.so",
+      "sha256": "D6023DC65442A2B1976C70A0E8098D5A24756FFC4335C98D034589B5CF7C3A27",
+      "abi": 1,
+      "version": "1.3.0"
+    },
+    {
+      "platform": "linux-arm64",
+      "filename": "libspm_core_native.so",
+      "sha256": "9A80B93FCC733CD741E4FB9721BF58B27CF989F5F6BA2F4496CCD1DD355B7404",
+      "abi": 1,
+      "version": "1.3.0"
+    },
+    {
+      "platform": "linux-riscv64",
+      "filename": "libspm_core_native.so",
+      "sha256": "F75A5C88B5C838066A935EA133B855B481AD1604CB9437367D00965B048B87D9",
+      "abi": 1,
+      "version": "1.3.0"
+    },
+    {
+      "platform": "linux-loongarch64",
+      "filename": "libspm_core_native.so",
+      "sha256": "932568C203C8D165ECD5EE95B7F1385833ACDCC066519E3CA2717AE848315F43",
+      "abi": 1,
+      "version": "1.3.0"
+    },
+    {
+      "platform": "macos-x64",
+      "filename": "libspm_core_native.dylib",
+      "sha256": "DDEA4FA9D49919725A478CBD2B02D63C3091765296A48B9027B6DAE223C7A334",
+      "abi": 1,
+      "version": "1.3.0"
+    },
+    {
+      "platform": "macos-arm64",
+      "filename": "libspm_core_native.dylib",
+      "sha256": "ED4963F0B7E0E21179A639DCA377633268E744DC447E13EB2DF46756BB2D8FDC",
+      "abi": 1,
+      "version": "1.3.0"
+    },
+    {
+      "platform": "android-arm64",
+      "filename": "libspm_core_native.so",
+      "sha256": "D3B0698F9EA785C155198E8CC01D8268D0A8417AA1C42DC471213A42C3735FE2",
+      "abi": 1,
+      "version": "1.3.0"
+    },
+    {
+      "platform": "android-arm32",
+      "filename": "libspm_core_native.so",
+      "sha256": "4E10BF0DA5A127EF51C5E3F111DF632E0DFB260BBC02BC8E14A67BE22102AB85",
+      "abi": 1,
+      "version": "1.3.0"
     }
   ]
 }

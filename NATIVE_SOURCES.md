@@ -8,7 +8,7 @@ binaries bundled with this release line.
 ## Source provenance
 
 - Upstream independent core repository: [AIH-Interactive/spm-core](https://github.com/AIH-Interactive/spm-core)
-- Source revision: `166402d4707e01b17a9b87a8631e18768eb3c1eb`
+- Source revision: `3cffa18799a4caff1a6147fa9c0202add60cfa98`
 - Rust workspace: `native-rust/` (`spm-native-abi`, `spm-render-scalar`, `spm-render-simd`, `spm-native-jni`)
 - License: MIT; see the repository `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md`.
 
@@ -30,13 +30,17 @@ SHA-256 digest in `common/src/main/resources/native-manifest.json`:
 
 | Target | Packaged file | SHA-256 |
 | --- | --- | --- |
-| Windows x64 | `natives/windows-x64/spm_core_native.dll` | `0F399A91AECC0A201D6CE26D6E9BB6727BA26D33C9D2DAA906D2BCEE7923C087` |
-| Windows x86 | `natives/windows-x86/spm_core_native.dll` | `6E91B6560E465AFE540B090167259E63B6A8075F80E9439CEA3E3153B2420690` |
-| Linux x64 | `natives/linux-x64/libspm_core_native.so` | `24C85D286F59DEDA33E91AD3BF9383743D745236F734B2BC5C67FD128424156D` |
-| Linux ARM64 | `natives/linux-arm64/libspm_core_native.so` | `FEF3797E4964AFF198E228FB15320BB79A949BD58DE9D73519E2AB759BA052CC` |
-| macOS x64 | `natives/macos-x64/libspm_core_native.dylib` | `619DA06023BF393FB1ACADCED860F67A18566A2892E79ED9079B68188A2E4E75` |
-| macOS ARM64 | `natives/macos-arm64/libspm_core_native.dylib` | `EECE73913C8B02B9E8793EFF445B98AE39F0D2BFCF8176103565B862D4CEF3B0` |
-| Android ARM64 | `natives/android-arm64/libspm_core_native.so` | `AA858F464A18115A6C4170714515D7D431D65B9AC42F8E5D5F128A8315314A62` |
+| Windows x64 | `natives/windows-x64/spm_core_native.dll` | `9B5AAD7EC12B343D30FB070843F8F74C4700BEE1F4B61D9D908E2A62FCBD695D` |
+| Windows x86 | `natives/windows-x86/spm_core_native.dll` | `869A1526E1D11048453FB061624B364922C5F3E399D291846E5AE2D66E770C56` |
+| Windows ARM64 | `natives/windows-arm64/spm_core_native.dll` | `65B8E26126508FC7520E3073CBB7001646024667B1FDBA193861BFFAC35A25DC` |
+| Linux x64 | `natives/linux-x64/libspm_core_native.so` | `D6023DC65442A2B1976C70A0E8098D5A24756FFC4335C98D034589B5CF7C3A27` |
+| Linux ARM64 | `natives/linux-arm64/libspm_core_native.so` | `9A80B93FCC733CD741E4FB9721BF58B27CF989F5F6BA2F4496CCD1DD355B7404` |
+| Linux RISC-V 64 | `natives/linux-riscv64/libspm_core_native.so` | `F75A5C88B5C838066A935EA133B855B481AD1604CB9437367D00965B048B87D9` |
+| Linux LoongArch64 | `natives/linux-loongarch64/libspm_core_native.so` | `932568C203C8D165ECD5EE95B7F1385833ACDCC066519E3CA2717AE848315F43` |
+| macOS x64 | `natives/macos-x64/libspm_core_native.dylib` | `DDEA4FA9D49919725A478CBD2B02D63C3091765296A48B9027B6DAE223C7A334` |
+| macOS ARM64 | `natives/macos-arm64/libspm_core_native.dylib` | `ED4963F0B7E0E21179A639DCA377633268E744DC447E13EB2DF46756BB2D8FDC` |
+| Android ARM64 | `natives/android-arm64/libspm_core_native.so` | `D3B0698F9EA785C155198E8CC01D8268D0A8417AA1C42DC471213A42C3735FE2` |
+| Android ARM32 | `natives/android-arm32/libspm_core_native.so` | `4E10BF0DA5A127EF51C5E3F111DF632E0DFB260BBC02BC8E14A67BE22102AB85` |
 
 The Java project verifies these digests and expected JNI ABI symbols through
 `gradle/verify-native-abi.gradle`.
