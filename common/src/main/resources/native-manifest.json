@@ -53,6 +53,13 @@
       "sha256": "9C17E19589920653BE8B64A23D59E0CDE5327CBFE166FFE288914DB90B95A697",
       "abi": 1,
       "version": "1.2.0"
+    },
+    {
+      "platform": "windows-arm64",
+      "filename": "spm_core_native.dll",
+      "sha256": "4450CFCC7D74644E7A14FDBB0F3B7ED6DDA107EBFE22D9C88AA29286BCFA6A7A",
+      "abi": 1,
+      "version": "1.2.0"
     }
   ]
 }
