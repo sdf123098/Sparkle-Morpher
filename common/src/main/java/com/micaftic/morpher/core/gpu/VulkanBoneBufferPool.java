@@ -20,11 +20,11 @@ final class VulkanBoneBufferPool implements AutoCloseable {
             if (lease.reserved) continue;
             if (lease.fence != null) {
                 if (!lease.fence.awaitCompletion(0)) continue;
-                if (lease.nativeComputed) VulkanBoneStorage.nativeDrawCompleted();
+                if (lease.ssboSubmitted) VulkanBoneStorage.ssboDrawCompleted();
                 lease.fence.close();
                 lease.fence = null;
             }
-            lease.nativeComputed = false;
+            lease.ssboSubmitted = false;
             lease.reserved = true;
             return lease;
         }
@@ -46,7 +46,7 @@ final class VulkanBoneBufferPool implements AutoCloseable {
 
     final class Lease {
         final GpuBuffer buffer;
-        boolean nativeComputed;
+        boolean ssboSubmitted;
         private GpuFence fence;
         private boolean reserved = true;
         private Lease(GpuBuffer buffer) { this.buffer = buffer; }

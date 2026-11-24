@@ -13,7 +13,6 @@ import com.micaftic.morpher.core.api.item.WeaponKind;
 import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
 
 public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<SpmPlayerEntity> {
 
@@ -34,20 +33,25 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<S
             if (InputStateKey.getTicksUsingItem(player) == 1 && animatable.getPositionTracker().markProcessed(LANCE_USE_MARKER)) {
                 event.getController().stopTransition();
             }
-            ItemStack itemStack = player.getMainHandItem();
             String animation = selectAnimation(animatable, LanceAnimationTiming.selectChargeNames(lance));
-            applyKineticChargeAnimationTickOverride(event, itemStack, lance.useTicks(), animation == null ? null : animatable.getAnimation(animation));
-            return playIfPresent(event, animation, CodedLoopMode.LOOP);
+            ClipSpec clip = animation == null ? null : animatable.getAnimation(animation);
+            if (clip != null && event.getController() != null) {
+                float useTicks = InputStateKey.getTicksUsingItem(player, event.getPartialTick());
+                double speed = LanceAnimationTiming.computeChargePlaybackSpeed(
+                        player.getMainHandItem(), useTicks, clip, event.getController().getCurrentAnimTimeSeconds());
+                event.getController().setPlaybackSpeed(speed);
+            }
+            CodedLoopMode loopMode = resolveUseLoopMode(clip);
+            return playIfPresent(event, animation, loopMode);
         }
 
         if (lance.jabbing() || lance.lunging()) {
             if (shouldRestartAttackAnimation(player) && animatable.getPositionTracker().markProcessed(LANCE_ATTACK_MARKER)) {
                 event.getController().stopTransition();
             }
-            event.getController().setAnimationTickOverride(InputStateKey.getSwingAnimationTicks(player, event.getPartialTick()));
             String animation = lance.lunging()
-                    ? selectAnimation(animatable, "lance_lunge", "lance_jab", "swing:lance")
-                    : selectAnimation(animatable, "lance_jab", "swing:lance");
+                    ? selectAnimation(animatable, "lance_lunge", "lance_jab", "swing:lance", "swing:spear")
+                    : selectAnimation(animatable, "lance_jab", "swing:lance", "swing:spear");
             return playIfPresent(event, animation, CodedLoopMode.PLAY_ONCE);
         }
 
@@ -56,9 +60,10 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<S
         }
 
         String animation = lance.riding()
-                ? selectAnimation(animatable, "lance_riding_idle", "lance_stand", "hold_mainhand:lance")
-                : selectAnimation(animatable, "lance_stand", "hold_mainhand:lance");
-        return playIfPresent(event, animation, CodedLoopMode.LOOP);
+                ? selectAnimation(animatable, "lance_riding_idle", "lance_stand", "hold_mainhand:lance", "hold_mainhand:spear")
+                : selectAnimation(animatable, "lance_stand", "hold_mainhand:lance", "hold_mainhand:spear");
+        ClipSpec holdClip = animation == null ? null : animatable.getAnimation(animation);
+        return playIfPresent(event, animation, resolveUseLoopMode(holdClip));
     }
 
     private boolean shouldRestartAttackAnimation(LocalPlayer player) {
@@ -83,11 +88,10 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<S
         return null;
     }
 
-    private void applyKineticChargeAnimationTickOverride(HostActionEvent<SpmPlayerEntity> event, ItemStack itemStack, float useTicks, ClipSpec animation) {
-        float animationTick = LanceAnimationTiming.sampleKineticChargeAnimationTick(itemStack, useTicks, animation);
-        if (animationTick >= 0.0f) {
-            event.getController().setAnimationTickOverride(animationTick);
-        }
+    private static CodedLoopMode resolveUseLoopMode(ClipSpec animation) {
+        return animation != null && animation.loopMode() == CodedLoopMode.HOLD_ON_LAST_FRAME
+                ? CodedLoopMode.HOLD_ON_LAST_FRAME
+                : CodedLoopMode.LOOP;
     }
 
     private HostPlayState.Decision playIfPresent(HostActionEvent<SpmPlayerEntity> event, String animationName, CodedLoopMode loopMode) {

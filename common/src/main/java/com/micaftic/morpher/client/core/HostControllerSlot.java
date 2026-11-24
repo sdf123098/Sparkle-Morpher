@@ -139,9 +139,18 @@ public class HostControllerSlot<T extends HostAnimatable<?>> {
         return this.finished;
     }
 
-    public CodedControllerCommand evaluateCommand(HostActionEvent<T> event, boolean hasSoundOverride) {
+    /**
+     * Called by the host once a fixed simulation step has actually consumed the last command.
+     * Core only applies {@code reset}/{@code reload} inside a fixed step; render frames that execute
+     * zero steps (any frame rate above the step rate) must keep the request latched, otherwise a
+     * swing restart requested on such a frame is silently lost.
+     */
+    public void acknowledgeCommandDelivery() {
         this.pendingReset = false;
         this.pendingReload = false;
+    }
+
+    public CodedControllerCommand evaluateCommand(HostActionEvent<T> event, boolean hasSoundOverride) {
         this.requestedSpeed = 1.0;
         event.setController(this);
         HostPlayState.Decision decision;
@@ -165,6 +174,7 @@ public class HostControllerSlot<T extends HostAnimatable<?>> {
 
         if (decision == HostPlayState.Decision.STOP) {
             this.requestedAnimation = "";
+            this.pendingReload = false;
         }
         CodedPlayDecision coreDecision = switch (decision) {
             case CONTINUE -> CodedPlayDecision.CONTINUE;

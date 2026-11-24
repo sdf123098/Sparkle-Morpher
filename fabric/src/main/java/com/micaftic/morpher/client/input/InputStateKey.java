@@ -213,6 +213,28 @@ public class InputStateKey {
         return 0.0f;
     }
 
+    public static boolean isVanillaSwinging(LivingEntity entity, InteractionHand hand) {
+        if (entity == null || entity.isSleeping()) {
+            return false;
+        }
+        if (hand == InteractionHand.MAIN_HAND && isUsingLocalOffhandShield(entity)) {
+            return false;
+        }
+        return entity.isSwinging() && entity.getCurrentSwing() != null && entity.getCurrentSwing().hand() == hand;
+    }
+
+    public static boolean isVanillaAnyHandSwinging(LivingEntity entity) {
+        return isVanillaSwinging(entity, InteractionHand.MAIN_HAND)
+                || isVanillaSwinging(entity, InteractionHand.OFF_HAND);
+    }
+
+    public static float getVanillaAttackProgress(LivingEntity entity, float partialTick) {
+        if (entity == null || entity.isSleeping() || isUsingLocalOffhandShield(entity)) {
+            return 0.0f;
+        }
+        return entity.isSwinging() ? entity.getSwingAnimation(partialTick) : 0.0f;
+    }
+
     public static boolean isSwinging(LivingEntity entity, InteractionHand hand) {
         if (entity == null || entity.isSleeping()) {
             return false;

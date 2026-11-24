@@ -48,16 +48,16 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
             }
             String use = selectUseAnimation(animatable, usedHand);
             if (use != null) {
-                return IAnimationPredicate.playAnimationWithLoop(event, use, CodedLoopMode.LOOP);
+                return IAnimationPredicate.playContinuousAnimation(event, use);
             }
         }
         String hold = selectHoldAnimation(animatable, InteractionHand.MAIN_HAND);
         if (hold != null) {
-            return IAnimationPredicate.playAnimationWithLoop(event, hold, CodedLoopMode.LOOP);
+            return IAnimationPredicate.playContinuousAnimation(event, hold);
         }
         String offhandHold = selectHoldAnimation(animatable, InteractionHand.OFF_HAND);
         if (offhandHold != null) {
-            return IAnimationPredicate.playAnimationWithLoop(event, offhandHold, CodedLoopMode.LOOP);
+            return IAnimationPredicate.playContinuousAnimation(event, offhandHold);
         }
         return HostPlayState.Decision.STOP;
     }
@@ -73,6 +73,9 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
             String classified = prefix + ":" + itemType;
             if (hasAnimation(entity, classified)) {
                 return classified;
+            }
+            if ("spear".equals(itemType) && hasAnimation(entity, prefix + ":lance")) {
+                return prefix + ":lance";
             }
         }
         return hasAnimation(entity, prefix) ? prefix : null;
@@ -90,6 +93,12 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
             if (hasAnimation(entity, classified)) {
                 return classified;
             }
+            if ("spear".equals(useName) && hasAnimation(entity, prefix + ":lance")) {
+                return prefix + ":lance";
+            }
+            if ("trident".equals(useName) && hasAnimation(entity, prefix + ":spear")) {
+                return prefix + ":spear";
+            }
         }
         return hasAnimation(entity, prefix) ? prefix : null;
     }
@@ -101,6 +110,9 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
             String classified = "swing:" + itemType;
             if (hasAnimation(entity, classified)) {
                 return classified;
+            }
+            if ("spear".equals(itemType) && hasAnimation(entity, "swing:lance")) {
+                return "swing:lance";
             }
         }
         String handFallback = hand == InteractionHand.MAIN_HAND ? "swing_hand" : "swing_offhand";

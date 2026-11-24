@@ -10,11 +10,17 @@ import net.minecraft.client.renderer.state.gui.pip.GuiEntityRenderState;
 public final class NativeCardPreviewCache {
     // PIP owns an RGBA8 and a depth32 texture: 8M pixels bounds their storage to 64 MiB.
     private static final CardPreviewTexturePool<CachedRenderer> CACHE = new CardPreviewTexturePool<>(96, 8_388_608L);
+    private static long pendingPrepareNanos;
 
     private NativeCardPreviewCache() { }
 
     public static void beginFrame() { CACHE.beginFrame(); }
-    public static void clear() { CACHE.clear(); }
+    public static void clear() { CACHE.clear(); pendingPrepareNanos = 0L; }
+    public static long consumePrepareNanos() {
+        long elapsed = pendingPrepareNanos;
+        pendingPrepareNanos = 0L;
+        return elapsed;
+    }
 
     public static Object reserve(Object stableKey, int width, int height, boolean refreshAllowed) {
         int guiScale = Math.max(1,Minecraft.getInstance().getWindow().getGuiScale());
@@ -60,7 +66,9 @@ public final class NativeCardPreviewCache {
                 return;
             }
             if (!request.refreshAllowed()) return;
+            long started = System.nanoTime();
             super.prepare(state, gui, dispatcher, scale);
+            pendingPrepareNanos += Math.max(0L, System.nanoTime() - started);
             revision = request.revision();
             ready = true;
         }

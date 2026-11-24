@@ -5,7 +5,6 @@ import com.micaftic.morpher.capability.PlayerCapability;
 import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.client.animation.condition.ConditionManager;
 import com.micaftic.morpher.client.animation.condition.ConditionSwing;
-import com.micaftic.morpher.client.animation.condition.InnerClassify;
 import com.micaftic.morpher.client.core.HostActionEvent;
 import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
@@ -14,7 +13,6 @@ import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.client.model.ModelActionProfile;
 import com.micaftic.morpher.client.model.ModelAssembly;
 import com.micaftic.morpher.client.model.PlayerModelBundle;
-import com.micaftic.morpher.core.api.item.WeaponKind;
 import com.micaftic.morpher.core.compat.ironsspellbooks.SpellbooksCompat;
 import com.micaftic.morpher.core.compat.slashblade.SlashBladeCompat;
 import com.micaftic.morpher.core.config.ConfigPolicies;
@@ -71,30 +69,37 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 String str2 = conditionSwing.doTest(livingEntity, swingingHand);
                 if (StringUtils.isNoneBlank(str2)) {
                     debugSwingSelection(event, livingEntity, swingingHand, str2, hasLocalSwingPulse ? "local-condition" : "condition");
-                    applyLanceSwingTickOverride(event, livingEntity, swingingHand);
                     return IAnimationPredicate.playAnimationWithLoop(event, str2, CodedLoopMode.PLAY_ONCE);
                 }
             }
             String fallback = getFallbackSwingAnimation(event, livingEntity, swingingHand);
             if (fallback != null) {
                 debugSwingSelection(event, livingEntity, swingingHand, fallback, hasLocalSwingPulse ? "local-fallback" : "fallback");
-                applyLanceSwingTickOverride(event, livingEntity, swingingHand);
                 return IAnimationPredicate.playAnimationWithLoop(event, fallback, CodedLoopMode.PLAY_ONCE);
             }
             debugSwingSelection(event, livingEntity, swingingHand, "none", hasLocalSwingPulse ? "local-missing" : "missing");
+        } else {
+            event.getAnimatable().getPositionTracker().resetVanillaSwingTracking();
         }
         return HostPlayState.Decision.CONTINUE;
     }
 
     private static boolean shouldStartSwingAnimation(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
-        if (hasLocalSwingPulse) {
-            boolean pulseJustStarted = event.getAnimatable().getPositionTracker()
-                    .markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
-            return pulseJustStarted
-                    && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
+        var tracker = event.getAnimatable().getPositionTracker();
+        boolean vanillaSwinging = InputStateKey.isVanillaAnyHandSwinging(entity);
+        float vanillaProgress = vanillaSwinging ? InputStateKey.getVanillaAttackProgress(entity, event.getPartialTick()) : 0.0f;
+        boolean pulseJustStarted = hasLocalSwingPulse
+                && tracker.markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
+        boolean suppressVanillaInitialStart = pulseJustStarted
+                || (hasLocalSwingPulse && InputStateKey.getLocalSwingPulseAge() <= 1);
+        boolean vanillaRestarted = tracker.consumeVanillaSwingRestart(
+                vanillaSwinging, vanillaProgress, suppressVanillaInitialStart);
+        if (pulseJustStarted || vanillaRestarted) {
+            return tracker.markProcessed(SWING_START_MARKER);
         }
-        return InputStateKey.getSwingTicks(entity, event.getPartialTick()) < 1.0f
-                && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
+        return !hasLocalSwingPulse
+                && InputStateKey.getSwingTicks(entity, event.getPartialTick()) < 1.0f
+                && tracker.markProcessed(SWING_START_MARKER);
     }
 
     private static boolean isLocalSwingTarget(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity) {
@@ -106,16 +111,6 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
             return true;
         }
         return InputStateKey.isLocalPlayerEntity(event.getAnimatable().getEntity());
-    }
-
-    private static void applyLanceSwingTickOverride(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand) {
-        if (InputStateKey.isLocalPlayerEntity(entity) && isLanceLike(InnerClassify.getWeaponKind(entity.getItemInHand(hand)))) {
-            event.getController().setAnimationTickOverride(InputStateKey.getSwingAnimationTicks(entity, event.getPartialTick()));
-        }
-    }
-
-    private static boolean isLanceLike(WeaponKind kind) {
-        return kind == WeaponKind.LANCE || kind == WeaponKind.SPEAR;
     }
 
     private static void debugSwingEntry(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {

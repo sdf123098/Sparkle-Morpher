@@ -177,9 +177,6 @@ public final class RenderBackendDecision {
             if (!AccelerationCapability.canRenderSimd()) {
                 return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD unavailable: " + AccelerationCapability.getReason());
             }
-            if (isPreview) {
-                return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD disabled for preview (unvalidated)");
-            }
             if (translucentTexture) {
                 return new RenderBackendDecision(Backend.JAVA, "java fallback: " + gpuReason + "; native SIMD disabled for translucent texture (unvalidated)");
             }

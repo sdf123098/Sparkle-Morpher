@@ -204,7 +204,7 @@ public final class GeometryBaker {
         }
         stats.importBakeMillis = (System.nanoTime() - bakeStart) / 1_000_000L;
         logModelOptimizationStats(stats);
-        if (RuntimeAccelerationLoader.isLoaded()) mesh.ensureComputeCache();
+        mesh.ensureComputeCache();
         return mesh;
     }
 

@@ -50,40 +50,50 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
                 if (conditionUse != null) {
                     String str = conditionUse.doTest(livingEntity, usedHand);
                     if (StringUtils.isNoneBlank(str)) {
-                        return playUseAnimation(event, livingEntity, usedHand, str, i);
+                        return playUseAnimation(event, livingEntity, usedHand, usedArm, str);
                     }
                 }
-                return playUseAnimation(event, livingEntity, usedHand, "use_mainhand", i);
+                return playUseAnimation(event, livingEntity, usedHand, usedArm, "use_mainhand");
             }
             ConditionUse conditionUse2 = conditionManager.getUseOffhand();
             if (conditionUse2 != null) {
                 String str2 = conditionUse2.doTest(livingEntity, usedHand);
                 if (StringUtils.isNoneBlank(str2)) {
-                    return playUseAnimation(event, livingEntity, usedHand, str2, i);
+                    return playUseAnimation(event, livingEntity, usedHand, usedArm, str2);
                 }
             }
-            return playUseAnimation(event, livingEntity, usedHand, "use_offhand", i);
+            return playUseAnimation(event, livingEntity, usedHand, usedArm, "use_offhand");
         }
         return HostPlayState.Decision.STOP;
     }
 
-    private HostPlayState.Decision playUseAnimation(HostActionEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, InteractionHand usedHand, String animation, int version) {
+    private HostPlayState.Decision playUseAnimation(HostActionEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, InteractionHand usedHand, HumanoidArm usedArm, String animation) {
         ItemStack itemStack = livingEntity.getItemInHand(usedHand);
         if (isLanceUse(itemStack)) {
-            WeaponActionState state = WeaponActionBridge.get(livingEntity, event.getPartialTick());
-            if (isLanceLike(state.kind())) {
-                ClipSpec targetAnimation = event.getAnimatable().getAnimation(animation);
-                ResolvedAnimation resolved = pickFirstAvailable(event, LanceAnimationTiming.selectChargeNames(state.lance()));
-                if (resolved != null) {
-                    animation = resolved.name();
-                    targetAnimation = resolved.animation();
-                } else if (state.kind() == WeaponKind.SPEAR) {
-                    return HostPlayState.Decision.STOP;
+            ResolvedAnimation resolved = null;
+            if (usedHand == InteractionHand.MAIN_HAND) {
+                WeaponActionState state = WeaponActionBridge.get(livingEntity, event.getPartialTick());
+                if (isLanceLike(state.kind())) {
+                    resolved = pickFirstAvailable(event, LanceAnimationTiming.selectChargeNames(state.lance(), usedArm));
                 }
-                applyKineticChargeAnimationTickOverride(event, itemStack, state.lance().useTicks(), targetAnimation);
+            } else {
+                resolved = pickFirstAvailable(event, LanceAnimationTiming.selectChargeNames(WeaponActionBridge.get(livingEntity, event.getPartialTick()).lance(), usedArm));
+            }
+            if (resolved != null) {
+                animation = resolved.name();
+                if (event.getController() != null) {
+                    float useTicks = InputStateKey.getTicksUsingItem(livingEntity, event.getPartialTick());
+                    double speed = LanceAnimationTiming.computeChargePlaybackSpeed(
+                            itemStack, useTicks, resolved.animation(), event.getController().getCurrentAnimTimeSeconds());
+                    event.getController().setPlaybackSpeed(speed);
+                }
             }
         }
-        return IAnimationPredicate.playAnimationWithValid(event, animation, CodedLoopMode.LOOP, version);
+        return playContinuousUseAnimation(event, animation);
+    }
+
+    static HostPlayState.Decision playContinuousUseAnimation(HostActionEvent<? extends LivingAnimatable<?>> event, String animation) {
+        return IAnimationPredicate.playContinuousAnimation(event, animation);
     }
 
     private ResolvedAnimation pickFirstAvailable(HostActionEvent<LivingAnimatable<?>> event, String[] names) {
@@ -95,13 +105,6 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
             }
         }
         return null;
-    }
-
-    private void applyKineticChargeAnimationTickOverride(HostActionEvent<LivingAnimatable<?>> event, ItemStack itemStack, float useTicks, ClipSpec animation) {
-        float animationTick = LanceAnimationTiming.sampleKineticChargeAnimationTick(itemStack, useTicks, animation);
-        if (animationTick >= 0.0f) {
-            event.getController().setAnimationTickOverride(animationTick);
-        }
     }
 
     private boolean isLanceUse(ItemStack itemStack) {

@@ -2,7 +2,6 @@ package com.micaftic.morpher.core.gpu;
 
 import com.micaftic.morpher.client.render.BuiltModel;
 import com.micaftic.morpher.core.config.ConfigPolicies;
-import com.micaftic.morpher.core.acceleration.AccelerationCapability;
 import com.micaftic.morpher.core.render.Blaze3D26_2Capability;
 import com.mojang.renderpearl.api.pipeline.IndexType;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
@@ -40,10 +39,7 @@ public final class Blaze3DRenderPath {
     private static final Map<BuiltModel, Blaze3DModelMesh> meshCache = Collections.synchronizedMap(new WeakHashMap<>());
     private static final Matrix4f IDENTITY_MATRIX = new Matrix4f();
     private static final Vector3f overlayScratch = new Vector3f();
-    private static final float[] rootPoseScratch = new float[16];
-    private static final float[] rootNormalScratch = new float[9];
-    private static final AtomicBoolean reportedNativeStorageDraw = new AtomicBoolean();
-    private static final AtomicBoolean warnedNativeStorageFallback = new AtomicBoolean();
+    private static final AtomicBoolean reportedStorageDraw = new AtomicBoolean();
 
     private Blaze3DRenderPath() {
     }
@@ -76,7 +72,6 @@ public final class Blaze3DRenderPath {
             Blaze3DModelMesh mesh = getOrBuildMesh(model);
             if (mesh == null) return null;
             ByteBuffer bones = mesh.perFrameBoneBuffer;
-            boolean nativeComputed = false;
             if (!Blaze3DBoneMatrices.write(model, pose.pose(), pose.normal(), boneParams, stateBuffer, packedLight, bones)) return null;
             if (bonePass != com.micaftic.morpher.client.render.ModelRendererBridge.BoneRenderPass.ALL) {
                 for (int i = 0; i < model.bakedBones.size(); i++) {
@@ -98,10 +93,10 @@ public final class Blaze3DRenderPath {
                     overlayTexture.getTextureView(), lightmap, renderPartMask,
                     outline ? Blaze3DBoneSkinPipeline.OUTLINE_PIPELINE : translucent
                             ? Blaze3DBoneSkinPipeline.TRANSLUCENT_PIPELINE : Blaze3DBoneSkinPipeline.PIPELINE,
-                    RenderSystem.getScissorStateForRenderTypeDraws(), nativeComputed);
+                    RenderSystem.getScissorStateForRenderTypeDraws());
         } catch (Throwable failure) {
             if (lease != null) lease.retire();
-            com.micaftic.morpher.YesSteveModel.LOGGER.error("[SM-VULKAN-SSBO] prepare failed; native/GPU chain was not accepted", failure);
+            com.micaftic.morpher.YesSteveModel.LOGGER.error("[SM-VULKAN-SSBO] prepare failed; GPU skinning chain was not accepted", failure);
             return null;
         }
     }
@@ -117,15 +112,14 @@ public final class Blaze3DRenderPath {
         private final int partMask;
         private final RenderPipeline pipeline;
         private final com.mojang.blaze3d.systems.ScissorState scissor;
-        private final boolean nativeComputed;
 
         private PreparedDraw(Blaze3DModelMesh mesh, VulkanBoneBufferPool.Lease bones,
                 Vector4f color, int packedOverlay, GpuTextureView texture, GpuSampler sampler,
                 GpuTextureView overlay, GpuTextureView lightmap, int partMask, RenderPipeline pipeline,
-                com.mojang.blaze3d.systems.ScissorState scissor, boolean nativeComputed) {
+                com.mojang.blaze3d.systems.ScissorState scissor) {
             this.mesh = mesh; this.bones = bones; this.color = color; this.packedOverlay = packedOverlay; this.texture = texture;
             this.sampler = sampler; this.overlay = overlay; this.lightmap = lightmap;
-            this.partMask = partMask; this.pipeline = pipeline; this.scissor = scissor; this.nativeComputed = nativeComputed;
+            this.partMask = partMask; this.pipeline = pipeline; this.scissor = scissor;
         }
 
         public void prepareView() {
@@ -148,14 +142,14 @@ public final class Blaze3DRenderPath {
             pass.setVertexBuffer(0, mesh.vertexSlice());
             pass.setIndexBuffer(mesh.indexBuffer, IndexType.INT);
             drawMeshParts(pass, mesh, partMask);
-            bones.nativeComputed = nativeComputed;
+            bones.ssboSubmitted = true;
             if (partMask != 0) VulkanBoneStorage.drawPhase("part_mask_" + partMask);
             VulkanBoneStorage.drawPhase(stage != null ? "oit_" + stage : pipeline == Blaze3DBoneSkinPipeline.OUTLINE_PIPELINE ? "outline"
                     : pipeline == Blaze3DBoneSkinPipeline.TRANSLUCENT_PIPELINE ? "translucent" : "opaque");
-            if (nativeComputed) VulkanBoneStorage.nativeDrawSubmitted();
-            if (nativeComputed && reportedNativeStorageDraw.compareAndSet(false, true)) {
+            VulkanBoneStorage.ssboDrawSubmitted();
+            if (reportedStorageDraw.compareAndSet(false, true)) {
                 com.micaftic.morpher.YesSteveModel.LOGGER.info(
-                        "[SM-VULKAN-SSBO] native SIMD -> storage buffer -> GPU skinning draw submitted; GPU completion and screen pixels require validation");
+                        "[SM-VULKAN-SSBO] zero-alloc bone storage buffer -> GPU skinning draw submitted");
             }
         }
 
