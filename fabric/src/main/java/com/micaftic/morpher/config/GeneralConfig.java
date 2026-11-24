@@ -178,8 +178,8 @@ public class GeneralConfig {
         USE_COMPATIBILITY_RENDERER = builder.define("UseCompatibilityRenderer", false);
         builder.comment("Test renderer.");
         USE_GPU_RENDERER = builder.define("UseGpuRenderer", true);
-        builder.comment("Native SIMD renderer policy. OFF disables the native path; SAFE and AGGRESSIVE are retained as compatibility modes.");
-        NATIVE_SIMD_POLICY = builder.defineEnum("NativeSimdPolicy", NativeSimdPolicy.AGGRESSIVE);
+        builder.comment("Native SIMD renderer policy. OFF uses the direct Java/GPU path without per-frame off-heap vertex marshaling (default). SAFE and AGGRESSIVE opt back into native CPU vertex transformation.");
+        NATIVE_SIMD_POLICY = builder.defineEnum("NativeSimdPolicy", NativeSimdPolicy.OFF);
         builder.comment("Render ysmGlow bones with normal entity lighting while a shader pack is active.");
         DISABLE_MODEL_GLOW_IN_SHADERPACK = builder.define("DisableModelGlowInShaderpack", true);
         builder.comment("Disable the per-cube face cull baked into models. Turn this on if a model loses faces/parts at certain angles. Changing it reloads models.");

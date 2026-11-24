@@ -26,6 +26,17 @@ final class LegacyCardPreviewCache {
     private static final int MAX_PHYSICAL_SIZE = 256;
     private final PreviewTexturePool<Key, Image> images = new PreviewTexturePool<>(
             32, 24L * 1024 * 1024, image -> image.target.destroyBuffers());
+    private long pendingRenderNanos;
+
+    long consumeRenderNanos() {
+        long elapsed = pendingRenderNanos;
+        pendingRenderNanos = 0L;
+        return elapsed;
+    }
+
+    void resetRenderNanos() {
+        pendingRenderNanos = 0L;
+    }
 
     private record Key(Object source, int width, int height, int physicalWidth, int physicalHeight,
                        float originX, float originY, float scale, boolean fixed, boolean hide, float yaw) {}
@@ -79,7 +90,9 @@ final class LegacyCardPreviewCache {
                 projectionSaved = true;
                 RenderSystem.setProjectionMatrix(
                         new Matrix4f().setOrtho(0, width, height, 0, 1000, 21000), VertexSorting.ORTHOGRAPHIC_Z);
+                long startNanos = System.nanoTime();
                 renderLocal(graphics, key, tick, entity, renderer);
+                pendingRenderNanos += Math.max(0L, System.nanoTime() - startNanos);
                 image.revision = revision;
                 image.ready = true;
             } finally {

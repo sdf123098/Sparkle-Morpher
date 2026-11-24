@@ -174,6 +174,10 @@ public abstract class HostAnimatable<TEntity extends Entity> {
         return null;
     }
 
+    public @Nullable com.micaftic.morpher.resource.models.ModelProperties resolveModelProperties() {
+        return null;
+    }
+
     protected @Nullable PoseAnimationLibrary resolveAnimationLibrary() {
         return null;
     }

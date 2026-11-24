@@ -61,16 +61,16 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
             }
             String use = selectUseAnimation(animatable, usedHand);
             if (use != null) {
-                return IAnimationPredicate.playAnimationWithLoop(event, use, CodedLoopMode.LOOP);
+                return IAnimationPredicate.playContinuousAnimation(event, use);
             }
         }
         String hold = selectHoldAnimation(animatable, InteractionHand.MAIN_HAND);
         if (hold != null) {
-            return IAnimationPredicate.playAnimationWithLoop(event, hold, CodedLoopMode.LOOP);
+            return IAnimationPredicate.playContinuousAnimation(event, hold);
         }
         String offhandHold = selectHoldAnimation(animatable, InteractionHand.OFF_HAND);
         if (offhandHold != null) {
-            return IAnimationPredicate.playAnimationWithLoop(event, offhandHold, CodedLoopMode.LOOP);
+            return IAnimationPredicate.playContinuousAnimation(event, offhandHold);
         }
         return HostPlayState.Decision.STOP;
     }

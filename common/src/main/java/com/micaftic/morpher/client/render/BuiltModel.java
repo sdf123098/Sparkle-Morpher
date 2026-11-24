@@ -103,12 +103,14 @@ public class BuiltModel {
     public long gpuMeshHandle = 0;
 
     private volatile @Nullable ComputeCache computeCache;
+    private volatile float[] cachedRenderBounds;
 
     public record PartBatch(VertexBatch vertices, float[] uvs) {
     }
 
     public static final class ComputeCache {
         public final Skeleton skeleton;
+        public final int[] evaluationOrder;
         public final int[] parents;
         public final float[] pivots;
         /** One entry per bone: {@code 0} normal, {@code 1} full-bright. */
@@ -138,6 +140,7 @@ public class BuiltModel {
 
         ComputeCache(Skeleton skeleton, int[] parents, float[] pivots, int[] glow) {
             this.skeleton = skeleton;
+            this.evaluationOrder = skeleton.evaluationOrder();
             this.parents = parents;
             this.pivots = pivots;
             this.glow = glow;
@@ -214,6 +217,9 @@ public class BuiltModel {
 
     public static class BakedQuad {
         public final float[] packedPositions = new float[12];
+        public final float[] soaX = new float[4];
+        public final float[] soaY = new float[4];
+        public final float[] soaZ = new float[4];
         public final float[] packedUvs = new float[8];
         public float normalX, normalY, normalZ;
 
@@ -228,6 +234,9 @@ public class BuiltModel {
             packedPositions[posOffset] = x;
             packedPositions[posOffset + 1] = y;
             packedPositions[posOffset + 2] = z;
+            soaX[index] = x;
+            soaY[index] = y;
+            soaZ[index] = z;
             int uvOffset = index * 2;
             packedUvs[uvOffset] = u;
             packedUvs[uvOffset + 1] = v;
@@ -477,6 +486,47 @@ public class BuiltModel {
     @NotNull
     public GeometryDescription getProperties() {
         return this.properties;
+    }
+
+    /**
+     * Cached {@code {minX, minY, maxX, maxY}} bounds of the baked geometry, in model space.
+     *
+     * <p>The HUD overlay asks for this every frame; rescanning every vertex per frame is what this
+     * cache exists to avoid. The array is shared, so callers must not mutate it.
+     */
+    public float[] getOrComputeRenderBounds() {
+        float[] cached = cachedRenderBounds;
+        if (cached != null) {
+            return cached;
+        }
+        float[] bounds = computeRenderBounds();
+        cachedRenderBounds = bounds;
+        return bounds;
+    }
+
+    private float[] computeRenderBounds() {
+        if (bakedBones != null) {
+            float minX = Float.POSITIVE_INFINITY;
+            float minY = Float.POSITIVE_INFINITY;
+            float maxX = Float.NEGATIVE_INFINITY;
+            float maxY = Float.NEGATIVE_INFINITY;
+            for (BakedBone bone : bakedBones) {
+                for (BakedCube cube : bone.cubes) {
+                    for (BakedQuad quad : cube.quads) {
+                        for (int i = 0; i < 4; i++) {
+                            minX = Math.min(minX, quad.x(i));
+                            minY = Math.min(minY, quad.y(i));
+                            maxX = Math.max(maxX, quad.x(i));
+                            maxY = Math.max(maxY, quad.y(i));
+                        }
+                    }
+                }
+            }
+            if (Float.isFinite(minX) && Float.isFinite(minY) && maxX > minX && maxY > minY) {
+                return new float[]{minX, minY, maxX, maxY};
+            }
+        }
+        return new float[]{-0.5f, 0.0f, 0.5f, 2.0f};
     }
 
     public boolean isTranslucentTexture(int i) {

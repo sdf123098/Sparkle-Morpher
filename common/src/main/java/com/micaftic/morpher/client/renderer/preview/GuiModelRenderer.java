@@ -8,7 +8,13 @@ public final class GuiModelRenderer {
     private static final LegacyCardPreviewCache CARD_PREVIEWS = new LegacyCardPreviewCache();
     /** Legacy snapshots are submitted immediately; there is no deferred frame queue to drain. */
     public static void beginCardPreviewFrame() {}
-    public static void clearCardPreviews() { CARD_PREVIEWS.clear(); }
+    public static void clearCardPreviews() {
+        CARD_PREVIEWS.resetRenderNanos();
+        CARD_PREVIEWS.clear();
+    }
+    public static long consumeCardPreviewNanos() {
+        return CARD_PREVIEWS.consumeRenderNanos();
+    }
     public record DollOptions(float headYawOffset,float headYawOffsetO,boolean alignWithVehicle){
         public static final DollOptions GUI_PREVIEW=new DollOptions(0,0,false);
     }

@@ -81,12 +81,12 @@ public final class ConfigPolicies {
 
     public static GraphicsPolicy graphics() {
         return new GraphicsPolicy(
-                NativeSimdPolicy.AGGRESSIVE,
+                nativeSimdPolicy(value(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.OFF)),
                 bool(GeneralConfig.EXPERIMENTAL_JAVA_VECTOR_RENDERER, false));
     }
 
     private static NativeSimdPolicy nativeSimdPolicy(GeneralConfig.NativeSimdPolicy value) {
-        return value == null ? NativeSimdPolicy.AGGRESSIVE : NativeSimdPolicy.valueOf(value.name());
+        return value == null ? NativeSimdPolicy.OFF : NativeSimdPolicy.valueOf(value.name());
     }
 
     public static AudioPolicy audio() {

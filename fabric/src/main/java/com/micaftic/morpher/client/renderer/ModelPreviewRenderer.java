@@ -508,12 +508,61 @@ public final class ModelPreviewRenderer {
     // 同时让高刷或未限帧场景的额外玩家视图成本保持恒定。
     private static final long EXTRA_PLAYER_GPU_REFRESH_NANOS = 1_000_000_000L / 60L;
     private static final int EXTRA_PLAYER_FBO_PADDING = 2;
+    private static final ModelBounds DEFAULT_EXTRA_PLAYER_BOUNDS = new ModelBounds(-0.5f, 0.0f, 0.5f, 2.0f);
+    private static final SequencedMap<RenderType, ByteBufferBuilder> EXTRA_PLAYER_FBO_TYPE_BUFFERS = new LinkedHashMap<>() {
+        @Override
+        public ByteBufferBuilder get(Object key) {
+            return super.computeIfAbsent((RenderType) key, k -> new ByteBufferBuilder(256));
+        }
+    };
+    private static ByteBufferBuilder extraPlayerFboSharedBuffer;
+    private static MultiBufferSource.BufferSource extraPlayerFboBuffer;
     private static RenderTarget extraPlayerFbo;
     private static int extraPlayerFboWidth = -1;
     private static int extraPlayerFboHeight = -1;
     private static int extraPlayerLastRenderTick = -1;
     private static long extraPlayerLastRenderNanos = -1L;
     private static boolean extraPlayerGpuFastPath;
+
+    private static MultiBufferSource.BufferSource borrowExtraPlayerFboBuffer() {
+        if (extraPlayerFboBuffer == null) {
+            extraPlayerFboSharedBuffer = new ByteBufferBuilder(256);
+            extraPlayerFboBuffer = MultiBufferSource.immediateWithBuffers(EXTRA_PLAYER_FBO_TYPE_BUFFERS, extraPlayerFboSharedBuffer);
+        }
+        return extraPlayerFboBuffer;
+    }
+
+    private static void resetExtraPlayerFboBuffers() {
+        extraPlayerFboBuffer = null;
+        if (extraPlayerFboSharedBuffer != null) {
+            try {
+                extraPlayerFboSharedBuffer.close();
+            } catch (Throwable ignored) {
+            }
+            extraPlayerFboSharedBuffer = null;
+        }
+        for (ByteBufferBuilder builder : EXTRA_PLAYER_FBO_TYPE_BUFFERS.values()) {
+            try {
+                builder.close();
+            } catch (Throwable ignored) {
+            }
+        }
+        EXTRA_PLAYER_FBO_TYPE_BUFFERS.clear();
+    }
+
+    private static long extraPlayerGpuRefreshNanos() {
+        int fps = 60;
+        try {
+            if (ExtraPlayerRenderConfig.CLASSIC_HUD_ANIMATION_SAMPLE_FPS != null) {
+                int configured = ExtraPlayerRenderConfig.CLASSIC_HUD_ANIMATION_SAMPLE_FPS.get();
+                if (configured > 0) {
+                    fps = Math.min(configured, 60);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return 1_000_000_000L / fps;
+    }
 
     public static void renderPlayerOverlay(GuiGraphics guiGraphics, LocalPlayer localPlayer, double x, double y, float scale, float yawOffset, int zDepth, float partialTick) {
         boolean profile = ExtraPlayerRenderProfiler.enabled();
@@ -567,7 +616,7 @@ public final class ModelPreviewRenderer {
         boolean initialRender = extraPlayerLastRenderTick < 0 || extraPlayerLastRenderNanos < 0L;
         boolean refreshDue = initialRender
                 || (extraPlayerGpuFastPath
-                ? renderNanos - extraPlayerLastRenderNanos >= EXTRA_PLAYER_GPU_REFRESH_NANOS
+                ? renderNanos - extraPlayerLastRenderNanos >= extraPlayerGpuRefreshNanos()
                 : tick - extraPlayerLastRenderTick >= EXTRA_PLAYER_FBO_REFRESH_TICKS);
         if (refreshDue) {
             // Finish the outer HUD batch before changing framebuffer. ImmediatelyFast normally
@@ -599,26 +648,27 @@ public final class ModelPreviewRenderer {
                 // 第二次 getBuffer() 会先 endBatch() 掉前一个 builder，随后 Double 写入时触发
                 // BufferBuilder "Not building!"（Sodium 下经 modifyPutBulkData 路径复现；原版同样会崩）。
                 // immediateWithBuffers + 惰性 per-type 映射，等价于主 renderBuffers 的固定缓冲语义。
-                SequencedMap<RenderType, ByteBufferBuilder> fboTypeBuffers = new LinkedHashMap<>() {
-                    @Override
-                    public ByteBufferBuilder get(Object key) {
-                        return super.computeIfAbsent((RenderType) key, k -> new ByteBufferBuilder(256));
-                    }
-                };
-                MultiBufferSource.BufferSource fboBuffer = MultiBufferSource.immediateWithBuffers(fboTypeBuffers, new ByteBufferBuilder(256));
+                MultiBufferSource.BufferSource fboBuffer = borrowExtraPlayerFboBuffer();
                 long modelStart = profile ? System.nanoTime() : 0L;
-                renderOverlayModel(localPlayer, EXTRA_PLAYER_FBO_PADDING, EXTRA_PLAYER_FBO_PADDING,
-                        scale, yawOffset, zDepth, partialTick, fboBuffer, modelBounds);
-                if (profile) {
-                    ExtraPlayerRenderProfiler.recordModel(System.nanoTime() - modelStart);
-                }
-                long batchStart = profile ? System.nanoTime() : 0L;
-                fboBuffer.endBatch();
-                // Accelerated Rendering + ImmediatelyFast may redirect even a private BufferSource
-                // to a shared provider. Flush all GUI work while the old HUD FBO is still bound.
-                guiGraphics.flush();
-                if (profile) {
-                    ExtraPlayerRenderProfiler.recordBatch(System.nanoTime() - batchStart);
+                try {
+                    renderOverlayModel(localPlayer, EXTRA_PLAYER_FBO_PADDING, EXTRA_PLAYER_FBO_PADDING,
+                            scale, yawOffset, zDepth, partialTick, fboBuffer, modelBounds);
+                    if (profile) {
+                        ExtraPlayerRenderProfiler.recordModel(System.nanoTime() - modelStart);
+                    }
+                    long batchStart = profile ? System.nanoTime() : 0L;
+                    fboBuffer.endBatch();
+                    if (isolatedAcceleratedRendering) {
+                        // Accelerated Rendering + ImmediatelyFast may redirect even a private BufferSource
+                        // to a shared provider. Flush all GUI work while the old HUD FBO is still bound.
+                        guiGraphics.flush();
+                    }
+                    if (profile) {
+                        ExtraPlayerRenderProfiler.recordBatch(System.nanoTime() - batchStart);
+                    }
+                } catch (Throwable failure) {
+                    resetExtraPlayerFboBuffers();
+                    throw failure;
                 }
                 extraPlayerLastRenderTick = tick;
                 extraPlayerLastRenderNanos = renderNanos;
@@ -747,28 +797,11 @@ public final class ModelPreviewRenderer {
                 .filter(PlayerCapability::isModelActive)
                 .map(PlayerCapability::getCurrentModel)
                 .orElse(null);
-        if (model != null && model.getGeoModel() != null && model.getGeoModel().bakedBones != null) {
-            float minX = Float.POSITIVE_INFINITY;
-            float minY = Float.POSITIVE_INFINITY;
-            float maxX = Float.NEGATIVE_INFINITY;
-            float maxY = Float.NEGATIVE_INFINITY;
-            for (BuiltModel.BakedBone bone : model.getGeoModel().bakedBones) {
-                for (BuiltModel.BakedCube cube : bone.cubes) {
-                    for (BuiltModel.BakedQuad quad : cube.quads) {
-                        for (int vertex = 0; vertex < 4; vertex++) {
-                            minX = Math.min(minX, quad.x(vertex));
-                            minY = Math.min(minY, quad.y(vertex));
-                            maxX = Math.max(maxX, quad.x(vertex));
-                            maxY = Math.max(maxY, quad.y(vertex));
-                        }
-                    }
-                }
-            }
-            if (Float.isFinite(minX) && Float.isFinite(minY) && maxX > minX && maxY > minY) {
-                return new ModelBounds(minX, minY, maxX, maxY);
-            }
+        if (model != null && model.getGeoModel() != null) {
+            float[] b = model.getGeoModel().getOrComputeRenderBounds();
+            return new ModelBounds(b[0], b[1], b[2], b[3]);
         }
-        return new ModelBounds(-0.5f, 0.0f, 0.5f, 2.0f);
+        return DEFAULT_EXTRA_PLAYER_BOUNDS;
     }
 
     private record ModelBounds(float minX, float minY, float maxX, float maxY) {

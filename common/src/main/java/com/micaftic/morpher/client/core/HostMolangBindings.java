@@ -126,6 +126,30 @@ public final class HostMolangBindings {
     private static final float BOAT_CHEST_BODY_Z_OFFSET = -0.15f * 16.0f;
     private static final float BOAT_DEFAULT_BODY_Y_OFFSET = 0.0f;
     private static final float BOAT_RAFT_BODY_Y_OFFSET = -((0.8888889f - 1.0f / 3.0f) * 0.5625f * 16.0f + 1.0f);
+    private static final EquipmentSlot[] ARMOR_SLOTS = {
+            EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
+    };
+    private static final String[][] CTRL_STATE_ENTRIES = {
+            {ControllerActionResolver.DEATH, "ctrl." + ControllerActionResolver.DEATH},
+            {ControllerActionResolver.RIPTIDE, "ctrl." + ControllerActionResolver.RIPTIDE},
+            {ControllerActionResolver.SLEEP, "ctrl." + ControllerActionResolver.SLEEP},
+            {ControllerActionResolver.SWIM, "ctrl." + ControllerActionResolver.SWIM},
+            {ControllerActionResolver.CLIMB, "ctrl." + ControllerActionResolver.CLIMB},
+            {ControllerActionResolver.CLIMBING, "ctrl." + ControllerActionResolver.CLIMBING},
+            {ControllerActionResolver.LADDER_UP, "ctrl." + ControllerActionResolver.LADDER_UP},
+            {ControllerActionResolver.LADDER_STILLNESS, "ctrl." + ControllerActionResolver.LADDER_STILLNESS},
+            {ControllerActionResolver.LADDER_DOWN, "ctrl." + ControllerActionResolver.LADDER_DOWN},
+            {ControllerActionResolver.FLY, "ctrl." + ControllerActionResolver.FLY},
+            {ControllerActionResolver.ELYTRA_FLY, "ctrl." + ControllerActionResolver.ELYTRA_FLY},
+            {ControllerActionResolver.SWIM_STAND, "ctrl." + ControllerActionResolver.SWIM_STAND},
+            {ControllerActionResolver.ATTACKED, "ctrl." + ControllerActionResolver.ATTACKED},
+            {ControllerActionResolver.JUMP, "ctrl." + ControllerActionResolver.JUMP},
+            {ControllerActionResolver.SNEAK, "ctrl." + ControllerActionResolver.SNEAK},
+            {ControllerActionResolver.SNEAKING, "ctrl." + ControllerActionResolver.SNEAKING},
+            {ControllerActionResolver.RUN, "ctrl." + ControllerActionResolver.RUN},
+            {ControllerActionResolver.WALK, "ctrl." + ControllerActionResolver.WALK},
+            {ControllerActionResolver.IDLE, "ctrl." + ControllerActionResolver.IDLE}
+    };
     private static final Map<String, EquipmentSlot> SLOT_MAP = Map.of(
             "chest", EquipmentSlot.CHEST,
             "feet", EquipmentSlot.FEET,
@@ -294,6 +318,15 @@ public final class HostMolangBindings {
             Map<MolangBindings.Call, MolangValue> sampledCalls,
             boolean effectsAllowed,
             Map<String, CodedControllerCommand> commands) {
+        return buildInputs(event, sampledCalls, effectsAllowed, commands, Map.of());
+    }
+
+    public static SceneInputs buildInputs(
+            HostActionEvent<?> event,
+            Map<MolangBindings.Call, MolangValue> sampledCalls,
+            boolean effectsAllowed,
+            Map<String, CodedControllerCommand> commands,
+            Map<MolangHooks.Phase, List<MolangValue>> hookArguments) {
         ensureExtensionsInitialized();
         Entity entity = event.getAnimatable().getEntity();
         LivingEntity living = entity instanceof LivingEntity le ? le : null;
@@ -366,7 +399,7 @@ public final class HostMolangBindings {
             queries.put("swing_time", swinging ? getSwingTime(event, living) / 20.0 : 0.0);
             queries.put("attack_time", (double) getAttackTime(event, living));
             int armorCount = 0;
-            for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+            for (EquipmentSlot slot : ARMOR_SLOTS) {
                 if (!CosmeticArmorHelper.getArmorItem(living, slot).isEmpty()) armorCount++;
             }
             queries.put("equipment_count", (double) armorCount);
@@ -608,16 +641,8 @@ public final class HostMolangBindings {
 
         // ctrl.* state predicates from authoritative ControllerActionResolver
         String currentCtrlState = ControllerActionResolver.resolve(event);
-        for (String stateKey : new String[]{
-                ControllerActionResolver.DEATH, ControllerActionResolver.RIPTIDE, ControllerActionResolver.SLEEP,
-                ControllerActionResolver.SWIM, ControllerActionResolver.CLIMB, ControllerActionResolver.CLIMBING,
-                ControllerActionResolver.LADDER_UP, ControllerActionResolver.LADDER_STILLNESS, ControllerActionResolver.LADDER_DOWN,
-                ControllerActionResolver.FLY, ControllerActionResolver.ELYTRA_FLY, ControllerActionResolver.SWIM_STAND,
-                ControllerActionResolver.ATTACKED, ControllerActionResolver.JUMP, ControllerActionResolver.SNEAK,
-                ControllerActionResolver.SNEAKING, ControllerActionResolver.RUN, ControllerActionResolver.WALK,
-                ControllerActionResolver.IDLE
-        }) {
-            values.put("ctrl." + stateKey, MolangValue.bool(stateKey.equals(currentCtrlState)));
+        for (String[] entry : CTRL_STATE_ENTRIES) {
+            values.put(entry[1], MolangValue.bool(entry[0].equals(currentCtrlState)));
         }
 
         // External compat vars (ParCool, TaCZ, BetterCombat, CarryOn, SlashBlade, SWEM, Create, IM, ISS, TLM, Curios, SBackpack)
@@ -637,7 +662,7 @@ public final class HostMolangBindings {
                 new MolangBindings(values, sampledCalls),
                 effectsAllowed,
                 syncMode,
-                Map.of(),
+                hookArguments == null ? Map.of() : hookArguments,
                 commands);
     }
 

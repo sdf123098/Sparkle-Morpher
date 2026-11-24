@@ -1052,7 +1052,7 @@ public boolean cloudAvailable() { return CloudClientRuntime.state(state.selected
     }
 
     public GeneralConfig.NativeSimdPolicy nativeSimdPolicy() {
-        return GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.AGGRESSIVE);
+        return GeneralConfig.safeGet(GeneralConfig.NATIVE_SIMD_POLICY, GeneralConfig.NativeSimdPolicy.OFF);
     }
 
     public void cycleNativeSimdPolicy() {

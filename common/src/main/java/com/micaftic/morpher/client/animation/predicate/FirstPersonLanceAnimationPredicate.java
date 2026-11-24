@@ -33,7 +33,8 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<S
                 event.getController().stopTransition();
             }
             String animation = selectAnimation(animatable, selectChargeNames(lance));
-            return playIfPresent(event, animation, CodedLoopMode.LOOP);
+            ClipSpec chargeClip = animation == null ? null : animatable.getAnimation(animation);
+            return playIfPresent(event, animation, resolveUseLoopMode(chargeClip));
         }
 
         if (lance.jabbing() || lance.lunging()) {
@@ -53,7 +54,8 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<S
         String animation = lance.riding()
                 ? selectAnimation(animatable, "lance_riding_idle", "lance_stand", "hold_mainhand:lance")
                 : selectAnimation(animatable, "lance_stand", "hold_mainhand:lance");
-        return playIfPresent(event, animation, CodedLoopMode.LOOP);
+        ClipSpec holdClip = animation == null ? null : animatable.getAnimation(animation);
+        return playIfPresent(event, animation, resolveUseLoopMode(holdClip));
     }
 
     private String[] selectChargeNames(LanceActionState lance) {
@@ -74,6 +76,12 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<S
             }
         }
         return null;
+    }
+
+    private static CodedLoopMode resolveUseLoopMode(ClipSpec animation) {
+        return animation != null && animation.loopMode() == CodedLoopMode.HOLD_ON_LAST_FRAME
+                ? CodedLoopMode.HOLD_ON_LAST_FRAME
+                : CodedLoopMode.LOOP;
     }
 
     private HostPlayState.Decision playIfPresent(HostActionEvent<SpmPlayerEntity> event, String animationName, CodedLoopMode loopType) {

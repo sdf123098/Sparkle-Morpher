@@ -4,6 +4,7 @@ import com.micaftic.morpher.client.animation.IAnimationPredicate;
 import com.micaftic.morpher.core.compat.gun.swarfare.SWarfareCompat;
 import com.micaftic.morpher.client.entity.LivingAnimatable;
 import com.micaftic.morpher.client.animation.condition.ConditionHold;
+import com.micaftic.morpher.client.input.InputStateKey;
 import com.micaftic.morpher.core.compat.gun.tacz.TacCompat;
 import com.micaftic.morpher.core.compat.touhoulittlemaid.TouhouLittleMaidCompat;
 import dev.spm.core.scene.CodedLoopMode;
@@ -52,24 +53,23 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         if (playState != null) {
             return playState;
         }
-        if (!checkSwingAndUse(entity, InteractionHand.MAIN_HAND)) return HostPlayState.Decision.PAUSE;
-        int i = event.getAnimatable().getModelAssembly().getModelData().getFormatVersion();
+        if (!checkSwingAndUse(event, entity, InteractionHand.MAIN_HAND)) return HostPlayState.Decision.PAUSE;
         HostPlayState.Decision gunPlayState = SWarfareCompat.handleGunHoldAnim(mainHandItem, event);
         if (gunPlayState != null) {
             return gunPlayState;
         }
         if (mainHandItem.is(Items.CROSSBOW) && CrossbowItem.isCharged(mainHandItem)) {
-            return IAnimationPredicate.playAnimationWithValid(event, "hold_mainhand:charged_crossbow", CodedLoopMode.LOOP, i);
+            return IAnimationPredicate.playContinuousAnimation(event, "hold_mainhand:charged_crossbow");
         }
         boolean flag = TouhouLittleMaidCompat.isMaidSitting(entity);
         if (isFishing || flag) {
-            return IAnimationPredicate.playAnimationWithValid(event, "hold_mainhand:fishing", CodedLoopMode.LOOP, i);
+            return IAnimationPredicate.playContinuousAnimation(event, "hold_mainhand:fishing");
         }
         ConditionHold conditionHold = event.getAnimatable().getModelConfig().getHoldMainhand();
         if (conditionHold != null) {
             String str = conditionHold.doTest(entity, InteractionHand.MAIN_HAND);
             if (StringUtils.isNoneBlank(str)) {
-                return IAnimationPredicate.playAnimationWithValid(event, str, CodedLoopMode.LOOP, i);
+                return IAnimationPredicate.playContinuousAnimation(event, str);
             }
         }
         return HostPlayState.Decision.STOP;
@@ -83,10 +83,25 @@ public class MainHandHoldPredicate implements IAnimationPredicate<LivingAnimatab
         return ItemStack.matches(itemStack, preItem);
     }
 
-    private boolean checkSwingAndUse(LivingEntity entity, InteractionHand hand) {
-        if (entity.swinging && entity.swingingArm == hand) {
+    private boolean checkSwingAndUse(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand) {
+        if (shouldPauseForSwing(event, entity, hand)) {
             return false;
         }
-        return !entity.isUsingItem() || entity.getUsedItemHand() != hand;
+        return !InputStateKey.isUsingItem(entity, hand);
+    }
+
+    private static boolean shouldPauseForSwing(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, InteractionHand hand) {
+        if (!InputStateKey.isSwinging(entity, hand)) {
+            return false;
+        }
+        if (InputStateKey.isVanillaSwinging(entity, hand) || InputStateKey.getLocalSwingPulseAge() <= 1) {
+            return true;
+        }
+        for (var slot : event.getAnimatable().getControllerSlots()) {
+            if ("player.swing".equals(slot.getName())) {
+                return slot.isPlaying();
+            }
+        }
+        return false;
     }
 }

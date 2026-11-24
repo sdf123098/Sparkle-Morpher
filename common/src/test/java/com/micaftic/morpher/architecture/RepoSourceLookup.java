@@ -18,7 +18,7 @@ import java.util.List;
  * each ancestor of the working directory, every candidate plus the equivalent path under
  * each known source root.
  */
-final class RepoSourceLookup {
+public final class RepoSourceLookup {
 
     /** Source roots in preference order, relative to the repository root. */
     private static final List<String> SOURCE_ROOTS = List.of(
@@ -41,7 +41,7 @@ final class RepoSourceLookup {
      * Reads a Java source file identified by its package path, e.g.
      * {@code com/micaftic/morpher/config/ExtraPlayerRenderConfig.java}.
      */
-    static String readSource(String packagePath) throws IOException {
+    public static String readSource(String packagePath) throws IOException {
         return readFirstExisting(resolve(packagePath));
     }
 

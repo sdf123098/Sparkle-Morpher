@@ -32,6 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class ModelRendererBridge {
     private static final int FULL_BRIGHT_LIGHT = 0xF000F0;
+    private static final boolean FORCE_CORE_NATIVE_RIGID = Boolean.getBoolean("spm.force.core.native.rigid");
+    private static final AtomicBoolean LOGGED_NATIVE_RIGID_BYPASS = new AtomicBoolean(false);
 
     public enum BoneRenderPass {
         ALL,
@@ -104,7 +106,9 @@ public class ModelRendererBridge {
                 return;
             }
             PREVIEW_BACKEND_COUNTS.get()[1]++;
+            com.micaftic.morpher.core.render.NativeSimdPolicy previewNativePolicy = ConfigPolicies.graphics().nativeSimdPolicy();
             if (boneRenderPass == BoneRenderPass.ALL
+                    && previewNativePolicy == com.micaftic.morpher.core.render.NativeSimdPolicy.AGGRESSIVE
                     && AccelerationCapability.canRenderSimd()
                     && !ConfigPolicies.render().useCompatibilityRenderer()) {
                 if (RenderBackends.simd().tryRender(previewRequest)) {
@@ -143,7 +147,9 @@ public class ModelRendererBridge {
                 return;
             }
         }
-        if (boneRenderPass == BoneRenderPass.ALL
+        com.micaftic.morpher.core.render.NativeSimdPolicy nativePolicy = ConfigPolicies.graphics().nativeSimdPolicy();
+        if (nativePolicy != com.micaftic.morpher.core.render.NativeSimdPolicy.OFF
+                && boneRenderPass == BoneRenderPass.ALL
                 && AccelerationCapability.canRenderSimd() && !ConfigPolicies.render().useCompatibilityRenderer()) {
             if (RenderBackends.simd().tryRender(request)) {
                 return;
@@ -171,31 +177,42 @@ public class ModelRendererBridge {
         if (mesh.bakedBones == null || mesh.bakedBones.isEmpty()) return;
         int boneCount = mesh.bakedBones.size();
         RenderScratch scratch = FALLBACK_SCRATCH.get();
-        scratch.ensureBoneCapacity(boneCount);
-
-        Matrix4f rootPoseMat = pose.pose();
-        Matrix3f rootNormalMC = pose.normal();
-        Matrix4f globalBoneMat = scratch.globalBoneMat;
-        Matrix3f localNormalMat = scratch.localNormalMat;
-        Matrix3f globalNormalMat = scratch.globalNormalMat;
-        Vector4f tempPos = scratch.tempPos;
-        Vector3f tempNorm = scratch.tempNorm;
-        Matrix4f[] boneLocalTransforms = scratch.boneLocalTransforms;
-        boolean[] boneVisible = scratch.boneVisible;
         boolean javaVectorRequested = ConfigPolicies.graphics().experimentalJavaVectorRenderer();
         VectorApiCapability.warnIfRequested(javaVectorRequested);
         boolean useJavaVector = javaVectorRequested && VectorApiCapability.isAvailable();
-        if (!com.micaftic.morpher.core.gpu.SpmCoreBoneMatrixWriter.evaluateBoneLocalTransforms(
-                mesh, boneParams, stateBuffer, boneLocalTransforms, boneVisible)) {
+
+        com.micaftic.morpher.core.gpu.SpmCoreBoneMatrixWriter.EvaluatedBones evaluated =
+                com.micaftic.morpher.core.gpu.SpmCoreBoneMatrixWriter.evaluateForCpuRender(
+                        mesh, boneParams, stateBuffer);
+        if (evaluated == null) {
             return;
         }
+        float[] transforms = evaluated.transforms;
+        float[] normals = evaluated.normals;
+        boolean[] boneVisible = evaluated.visible;
 
         int[] renderBoneOrder = mesh.getPartMaskBoneRenderOrder(renderPartMask);
         if (renderBoneOrder == null || renderBoneOrder.length == 0) {
             renderBoneOrder = scratch.fallbackRenderOrder(boneCount);
         }
 
+        Matrix4f rootPoseMat = pose.pose();
+        Matrix3f rootNormalMC = pose.normal();
+        float r00 = rootPoseMat.m00(), r01 = rootPoseMat.m01(), r02 = rootPoseMat.m02(), r03 = rootPoseMat.m03();
+        float r10 = rootPoseMat.m10(), r11 = rootPoseMat.m11(), r12 = rootPoseMat.m12(), r13 = rootPoseMat.m13();
+        float r20 = rootPoseMat.m20(), r21 = rootPoseMat.m21(), r22 = rootPoseMat.m22(), r23 = rootPoseMat.m23();
+        float r30 = rootPoseMat.m30(), r31 = rootPoseMat.m31(), r32 = rootPoseMat.m32(), r33 = rootPoseMat.m33();
+        boolean affineRoot = r03 == 0.0f && r13 == 0.0f && r23 == 0.0f && r33 == 1.0f;
+
+        float rn00 = rootNormalMC.m00(), rn01 = rootNormalMC.m01(), rn02 = rootNormalMC.m02();
+        float rn10 = rootNormalMC.m10(), rn11 = rootNormalMC.m11(), rn12 = rootNormalMC.m12();
+        float rn20 = rootNormalMC.m20(), rn21 = rootNormalMC.m21(), rn22 = rootNormalMC.m22();
+
+        float[] vectorX = scratch.vectorX;
+        float[] vectorY = scratch.vectorY;
+        float[] vectorZ = scratch.vectorZ;
         int packedColor = packArgb(a, r, g, b);
+
         for (int orderIndex = 0; orderIndex < renderBoneOrder.length; orderIndex++) {
             int i = renderBoneOrder[orderIndex];
             if (i < 0 || i >= boneCount || !boneVisible[i]) {
@@ -209,26 +226,88 @@ public class ModelRendererBridge {
             if (renderPartMask != 0 && bone.partMask != renderPartMask && bone.partMask != 3) {
                 continue;
             }
+            if (bone.cubes.isEmpty()) {
+                continue;
+            }
 
-            Matrix4f localBoneMat = boneLocalTransforms[i];
-            globalBoneMat.set(rootPoseMat).mul(localBoneMat);
-            localBoneMat.normal(localNormalMat);
-            globalNormalMat.set(rootNormalMC).mul(localNormalMat);
+            int mOff = i * 16;
+            float l00 = transforms[mOff],     l01 = transforms[mOff + 1],  l02 = transforms[mOff + 2];
+            float l10 = transforms[mOff + 4], l11 = transforms[mOff + 5],  l12 = transforms[mOff + 6];
+            float l20 = transforms[mOff + 8], l21 = transforms[mOff + 9],  l22 = transforms[mOff + 10];
+            float l30 = transforms[mOff + 12], l31 = transforms[mOff + 13], l32 = transforms[mOff + 14];
+
+            float m00 = r00 * l00 + r10 * l01 + r20 * l02;
+            float m01 = r01 * l00 + r11 * l01 + r21 * l02;
+            float m02 = r02 * l00 + r12 * l01 + r22 * l02;
+
+            float m10 = r00 * l10 + r10 * l11 + r20 * l12;
+            float m11 = r01 * l10 + r11 * l11 + r21 * l12;
+            float m12 = r02 * l10 + r12 * l11 + r22 * l12;
+
+            float m20 = r00 * l20 + r10 * l21 + r20 * l22;
+            float m21 = r01 * l20 + r11 * l21 + r21 * l22;
+            float m22 = r02 * l20 + r12 * l21 + r22 * l22;
+
+            float m30 = r00 * l30 + r10 * l31 + r20 * l32 + r30;
+            float m31 = r01 * l30 + r11 * l31 + r21 * l32 + r31;
+            float m32 = r02 * l30 + r12 * l31 + r22 * l32 + r32;
+
+            int nOff = i * 9;
+            float ln00 = normals[nOff],     ln01 = normals[nOff + 1], ln02 = normals[nOff + 2];
+            float ln10 = normals[nOff + 3], ln11 = normals[nOff + 4], ln12 = normals[nOff + 5];
+            float ln20 = normals[nOff + 6], ln21 = normals[nOff + 7], ln22 = normals[nOff + 8];
+
+            float n00 = rn00 * ln00 + rn10 * ln01 + rn20 * ln02;
+            float n01 = rn01 * ln00 + rn11 * ln01 + rn21 * ln02;
+            float n02 = rn02 * ln00 + rn12 * ln01 + rn22 * ln02;
+
+            float n10 = rn00 * ln10 + rn10 * ln11 + rn20 * ln12;
+            float n11 = rn01 * ln10 + rn11 * ln11 + rn21 * ln12;
+            float n12 = rn02 * ln10 + rn12 * ln11 + rn22 * ln12;
+
+            float n20 = rn00 * ln20 + rn10 * ln21 + rn20 * ln22;
+            float n21 = rn01 * ln20 + rn11 * ln21 + rn21 * ln22;
+            float n22 = rn02 * ln20 + rn12 * ln21 + rn22 * ln22;
 
             int currentPackedLight = isPreview || bone.glow ? FULL_BRIGHT_LIGHT : packedLight;
 
             for (BuiltModel.BakedCube cube : bone.cubes) {
                 for (BuiltModel.BakedQuad quad : cube.quads) {
-                    tempNorm.set(quad.normalX, quad.normalY, quad.normalZ).mul(globalNormalMat).normalize();
-                    if (useJavaVector) {
-                        JdkVectorModelMath.transformQuadPositions(quad, globalBoneMat, scratch.vectorX, scratch.vectorY, scratch.vectorZ);
+                    float qnx = quad.normalX, qny = quad.normalY, qnz = quad.normalZ;
+                    float nx = n00 * qnx + n10 * qny + n20 * qnz;
+                    float ny = n01 * qnx + n11 * qny + n21 * qnz;
+                    float nz = n02 * qnx + n12 * qny + n22 * qnz;
+                    float lenSq = nx * nx + ny * ny + nz * nz;
+                    if (lenSq > 0.0f) {
+                        float invLen = org.joml.Math.invsqrt(lenSq);
+                        nx *= invLen;
+                        ny *= invLen;
+                        nz *= invLen;
+                    }
+                    float[] uvs = quad.packedUvs;
+                    if (useJavaVector && affineRoot) {
+                        JdkVectorModelMath.transformQuadPositions(
+                                quad,
+                                m00, m10, m20, m30,
+                                m01, m11, m21, m31,
+                                m02, m12, m22, m32,
+                                vectorX, vectorY, vectorZ);
                         for (int v = 0; v < 4; v++) {
-                            vertexConsumer.addVertex(scratch.vectorX[v], scratch.vectorY[v], scratch.vectorZ[v], packedColor, quad.u(v), quad.v(v), packedOverlay, currentPackedLight, tempNorm.x(), tempNorm.y(), tempNorm.z());
+                            int uvOff = v << 1;
+                            vertexConsumer.addVertex(vectorX[v], vectorY[v], vectorZ[v], packedColor, uvs[uvOff], uvs[uvOff + 1], packedOverlay, currentPackedLight, nx, ny, nz);
                         }
                     } else {
+                        float[] pos = quad.packedPositions;
                         for (int v = 0; v < 4; v++) {
-                            tempPos.set(quad.x(v), quad.y(v), quad.z(v), 1.0f).mul(globalBoneMat);
-                            vertexConsumer.addVertex(tempPos.x(), tempPos.y(), tempPos.z(), packedColor, quad.u(v), quad.v(v), packedOverlay, currentPackedLight, tempNorm.x(), tempNorm.y(), tempNorm.z());
+                            int pOff = v * 3;
+                            int uvOff = v << 1;
+                            float qx = pos[pOff];
+                            float qy = pos[pOff + 1];
+                            float qz = pos[pOff + 2];
+                            float vx = m00 * qx + m10 * qy + m20 * qz + m30;
+                            float vy = m01 * qx + m11 * qy + m21 * qz + m31;
+                            float vz = m02 * qx + m12 * qy + m22 * qz + m32;
+                            vertexConsumer.addVertex(vx, vy, vz, packedColor, uvs[uvOff], uvs[uvOff + 1], packedOverlay, currentPackedLight, nx, ny, nz);
                         }
                     }
                 }
@@ -242,8 +321,25 @@ public class ModelRendererBridge {
             int textureIndex, int renderPartMask, int packedLight, int packedOverlay,
             float r, float g, float b, float a, boolean isPreview) {
 
+        if (mesh == null || mesh.bakedBones == null || mesh.bakedBones.isEmpty()) {
+            logNativeCacheFailOnce();
+            return false;
+        }
+        // Route NATIVE_SIMD draws through zero-allocation host affine/vector renderer by default so
+        // users with legacy SAFE/AGGRESSIVE configs avoid spm-core NativeRigidRenderer's ~39x slower staging.
+        if (!FORCE_CORE_NATIVE_RIGID) {
+            if (LOGGED_NATIVE_RIGID_BYPASS.compareAndSet(false, true)) {
+                YesSteveModel.LOGGER.info("[SM-SIMD] NATIVE_SIMD policy routed through zero-allocation host affine/vector path (set -Dspm.force.core.native.rigid=true to force spm-core NativeRigidRenderer staging)");
+            }
+            renderModel(
+                    vertexConsumer, pose, projectionModelViewMatrix, isCompatMode,
+                    mesh, boneParams, stateBuffer, textureIndex, renderPartMask,
+                    packedLight, packedOverlay, r, g, b, a, isPreview, BoneRenderPass.ALL);
+            return true;
+        }
+
         BuiltModel.ComputeCache cache = mesh.ensureComputeCache();
-        if (cache == null || mesh.bakedBones == null || mesh.bakedBones.isEmpty()) {
+        if (cache == null) {
             logNativeCacheFailOnce();
             return false;
         }
@@ -292,7 +388,7 @@ public class ModelRendererBridge {
                         tmpNorm.x(), tmpNorm.y(), tmpNorm.z()
                 );
             }
-            return count > 0;
+            return true;
         } catch (Throwable t) {
             YesSteveModel.LOGGER.error("spm-core SIMD vertex computation failed; using Java fallback", t);
             return false;
@@ -316,26 +412,12 @@ public class ModelRendererBridge {
     }
 
     private static final class RenderScratch {
-        private final Matrix4f globalBoneMat = new Matrix4f();
-        private final Matrix3f localNormalMat = new Matrix3f();
-        private final Matrix3f globalNormalMat = new Matrix3f();
         private final Vector4f tempPos = new Vector4f();
         private final Vector3f tempNorm = new Vector3f();
         private final float[] vectorX = new float[4];
         private final float[] vectorY = new float[4];
         private final float[] vectorZ = new float[4];
-        private Matrix4f[] boneLocalTransforms = new Matrix4f[0];
-        private boolean[] boneVisible = new boolean[0];
         private int[] allBoneRenderOrder = new int[0];
-
-        private void ensureBoneCapacity(int size) {
-            if (boneLocalTransforms.length >= size) {
-                return;
-            }
-            int newSize = Math.max(size, boneLocalTransforms.length == 0 ? 16 : boneLocalTransforms.length * 2);
-            boneLocalTransforms = Arrays.copyOf(boneLocalTransforms, newSize);
-            boneVisible = Arrays.copyOf(boneVisible, newSize);
-        }
 
         private int[] fallbackRenderOrder(int boneCount) {
             if (allBoneRenderOrder.length != boneCount) {

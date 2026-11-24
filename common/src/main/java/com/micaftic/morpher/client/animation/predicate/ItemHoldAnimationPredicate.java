@@ -82,6 +82,8 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
                 return IAnimationPredicate.playAnimationWithLoop(event, fallback, CodedLoopMode.PLAY_ONCE);
             }
             debugSwingSelection(event, livingEntity, swingingHand, "none", hasLocalSwingPulse ? "local-missing" : "missing");
+        } else {
+            event.getAnimatable().getPositionTracker().resetVanillaSwingTracking();
         }
         return HostPlayState.Decision.CONTINUE;
     }
@@ -99,16 +101,21 @@ public class ItemHoldAnimationPredicate implements IAnimationPredicate<LivingAni
     }
 
     private static boolean shouldStartSwingAnimation(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity, boolean hasLocalSwingPulse) {
-        if (hasLocalSwingPulse) {
-            boolean pulseJustStarted = event.getAnimatable().getPositionTracker()
-                    .markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
-            // The local pulse owns this attack edge. Vanilla mirrors the same swing on a later
-            // tick, so accepting both would restart swing:sword and advance combo controllers twice.
-            return pulseJustStarted
-                    && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
+        var tracker = event.getAnimatable().getPositionTracker();
+        boolean vanillaSwinging = InputStateKey.isVanillaAnyHandSwinging(entity);
+        float vanillaProgress = vanillaSwinging ? InputStateKey.getVanillaAttackProgress(entity, event.getPartialTick()) : 0.0f;
+        boolean pulseJustStarted = hasLocalSwingPulse
+                && tracker.markSwingPulseProcessed(InputStateKey.getLocalSwingPulseSequence());
+        boolean suppressVanillaInitialStart = pulseJustStarted
+                || (hasLocalSwingPulse && InputStateKey.getLocalSwingPulseAge() <= 1);
+        boolean vanillaRestarted = tracker.consumeVanillaSwingRestart(
+                vanillaSwinging, vanillaProgress, suppressVanillaInitialStart);
+        if (pulseJustStarted || vanillaRestarted) {
+            return tracker.markProcessed(SWING_START_MARKER);
         }
-        return entity.swingTime == 0
-                && event.getAnimatable().getPositionTracker().markProcessed(SWING_START_MARKER);
+        return !hasLocalSwingPulse
+                && entity.swingTime == 0
+                && tracker.markProcessed(SWING_START_MARKER);
     }
 
     private static boolean isLocalSwingTarget(HostActionEvent<LivingAnimatable<?>> event, LivingEntity entity) {

@@ -72,7 +72,8 @@ public class ParallelProcessor<T extends SpmEntity<?>, TModel> implements ModelP
             }
         });
         Object2ReferenceMaps.fastForEach(animations, animEntry -> {
-            if (animEntry.getValue().hasKeyframes() && this.animationNameMatcher.test(animEntry.getKey())) {
+            if ((animEntry.getValue().hasKeyframes() || animEntry.getValue().hasTimelineEvents())
+                    && this.animationNameMatcher.test(animEntry.getKey())) {
                 matchedSlots.put(String.format("%s.%s_%s", this.prefix, this.slotName, animEntry.getKey().substring(this.slotName.length())), animEntry.getKey());
             }
         });
