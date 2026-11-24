@@ -128,11 +128,15 @@ tasks.register('verifyNativeAbi') {
         def expectedFiles = [
                 'windows-x64/spm_core_native.dll',
                 'windows-x86/spm_core_native.dll',
+                'windows-arm64/spm_core_native.dll',
                 'linux-x64/libspm_core_native.so',
                 'linux-arm64/libspm_core_native.so',
+                'linux-riscv64/libspm_core_native.so',
+                'linux-loongarch64/libspm_core_native.so',
                 'macos-x64/libspm_core_native.dylib',
                 'macos-arm64/libspm_core_native.dylib',
-                'android-arm64/libspm_core_native.so'
+                'android-arm64/libspm_core_native.so',
+                'android-arm32/libspm_core_native.so'
         ]
 
         nativeAbiDirs.each { nativeDir ->
