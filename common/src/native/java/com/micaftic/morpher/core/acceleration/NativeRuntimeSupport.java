@@ -49,6 +49,7 @@ public final class NativeRuntimeSupport {
         LINUX_ARM64("linux-arm64", "libspm_core_native.so", Path.of(System.getProperty("user.home"), ".spm")),
         MACOS_X64("macos-x64", "libspm_core_native.dylib", Path.of(System.getProperty("user.home"), ".spm")),
         MACOS_ARM64("macos-arm64", "libspm_core_native.dylib", Path.of(System.getProperty("user.home"), ".spm")),
+         WINDOWS_ARM64("windows-arm64", "spm_core_native.dll", Path.of(System.getProperty("java.io.tmpdir"), "spm")),
         ANDROID_ARM64("android-arm64", "libspm_core_native.so", null);
 
         final String resDir;
@@ -256,7 +257,12 @@ public final class NativeRuntimeSupport {
         boolean isAarch64 = "aarch64".equals(SystemUtils.OS_ARCH) || "arm64".equals(SystemUtils.OS_ARCH);
 
         if (SystemUtils.IS_OS_WINDOWS) {
-            return isX86_64 ? TargetPlatform.WINDOWS_X64 : TargetPlatform.WINDOWS_X86;
+            // Windows on ARM is a distinct platform, not a 32-bit x86 host: falling through to
+            // WINDOWS_X86 there would hand the loader a 32-bit DLL it can never map, and the only
+            // symptom would be a silent drop to the Java writer.
+            if (isAarch64) return TargetPlatform.WINDOWS_ARM64;
+            if (isX86_64) return TargetPlatform.WINDOWS_X64;
+            return TargetPlatform.WINDOWS_X86;
         }
         if (SystemUtils.IS_OS_LINUX) {
             LibcType libc = detectLibcType();
