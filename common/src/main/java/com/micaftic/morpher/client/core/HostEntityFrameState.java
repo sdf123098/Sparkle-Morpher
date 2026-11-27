@@ -104,22 +104,38 @@ public class HostEntityFrameState<T extends Entity> {
         return getNormalizedTimeDelta() / 20.0f;
     }
 
+    private static final float WALK_DROP_GUARD_SPEED = 0.05f;
+
     public Vec3 getResolvedPositionDelta(Entity entity) {
         Vec3 trackerDelta = sanitize(this.positionDelta);
+        Vec3 tickDelta = sanitize(new Vec3(entity.getX() - entity.xo, entity.getY() - entity.yo, entity.getZ() - entity.zo));
+        Vec3 velocity = sanitize(entity.getDeltaMovement());
+        return resolvePositionDelta(trackerDelta, tickDelta, velocity, getNormalizedTimeDelta(), shouldSuppressSyntheticWalk());
+    }
+
+    static Vec3 resolvePositionDelta(
+            Vec3 trackerDelta,
+            Vec3 tickDelta,
+            Vec3 velocity,
+            float normalizedTimeDelta,
+            boolean suppressSyntheticWalk) {
+        if (!suppressSyntheticWalk) {
+            double trackerHorizSq = trackerDelta.x * trackerDelta.x + trackerDelta.z * trackerDelta.z;
+            if (trackerHorizSq < 1.0E-6d && (tickDelta.x * tickDelta.x + tickDelta.z * tickDelta.z) > 1.0E-4d) {
+                return tickDelta;
+            }
+        }
         if (hasMovement(trackerDelta)) {
             return trackerDelta;
         }
-        if (shouldSuppressSyntheticWalk()) {
+        if (suppressSyntheticWalk) {
             return Vec3.ZERO;
         }
-        Vec3 tickDelta = sanitize(new Vec3(entity.getX() - entity.xo, entity.getY() - entity.yo, entity.getZ() - entity.zo));
         if (hasMovement(tickDelta)) {
             return tickDelta;
         }
-        Vec3 velocity = sanitize(entity.getDeltaMovement());
         if (hasMovement(velocity)) {
-            float dt = getNormalizedTimeDelta();
-            return velocity.scale(dt > EPSILON ? dt : 1.0f);
+            return velocity.scale(normalizedTimeDelta > EPSILON ? normalizedTimeDelta : 1.0f);
         }
         return Vec3.ZERO;
     }
@@ -127,32 +143,59 @@ public class HostEntityFrameState<T extends Entity> {
     public float getGroundSpeed(Entity entity, @Nullable HostActionEvent<?> event) {
         Vec3 trackerDelta = sanitize(this.positionDelta);
         float trackerSpeed = getHorizontalSpeedFromDelta(trackerDelta);
-        if (isUsable(trackerSpeed)) {
+        if (Float.isFinite(trackerSpeed) && trackerSpeed > WALK_DROP_GUARD_SPEED) {
             return trackerSpeed;
         }
-        if (shouldSuppressSyntheticWalk()) {
-            return 0.0f;
-        }
-        if (event != null) {
-            float limbSwingAmount = Math.abs(event.getLimbSwingAmount());
-            if (isUsable(limbSwingAmount)) {
-                return limbSwingAmount;
-            }
-        }
-        if (entity instanceof LivingEntity livingEntity) {
-            float partialTick = event != null ? event.getPartialTick() : 1.0f;
-            float walkSpeed = Math.abs(livingEntity.walkAnimation.speed(partialTick));
-            if (isUsable(walkSpeed)) {
-                return walkSpeed;
-            }
-        }
-        Vec3 deltaMovement = sanitize(entity.getDeltaMovement());
-        float velocitySpeed = 20.0f * horizontalLength(deltaMovement);
-        if (isUsable(velocitySpeed)) {
-            return velocitySpeed;
+        boolean suppressSyntheticWalk = shouldSuppressSyntheticWalk();
+        if (suppressSyntheticWalk) {
+            return isUsable(trackerSpeed) ? trackerSpeed : 0.0f;
         }
         Vec3 tickDelta = sanitize(new Vec3(entity.getX() - entity.xo, entity.getY() - entity.yo, entity.getZ() - entity.zo));
         float tickSpeed = 20.0f * horizontalLength(tickDelta);
+        Vec3 deltaMovement = sanitize(entity.getDeltaMovement());
+        float velocitySpeed = 20.0f * horizontalLength(deltaMovement);
+        float limbSwingAmount = event != null ? Math.abs(event.getLimbSwingAmount()) : 0.0f;
+        float walkSpeed = 0.0f;
+        if (entity instanceof LivingEntity livingEntity) {
+            float partialTick = event != null ? event.getPartialTick() : 1.0f;
+            walkSpeed = Math.abs(livingEntity.walkAnimation.speed(partialTick));
+        }
+        return resolveGroundSpeed(trackerSpeed, tickSpeed, velocitySpeed, limbSwingAmount, walkSpeed, false);
+    }
+
+    static float resolveGroundSpeed(
+            float trackerSpeed,
+            float tickSpeed,
+            float velocitySpeed,
+            float limbSwingAmount,
+            float walkAnimSpeed,
+            boolean suppressSyntheticWalk) {
+        if (Float.isFinite(trackerSpeed) && trackerSpeed > WALK_DROP_GUARD_SPEED) {
+            return trackerSpeed;
+        }
+        if (suppressSyntheticWalk) {
+            return isUsable(trackerSpeed) ? trackerSpeed : 0.0f;
+        }
+        // Guard against 1-frame tick-boundary / lerp micro-deltas (0.0001 < trackerSpeed <= 0.05)
+        // prematurely dropping ctrl.walk -> ctrl.idle mid-stride while physically moving.
+        if (Float.isFinite(tickSpeed) && tickSpeed > WALK_DROP_GUARD_SPEED) {
+            return Math.max(Float.isFinite(trackerSpeed) ? trackerSpeed : 0.0f, tickSpeed);
+        }
+        if (Float.isFinite(velocitySpeed) && velocitySpeed > WALK_DROP_GUARD_SPEED) {
+            return Math.max(Float.isFinite(trackerSpeed) ? trackerSpeed : 0.0f, velocitySpeed);
+        }
+        if (isUsable(trackerSpeed)) {
+            return trackerSpeed;
+        }
+        if (isUsable(limbSwingAmount)) {
+            return limbSwingAmount;
+        }
+        if (isUsable(walkAnimSpeed)) {
+            return walkAnimSpeed;
+        }
+        if (isUsable(velocitySpeed)) {
+            return velocitySpeed;
+        }
         return Float.isFinite(tickSpeed) && tickSpeed > 0.0f ? tickSpeed : 0.0f;
     }
 

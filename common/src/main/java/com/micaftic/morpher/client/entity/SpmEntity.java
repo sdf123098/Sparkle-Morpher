@@ -319,28 +319,23 @@ public abstract class SpmEntity<T extends Entity> extends HostAnimatable<T> {
         }
         boolean isGuiPreview = com.micaftic.morpher.client.render.RenderContext.isAnyPreview();
         boolean useAsyncResult = !isGuiPreview && !(this.entity instanceof LocalPlayer && InputStateKey.hasLocalInteractionState());
-        if (useAsyncResult) {
+        if (this.modelFuture != null) {
             int renderFrameId = AnimationFrameProfiler.getRenderFrameId();
-            if (this.modelFuture != null && this.asyncSubmitFrameId != renderFrameId) {
-                // The pending task belongs to a frame in which this entity was not rendered;
-                // its time base is stale. Discard it and submit a fresh task below.
-                awaitAsyncResult();
-            }
-            if (this.modelFuture == null && this.asyncSubmitFrameId != renderFrameId) {
-                // Submit only while the entity is actually being rendered this frame. Keeping the
-                // worker queue bounded by the visible set (and submit order equal to render order)
-                // keeps frame pacing regular instead of stalling on accumulated background tasks.
-                submitAsyncUpdate(partialTick);
-            }
-            if (this.modelFuture != null) {
+            if (useAsyncResult && this.asyncSubmitFrameId == renderFrameId) {
                 HostActionEvent<?> event = awaitAsyncResult();
                 if (event != null) {
                     return event;
                 }
+            } else {
+                // Pending task belongs to an earlier frame or preview/interaction path;
+                // drain it before computing this frame synchronously.
+                awaitAsyncResult();
             }
-        } else if (this.modelFuture != null) {
-            awaitAsyncResult();
         }
+        // Run directly on the render thread when no task was pre-submitted for this frame.
+        // Submitting to YSMThreadPool only to immediately block on Future.get() added two OS
+        // context switches and thread-pool lock contention per entity on every third-person frame
+        // with zero concurrency benefit.
         return super.processAnimationImpl(partialTick, isFirstPerson);
     }
 

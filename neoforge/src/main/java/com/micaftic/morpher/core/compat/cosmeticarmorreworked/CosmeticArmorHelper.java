@@ -1,5 +1,6 @@
 package com.micaftic.morpher.core.compat.cosmeticarmorreworked;
 
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -29,6 +30,6 @@ public final class CosmeticArmorHelper {
             }
         }
         ItemStack chestStack = getArmorItem(livingEntity, EquipmentSlot.CHEST);
-        return chestStack.is(Items.ELYTRA) ? chestStack : ItemStack.EMPTY;
+        return (chestStack.is(Items.ELYTRA) || chestStack.has(DataComponents.GLIDER)) ? chestStack : ItemStack.EMPTY;
     }
 }

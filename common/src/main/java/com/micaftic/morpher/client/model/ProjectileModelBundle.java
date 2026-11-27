@@ -31,7 +31,7 @@ public class ProjectileModelBundle {
         this.animations = animations;
         this.animationControllers = animationControllers;
         this.animationLibrary = model != null
-                ? HostAnimationAssets.compileLibrary("ysm:projectile", animations.values(),
+                ? HostAnimationAssets.compileLibrary("ysm:projectile", animations,
                 HostAnimationAssets.buildSkeleton(model), HostAnimationAssets.buildBindPose(model))
                 : null;
         this.texture = texture;

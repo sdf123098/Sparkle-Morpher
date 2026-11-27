@@ -312,6 +312,14 @@ public final class HostMolangBindings {
         }
     }
 
+    private static double finite(double value) {
+        return Double.isFinite(value) ? value : 0.0;
+    }
+
+    private static MolangValue safeNumber(double value) {
+        return MolangValue.number(finite(value));
+    }
+
     public static SceneInputs buildInputs(
             HostActionEvent<?> event,
             Map<MolangBindings.Call, MolangValue> sampledCalls,
@@ -346,23 +354,23 @@ public final class HostMolangBindings {
         long dayTime = entity.level().getDefaultClockTime();
 
         queries.put("actor_count", (double) (client.level != null ? client.level.getEntityCount() : 1));
-        queries.put("life_time", (double) (event.getAnimatable().getSeekTime() / 20.0));
-        queries.put("head_x_rotation", (double) modelData.netHeadYaw);
-        queries.put("head_y_rotation", (double) modelData.headPitch);
+        queries.put("life_time", finite(event.getAnimatable().getSeekTime() / 20.0));
+        queries.put("head_x_rotation", finite(modelData.netHeadYaw));
+        queries.put("head_y_rotation", finite(modelData.headPitch));
         queries.put("moon_phase", (double) Math.floorMod(dayTime / 24000L, 8L));
-        queries.put("time_of_day", (double) ((((float) (dayTime + 6000L)) / 24000.0f) % 1.0f));
+        queries.put("time_of_day", finite((((float) (dayTime + 6000L)) / 24000.0f) % 1.0f));
         queries.put("time_stamp", (double) dayTime);
-        queries.put("delta_time", (double) tracker.getTimeDeltaSeconds());
-        queries.put("yaw_speed", (double) getYawSpeed(entity));
+        queries.put("delta_time", finite(tracker.getTimeDeltaSeconds()));
+        queries.put("yaw_speed", finite(getYawSpeed(entity)));
         queries.put("cardinal_facing_2d", (double) entity.getDirection().get3DDataValue());
-        queries.put("distance_from_camera", client.gameRenderer != null
-                ? client.gameRenderer.getMainCamera().position().distanceTo(entity.position()) : 0.0);
-        queries.put("eye_target_x_rotation", RenderContext.isOldHud() ? 0.0 : (double) entity.getViewXRot(partial));
-        queries.put("eye_target_y_rotation", RenderContext.isOldHud() ? 0.0 : (double) entity.getViewYRot(partial));
-        queries.put("ground_speed", (double) groundSpeed);
-        queries.put("modified_distance_moved", (double) (living != null ? living.moveDist : 0.0f));
-        queries.put("vertical_speed", (double) verticalSpeed);
-        queries.put("walk_distance", (double) (living != null ? living.moveDist : 0.0f));
+        queries.put("distance_from_camera", finite(client.gameRenderer != null
+                ? client.gameRenderer.getMainCamera().position().distanceTo(entity.position()) : 0.0));
+        queries.put("eye_target_x_rotation", RenderContext.isOldHud() ? 0.0 : finite(entity.getViewXRot(partial)));
+        queries.put("eye_target_y_rotation", RenderContext.isOldHud() ? 0.0 : finite(entity.getViewYRot(partial)));
+        queries.put("ground_speed", finite(groundSpeed));
+        queries.put("modified_distance_moved", finite(living != null ? living.moveDist : 0.0f));
+        queries.put("vertical_speed", finite(verticalSpeed));
+        queries.put("walk_distance", finite(living != null ? living.moveDist : 0.0f));
         queries.put("has_rider", entity.isVehicle() ? 1.0 : 0.0);
         int cameraType = CameraUtil.getCameraType(event.getAnimatable());
         queries.put("is_first_person", cameraType == CameraType.FIRST_PERSON.ordinal() ? 1.0 : 0.0);
@@ -377,26 +385,36 @@ public final class HostMolangBindings {
         queries.put("is_swimming", entity.isSwimming() ? 1.0 : 0.0);
 
         if (living != null) {
-            queries.put("body_x_rotation", RenderContext.isOldHud() ? 0.0 : (double) Mth.lerp(event.getFrameTime(), living.xRotO, living.getXRot()));
-            queries.put("body_y_rotation", RenderContext.isOldHud() ? 0.0 : (double) Mth.wrapDegrees(Mth.lerp(partial, living.yBodyRotO, living.yBodyRot)));
+            queries.put("body_x_rotation", RenderContext.isOldHud() ? 0.0 : finite(Mth.lerp(event.getFrameTime(), living.xRotO, living.getXRot())));
+            queries.put("body_y_rotation", RenderContext.isOldHud() ? 0.0 : finite(Mth.wrapDegrees(Mth.lerp(partial, living.yBodyRotO, living.yBodyRot))));
             boolean isLocalCap = !(event.getAnimatable() instanceof PlayerCapability cap) || cap.isLocalPlayerModel();
             float health = isLocalCap ? living.getHealth() : ((PlayerCapability) event.getAnimatable()).getPositionTracker().getHealth();
             float maxHealth = isLocalCap ? living.getMaxHealth() : ((PlayerCapability) event.getAnimatable()).getPositionTracker().getMaxHealth();
-            queries.put("health", (double) health);
-            queries.put("max_health", (double) maxHealth);
+            queries.put("health", finite(health));
+            queries.put("max_health", finite(maxHealth));
             queries.put("hurt_time", (double) living.hurtTime);
             queries.put("is_eating", living.getUseItem().getUseAnimation() == ItemUseAnimation.EAT ? 1.0 : 0.0);
             queries.put("is_playing_dead", living.isDeadOrDying() ? 1.0 : 0.0);
             queries.put("is_sleeping", living.isSleeping() ? 1.0 : 0.0);
-            queries.put("is_using_item", InputStateKey.isUsingItem(living, InputStateKey.getUsedItemHand(living)) ? 1.0 : 0.0);
-            queries.put("item_in_use_duration", InputStateKey.getTicksUsingItem(living) / 20.0);
+            InteractionHand usedHand = InputStateKey.getUsedItemHand(living);
+            boolean usingItem = InputStateKey.isUsingItem(living, usedHand);
+            double inUseSeconds = finite(InputStateKey.getTicksUsingItem(living) / 20.0);
             ItemStack useItem = living.getUseItem();
-            queries.put("item_max_use_duration", useItem.isEmpty() ? 0.0 : useItem.getUseDuration(living) / 20.0);
-            queries.put("item_remaining_use_duration", living.isUsingItem() ? living.getUseItemRemainingTicks() / 20.0 : 0.0);
+            if (useItem.isEmpty() && usingItem) {
+                useItem = living.getItemInHand(usedHand);
+            }
+            double maxUseSeconds = useItem.isEmpty() ? 0.0 : finite(useItem.getUseDuration(living) / 20.0);
+            double remainingUseSeconds = living.isUsingItem()
+                    ? finite(living.getUseItemRemainingTicks() / 20.0)
+                    : (usingItem ? Math.max(0.0, maxUseSeconds - inUseSeconds) : 0.0);
+            queries.put("is_using_item", usingItem ? 1.0 : 0.0);
+            queries.put("item_in_use_duration", inUseSeconds);
+            queries.put("item_max_use_duration", maxUseSeconds);
+            queries.put("item_remaining_use_duration", remainingUseSeconds);
             boolean swinging = isSwinging(event, living);
             queries.put("is_swinging", swinging ? 1.0 : 0.0);
-            queries.put("swing_time", swinging ? getSwingTime(event, living) / 20.0 : 0.0);
-            queries.put("attack_time", (double) getAttackTime(event, living));
+            queries.put("swing_time", swinging ? finite(getSwingTime(event, living) / 20.0) : 0.0);
+            queries.put("attack_time", finite(getAttackTime(event, living)));
             int armorCount = 0;
             for (EquipmentSlot slot : ARMOR_SLOTS) {
                 if (!CosmeticArmorHelper.getArmorItem(living, slot).isEmpty()) armorCount++;
@@ -419,7 +437,7 @@ public final class HostMolangBindings {
                     Mth.sin(player.moveDist * 6.0f),
                     0.0f,
                     player.isCrouching());
-            queries.put("cape_flap_amount", (double) flap);
+            queries.put("cape_flap_amount", finite(flap));
             if (player instanceof net.minecraft.client.player.AbstractClientPlayer clientPlayer) {
                 queries.put("has_cape", (!player.isInvisible() && player.isModelPartShown(PlayerModelPart.CAPE) && clientPlayer.getSkin().cape() != null) ? 1.0 : 0.0);
             } else {
@@ -433,27 +451,27 @@ public final class HostMolangBindings {
         values.put("query.position_delta", vectorStruct(resolvedDelta));
 
         // ysm.* bindings
-        values.put("ysm.head_yaw", MolangValue.number(modelData.netHeadYaw));
-        values.put("ysm.head_pitch", MolangValue.number(modelData.headPitch));
+        values.put("ysm.head_yaw", safeNumber(modelData.netHeadYaw));
+        values.put("ysm.head_pitch", safeNumber(modelData.headPitch));
         float moveSpeedFactor = living != null ? living.moveDist : 0.0f;
         float lifeSec = event.getAnimatable().getSeekTime() / 20.0f;
-        values.put("ysm.tcos0", MolangValue.number(Math.cos(lifeSec * 103.2 * Math.PI / 180.0) * Math.min(1.0, moveSpeedFactor * 4.0) * 20.0));
+        values.put("ysm.tcos0", safeNumber(Math.cos(lifeSec * 103.2 * Math.PI / 180.0) * Math.min(1.0, moveSpeedFactor * 4.0) * 20.0));
         values.put("ysm.swim_amount", MolangValue.number(living != null && living.isSwimming() ? 1.0 : 0.0));
         values.put("ysm.item_use_normalized", MolangValue.number(living != null && living.isUsingItem() ? 1.0 : 0.0));
-        values.put("ysm.map_angle", MolangValue.number(Math.max(0.0, Math.min(1.0, 1.0 - modelData.headPitch / 45.1))));
+        values.put("ysm.map_angle", safeNumber(Math.max(0.0, Math.min(1.0, 1.0 - modelData.headPitch / 45.1))));
         values.put("ysm.is_holding_right", MolangValue.number(living != null && !living.getMainHandItem().isEmpty() ? 1.0 : 0.0));
         values.put("ysm.is_holding_left", MolangValue.number(living != null && !living.getOffhandItem().isEmpty() ? 1.0 : 0.0));
-        values.put("ysm.target_x_rotation", MolangValue.number(modelData.headPitch));
-        values.put("ysm.target_y_rotation", MolangValue.number(modelData.netHeadYaw));
+        values.put("ysm.target_x_rotation", safeNumber(modelData.headPitch));
+        values.put("ysm.target_y_rotation", safeNumber(modelData.netHeadYaw));
         values.put("ysm.sleep_rotation", MolangValue.number(0.0));
-        values.put("ysm.modified_move_speed", MolangValue.number(moveSpeedFactor * 20.0));
+        values.put("ysm.modified_move_speed", safeNumber(moveSpeedFactor * 20.0));
         values.put("ysm.weather", MolangValue.number(entity.level().isThundering() ? 2 : entity.level().isRaining() ? 1 : 0));
         values.put("ysm.dimension_name", MolangValue.text(entity.level().dimension().identifier().toString()));
-        values.put("ysm.fps", MolangValue.number(client.getFps()));
-        values.put("ysm.time_delta", MolangValue.number(tracker.getTimeDeltaSeconds()));
-        values.put("ysm.ground_speed2", MolangValue.number(groundSpeed));
-        values.put("ysm.input_vertical", MolangValue.number(getYawInterpolation(entity, resolvedDelta, event.getFrameTime())));
-        values.put("ysm.input_horizontal", MolangValue.number(getPitchInterpolation(entity, resolvedDelta, event.getFrameTime())));
+        values.put("ysm.fps", safeNumber(client.getFps()));
+        values.put("ysm.time_delta", safeNumber(tracker.getTimeDeltaSeconds()));
+        values.put("ysm.ground_speed2", safeNumber(groundSpeed));
+        values.put("ysm.input_vertical", safeNumber(getYawInterpolation(entity, resolvedDelta, event.getFrameTime())));
+        values.put("ysm.input_horizontal", safeNumber(getPitchInterpolation(entity, resolvedDelta, event.getFrameTime())));
         values.put("ysm.person_view", MolangValue.number(cameraType));
         values.put("ysm.rendering_in_paperdoll", MolangValue.bool(RenderContext.isGuiPreview()));
         values.put("ysm.rendering_in_inventory", MolangValue.bool(preview));
@@ -466,21 +484,21 @@ public final class HostMolangBindings {
         values.put("ysm.eye_in_water", MolangValue.bool(entity.isUnderWater()));
         values.put("ysm.frozen_ticks", MolangValue.number(entity.getTicksFrozen()));
         values.put("ysm.air_supply", MolangValue.number(entity.getAirSupply()));
-        values.put("ysm.delta_movement_length", MolangValue.number(tracker.getDeltaMovementLength(entity)));
+        values.put("ysm.delta_movement_length", safeNumber(tracker.getDeltaMovementLength(entity)));
 
         AbstractBoat boat = getBoat(entity);
         values.put("ysm.boat_left_paddle", MolangValue.bool(boat != null && boat.getPaddleState(AbstractBoat.PADDLE_LEFT)));
         values.put("ysm.boat_right_paddle", MolangValue.bool(boat != null && boat.getPaddleState(AbstractBoat.PADDLE_RIGHT)));
-        values.put("ysm.boat_left_rowing_time", MolangValue.number(boat != null ? -boat.getRowingTime(AbstractBoat.PADDLE_LEFT, partial) : 0.0));
-        values.put("ysm.boat_right_rowing_time", MolangValue.number(boat != null ? -boat.getRowingTime(AbstractBoat.PADDLE_RIGHT, partial) : 0.0));
+        values.put("ysm.boat_left_rowing_time", safeNumber(boat != null ? -boat.getRowingTime(AbstractBoat.PADDLE_LEFT, partial) : 0.0));
+        values.put("ysm.boat_right_rowing_time", safeNumber(boat != null ? -boat.getRowingTime(AbstractBoat.PADDLE_RIGHT, partial) : 0.0));
         values.put("ysm.boat_is_chest", MolangValue.bool(boat instanceof AbstractChestBoat));
         boolean raft = boat instanceof Raft || boat instanceof ChestRaft;
         values.put("ysm.boat_is_raft", MolangValue.bool(raft));
-        values.put("ysm.boat_body_offset_y", MolangValue.number(raft ? BOAT_RAFT_BODY_Y_OFFSET : BOAT_DEFAULT_BODY_Y_OFFSET));
+        values.put("ysm.boat_body_offset_y", safeNumber(raft ? BOAT_RAFT_BODY_Y_OFFSET : BOAT_DEFAULT_BODY_Y_OFFSET));
         double bodyOffsetZ = (boat instanceof AbstractChestBoat) ? BOAT_CHEST_BODY_Z_OFFSET : 0.0;
-        values.put("ysm.boat_body_offset_z", MolangValue.number(bodyOffsetZ));
+        values.put("ysm.boat_body_offset_z", safeNumber(bodyOffsetZ));
         values.put("ysm.boat_paddle_scale", MolangValue.number(1.0));
-        values.put("ysm.boat_chest_passenger_offset", MolangValue.number(-bodyOffsetZ));
+        values.put("ysm.boat_chest_passenger_offset", safeNumber(-bodyOffsetZ));
 
         if (living != null) {
             values.put("ysm.has_helmet", MolangValue.bool(!CosmeticArmorHelper.getArmorItem(living, EquipmentSlot.HEAD).isEmpty()));
@@ -491,8 +509,8 @@ public final class HostMolangBindings {
             values.put("ysm.has_offhand", MolangValue.bool(!CosmeticArmorHelper.getArmorItem(living, EquipmentSlot.OFFHAND).isEmpty()));
             values.put("ysm.has_elytra", MolangValue.bool(!CosmeticArmorHelper.getElytraItem(living).isEmpty()));
             values.put("ysm.is_riptide", MolangValue.bool(living.isAutoSpinAttack()));
-            values.put("ysm.armor_value", MolangValue.number(living.getArmorValue()));
-            values.put("ysm.hurt_time", MolangValue.number(living.hurtTime));
+            values.put("ysm.armor_value", safeNumber(living.getArmorValue()));
+            values.put("ysm.hurt_time", safeNumber(living.hurtTime));
             float blinkPhase = (event.currentTick + (Math.abs(living.getUUID().getLeastSignificantBits()) % 10)) % 90.0f;
             values.put("ysm.is_close_eyes", MolangValue.bool(living.isSleeping() || (blinkPhase > 85.0f && blinkPhase < 90.0f)));
             values.put("ysm.on_ladder", MolangValue.bool(living.onClimbable()));
@@ -505,14 +523,14 @@ public final class HostMolangBindings {
             values.put("ysm.is_maid", MolangValue.bool("maid".equals(entityTypeName)));
 
             boolean isRemotePlayer = (event.getAnimatable() instanceof PlayerCapability cap) && !cap.isLocalPlayerModel();
-            values.put("ysm.food_level", MolangValue.number(isRemotePlayer
+            values.put("ysm.food_level", safeNumber(isRemotePlayer
                     ? ((PlayerCapability) event.getAnimatable()).getPositionTracker().getFoodLevel()
                     : (player != null ? player.getFoodData().getFoodLevel() : 20)));
-            values.put("ysm.xxa", MolangValue.number(isRemotePlayer
+            values.put("ysm.xxa", safeNumber(isRemotePlayer
                     ? ((PlayerCapability) event.getAnimatable()).getPositionTracker().getStrafeInput() : living.xxa));
-            values.put("ysm.yya", MolangValue.number(isRemotePlayer
+            values.put("ysm.yya", safeNumber(isRemotePlayer
                     ? ((PlayerCapability) event.getAnimatable()).getPositionTracker().getVerticalInput() : living.yya));
-            values.put("ysm.zza", MolangValue.number(isRemotePlayer
+            values.put("ysm.zza", safeNumber(isRemotePlayer
                     ? ((PlayerCapability) event.getAnimatable()).getPositionTracker().getForwardInput() : living.zza));
 
             ItemStack mainHand = living.getItemInHand(InteractionHand.MAIN_HAND);
@@ -531,17 +549,17 @@ public final class HostMolangBindings {
             values.put("ysm.weapon_using", MolangValue.bool(ws.trident().using() || ws.lance().using()));
             values.put("ysm.weapon_riding", MolangValue.bool(ws.lance().riding() || ws.mace().riding()));
             values.put("ysm.weapon_fall_flying", MolangValue.bool(ws.lance().fallFlying() || ws.mace().fallFlying()));
-            values.put("ysm.weapon_speed", MolangValue.number(ws.speed()));
-            values.put("ysm.weapon_attack_ticks", MolangValue.number(Math.max(ws.trident().attackTicks(), Math.max(ws.lance().attackTicks(), ws.mace().attackTicks()))));
-            values.put("ysm.weapon_use_ticks", MolangValue.number(Math.max(ws.trident().useTicks(), ws.lance().useTicks())));
+            values.put("ysm.weapon_speed", safeNumber(ws.speed()));
+            values.put("ysm.weapon_attack_ticks", safeNumber(Math.max(ws.trident().attackTicks(), Math.max(ws.lance().attackTicks(), ws.mace().attackTicks()))));
+            values.put("ysm.weapon_use_ticks", safeNumber(Math.max(ws.trident().useTicks(), ws.lance().useTicks())));
             TridentActionState trident = ws.trident();
             values.put("ysm.trident_holding", MolangValue.bool(trident.holding()));
             values.put("ysm.trident_using", MolangValue.bool(trident.using()));
             values.put("ysm.trident_throwing", MolangValue.bool(trident.throwing()));
             values.put("ysm.trident_riptide", MolangValue.bool(trident.riptide()));
             values.put("ysm.trident_attack", MolangValue.bool(trident.attacking()));
-            values.put("ysm.trident_use_ticks", MolangValue.number(trident.useTicks()));
-            values.put("ysm.trident_attack_ticks", MolangValue.number(trident.attackTicks()));
+            values.put("ysm.trident_use_ticks", safeNumber(trident.useTicks()));
+            values.put("ysm.trident_attack_ticks", safeNumber(trident.attackTicks()));
             LanceActionState lance = ws.lance();
             values.put("ysm.lance_holding", MolangValue.bool(lance.holding()));
             values.put("ysm.lance_using", MolangValue.bool(lance.using()));
@@ -551,10 +569,10 @@ public final class HostMolangBindings {
             values.put("ysm.lance_riding", MolangValue.bool(lance.riding()));
             values.put("ysm.lance_riding_charge", MolangValue.bool(lance.ridingCharge()));
             values.put("ysm.lance_fall_flying", MolangValue.bool(lance.fallFlying()));
-            values.put("ysm.lance_use_ticks", MolangValue.number(lance.useTicks()));
-            values.put("ysm.lance_attack_ticks", MolangValue.number(lance.attackTicks()));
-            values.put("ysm.lance_speed", MolangValue.number(lance.speed()));
-            values.put("ysm.lance_charge_progress", MolangValue.number(lance.chargeProgress()));
+            values.put("ysm.lance_use_ticks", safeNumber(lance.useTicks()));
+            values.put("ysm.lance_attack_ticks", safeNumber(lance.attackTicks()));
+            values.put("ysm.lance_speed", safeNumber(lance.speed()));
+            values.put("ysm.lance_charge_progress", safeNumber(lance.chargeProgress()));
             MaceActionState mace = ws.mace();
             values.put("ysm.mace_holding", MolangValue.bool(mace.holding()));
             values.put("ysm.mace_falling", MolangValue.bool(mace.falling()));
@@ -564,19 +582,19 @@ public final class HostMolangBindings {
             values.put("ysm.mace_attacking", MolangValue.bool(mace.attacking()));
             values.put("ysm.mace_riding", MolangValue.bool(mace.riding()));
             values.put("ysm.mace_fall_flying", MolangValue.bool(mace.fallFlying()));
-            values.put("ysm.mace_fall_distance", MolangValue.number(mace.fallDistance()));
-            values.put("ysm.mace_vertical_speed", MolangValue.number(mace.verticalSpeed()));
-            values.put("ysm.mace_attack_ticks", MolangValue.number(mace.attackTicks()));
-            values.put("ysm.mace_smash_progress", MolangValue.number(mace.smashProgress()));
+            values.put("ysm.mace_fall_distance", safeNumber(mace.fallDistance()));
+            values.put("ysm.mace_vertical_speed", safeNumber(mace.verticalSpeed()));
+            values.put("ysm.mace_attack_ticks", safeNumber(mace.attackTicks()));
+            values.put("ysm.mace_smash_progress", safeNumber(mace.smashProgress()));
 
             values.put("ysm.is_fishing", MolangValue.bool(player != null ? player.fishing != null : TouhouLittleMaidCompat.isMaidSitting(living)));
             values.put("ysm.swinging", MolangValue.bool(isSwinging(event, living)));
-            values.put("ysm.swing_time", MolangValue.number(getSwingTime(event, living)));
+            values.put("ysm.swing_time", safeNumber(getSwingTime(event, living)));
             values.put("ysm.swinging_arm", MolangValue.number(getSwingingHand(event, living) == InteractionHand.MAIN_HAND ? 0 : 1));
-            values.put("ysm.attack_time", MolangValue.number(getAttackTime(event, living)));
-            values.put("ysm.elytra_rot_x", MolangValue.number(Math.toDegrees(living.elytraAnimationState.getRotX(partial))));
-            values.put("ysm.elytra_rot_y", MolangValue.number(Math.toDegrees(living.elytraAnimationState.getRotY(partial))));
-            values.put("ysm.elytra_rot_z", MolangValue.number(Math.toDegrees(living.elytraAnimationState.getRotZ(partial))));
+            values.put("ysm.attack_time", safeNumber(getAttackTime(event, living)));
+            values.put("ysm.elytra_rot_x", safeNumber(Math.toDegrees(living.elytraAnimationState.getRotX(partial))));
+            values.put("ysm.elytra_rot_y", safeNumber(Math.toDegrees(living.elytraAnimationState.getRotY(partial))));
+            values.put("ysm.elytra_rot_z", safeNumber(Math.toDegrees(living.elytraAnimationState.getRotZ(partial))));
         }
 
         if (player != null) {
@@ -585,18 +603,18 @@ public final class HostMolangBindings {
             values.put("ysm.has_right_shoulder_parrot", MolangValue.bool(player.getShoulderParrotRight().isPresent()));
             values.put("ysm.left_shoulder_parrot_variant", MolangValue.text(parrotVariant(player.getShoulderParrotLeft())));
             values.put("ysm.right_shoulder_parrot_variant", MolangValue.text(parrotVariant(player.getShoulderParrotRight())));
-            values.put("ysm.attack_damage", MolangValue.number(player.getAttributeValue(Attributes.ATTACK_DAMAGE)));
-            values.put("ysm.attack_speed", MolangValue.number(player.getAttributeValue(Attributes.ATTACK_SPEED)));
-            values.put("ysm.attack_knockback", MolangValue.number(player.getAttributeValue(Attributes.ATTACK_KNOCKBACK)));
-            values.put("ysm.movement_speed", MolangValue.number(player.getAttributeValue(Attributes.MOVEMENT_SPEED)));
-            values.put("ysm.knockback_resistance", MolangValue.number(player.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE)));
-            values.put("ysm.luck", MolangValue.number(player.getAttributeValue(Attributes.LUCK)));
-            values.put("ysm.block_reach", MolangValue.number(ForgeAttributes.getValue(player, ForgeAttributes.blockReach(), 4.5D)));
-            values.put("ysm.entity_reach", MolangValue.number(ForgeAttributes.getValue(player, ForgeAttributes.entityReach(), 3.0D)));
-            values.put("ysm.swim_speed", MolangValue.number(ForgeAttributes.getValue(player, ForgeAttributes.swimSpeed(), 1.0D)));
-            values.put("ysm.entity_gravity", MolangValue.number(ForgeAttributes.getValue(player, ForgeAttributes.entityGravity(), 0.08D)));
-            values.put("ysm.step_height_addition", MolangValue.number(ForgeAttributes.getValue(player, ForgeAttributes.stepHeightAddition(), 0.0D)));
-            values.put("ysm.nametag_distance", MolangValue.number(ForgeAttributes.getValue(player, ForgeAttributes.nametagDistance(), 64.0D)));
+            values.put("ysm.attack_damage", safeNumber(player.getAttributeValue(Attributes.ATTACK_DAMAGE)));
+            values.put("ysm.attack_speed", safeNumber(player.getAttributeValue(Attributes.ATTACK_SPEED)));
+            values.put("ysm.attack_knockback", safeNumber(player.getAttributeValue(Attributes.ATTACK_KNOCKBACK)));
+            values.put("ysm.movement_speed", safeNumber(player.getAttributeValue(Attributes.MOVEMENT_SPEED)));
+            values.put("ysm.knockback_resistance", safeNumber(player.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE)));
+            values.put("ysm.luck", safeNumber(player.getAttributeValue(Attributes.LUCK)));
+            values.put("ysm.block_reach", safeNumber(ForgeAttributes.getValue(player, ForgeAttributes.blockReach(), 4.5D)));
+            values.put("ysm.entity_reach", safeNumber(ForgeAttributes.getValue(player, ForgeAttributes.entityReach(), 3.0D)));
+            values.put("ysm.swim_speed", safeNumber(ForgeAttributes.getValue(player, ForgeAttributes.swimSpeed(), 1.0D)));
+            values.put("ysm.entity_gravity", safeNumber(ForgeAttributes.getValue(player, ForgeAttributes.entityGravity(), 0.08D)));
+            values.put("ysm.step_height_addition", safeNumber(ForgeAttributes.getValue(player, ForgeAttributes.stepHeightAddition(), 0.0D)));
+            values.put("ysm.nametag_distance", safeNumber(ForgeAttributes.getValue(player, ForgeAttributes.nametagDistance(), 64.0D)));
             boolean shieldCooldown = event.getAnimatable() instanceof PlayerCapability cap && cap.getPositionTracker().isShieldBlocking();
             values.put("ysm.in_shield_block_cooldown", MolangValue.bool(shieldCooldown));
         }
@@ -665,7 +683,173 @@ public final class HostMolangBindings {
                 commands);
     }
 
+    public static final class FrameCallCache {
+        private final @Nullable LivingEntity living;
+        private @Nullable CoreQueryFunctions.Source cachedSourceWithTags;
+        private @Nullable CoreQueryFunctions.Source cachedSourceNoTags;
+        private @Nullable java.util.Set<String> biomeTags;
+        private final CoreQueryFunctions.Equipment[] equipmentWithTags = new CoreQueryFunctions.Equipment[CoreQueryFunctions.Slot.values().length];
+        private final CoreQueryFunctions.Equipment[] equipmentNoTags = new CoreQueryFunctions.Equipment[CoreQueryFunctions.Slot.values().length];
+        private @Nullable java.util.Map<CoreQueryFunctions.BlockPosition, String> blockIds;
+        private @Nullable java.util.Map<CoreQueryFunctions.BlockPosition, java.util.Set<String>> blockTags;
+        private boolean cameraCached;
+        private double cameraPitch;
+        private double cameraYaw;
+
+        private FrameCallCache(@Nullable LivingEntity living) {
+            this.living = living;
+        }
+
+        private CoreQueryFunctions.Source source(boolean needsItemTags) {
+            if (this.living == null) {
+                throw new IllegalStateException("No living entity");
+            }
+            if (!needsItemTags) {
+                if (this.cachedSourceNoTags == null) {
+                    this.cachedSourceNoTags = createSource(false);
+                }
+                return this.cachedSourceNoTags;
+            }
+            if (this.cachedSourceWithTags == null) {
+                this.cachedSourceWithTags = createSource(true);
+            }
+            return this.cachedSourceWithTags;
+        }
+
+        private CoreQueryFunctions.Source createSource(boolean needsItemTags) {
+            final LivingEntity entity = this.living;
+            return new CoreQueryFunctions.Source() {
+                @Override
+                public java.util.Set<String> biomeTags() {
+                    if (FrameCallCache.this.biomeTags == null) {
+                        BlockPos bp = entity.blockPosition();
+                        if (!entity.level().hasChunk(bp.getX() >> 4, bp.getZ() >> 4)) {
+                            FrameCallCache.this.biomeTags = java.util.Set.of();
+                        } else {
+                            FrameCallCache.this.biomeTags = entity.level().getBiome(bp).tags()
+                                    .map(tag -> tag.location().toString())
+                                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                        }
+                    }
+                    return FrameCallCache.this.biomeTags;
+                }
+
+                @Override
+                public CoreQueryFunctions.Equipment equipment(CoreQueryFunctions.Slot slot) {
+                    int idx = slot.ordinal();
+                    CoreQueryFunctions.Equipment[] table = needsItemTags ? equipmentWithTags : equipmentNoTags;
+                    CoreQueryFunctions.Equipment cached = table[idx];
+                    if (cached != null) {
+                        return cached;
+                    }
+                    if (!needsItemTags && equipmentWithTags[idx] != null) {
+                        return equipmentWithTags[idx];
+                    }
+                    EquipmentSlot target = EquipmentSlot.valueOf(slot.name());
+                    ItemStack stack = CosmeticArmorHelper.getArmorItem(entity, target);
+                    Identifier key = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                    java.util.Set<String> tags = needsItemTags && !stack.isEmpty()
+                            ? stack.typeHolder().tags()
+                                    .map(tag -> tag.location().toString())
+                                    .collect(java.util.stream.Collectors.toUnmodifiableSet())
+                            : java.util.Set.of();
+                    CoreQueryFunctions.Equipment eq = new CoreQueryFunctions.Equipment(
+                            key == null ? "minecraft:air" : key.toString(),
+                            stack.isEmpty(),
+                            stack.getMaxDamage(),
+                            stack.getDamageValue(),
+                            tags);
+                    table[idx] = eq;
+                    return eq;
+                }
+
+                @Override
+                public java.util.Set<String> blockTags(CoreQueryFunctions.BlockPosition position) {
+                    if (blockTags == null) {
+                        blockTags = new java.util.HashMap<>(4);
+                    }
+                    return blockTags.computeIfAbsent(position, p -> {
+                        BlockPos pos = new BlockPos(p.x(), p.y(), p.z());
+                        if (!entity.level().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+                            return java.util.Set.of();
+                        }
+                        BlockState state = entity.level().getBlockState(pos);
+                        return state.typeHolder().tags()
+                                .map(tag -> tag.location().toString())
+                                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                    });
+                }
+
+                @Override
+                public String blockId(CoreQueryFunctions.BlockPosition position) {
+                    if (blockIds == null) {
+                        blockIds = new java.util.HashMap<>(4);
+                    }
+                    if (blockIds.containsKey(position)) {
+                        return blockIds.get(position);
+                    }
+                    BlockPos pos = new BlockPos(position.x(), position.y(), position.z());
+                    String resolved = null;
+                    if (entity.level().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+                        BlockState state = entity.level().getBlockState(pos);
+                        Identifier key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+                        resolved = key == null ? null : key.toString();
+                    }
+                    blockIds.put(position, resolved);
+                    return resolved;
+                }
+
+                @Override
+                public double entityX() {
+                    return finite(entity.getX());
+                }
+
+                @Override
+                public double entityY() {
+                    return finite(entity.getY());
+                }
+
+                @Override
+                public double entityZ() {
+                    return finite(entity.getZ());
+                }
+
+                private void ensureCamera() {
+                    if (!cameraCached) {
+                        cameraCached = true;
+                        Minecraft mc = Minecraft.getInstance();
+                        if (mc != null && mc.gameRenderer != null) {
+                            cameraPitch = finite(mc.gameRenderer.getMainCamera().xRot());
+                            cameraYaw = finite(mc.gameRenderer.getMainCamera().yRot());
+                        }
+                    }
+                }
+
+                @Override
+                public double cameraPitch() {
+                    ensureCamera();
+                    return cameraPitch;
+                }
+
+                @Override
+                public double cameraYaw() {
+                    ensureCamera();
+                    return cameraYaw;
+                }
+            };
+        }
+    }
+
+    public static FrameCallCache createCallCache(HostActionEvent<?> event) {
+        Entity entity = event.getAnimatable().getEntity();
+        return new FrameCallCache(entity instanceof LivingEntity le ? le : null);
+    }
+
     public static MolangValue resolveCall(HostActionEvent<?> event, MolangBindings.Call call) {
+        return resolveCall(event, call, null);
+    }
+
+    public static MolangValue resolveCall(HostActionEvent<?> event, MolangBindings.Call call, @Nullable FrameCallCache cache) {
         String name = call.name();
         List<MolangValue> args = call.arguments();
         Entity entity = event.getAnimatable().getEntity();
@@ -682,16 +866,12 @@ public final class HostMolangBindings {
         }
 
         if (CoreQueryFunctions.supports(name) && living != null) {
-            try {
-                var resolver = MinecraftHostSnapshotSampler.queryResolver(Minecraft.getInstance(), living, false);
-                return resolver.resolve(call);
-            } catch (RuntimeException ignored) {
-                return MolangValue.missing();
-            }
+            return resolveCoreQuerySafely(living, call, cache);
         }
 
         return switch (name) {
             case "query.debug_output" -> MolangValue.missing();
+            case "ysm.get_equipped_item_name" -> resolveYsmEquippedItemName(living, args);
             case "ysm.play_sound", "ysm.stop_sound", "ysm.stop_all_sounds", "ysm.particle", "ysm.abs_particle" ->
                     MolangValue.bool(true);
             case "ysm.relative_block_name_any" -> resolveRelativeBlockNameAny(entity, args);
@@ -715,6 +895,40 @@ public final class HostMolangBindings {
         };
     }
 
+    /**
+     * Thread-safe live {@link CoreQueryFunctions.Source} for animation evaluation on {@code YSMThreadPool}.
+     * Avoids {@link MinecraftCoreQueryResolver}'s main-thread check that previously caused every
+     * {@code CoreQueryFunctions} call to throw and silently return {@code MolangValue.missing()} off-thread.
+     */
+    private static MolangValue resolveCoreQuerySafely(LivingEntity living, MolangBindings.Call call, @Nullable FrameCallCache cache) {
+        try {
+            boolean needsItemTags = "query.equipped_item_all_tags".equals(call.name())
+                    || "query.equipped_item_any_tag".equals(call.name());
+            FrameCallCache resolvedCache = cache != null && cache.living == living ? cache : new FrameCallCache(living);
+            return CoreQueryFunctions.resolve(call.name(), call.arguments(), resolvedCache.source(needsItemTags));
+        } catch (RuntimeException ignored) {
+            return MolangValue.missing();
+        }
+    }
+
+    /**
+     * Restores legacy {@code ysm.get_equipped_item_name(hand)} semantics (short item path, {@code "empty"} when empty).
+     */
+    private static MolangValue resolveYsmEquippedItemName(@Nullable LivingEntity living, List<MolangValue> args) {
+        if (living == null || args.isEmpty()) {
+            return MolangValue.text("empty");
+        }
+        String hand = textArg(args, 0);
+        ItemStack stack = "off_hand".equals(hand) || "offhand".equals(hand)
+                ? living.getOffhandItem()
+                : living.getMainHandItem();
+        if (stack.isEmpty()) {
+            return MolangValue.text("empty");
+        }
+        Identifier key = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        return MolangValue.text(key == null ? "empty" : key.getPath());
+    }
+
     public static void dispatchEffects(
             HostAnimatable<?> animatable,
             HostActionEvent<?> event,
@@ -732,16 +946,33 @@ public final class HostMolangBindings {
                 entityAudio.playSound(animatable, 0, effect.resource(), false, null);
                 continue;
             }
-            if ("particle".equals(effect.kind()) && args.isEmpty()) {
-                String particleName = effect.resource();
-                Object locatorObj = effect.parameters().get("locator");
-                String locator = locatorObj == null ? "" : locatorObj.toString();
-                if (!particleName.isBlank() && pose != null && !locator.isEmpty() && entity != null) {
+            if ("particle".equals(effect.kind()) && args.size() <= 1) {
+                String rawResource = effect.resource() == null ? "" : effect.resource();
+                String locator = "";
+                if (args.size() == 1 && args.get(0) instanceof MolangValue.TextValue textLoc) {
+                    locator = textLoc.value();
+                }
+                if (locator.isEmpty()) {
+                    Object locatorObj = effect.parameters().get("locator");
+                    if (locatorObj != null) {
+                        locator = locatorObj.toString();
+                    }
+                }
+                String particleName = rawResource;
+                int sep = rawResource.indexOf(HostAnimationAssets.PARTICLE_LOCATOR_SEPARATOR);
+                if (sep >= 0) {
+                    particleName = rawResource.substring(0, sep);
+                    if (locator.isEmpty()) {
+                        locator = rawResource.substring(sep + 1);
+                    }
+                }
+                final String resolvedParticle = particleName;
+                if (!resolvedParticle.isBlank() && pose != null && !locator.isEmpty() && entity != null) {
                     pose.animationParticles.enqueue(particleKey, locator, offset -> {
                         Vector3d posVec = new Vector3d(offset.x, offset.y, offset.z);
                         mc.execute(() -> {
                             try {
-                                ParticleEffectUtil.spawnAnimationParticle(entity, particleName, posVec, entity.getRandom());
+                                ParticleEffectUtil.spawnAnimationParticle(entity, resolvedParticle, posVec, entity.getRandom());
                             } catch (Exception ignored) {
                             }
                         });
@@ -811,31 +1042,33 @@ public final class HostMolangBindings {
         if (bone == null) return MolangValue.missing();
         return switch (channel) {
             case ROT -> MolangValue.struct(Map.of(
-                    "x", MolangValue.number(Math.toDegrees(bone.getRotationX())),
-                    "y", MolangValue.number(Math.toDegrees(bone.getRotationY())),
-                    "z", MolangValue.number(Math.toDegrees(bone.getRotationZ()))));
+                    "x", safeNumber(Math.toDegrees(bone.getRotationX())),
+                    "y", safeNumber(Math.toDegrees(bone.getRotationY())),
+                    "z", safeNumber(Math.toDegrees(bone.getRotationZ()))));
             case POS -> MolangValue.struct(Map.of(
-                    "x", MolangValue.number(bone.getPositionX()),
-                    "y", MolangValue.number(bone.getPositionY()),
-                    "z", MolangValue.number(bone.getPositionZ())));
+                    "x", safeNumber(bone.getPositionX()),
+                    "y", safeNumber(bone.getPositionY()),
+                    "z", safeNumber(bone.getPositionZ())));
             case SCALE -> MolangValue.struct(Map.of(
-                    "x", MolangValue.number(bone.getScaleX()),
-                    "y", MolangValue.number(bone.getScaleY()),
-                    "z", MolangValue.number(bone.getScaleZ())));
+                    "x", safeNumber(bone.getScaleX()),
+                    "y", safeNumber(bone.getScaleY()),
+                    "z", safeNumber(bone.getScaleZ())));
             case PIVOT_ABS -> MolangValue.struct(Map.of(
-                    "x", MolangValue.number(bone.getAbsPivotX()),
-                    "y", MolangValue.number(bone.getAbsPivotY()),
-                    "z", MolangValue.number(bone.getAbsPivotZ())));
+                    "x", safeNumber(bone.getAbsPivotX()),
+                    "y", safeNumber(bone.getAbsPivotY()),
+                    "z", safeNumber(bone.getAbsPivotZ())));
         };
     }
 
     private static MolangValue resolveRelativeBlockNameAny(Entity entity, List<MolangValue> args) {
         if (args.size() <= 3) return MolangValue.bool(false);
         double dx = args.get(0).number(), dy = args.get(1).number(), dz = args.get(2).number();
-        if (Math.abs(dx) > 5.0 || Math.abs(dy) > 5.0 || Math.abs(dz) > 5.0) return MolangValue.missing();
+        if (!Double.isFinite(dx) || !Double.isFinite(dy) || !Double.isFinite(dz)
+                || Math.abs(dx) > 5.0 || Math.abs(dy) > 5.0 || Math.abs(dz) > 5.0) return MolangValue.missing();
         BlockPos pos = new BlockPos((int) Math.round(entity.getX() + dx - 0.5),
                 (int) Math.round(entity.getY() + dy - 0.5),
                 (int) Math.round(entity.getZ() + dz - 0.5));
+        if (!entity.level().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) return MolangValue.bool(false);
         BlockState state = entity.level().getBlockState(pos);
         Identifier key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         if (key == null) return MolangValue.bool(false);
@@ -1023,15 +1256,15 @@ public final class HostMolangBindings {
 
     private static MolangValue vectorStruct(Vec3 v) {
         return MolangValue.struct(Map.of(
-                "x", MolangValue.number(v.x),
-                "y", MolangValue.number(v.y),
-                "z", MolangValue.number(v.z)));
+                "x", safeNumber(v.x),
+                "y", safeNumber(v.y),
+                "z", safeNumber(v.z)));
     }
 
     private static float getYawSpeed(Entity entity) {
         Minecraft mc = Minecraft.getInstance();
         if (entity != mc.player) {
-            return 20.0f * (entity.getYRot() - entity.yRotO);
+            return 20.0f * Mth.wrapDegrees(entity.getYRot() - entity.yRotO);
         }
         return PlayerEntityFrameState.getHeadYawDelta();
     }

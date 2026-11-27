@@ -105,6 +105,25 @@ public class BuiltModel {
     public long gpuMeshHandle = 0;
 
     private volatile @Nullable ComputeCache computeCache;
+    private int cachedHasGlowBones = -1;
+
+    public boolean hasGlowBones() {
+        int cached = this.cachedHasGlowBones;
+        if (cached >= 0) {
+            return cached == 1;
+        }
+        boolean found = false;
+        if (this.bakedBones != null) {
+            for (int i = 0, n = this.bakedBones.size(); i < n; i++) {
+                if (this.bakedBones.get(i).glow) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        this.cachedHasGlowBones = found ? 1 : 0;
+        return found;
+    }
 
     public record PartBatch(VertexBatch vertices, float[] uvs) {
     }
@@ -209,6 +228,28 @@ public class BuiltModel {
         public float rotX, rotY, rotZ;
         public List<BakedCube> cubes = new ObjectArrayList<>();
         public int partMask;
+        private transient @Nullable BakedQuad[] flatQuads;
+
+        public BakedQuad[] getOrBuildFlatQuads() {
+            BakedQuad[] cached = this.flatQuads;
+            if (cached != null) {
+                return cached;
+            }
+            int total = 0;
+            for (int c = 0, cn = this.cubes.size(); c < cn; c++) {
+                total += this.cubes.get(c).quads.size();
+            }
+            BakedQuad[] flat = new BakedQuad[total];
+            int idx = 0;
+            for (int c = 0, cn = this.cubes.size(); c < cn; c++) {
+                List<BakedQuad> quads = this.cubes.get(c).quads;
+                for (int q = 0, qn = quads.size(); q < qn; q++) {
+                    flat[idx++] = quads.get(q);
+                }
+            }
+            this.flatQuads = flat;
+            return flat;
+        }
     }
 
     public static class BakedCube {
@@ -225,6 +266,13 @@ public class BuiltModel {
         public float normalX, normalY, normalZ;
 
         public void setNormal(float x, float y, float z) {
+            float lenSq = x * x + y * y + z * z;
+            if (lenSq > 0.0f && Math.abs(lenSq - 1.0f) > 1.0e-5f) {
+                float inv = org.joml.Math.invsqrt(lenSq);
+                x *= inv;
+                y *= inv;
+                z *= inv;
+            }
             this.normalX = x;
             this.normalY = y;
             this.normalZ = z;

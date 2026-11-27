@@ -58,6 +58,13 @@ public class FirstPersonArmAnimationController {
 
     private static final ProcessorPipeline<SpmPlayerEntity, PlayerModelBundle> processorRegistry = new ProcessorPipeline<>();
 
+    /** 仅在 bbmodel/figura 导入模型上安装第一人称自动武器兜底槽（禁止污染全局静态注册表）。 */
+    private static final ModelProcessor<SpmPlayerEntity, PlayerModelBundle> IMPORTED_WEAPON_PROCESSOR =
+            new NamedModelProcessor<>(
+                    FP_ARM_PREFIX, "weapon", REQUIRED_WEAPON_ANIMATIONS, false,
+                    DefaultBoneExpressionProvider.INSTANCE,
+                    (animationEntryKey, entity) -> new HostControllerSlot<>(entity, animationEntryKey, 0.0f, new FirstPersonWeaponAnimationPredicate()));
+
     private static void registerDefaultProcessors() {
         registerNamedProcessor("misc", null, true, (animationEntryKey, entity) -> new HostControllerSlot<>(entity, animationEntryKey, 0.0f, new StopAnimationPredicate<>()));
         registerParallelProcessor("parallel", (animationEntryKey, entity, linkedAnimationName) -> new HostControllerSlot<>(entity, animationEntryKey, 0.0f, linkedAnimationName != null ? new NamedAnimationPredicate<>(linkedAnimationName) : new StopAnimationPredicate<>(), true));
@@ -65,21 +72,20 @@ public class FirstPersonArmAnimationController {
         registerNamedProcessor("lance", REQUIRED_LANCE_ANIMATIONS, false, (animationEntryKey, entity) -> new HostControllerSlot<>(entity, animationEntryKey, 0.0f, new FirstPersonLanceAnimationPredicate()));
     }
 
-    /** 仅在 bbmodel/figura 导入模型上安装第一人称自动武器兜底槽。 */
-    private static void registerWeaponProcessors() {
-        ModelProcessor<SpmPlayerEntity, PlayerModelBundle> weapon = new NamedModelProcessor<>(
-                FP_ARM_PREFIX, "weapon", REQUIRED_WEAPON_ANIMATIONS, false,
-                DefaultBoneExpressionProvider.INSTANCE,
-                (animationEntryKey, entity) -> new HostControllerSlot<>(entity, animationEntryKey, 0.0f, new FirstPersonWeaponAnimationPredicate()));
-        processorRegistry.register(weapon);
-    }
-
     public static Consumer<SpmPlayerEntity> buildControllers(PlayerModelBundle modelBundle, ModelResourceBundle resourceBundle) {
         processorRegistry.initializeOnce(FirstPersonArmAnimationController::registerDefaultProcessors);
-        if (isImportedPlayerModel(modelBundle)) {
-            registerWeaponProcessors();
+        Consumer<SpmPlayerEntity> base = processorRegistry.buildAll(modelBundle, resourceBundle);
+        if (!isImportedPlayerModel(modelBundle)) {
+            return base;
         }
-        return processorRegistry.buildAll(modelBundle, resourceBundle);
+        var weaponInstaller = IMPORTED_WEAPON_PROCESSOR.process(modelBundle, resourceBundle);
+        if (weaponInstaller == null) {
+            return base;
+        }
+        return entity -> {
+            base.accept(entity);
+            weaponInstaller.create(entity, entity::addAnimationController);
+        };
     }
 
     private static boolean isImportedPlayerModel(PlayerModelBundle modelBundle) {

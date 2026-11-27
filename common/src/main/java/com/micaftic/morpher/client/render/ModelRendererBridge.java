@@ -116,15 +116,7 @@ public class ModelRendererBridge {
     }
 
     public static boolean shouldUseEmissiveBoneMaterial(BuiltModel model) {
-        if (model == null || model.bakedBones == null) return false;
-        boolean hasGlow = false;
-        for (BuiltModel.BakedBone bone : model.bakedBones) {
-            if (bone.glow) {
-                hasGlow = true;
-                break;
-            }
-        }
-        if (!hasGlow) return false;
+        if (model == null || !model.hasGlowBones()) return false;
         OculusCompat.updatePBRState();
         boolean preview = ModelPreviewRenderer.isPreview() || ModelPreviewRenderer.isExtraPlayer();
         boolean shaderPackInUse = OculusCompat.isShaderPackInUse() && !preview;
@@ -294,45 +286,86 @@ public class ModelRendererBridge {
 
             int currentPackedLight = bone.glow && !disableGlow ? FULL_BRIGHT_LIGHT : packedLight;
 
-            for (BuiltModel.BakedCube cube : bone.cubes) {
-                for (BuiltModel.BakedQuad quad : cube.quads) {
+            boolean orthonormalNormals =
+                    Math.abs((n00 * n00 + n01 * n01 + n02 * n02) - 1.0f) < 1.0e-3f
+                    && Math.abs((n10 * n10 + n11 * n11 + n12 * n12) - 1.0f) < 1.0e-3f
+                    && Math.abs((n20 * n20 + n21 * n21 + n22 * n22) - 1.0f) < 1.0e-3f
+                    && Math.abs(n00 * n10 + n01 * n11 + n02 * n12) < 1.0e-3f
+                    && Math.abs(n00 * n20 + n01 * n21 + n02 * n22) < 1.0e-3f
+                    && Math.abs(n10 * n20 + n11 * n21 + n12 * n22) < 1.0e-3f;
+
+            BuiltModel.BakedQuad[] flatQuads = bone.getOrBuildFlatQuads();
+            int quadCount = flatQuads.length;
+            if (useJavaVector && affineRoot) {
+                for (int q = 0; q < quadCount; q++) {
+                    BuiltModel.BakedQuad quad = flatQuads[q];
                     float qnx = quad.normalX, qny = quad.normalY, qnz = quad.normalZ;
                     float nx = n00 * qnx + n10 * qny + n20 * qnz;
                     float ny = n01 * qnx + n11 * qny + n21 * qnz;
                     float nz = n02 * qnx + n12 * qny + n22 * qnz;
-                    float lenSq = nx * nx + ny * ny + nz * nz;
-                    if (lenSq > 0.0f) {
-                        float invLen = org.joml.Math.invsqrt(lenSq);
-                        nx *= invLen;
-                        ny *= invLen;
-                        nz *= invLen;
+                    if (!orthonormalNormals) {
+                        float lenSq = nx * nx + ny * ny + nz * nz;
+                        if (lenSq > 0.0f) {
+                            float invLen = org.joml.Math.invsqrt(lenSq);
+                            nx *= invLen;
+                            ny *= invLen;
+                            nz *= invLen;
+                        }
                     }
                     float[] uvs = quad.packedUvs;
-                    if (useJavaVector && affineRoot) {
-                        JdkVectorModelMath.transformQuadPositions(
-                                quad,
-                                m00, m10, m20, m30,
-                                m01, m11, m21, m31,
-                                m02, m12, m22, m32,
-                                vectorX, vectorY, vectorZ);
-                        for (int v = 0; v < 4; v++) {
-                            int uvOff = v << 1;
-                            vertexConsumer.addVertex(vectorX[v], vectorY[v], vectorZ[v], packedColor, uvs[uvOff], uvs[uvOff + 1], packedOverlay, currentPackedLight, nx, ny, nz);
-                        }
-                    } else {
-                        float[] pos = quad.packedPositions;
-                        for (int v = 0; v < 4; v++) {
-                            int pOff = v * 3;
-                            int uvOff = v << 1;
-                            float qx = pos[pOff];
-                            float qy = pos[pOff + 1];
-                            float qz = pos[pOff + 2];
-                            float vx = m00 * qx + m10 * qy + m20 * qz + m30;
-                            float vy = m01 * qx + m11 * qy + m21 * qz + m31;
-                            float vz = m02 * qx + m12 * qy + m22 * qz + m32;
-                            vertexConsumer.addVertex(vx, vy, vz, packedColor, uvs[uvOff], uvs[uvOff + 1], packedOverlay, currentPackedLight, nx, ny, nz);
+                    JdkVectorModelMath.transformQuadPositions(
+                            quad,
+                            m00, m10, m20, m30,
+                            m01, m11, m21, m31,
+                            m02, m12, m22, m32,
+                            vectorX, vectorY, vectorZ);
+                    vertexConsumer.addVertex(vectorX[0], vectorY[0], vectorZ[0], packedColor, uvs[0], uvs[1], packedOverlay, currentPackedLight, nx, ny, nz);
+                    vertexConsumer.addVertex(vectorX[1], vectorY[1], vectorZ[1], packedColor, uvs[2], uvs[3], packedOverlay, currentPackedLight, nx, ny, nz);
+                    vertexConsumer.addVertex(vectorX[2], vectorY[2], vectorZ[2], packedColor, uvs[4], uvs[5], packedOverlay, currentPackedLight, nx, ny, nz);
+                    vertexConsumer.addVertex(vectorX[3], vectorY[3], vectorZ[3], packedColor, uvs[6], uvs[7], packedOverlay, currentPackedLight, nx, ny, nz);
+                }
+            } else {
+                for (int q = 0; q < quadCount; q++) {
+                    BuiltModel.BakedQuad quad = flatQuads[q];
+                    float qnx = quad.normalX, qny = quad.normalY, qnz = quad.normalZ;
+                    float nx = n00 * qnx + n10 * qny + n20 * qnz;
+                    float ny = n01 * qnx + n11 * qny + n21 * qnz;
+                    float nz = n02 * qnx + n12 * qny + n22 * qnz;
+                    if (!orthonormalNormals) {
+                        float lenSq = nx * nx + ny * ny + nz * nz;
+                        if (lenSq > 0.0f) {
+                            float invLen = org.joml.Math.invsqrt(lenSq);
+                            nx *= invLen;
+                            ny *= invLen;
+                            nz *= invLen;
                         }
                     }
+                    float[] uvs = quad.packedUvs;
+                    float[] pos = quad.packedPositions;
+                    float qx0 = pos[0], qy0 = pos[1], qz0 = pos[2];
+                    vertexConsumer.addVertex(
+                            m00 * qx0 + m10 * qy0 + m20 * qz0 + m30,
+                            m01 * qx0 + m11 * qy0 + m21 * qz0 + m31,
+                            m02 * qx0 + m12 * qy0 + m22 * qz0 + m32,
+                            packedColor, uvs[0], uvs[1], packedOverlay, currentPackedLight, nx, ny, nz);
+                    float qx1 = pos[3], qy1 = pos[4], qz1 = pos[5];
+                    vertexConsumer.addVertex(
+                            m00 * qx1 + m10 * qy1 + m20 * qz1 + m30,
+                            m01 * qx1 + m11 * qy1 + m21 * qz1 + m31,
+                            m02 * qx1 + m12 * qy1 + m22 * qz1 + m32,
+                            packedColor, uvs[2], uvs[3], packedOverlay, currentPackedLight, nx, ny, nz);
+                    float qx2 = pos[6], qy2 = pos[7], qz2 = pos[8];
+                    vertexConsumer.addVertex(
+                            m00 * qx2 + m10 * qy2 + m20 * qz2 + m30,
+                            m01 * qx2 + m11 * qy2 + m21 * qz2 + m31,
+                            m02 * qx2 + m12 * qy2 + m22 * qz2 + m32,
+                            packedColor, uvs[4], uvs[5], packedOverlay, currentPackedLight, nx, ny, nz);
+                    float qx3 = pos[9], qy3 = pos[10], qz3 = pos[11];
+                    vertexConsumer.addVertex(
+                            m00 * qx3 + m10 * qy3 + m20 * qz3 + m30,
+                            m01 * qx3 + m11 * qy3 + m21 * qz3 + m31,
+                            m02 * qx3 + m12 * qy3 + m22 * qz3 + m32,
+                            packedColor, uvs[6], uvs[7], packedOverlay, currentPackedLight, nx, ny, nz);
                 }
             }
         }

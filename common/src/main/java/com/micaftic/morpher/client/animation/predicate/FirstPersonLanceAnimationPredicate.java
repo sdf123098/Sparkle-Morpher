@@ -50,8 +50,8 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<S
                 event.getController().stopTransition();
             }
             String animation = lance.lunging()
-                    ? selectAnimation(animatable, "lance_lunge", "lance_jab", "swing:lance", "swing:spear")
-                    : selectAnimation(animatable, "lance_jab", "swing:lance", "swing:spear");
+                    ? selectAnimation(animatable, "lance_lunge", "lance_jab", "swing:lance")
+                    : selectAnimation(animatable, "lance_jab", "swing:lance");
             return playIfPresent(event, animation, CodedLoopMode.PLAY_ONCE);
         }
 
@@ -60,8 +60,8 @@ public class FirstPersonLanceAnimationPredicate implements IAnimationPredicate<S
         }
 
         String animation = lance.riding()
-                ? selectAnimation(animatable, "lance_riding_idle", "lance_stand", "hold_mainhand:lance", "hold_mainhand:spear")
-                : selectAnimation(animatable, "lance_stand", "hold_mainhand:lance", "hold_mainhand:spear");
+                ? selectAnimation(animatable, "lance_riding_idle", "lance_stand", "hold_mainhand:lance")
+                : selectAnimation(animatable, "lance_stand", "hold_mainhand:lance");
         ClipSpec holdClip = animation == null ? null : animatable.getAnimation(animation);
         return playIfPresent(event, animation, resolveUseLoopMode(holdClip));
     }
