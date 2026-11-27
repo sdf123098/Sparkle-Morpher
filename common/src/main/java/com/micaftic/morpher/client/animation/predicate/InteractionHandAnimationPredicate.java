@@ -70,14 +70,15 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
     private HostPlayState.Decision playUseAnimation(HostActionEvent<LivingAnimatable<?>> event, LivingEntity livingEntity, InteractionHand usedHand, HumanoidArm usedArm, String animation) {
         ItemStack itemStack = livingEntity.getItemInHand(usedHand);
         if (isLanceUse(itemStack)) {
+            WeaponKind weaponKind = InnerClassify.getWeaponKind(itemStack);
+            WeaponActionState state = WeaponActionBridge.get(livingEntity, event.getPartialTick());
             ResolvedAnimation resolved = null;
             if (usedHand == InteractionHand.MAIN_HAND) {
-                WeaponActionState state = WeaponActionBridge.get(livingEntity, event.getPartialTick());
                 if (isLanceLike(state.kind())) {
                     resolved = pickFirstAvailable(event, LanceAnimationTiming.selectChargeNames(state.lance(), usedArm));
                 }
             } else {
-                resolved = pickFirstAvailable(event, LanceAnimationTiming.selectChargeNames(WeaponActionBridge.get(livingEntity, event.getPartialTick()).lance(), usedArm));
+                resolved = pickFirstAvailable(event, LanceAnimationTiming.selectChargeNames(state.lance(), usedArm));
             }
             if (resolved != null) {
                 animation = resolved.name();
@@ -87,9 +88,20 @@ public class InteractionHandAnimationPredicate implements IAnimationPredicate<Li
                             itemStack, useTicks, resolved.animation(), event.getController().getCurrentAnimTimeSeconds());
                     event.getController().setPlaybackSpeed(speed);
                 }
+            } else if (weaponKind == WeaponKind.SPEAR && !hasDedicatedLanceClip(event, animation)) {
+                // Keep vanilla spear isolated from Trident :spear and generic 0.375s looping use_mainhand/use_offhand.
+                return HostPlayState.Decision.STOP;
             }
         }
         return playContinuousUseAnimation(event, animation);
+    }
+
+    private boolean hasDedicatedLanceClip(HostActionEvent<LivingAnimatable<?>> event, String animation) {
+        if ("use_mainhand".equals(animation) || "use_offhand".equals(animation)) {
+            return false;
+        }
+        ClipSpec clip = event.getAnimatable().getAnimation(animation);
+        return clip != null && !clip.isEmpty();
     }
 
     static HostPlayState.Decision playContinuousUseAnimation(HostActionEvent<? extends LivingAnimatable<?>> event, String animation) {

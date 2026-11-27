@@ -21,15 +21,15 @@ final class LanceAnimationTiming {
 
     static String[] selectChargeNames(LanceActionState lance, HumanoidArm usedArm) {
         if (usedArm == HumanoidArm.LEFT) {
-            return new String[]{"use_offhand:lance", "use_offhand:spear"};
+            return new String[]{"use_offhand:lance"};
         }
         if (lance.ridingCharge()) {
-            return new String[]{"lance_riding_charge", "lance_charge", "use_mainhand:lance", "use_mainhand:spear"};
+            return new String[]{"lance_riding_charge", "lance_charge", "use_mainhand:lance"};
         }
         if (lance.fallFlying()) {
-            return new String[]{"lance_fall_flying_charge", "lance_charge", "use_mainhand:lance", "use_mainhand:spear"};
+            return new String[]{"lance_fall_flying_charge", "lance_charge", "use_mainhand:lance"};
         }
-        return new String[]{"lance_charge", "use_mainhand:lance", "use_mainhand:spear"};
+        return new String[]{"lance_charge", "use_mainhand:lance"};
     }
 
     private static final double BUILTIN_LANCE_MIN_LENGTH_SECONDS = 12.5;

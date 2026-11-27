@@ -132,24 +132,34 @@ class ItemUseAnimationRegressionTest {
     }
 
     @Test
-    void lanceChargeSelectNamesCoverRightLeftAndSpearFallback() {
+    void lanceChargeSelectNamesCoverRightAndLeftWithoutMixingTridentSpearNamespace() {
         LanceActionState idleCharge = new LanceActionState(true, true, true, false, false, false, false, false, 1f, 0f, 0f, 0.5f);
         assertArrayEquals(
-                new String[]{"lance_charge", "use_mainhand:lance", "use_mainhand:spear"},
+                new String[]{"lance_charge", "use_mainhand:lance"},
                 LanceAnimationTiming.selectChargeNames(idleCharge, HumanoidArm.RIGHT)
         );
         assertArrayEquals(
-                new String[]{"use_offhand:lance", "use_offhand:spear"},
+                new String[]{"use_offhand:lance"},
                 LanceAnimationTiming.selectChargeNames(idleCharge, HumanoidArm.LEFT)
+        );
+        LanceActionState ridingCharge = new LanceActionState(true, true, true, false, false, true, true, false, 1f, 0f, 0f, 0.5f);
+        assertArrayEquals(
+                new String[]{"lance_riding_charge", "lance_charge", "use_mainhand:lance"},
+                LanceAnimationTiming.selectChargeNames(ridingCharge, HumanoidArm.RIGHT)
+        );
+        LanceActionState elytraCharge = new LanceActionState(true, true, true, false, false, false, false, true, 1f, 0f, 0f, 0.5f);
+        assertArrayEquals(
+                new String[]{"lance_fall_flying_charge", "lance_charge", "use_mainhand:lance"},
+                LanceAnimationTiming.selectChargeNames(elytraCharge, HumanoidArm.RIGHT)
         );
     }
 
     @Test
-    void spearUseContractDoesNotAbortFallbackOrFeedTicksIntoSpeedMultiplier() throws Exception {
+    void spearUseContractIsolatesLanceFromTridentSpearAndUsesClosedLoopSpeed() throws Exception {
         String predicate = RepoSourceLookup.readSource(
                 "com/micaftic/morpher/client/animation/predicate/InteractionHandAnimationPredicate.java");
-        assertFalse(predicate.contains("state.kind() == WeaponKind.SPEAR"),
-                "Vanilla spear must not return STOP when custom lance clips are absent");
+        assertTrue(predicate.contains("weaponKind == WeaponKind.SPEAR"),
+                "Vanilla spear must stop cleanly when no dedicated lance clip is present instead of looping generic use_mainhand");
         assertFalse(predicate.contains("setAnimationTickOverride"),
                 "Must not pass raw tick counts into setAnimationTickOverride (which sets playback speed)");
         assertFalse(predicate.contains("playAnimationWithValid"),
@@ -159,11 +169,23 @@ class ItemUseAnimationRegressionTest {
                 "com/micaftic/morpher/client/animation/predicate/FirstPersonLanceAnimationPredicate.java");
         assertFalse(fpLance.contains("setAnimationTickOverride"),
                 "FirstPersonLanceAnimationPredicate must not pass tick counts as playback speed");
+        assertFalse(fpLance.contains("swing:spear") || fpLance.contains("hold_mainhand:spear"),
+                "FirstPersonLanceAnimationPredicate must keep :lance isolated from Trident :spear");
 
         String conditionUse = RepoSourceLookup.readSource(
                 "com/micaftic/morpher/client/animation/condition/ConditionUse.java");
-        assertTrue(conditionUse.contains("ItemUseAnimation.SPEAR.name().toLowerCase"),
-                "ConditionUse must also check use_mainhand:spear when handling ItemUseAnimation.SPEAR");
+        assertFalse(conditionUse.contains("legacySpearUse"),
+                "ConditionUse must NOT fall back from vanilla ItemUseAnimation.SPEAR to Trident's :spear namespace");
+
+        String conditionHold = RepoSourceLookup.readSource(
+                "com/micaftic/morpher/client/animation/condition/ConditionHold.java");
+        assertTrue(conditionHold.contains("weaponKind == WeaponKind.SPEAR || weaponKind == WeaponKind.LANCE"),
+                "ConditionHold must guard vanilla spear/lance from falling through to ItemUseAnimation.SPEAR (:spear)");
+
+        String conditionSwing = RepoSourceLookup.readSource(
+                "com/micaftic/morpher/client/animation/condition/ConditionSwing.java");
+        assertTrue(conditionSwing.contains("weaponKind == WeaponKind.SPEAR || weaponKind == WeaponKind.LANCE"),
+                "ConditionSwing must guard vanilla spear/lance from falling through to ItemUseAnimation.SPEAR (:spear)");
 
         String mainHold = RepoSourceLookup.readSource(
                 "com/micaftic/morpher/client/animation/predicate/MainHandHoldPredicate.java");
@@ -177,7 +199,7 @@ class ItemUseAnimationRegressionTest {
                 "com/micaftic/morpher/client/animation/predicate/FirstPersonWeaponAnimationPredicate.java");
         assertTrue(fpWeapon.contains("playContinuousAnimation"),
                 "FirstPersonWeaponAnimationPredicate must preserve hold_on_last_frame on bow/crossbow/spear");
-        assertTrue(fpWeapon.contains("\"spear\".equals(useName)"),
-                "FirstPersonWeaponAnimationPredicate must fall back from spear use animation to lance");
+        assertTrue(fpWeapon.contains("WeaponKind.SPEAR || weaponKind == WeaponKind.LANCE"),
+                "FirstPersonWeaponAnimationPredicate must dispatch strictly by WeaponKind (SPEAR/LANCE -> :lance, TRIDENT -> :trident/:spear)");
     }
 }

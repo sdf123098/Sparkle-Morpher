@@ -128,14 +128,27 @@ public final class YsmAnimationParsing {
             JsonElement valElem = entry.getValue();
             if (valElem.isJsonObject()) {
                 JsonObject obj = valElem.getAsJsonObject();
+                String modeStr = null;
                 if (obj.has("lerp_mode")) {
-                    String lm = YsmJsonSupport.getJsonString(obj.get("lerp_mode"));
-                    if ("catmullrom".equals(lm)) kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_CATMULLROM;
-                    else if ("step".equals(lm)) kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_STEP;
-                } else
-                    kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_STEP;
+                    modeStr = YsmJsonSupport.getJsonString(obj.get("lerp_mode"));
+                } else if (obj.has("easing")) {
+                    modeStr = YsmJsonSupport.getJsonString(obj.get("easing"));
+                }
+                if (modeStr != null) {
+                    String lm = modeStr.trim().toLowerCase(java.util.Locale.ENGLISH);
+                    if ("catmullrom".equals(lm) || "catmull_rom".equals(lm)) {
+                        kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_CATMULLROM;
+                    } else if ("step".equals(lm)) {
+                        kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_STEP;
+                    } else {
+                        kf.interpolationMode = RawYsmModel.RawKeyframe.INTERPOLATION_LINEAR;
+                    }
+                }
 
-                if (obj.has("pre") && obj.has("post")) {
+                if (obj.has("vector")) {
+                    kf.hasPreData = false;
+                    kf.postData = jsonElementToMolangArray(obj.get("vector"));
+                } else if (obj.has("pre") && obj.has("post")) {
                     kf.hasPreData = true;
                     kf.preData = jsonElementToMolangArray(obj.get("pre"));
                     kf.postData = jsonElementToMolangArray(obj.get("post"));

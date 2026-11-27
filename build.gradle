@@ -33,6 +33,27 @@ configure([project(':fabric'), project(':caustica-compat')]) {
 
     repositories {
         mavenLocal()
+        // MC 26.2's Mojang manifest lists `org.lwjgl:lwjgl:3.4.1:unsafe` (4-part coordinates) and
+        // `org.lwjgl:lwjgl-freetype:3.4.1-mojang-2.15.0.3` (hosted only on libraries.minecraft.net).
+        // Loom's LibraryContext.supportsJava19OrLater() checks `parts.length == 3`, falsely firing
+        // LWJGL3UpgradeLibraryProcessor -> forceLWJGLFromMavenCentral() which locks all `org.lwjgl`
+        // exclusively to Maven Central. Pre-declaring `MavenCentralLWJGL` short-circuits that lock
+        // while routing `-mojang-*` LWJGL builds to Mojang's library repository.
+        maven {
+            name = "MojangLWJGL"
+            url = "https://libraries.minecraft.net/"
+            content {
+                includeVersionByRegex "org\\.lwjgl", ".*", ".*-mojang-.*"
+            }
+        }
+        maven {
+            name = "MavenCentralLWJGL"
+            url = "https://repo.maven.apache.org/maven2/"
+            content {
+                includeGroup "org.lwjgl"
+                excludeVersionByRegex "org\\.lwjgl", ".*", ".*-mojang-.*"
+            }
+        }
         mavenCentral()
         flatDir {
             dirs rootProject.file('libs')

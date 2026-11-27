@@ -30,7 +30,7 @@ public class VehicleModelBundle {
         this.animations = animations;
         this.animationControllers = animationControllers;
         this.animationLibrary = model != null
-                ? HostAnimationAssets.compileLibrary("ysm:vehicle", animations.values(),
+                ? HostAnimationAssets.compileLibrary("ysm:vehicle", animations,
                 HostAnimationAssets.buildSkeleton(model), HostAnimationAssets.buildBindPose(model))
                 : null;
         this.texture = abstractTexture;
