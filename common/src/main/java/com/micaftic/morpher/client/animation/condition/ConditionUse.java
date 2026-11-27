@@ -132,10 +132,6 @@ public class ConditionUse {
             if (this.innerTest.contains(mcSpearUse)) {
                 return mcSpearUse;
             }
-            String legacySpearUse = this.extraPre + ItemUseAnimation.SPEAR.name().toLowerCase(Locale.US);
-            if (this.innerTest.contains(legacySpearUse)) {
-                return legacySpearUse;
-            }
             return EMPTY;
         }
         String innerName = InnerClassify.doClassifyTest(this.extraPre, entity, hand);

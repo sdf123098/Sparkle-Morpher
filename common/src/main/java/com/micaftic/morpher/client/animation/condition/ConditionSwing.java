@@ -142,6 +142,10 @@ public class ConditionSwing {
         if (StringUtils.isNotBlank(legacyInnerName) && this.innerTest.contains(legacyInnerName)) {
             return legacyInnerName;
         }
+        WeaponKind weaponKind = InnerClassify.getWeaponKind(entity.getItemInHand(hand));
+        if (weaponKind == WeaponKind.SPEAR || weaponKind == WeaponKind.LANCE) {
+            return EMPTY;
+        }
         ItemUseAnimation anim = entity.getItemInHand(hand).getUseAnimation();
         if (this.extraTes.contains(anim)) {
             return this.extraPre + anim.name().toLowerCase(Locale.US);

@@ -7,6 +7,7 @@ import com.micaftic.morpher.client.core.HostPlayState;
 import com.micaftic.morpher.client.entity.IPreviewAnimatable;
 import com.micaftic.morpher.client.entity.SpmPlayerEntity;
 import com.micaftic.morpher.client.input.InputStateKey;
+import com.micaftic.morpher.core.api.item.WeaponKind;
 import dev.spm.core.scene.CodedLoopMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
@@ -68,14 +69,27 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
             return null;
         }
         String prefix = hand == InteractionHand.MAIN_HAND ? "hold_mainhand" : "hold_offhand";
+        WeaponKind weaponKind = InnerClassify.getWeaponKind(stack);
+        if (weaponKind == WeaponKind.SPEAR || weaponKind == WeaponKind.LANCE) {
+            if (hasAnimation(entity, prefix + ":lance")) {
+                return prefix + ":lance";
+            }
+            return hasAnimation(entity, prefix) ? prefix : null;
+        }
+        if (weaponKind == WeaponKind.TRIDENT) {
+            if (hasAnimation(entity, prefix + ":trident")) {
+                return prefix + ":trident";
+            }
+            if (hasAnimation(entity, prefix + ":spear")) {
+                return prefix + ":spear";
+            }
+            return hasAnimation(entity, prefix) ? prefix : null;
+        }
         String itemType = InnerClassify.getItemType(stack);
         if (StringUtils.isNoneBlank(itemType)) {
             String classified = prefix + ":" + itemType;
             if (hasAnimation(entity, classified)) {
                 return classified;
-            }
-            if ("spear".equals(itemType) && hasAnimation(entity, prefix + ":lance")) {
-                return prefix + ":lance";
             }
         }
         return hasAnimation(entity, prefix) ? prefix : null;
@@ -87,17 +101,27 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
             return null;
         }
         String prefix = hand == InteractionHand.MAIN_HAND ? "use_mainhand" : "use_offhand";
+        WeaponKind weaponKind = InnerClassify.getWeaponKind(stack);
+        if (weaponKind == WeaponKind.SPEAR || weaponKind == WeaponKind.LANCE) {
+            if (hasAnimation(entity, prefix + ":lance")) {
+                return prefix + ":lance";
+            }
+            return weaponKind == WeaponKind.SPEAR ? null : (hasAnimation(entity, prefix) ? prefix : null);
+        }
+        if (weaponKind == WeaponKind.TRIDENT) {
+            if (hasAnimation(entity, prefix + ":trident")) {
+                return prefix + ":trident";
+            }
+            if (hasAnimation(entity, prefix + ":spear")) {
+                return prefix + ":spear";
+            }
+            return hasAnimation(entity, prefix) ? prefix : null;
+        }
         String useName = stack.getUseAnimation().name().toLowerCase(java.util.Locale.US);
         if (StringUtils.isNoneBlank(useName)) {
             String classified = prefix + ":" + useName;
             if (hasAnimation(entity, classified)) {
                 return classified;
-            }
-            if ("spear".equals(useName) && hasAnimation(entity, prefix + ":lance")) {
-                return prefix + ":lance";
-            }
-            if ("trident".equals(useName) && hasAnimation(entity, prefix + ":spear")) {
-                return prefix + ":spear";
             }
         }
         return hasAnimation(entity, prefix) ? prefix : null;
@@ -105,14 +129,27 @@ public class FirstPersonWeaponAnimationPredicate implements IAnimationPredicate<
 
     private String selectSwingAnimation(SpmPlayerEntity entity, InteractionHand hand) {
         ItemStack stack = entity.getEntity().getItemInHand(hand);
-        String itemType = stack.isEmpty() ? null : InnerClassify.getItemType(stack);
-        if (StringUtils.isNoneBlank(itemType)) {
-            String classified = "swing:" + itemType;
-            if (hasAnimation(entity, classified)) {
-                return classified;
-            }
-            if ("spear".equals(itemType) && hasAnimation(entity, "swing:lance")) {
-                return "swing:lance";
+        if (!stack.isEmpty()) {
+            WeaponKind weaponKind = InnerClassify.getWeaponKind(stack);
+            if (weaponKind == WeaponKind.SPEAR || weaponKind == WeaponKind.LANCE) {
+                if (hasAnimation(entity, "swing:lance")) {
+                    return "swing:lance";
+                }
+            } else if (weaponKind == WeaponKind.TRIDENT) {
+                if (hasAnimation(entity, "swing:trident")) {
+                    return "swing:trident";
+                }
+                if (hasAnimation(entity, "swing:spear")) {
+                    return "swing:spear";
+                }
+            } else {
+                String itemType = InnerClassify.getItemType(stack);
+                if (StringUtils.isNoneBlank(itemType)) {
+                    String classified = "swing:" + itemType;
+                    if (hasAnimation(entity, classified)) {
+                        return classified;
+                    }
+                }
             }
         }
         String handFallback = hand == InteractionHand.MAIN_HAND ? "swing_hand" : "swing_offhand";

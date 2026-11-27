@@ -115,7 +115,7 @@ public final class AnimationMapper {
                 states.put(rs.name, new ControllerStateSpec(rs.name, rs, animations, transitions, onEntry, onExit));
             }
             String initialState = (rac.initialState == null || rac.initialState.isEmpty()) ? "default" : rac.initialState;
-            result.put(rac.animationName, new ControllerSpec(rac.animationName, initialState, states, rac));
+            result.put(rac.animationName, new ControllerSpec(rac.animationName, initialState, states, rac, mergeMultilineExpr));
         }
         return result;
     }

@@ -82,11 +82,11 @@ public class PlayerModelBundle {
         this.mainAnimations = mainAnimations;
         this.armAnimations = armAnimations;
         this.mainAnimationLibrary = mainModel != null
-                ? HostAnimationAssets.compileLibrary("ysm:main", mainAnimations.values(),
+                ? HostAnimationAssets.compileLibrary("ysm:main", mainAnimations,
                 HostAnimationAssets.buildSkeleton(mainModel), HostAnimationAssets.buildBindPose(mainModel))
                 : null;
         this.armAnimationLibrary = armModel != null
-                ? HostAnimationAssets.compileLibrary("ysm:arm", armAnimations.values(),
+                ? HostAnimationAssets.compileLibrary("ysm:arm", armAnimations,
                 HostAnimationAssets.buildSkeleton(armModel), HostAnimationAssets.buildBindPose(armModel))
                 : null;
         this.conditionManager = conditionManager;

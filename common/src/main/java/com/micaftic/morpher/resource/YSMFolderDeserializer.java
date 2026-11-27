@@ -548,6 +548,7 @@ public class YSMFolderDeserializer implements AutoCloseable {
                             }
                         }
                     }
+                    state.blendViaShortestPath = YsmJsonSupport.getBool(sObj, "blend_via_shortest_path", false);
 
                     ac.states.add(state);
                 }

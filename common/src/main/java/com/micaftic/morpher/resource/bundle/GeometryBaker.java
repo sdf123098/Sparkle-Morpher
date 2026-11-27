@@ -171,22 +171,33 @@ public final class GeometryBaker {
             bakedBones.add(bb);
         }
 
-        // 回填父级索引
-        for (BuiltModel.BakedBone b : bakedBones) {
+        // 回填父级索引与 partMask，并同步写回 ModelBone（供 Skeleton / 粒子定位器 / 武器替换共享）
+        Map<String, Integer> boneIndexByName = new HashMap<>(bakedBones.size() * 2);
+        for (int i = 0; i < bakedBones.size(); i++) {
+            boneIndexByName.putIfAbsent(bakedBones.get(i).name, i);
+        }
+        for (int idx = 0; idx < bakedBones.size(); idx++) {
+            BuiltModel.BakedBone b = bakedBones.get(idx);
             String parentName = parentMap.get(b.name);
             if (parentName != null && !parentName.isEmpty()) {
-                for (int i = 0; i < bakedBones.size(); i++) {
-                    if (bakedBones.get(i).name.equals(parentName)) {
-                        b.parentIdx = i;
-                        break;
-                    }
+                Integer pIdx = boneIndexByName.get(parentName);
+                if (pIdx != null && pIdx != idx) {
+                    b.parentIdx = pIdx;
                 }
             }
+            ModelBone mb = geoBones.get(idx);
+            mb.parentIdx = b.parentIdx;
+            mb.parentName = parentName == null ? "" : parentName;
+        }
+        int[] parentFirstOrder = BuiltModel.buildParentFirstBoneOrder(bakedBones);
+        for (int idx : parentFirstOrder) {
+            BuiltModel.BakedBone b = bakedBones.get(idx);
             if (b.name.equalsIgnoreCase("LeftArm")) b.partMask = 1;
             else if (b.name.equalsIgnoreCase("RightArm")) b.partMask = 2;
             else if (b.name.equals("Background")) b.partMask = 3;
             else if (b.parentIdx != -1) b.partMask = bakedBones.get(b.parentIdx).partMask;
             else b.partMask = 0;
+            geoBones.get(idx).partMask = b.partMask;
         }
         finalizeOptimizationStats(bakedBones, stats);
 
@@ -194,7 +205,7 @@ public final class GeometryBaker {
         BuiltModel mesh = buildMesh(geoBones.toArray(new ModelBone[0]), parentMap, context, translucencyArray, specialHandLocatorProfile);
 
         mesh.bakedBones = bakedBones;
-        mesh.bakedBoneOrder = BuiltModel.buildParentFirstBoneOrder(bakedBones);
+        mesh.bakedBoneOrder = parentFirstOrder;
         mesh.buildPartMaskBoneRenderOrders();
         mesh.optimizationStats = stats;
         mesh.updateConservativeRenderFlags();

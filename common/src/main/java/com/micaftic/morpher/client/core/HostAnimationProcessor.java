@@ -16,15 +16,14 @@ import dev.spm.core.scene.CodedAnimationCollection;
 import dev.spm.core.scene.CodedControllerCommand;
 import dev.spm.core.scene.CodedControllerDefinition;
 import dev.spm.core.scene.CodedControllerSnapshot;
+import dev.spm.core.scene.CodedPlayDecision;
 import dev.spm.core.scene.CodedPoseFrame;
-import dev.spm.core.scene.EffectCommand;
 import dev.spm.core.scene.MolangBindings;
 import dev.spm.core.scene.MolangContext;
 import dev.spm.core.scene.MolangException;
 import dev.spm.core.scene.MolangHooks;
 import dev.spm.core.scene.MolangProgram;
 import dev.spm.core.scene.MolangValue;
-import dev.spm.core.scene.PoseAnimationController;
 import dev.spm.core.scene.PoseAnimationLibrary;
 import dev.spm.core.scene.PoseControllerDefinition;
 import dev.spm.core.scene.PoseFrame;
@@ -37,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -47,9 +47,10 @@ import java.util.function.Consumer;
 
 /**
  * Per-entity SPM animation orchestrator, replacing legacy {@code AnimationProcessor}.
- * Executes controller slots via {@code spm-core}'s {@link CodedAnimationCollection} and
- * {@link PoseAnimationController}, applies bone styles and procedural overrides, and writes
- * the result into {@link ModelScenePose}.
+ * Executes both coded and JSON controller slots natively in registration order inside
+ * {@code spm-core 1.3.1}'s {@link CodedAnimationCollection}, drives adaptive
+ * {@link AnimationProgramRuntime} programs when bound to active clips, applies bone styles
+ * and procedural overrides, and writes the result into {@link ModelScenePose}.
  */
 public class HostAnimationProcessor<TEntity extends Entity> {
 
@@ -57,6 +58,10 @@ public class HostAnimationProcessor<TEntity extends Entity> {
     private static final int FRAME_BUDGET_DEPTH = 128;
     private static final Set<String> REPORTED_FAILURES = ConcurrentHashMap.newKeySet();
     private static final AudioPlayerManager GLOBAL_AUDIO = new AudioPlayerManager();
+
+    public static boolean supportsNativeHybridControllers() {
+        return true;
+    }
 
     private final HostAnimatable<TEntity> animatable;
     private final AudioPlayerManager audioPlayerManager = new AudioPlayerManager();
@@ -66,19 +71,26 @@ public class HostAnimationProcessor<TEntity extends Entity> {
     private final Map<String, HostMolangScript> extraFunctions = new LinkedHashMap<>();
     private final Map<String, List<HostMolangScript>> eventScripts = new LinkedHashMap<>();
     private final Map<String, MolangValue> adhocVariables = new LinkedHashMap<>();
-    private final Set<MolangBindings.Call> knownCallRequests = new java.util.LinkedHashSet<>();
-    private final Set<String> registeredHookVarNames = new java.util.LinkedHashSet<>();
+    private final Set<MolangBindings.Call> knownCallRequests = new LinkedHashSet<>();
+    private final Set<String> registeredHookVarNames = new LinkedHashSet<>();
     private final Map<String, Double> pendingScalarVars = new LinkedHashMap<>();
     private boolean pendingRoamingSync;
     private boolean pendingScalarSync;
     private final Map<AnimationProgramPlan, AnimationProgramRuntime> programs = new IdentityHashMap<>();
+    private final Map<String, AnimationProgramPlan> activeSlotPrograms = new HashMap<>();
 
     private @Nullable PoseAnimationLibrary library;
     private @Nullable Skeleton skeleton;
     private @Nullable BonePose bindPose;
+    private final Map<String, Integer> boneIndexByName = new HashMap<>();
+    private final Map<String, ClipDrivenCache> clipDrivenCache = new HashMap<>();
+    private final Map<String, ClipDrivenCache> stateDrivenCache = new HashMap<>();
+    private final Map<String, ControllerSpec> activeControllerSpecs = new LinkedHashMap<>();
     private @Nullable CodedAnimationCollection codedCollection;
-    private final Map<String, PoseAnimationController> jsonControllers = new LinkedHashMap<>();
     private @Nullable KipfelRuntime kipfelRuntime;
+
+    private record ClipDrivenCache(int[] rotIndices, int[] posIndices, int[] scaleIndices, Set<String> rotationBones) {
+    }
 
     private @Nullable RoamingStruct roamingStruct;
     private @Nullable com.micaftic.morpher.client.animation.molang.MolangWatchRegistry watchRegistry;
@@ -117,6 +129,13 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         }
         this.skeleton = HostAnimationAssets.buildSkeleton(scenePose.getGeoModel());
         this.bindPose = HostAnimationAssets.buildBindPose(scenePose.getGeoModel());
+        this.boneIndexByName.clear();
+        this.clipDrivenCache.clear();
+        this.stateDrivenCache.clear();
+        this.activeControllerSpecs.clear();
+        for (int i = 0; i < this.skeleton.boneCount(); i++) {
+            this.boneIndexByName.put(this.skeleton.names().get(i), i);
+        }
         this.library = library != null
                 ? library
                 : HostAnimationAssets.compileLibrary("ysm:empty", List.of(), this.skeleton, this.bindPose);
@@ -134,21 +153,22 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         List<HostControllerSlot<?>> slots = this.animatable.getControllerSlots();
         List<CodedControllerDefinition> codedDefs = new ArrayList<>(slots.size());
         Map<String, MolangProgram> coreFunctions = toCorePrograms(this.extraFunctions);
-        MolangHooks hooks = buildHooks(this.eventScripts, this.registeredHookVarNames);
 
-        this.jsonControllers.clear();
+        this.activeControllerSpecs.clear();
+        this.stateDrivenCache.clear();
+
+        MolangHooks hooks = buildHooks(this.eventScripts, this.registeredHookVarNames);
+        long seed = this.animatable.getEntity().getUUID().getLeastSignificantBits();
         for (HostControllerSlot<?> slot : slots) {
-            codedDefs.add(CodedControllerDefinition.hostDriven(
-                    slot.getName(), slot.defaultTransitionTicks(), slot.isAdditive()));
             ControllerSpec jsonSpec = this.animatable.getControllerSpec(slot.getName());
-            if (jsonSpec != null) {
-                PoseControllerDefinition compiled = jsonSpec.compile(this.library, false);
-                if (compiled != null) {
-                    this.jsonControllers.put(slot.getName(),
-                            new PoseAnimationController(this.library, compiled, this.bindPose, 12,
-                                    this.animatable.getEntity().getUUID().getLeastSignificantBits(),
-                                    coreFunctions, hooks));
-                }
+            PoseControllerDefinition compiled = jsonSpec != null ? jsonSpec.compile(this.library) : null;
+            if (compiled != null) {
+                this.activeControllerSpecs.put(slot.getName(), jsonSpec);
+                codedDefs.add(CodedControllerDefinition.hostDriven(
+                        slot.getName(), slot.defaultTransitionTicks(), slot.isAdditive(), compiled));
+            } else {
+                codedDefs.add(CodedControllerDefinition.hostDriven(
+                        slot.getName(), slot.defaultTransitionTicks(), slot.isAdditive()));
             }
         }
         this.codedCollection = new CodedAnimationCollection(
@@ -156,7 +176,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
                 this.bindPose,
                 codedDefs,
                 12,
-                this.animatable.getEntity().getUUID().getLeastSignificantBits(),
+                seed,
                 coreFunctions,
                 hooks);
     }
@@ -179,6 +199,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
             this.programGeneration++;
             this.programs.values().forEach(AnimationProgramRuntime::close);
             this.programs.clear();
+            this.activeSlotPrograms.clear();
         }
         this.programWorld = world;
 
@@ -190,11 +211,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         }
 
         double seekSeconds = Math.max(0.0, seekTime / 20.0);
-        if (seekSeconds < this.lastSeekSeconds) {
-            this.lastSeekSeconds = seekSeconds;
-        } else {
-            this.lastSeekSeconds = seekSeconds;
-        }
+        this.lastSeekSeconds = seekSeconds;
         long nowNanos = (long) (seekSeconds * 1_000_000_000.0);
         long frameId = ++this.frameCounter;
 
@@ -204,122 +221,106 @@ public class HostAnimationProcessor<TEntity extends Entity> {
             this.watchRegistry.evaluatePreAnimation(buildDirectContext(event, Map.of()));
         }
 
-        // 2. Evaluate controller predicates (and JSON controller state overrides)
+        // 2. Evaluate controller predicates (JSON slots execute natively inside CodedAnimationCollection)
         Map<String, CodedControllerCommand> commands = new LinkedHashMap<>();
-        Map<String, PoseFrame> preJsonPoses = new LinkedHashMap<>();
-        Map<String, PoseFrame> postJsonPoses = new LinkedHashMap<>();
+        HostMolangBindings.FrameCallCache callCache = HostMolangBindings.createCallCache(event);
         Map<MolangBindings.Call, MolangValue> sampledCalls = new HashMap<>(Math.max(16, this.knownCallRequests.size() * 2));
         for (MolangBindings.Call known : this.knownCallRequests) {
-            sampledCalls.put(known, HostMolangBindings.resolveCall(event, known));
+            sampledCalls.put(known, HostMolangBindings.resolveCall(event, known, callCache));
         }
 
         List<HostControllerSlot<?>> slots = this.animatable.getControllerSlots();
-        Map<MolangHooks.Phase, List<MolangValue>> hookArgs = buildHookArguments();
-        SceneInputs baseInputs = HostMolangBindings.buildInputs(event, sampledCalls, active, Map.of(), hookArgs);
-
         if (active) {
-            for (HostControllerSlot<?> slot : slots) {
+            for (int slotIndex = 0, n = slots.size(); slotIndex < n; slotIndex++) {
+                HostControllerSlot<?> slot = slots.get(slotIndex);
                 HostControllerSlot<HostAnimatable<TEntity>> typedSlot =
                         (HostControllerSlot<HostAnimatable<TEntity>>) slot;
-                PoseAnimationController jsonCtrl = this.jsonControllers.get(slot.getName());
-                if (jsonCtrl != null) {
-                    try {
-                        PoseFrame jsonFrame = evaluateJsonWithRetry(jsonCtrl, frameId, nowNanos, baseInputs, event, sampledCalls, hookArgs);
-                        String jsonState = jsonFrame.animation();
-                        if (!isBuiltinControllerState(jsonState)) {
-                            if (isPreLayerJsonController(slot.getName())) {
-                                preJsonPoses.put(slot.getName(), jsonFrame);
-                            } else {
-                                postJsonPoses.put(slot.getName(), jsonFrame);
-                            }
-                            commands.put(slot.getName(), new CodedControllerCommand(
-                                    dev.spm.core.scene.CodedPlayDecision.STOP, "", dev.spm.core.scene.CodedLoopMode.CLIP_DEFAULT,
-                                    slot.defaultTransitionTicks(), 1.0, false, false));
-                            typedSlot.updateFeedback(jsonState, jsonFrame.animationTimeSeconds(), true, jsonFrame.finished());
-                            this.animatable.setAnimationState(slot.getName(), HostPlayState.State.RUNNING);
-                            continue;
-                        }
-                    } catch (RuntimeException ex) {
-                        reportFailure(slot.getName(), ex);
-                    }
-                }
                 try {
                     String soundEventKey = slot.getName().replace(".", "_ctrl_");
                     boolean hasSoundExpr = this.eventScripts.containsKey(soundEventKey)
                             && !this.eventScripts.get(soundEventKey).isEmpty();
                     CodedControllerCommand cmd = typedSlot.evaluateCommand(
                             (HostActionEvent<HostAnimatable<TEntity>>) event,
-                            hasSoundExpr && checkSoundOverride(soundEventKey, event, sampledCalls));
+                            hasSoundExpr && checkSoundOverride(soundEventKey, event, sampledCalls, callCache));
                     commands.put(slot.getName(), cmd);
                 } catch (RuntimeException ex) {
                     reportFailure(slot.getName(), ex);
                 }
             }
+            // Drive adaptive AnimationProgramRuntime instances for active clips carrying a verified programPlan,
+            // publishing stabilized fixed-step outputs before CodedAnimationCollection evaluates the frame.
+            syncActiveSlotPrograms(slots, commands, event);
         }
 
-        // 3. Evaluate CodedAnimationCollection in spm-core
+        Map<MolangHooks.Phase, List<MolangValue>> hookArgs = buildHookArguments();
+        SceneInputs baseInputs = HostMolangBindings.buildInputs(event, sampledCalls, active, Map.of(), hookArgs);
+        int baseInputsCallCount = sampledCalls.size();
+
+        // 3. Evaluate unified CodedAnimationCollection (coded + hybrid JSON controllers) in spm-core 1.3.1
         BonePose pose = this.lastPose != null ? this.lastPose : this.bindPose;
         if (active) {
-            CodedPoseFrame frame = evaluateCodedWithRetry(frameId, nowNanos, event, baseInputs, sampledCalls, commands, hookArgs);
+            CodedPoseFrame frame = evaluateCodedWithRetry(frameId, nowNanos, event, baseInputs, baseInputsCallCount, sampledCalls, callCache, commands, hookArgs);
             if (frame != null) {
                 boolean advancedStep = frame.step() != this.lastEvaluatedCodedStep;
                 this.lastEvaluatedCodedStep = frame.step();
                 this.pendingRoamingSync = false;
                 this.pendingScalarSync = false;
                 this.pendingScalarVars.clear();
-                pose = frame.pose();
-                // Layer pre-stage JSON controllers underneath coded poses (so hold/swing/use win)
-                // and post-stage JSON controllers on top of coded poses, matching controller priority.
-                if (!preJsonPoses.isEmpty() || !postJsonPoses.isEmpty()) {
-                    pose = compositeJsonPoses(pose, this.bindPose, preJsonPoses.values(), postJsonPoses.values());
-                }
-                // Apply bone color / transparency / glow effects
-                try {
-                    pose = this.boneEffects.apply(this.skeleton, pose, frame.effects());
-                } catch (RuntimeException ex) {
-                    reportFailure("bone_effects", ex);
-                }
-                // Sync controller snapshots back to slots
-                Map<String, CodedControllerSnapshot> snapByName = new HashMap<>(frame.controllers().size() * 2);
-                for (CodedControllerSnapshot s : frame.controllers()) {
-                    snapByName.put(s.name(), s);
-                }
-                for (HostControllerSlot<?> slot : slots) {
-                    if (preJsonPoses.containsKey(slot.getName()) || postJsonPoses.containsKey(slot.getName())) {
-                        slot.acknowledgeCommandDelivery();
-                        continue;
+                if (!advancedStep && this.lastPose != null && frame.effects().isEmpty()) {
+                    // Zero-step frame (e.g. 120-240Hz render frame between 60Hz animation ticks):
+                    // reuse the already-evaluated pose without re-allocating.
+                    pose = this.lastPose;
+                } else {
+                    pose = frame.pose();
+                    Map<String, CodedControllerSnapshot> snapByName = new HashMap<>(frame.controllers().size() * 2);
+                    for (CodedControllerSnapshot s : frame.controllers()) {
+                        snapByName.put(s.name(), s);
                     }
+                    for (int slotIndex = 0, n = slots.size(); slotIndex < n; slotIndex++) {
+                        HostControllerSlot<?> slot = slots.get(slotIndex);
+                        if (advancedStep) {
+                            slot.acknowledgeCommandDelivery();
+                        }
+                        CodedControllerSnapshot snap = snapByName.get(slot.getName());
+                        if (snap != null) {
+                            slot.updateFeedback(snap.selectedClip(), snap.animationTimeSeconds(), snap.contributing(), false);
+                            this.animatable.setAnimationState(slot.getName(),
+                                    snap.contributing() ? HostPlayState.State.RUNNING : HostPlayState.State.IDLE);
+                            if (!snap.contributing()) {
+                                releaseSlotProgram(slot.getName());
+                            }
+                        }
+                    }
+                    // Apply bone color / transparency / glow effects
+                    try {
+                        pose = this.boneEffects.apply(this.skeleton, pose, frame.effects());
+                    } catch (RuntimeException ex) {
+                        reportFailure("bone_effects", ex);
+                    }
+                    // Dispatch effects (sounds, particles)
+                    if (!frame.effects().isEmpty()) {
+                        HostMolangBindings.dispatchEffects(this.animatable, event, this.audioPlayerManager, GLOBAL_AUDIO, scenePose, frame.effects());
+                    }
+                    // Propagate roaming variable writes back into RoamingStruct for server sync
                     if (advancedStep) {
-                        slot.acknowledgeCommandDelivery();
+                        syncRoamingFromCore();
                     }
-                    CodedControllerSnapshot snap = snapByName.get(slot.getName());
-                    if (snap != null) {
-                        slot.updateFeedback(snap.selectedClip(), snap.animationTimeSeconds(), snap.contributing(), false);
-                        this.animatable.setAnimationState(slot.getName(),
-                                snap.contributing() ? HostPlayState.State.RUNNING : HostPlayState.State.IDLE);
-                    }
+                    this.lastPose = pose;
                 }
-                // Dispatch effects (sounds, particles)
-                HostMolangBindings.dispatchEffects(this.animatable, event, this.audioPlayerManager, GLOBAL_AUDIO, scenePose, frame.effects());
-                for (PoseFrame pf : preJsonPoses.values()) {
-                    HostMolangBindings.dispatchEffects(this.animatable, event, this.audioPlayerManager, GLOBAL_AUDIO, scenePose, pf.effects());
-                }
-                for (PoseFrame pf : postJsonPoses.values()) {
-                    HostMolangBindings.dispatchEffects(this.animatable, event, this.audioPlayerManager, GLOBAL_AUDIO, scenePose, pf.effects());
-                }
-                // Propagate roaming variable writes back into RoamingStruct for server sync
-                syncRoamingFromCore();
-                this.lastPose = pose;
             }
         }
 
         // 4. Write pose into ModelScenePose
         scenePose.writeBonePose(pose);
         if (active && this.library != null) {
-            for (HostControllerSlot<?> slot : slots) {
+            for (int i = 0, n = slots.size(); i < n; i++) {
+                HostControllerSlot<?> slot = slots.get(i);
                 String clip = slot.getActiveClipName();
-                if (slot.isPlaying() && !clip.isEmpty() && this.library.hasClip(clip)) {
-                    scenePose.markDrivenRotationBones(this.library.clipSummary(clip).rotationBones());
+                if (slot.isPlaying() && !clip.isEmpty()) {
+                    ClipDrivenCache driven = resolveStateDrivenCache(slot.getName(), clip);
+                    if (driven != null && !driven.rotationBones().isEmpty()) {
+                        scenePose.markDrivenRotationBones(driven.rotationBones());
+                    }
                 }
             }
         }
@@ -352,50 +353,21 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         this.watchRegistry = watchRegistry;
     }
 
-    private PoseFrame evaluateJsonWithRetry(
-            PoseAnimationController controller,
-            long frameId,
-            long nowNanos,
-            SceneInputs baseInputs,
-            HostActionEvent<?> event,
-            Map<MolangBindings.Call, MolangValue> sampledCalls,
-            Map<MolangHooks.Phase, List<MolangValue>> hookArgs) {
-        for (int attempt = 0; attempt < 64; attempt++) {
-            ScriptBudget budget = new ScriptBudget(FRAME_BUDGET_STEPS, FRAME_BUDGET_DEPTH, new CancellationToken());
-            try {
-                SceneInputs frozen = new SceneInputs(
-                        baseInputs.queries(),
-                        new MolangBindings(baseInputs.bindings().values(), sampledCalls),
-                        baseInputs.effectsAllowed(),
-                        baseInputs.syncMode(),
-                        hookArgs,
-                        baseInputs.controllerCommands());
-                return controller.evaluate(frameId, nowNanos, frozen, budget);
-            } catch (MolangException missing) {
-                var req = missing.bindingRequest().orElseThrow(() -> missing);
-                if (sampledCalls.containsKey(req)) {
-                    throw missing;
-                }
-                this.knownCallRequests.add(req);
-                sampledCalls.put(req, HostMolangBindings.resolveCall(event, req));
-            }
-        }
-        throw new IllegalStateException("Exceeded JSON controller call retry limit");
-    }
-
     private @Nullable CodedPoseFrame evaluateCodedWithRetry(
             long frameId,
             long nowNanos,
             HostActionEvent<?> event,
             SceneInputs baseInputs,
+            int baseInputsCallCount,
             Map<MolangBindings.Call, MolangValue> sampledCalls,
+            HostMolangBindings.FrameCallCache callCache,
             Map<String, CodedControllerCommand> commands,
             Map<MolangHooks.Phase, List<MolangValue>> hookArgs) {
         for (int attempt = 0; attempt < 128; attempt++) {
             ScriptBudget budget = new ScriptBudget(FRAME_BUDGET_STEPS, FRAME_BUDGET_DEPTH, new CancellationToken());
             try {
-                // First attempt reuses this frame's host sample; only a newly discovered call forces a resample.
-                SceneInputs inputs = attempt == 0
+                // First attempt reuses this frame's host sample when no new calls were discovered.
+                SceneInputs inputs = (attempt == 0 && sampledCalls.size() == baseInputsCallCount)
                         ? new SceneInputs(baseInputs.queries(), baseInputs.bindings(), true,
                                 baseInputs.syncMode(), baseInputs.hookArguments(), commands)
                         : HostMolangBindings.buildInputs(event, sampledCalls, true, commands, hookArgs);
@@ -407,7 +379,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
                     return null;
                 }
                 this.knownCallRequests.add(req);
-                sampledCalls.put(req, HostMolangBindings.resolveCall(event, req));
+                sampledCalls.put(req, HostMolangBindings.resolveCall(event, req, callCache));
             } catch (RuntimeException ex) {
                 reportFailure("coded_collection", ex);
                 return null;
@@ -419,12 +391,13 @@ public class HostAnimationProcessor<TEntity extends Entity> {
     private boolean checkSoundOverride(
             String eventKey,
             HostActionEvent<?> event,
-            Map<MolangBindings.Call, MolangValue> sampledCalls) {
+            Map<MolangBindings.Call, MolangValue> sampledCalls,
+            HostMolangBindings.FrameCallCache callCache) {
         List<HostMolangScript> list = this.eventScripts.get(eventKey);
         if (list == null || list.isEmpty()) {
             return false;
         }
-        MolangValue result = evaluateScriptWithRetry(list.getFirst(), event, sampledCalls, null);
+        MolangValue result = evaluateScriptWithRetry(list.getFirst(), event, sampledCalls, callCache, null);
         int code = (int) result.number();
         return code == 2 || code == 3 || code == 4;
     }
@@ -433,6 +406,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
             HostMolangScript script,
             HostActionEvent<?> event,
             Map<MolangBindings.Call, MolangValue> sampledCalls,
+            @Nullable HostMolangBindings.FrameCallCache callCache,
             @Nullable Map<String, MolangValue> outVars) {
         if (script == null || !script.parsedSuccessfully()) {
             return MolangValue.missing();
@@ -454,7 +428,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
                     return MolangValue.missing();
                 }
                 this.knownCallRequests.add(req);
-                sampledCalls.put(req, HostMolangBindings.resolveCall(event, req));
+                sampledCalls.put(req, HostMolangBindings.resolveCall(event, req, callCache));
             } catch (RuntimeException ex) {
                 return MolangValue.missing();
             }
@@ -511,7 +485,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
                 }
                 Map<String, MolangValue> beforeVars = snapshotHostAndCoreVariables();
                 Map<String, MolangValue> afterVars = new LinkedHashMap<>();
-                MolangValue val = evaluateScriptWithRetry(next.script, event, calls, afterVars);
+                MolangValue val = evaluateScriptWithRetry(next.script, event, calls, null, afterVars);
                 recordVariableMutations(beforeVars, afterVars, roamingTouched);
                 if (val == null || val == MolangValue.missing()) {
                     result = "null";
@@ -631,6 +605,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
             this.programExternalWrites = true;
             this.programs.values().forEach(AnimationProgramRuntime::close);
             this.programs.clear();
+            this.activeSlotPrograms.clear();
         }
         this.pendingExpressions.add(new PendingExpression(script, isClientPlayer, executeBeforeAnimation, resultConsumer));
     }
@@ -669,12 +644,107 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         }
         var runtime = this.programs.computeIfAbsent(plan, key -> new AnimationProgramRuntime(key, this.programGeneration));
         runtime.update(this.animatable, event, this.programGeneration, this.adhocVariables);
+        publishProgramScalars(runtime);
         return true;
     }
 
     public synchronized void releaseProgram(AnimationProgramPlan plan) {
         var runtime = this.programs.remove(plan);
         if (runtime != null) runtime.close();
+    }
+
+    synchronized int activeProgramCount() {
+        return this.programs.size();
+    }
+
+    private void syncActiveSlotPrograms(
+            List<HostControllerSlot<?>> slots,
+            Map<String, CodedControllerCommand> commands,
+            HostActionEvent<HostAnimatable<TEntity>> event) {
+        if (this.programExternalWrites) {
+            if (!this.activeSlotPrograms.isEmpty()) {
+                this.activeSlotPrograms.clear();
+            }
+            return;
+        }
+        for (int i = 0, n = slots.size(); i < n; i++) {
+            HostControllerSlot<?> slot = slots.get(i);
+            String slotName = slot.getName();
+            CodedControllerCommand cmd = commands.get(slotName);
+            String clipName;
+            if (cmd != null && cmd.decision() == CodedPlayDecision.STOP) {
+                clipName = "";
+            } else if (cmd != null && !cmd.animation().isEmpty()) {
+                clipName = cmd.animation();
+            } else if (slot.isPlaying()) {
+                clipName = slot.getActiveClipName();
+            } else {
+                clipName = "";
+            }
+            HostAnimationAssets.ClipSpec clip = clipName.isEmpty() ? null : this.animatable.getAnimation(clipName);
+            AnimationProgramPlan plan = clip != null ? clip.programPlan() : null;
+            AnimationProgramPlan prev = this.activeSlotPrograms.get(slotName);
+            if (prev != null && prev != plan) {
+                this.activeSlotPrograms.remove(slotName);
+                if (!this.activeSlotPrograms.containsValue(prev)) {
+                    releaseProgram(prev);
+                }
+            }
+            if (plan != null) {
+                this.activeSlotPrograms.put(slotName, plan);
+                runProgram(plan, event);
+            }
+        }
+    }
+
+    private void releaseSlotProgram(String slotName) {
+        AnimationProgramPlan prev = this.activeSlotPrograms.remove(slotName);
+        if (prev != null && !this.activeSlotPrograms.containsValue(prev)) {
+            releaseProgram(prev);
+        }
+    }
+
+    private void publishProgramScalars(AnimationProgramRuntime runtime) {
+        AnimationProgramRuntime.Snapshot snap = runtime.snapshot();
+        if (snap == null || snap.variables().isEmpty()) {
+            return;
+        }
+        boolean unknownHookKey = false;
+        Map<String, MolangValue> live = this.codedCollection != null ? this.codedCollection.typedVariables() : Map.of();
+        for (Map.Entry<String, MolangValue> entry : snap.variables().entrySet()) {
+            String key = entry.getKey().toLowerCase(Locale.ROOT);
+            if ("roaming".equals(key) || !key.matches("[a-z_][a-z0-9_]*")) {
+                continue;
+            }
+            MolangValue value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            double num = value.number();
+            if (!Double.isFinite(num)) {
+                continue;
+            }
+            this.adhocVariables.put(key, MolangValue.number(num));
+            MolangValue existing = live.get(key);
+            if (existing == null || Double.compare(existing.number(), num) != 0) {
+                this.pendingScalarVars.put(key, num);
+                this.pendingScalarSync = true;
+            }
+            if (this.registeredHookVarNames.add(key)) {
+                unknownHookKey = true;
+            }
+        }
+        if (unknownHookKey && this.initialized && this.codedCollection != null) {
+            this.codedCollection.typedVariables().forEach((k, v) -> {
+                if (!"roaming".equals(k) && !this.pendingScalarVars.containsKey(k)) {
+                    double n = v.number();
+                    if (Double.isFinite(n)) {
+                        this.pendingScalarVars.put(k, n);
+                    }
+                }
+            });
+            rebuildRuntimeControllers();
+        }
     }
 
     public synchronized void reset() {
@@ -684,6 +754,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         this.programGeneration++;
         this.programs.values().forEach(AnimationProgramRuntime::close);
         this.programs.clear();
+        this.activeSlotPrograms.clear();
         this.pendingExpressions.clear();
         this.extraFunctions.clear();
         this.eventScripts.clear();
@@ -693,11 +764,14 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         this.pendingScalarVars.clear();
         this.pendingRoamingSync = false;
         this.pendingScalarSync = false;
-        this.jsonControllers.clear();
+        this.activeControllerSpecs.clear();
         this.codedCollection = null;
         this.library = null;
         this.skeleton = null;
         this.bindPose = null;
+        this.boneIndexByName.clear();
+        this.clipDrivenCache.clear();
+        this.stateDrivenCache.clear();
         this.lastPose = null;
         this.initialized = false;
         this.frameCounter = 0;
@@ -713,10 +787,6 @@ public class HostAnimationProcessor<TEntity extends Entity> {
 
     public int getBoneCount() {
         return this.skeleton != null ? this.skeleton.boneCount() : 0;
-    }
-
-    private static boolean isBuiltinControllerState(@Nullable String jsonState) {
-        return jsonState == null || "ysm-builtin".equals(jsonState) || jsonState.startsWith("builtin");
     }
 
     private void collectButtonHookVariableNames() {
@@ -737,17 +807,17 @@ public class HostAnimationProcessor<TEntity extends Entity> {
                 if (form == null) {
                     continue;
                 }
-                scanHookVarNames(matcher, form.getValue());
+                scanHookVarNames(matcher, form.getValue(), this.registeredHookVarNames);
                 if (form instanceof com.micaftic.morpher.client.gui.custom.configs.RadioConfig radio && radio.getLabels() != null) {
                     for (String expr : radio.getLabels().values()) {
-                        scanHookVarNames(matcher, expr);
+                        scanHookVarNames(matcher, expr, this.registeredHookVarNames);
                     }
                 }
             }
         }
     }
 
-    private void scanHookVarNames(java.util.regex.Matcher matcher, @Nullable String script) {
+    private static void scanHookVarNames(java.util.regex.Matcher matcher, @Nullable String script, Set<String> out) {
         if (script == null || script.isEmpty()) {
             return;
         }
@@ -755,7 +825,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         while (matcher.find()) {
             String key = matcher.group(1).toLowerCase(Locale.ROOT);
             if (!"roaming".equals(key) && key.matches("[a-z_][a-z0-9_]*")) {
-                this.registeredHookVarNames.add(key);
+                out.add(key);
             }
         }
     }
@@ -773,18 +843,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         MolangValue scalarStruct = MolangValue.missing();
         if (syncScalar) {
             Map<String, MolangValue> fields = new LinkedHashMap<>();
-            Map<String, MolangValue> live = this.codedCollection != null ? this.codedCollection.typedVariables() : Map.of();
-            for (String key : this.registeredHookVarNames) {
-                Double override = this.pendingScalarVars.get(key);
-                if (override != null) {
-                    fields.put(key, MolangValue.number(override));
-                } else {
-                    MolangValue existing = live.get(key);
-                    if (existing != null) {
-                        fields.put(key, MolangValue.number(existing.number()));
-                    }
-                }
-            }
+            this.pendingScalarVars.forEach((k, v) -> fields.put(k, MolangValue.number(v)));
             scalarStruct = fields.isEmpty() ? MolangValue.missing() : new MolangValue.StructValue(fields);
         }
         List<MolangValue> args = List.of(
@@ -815,7 +874,7 @@ public class HostAnimationProcessor<TEntity extends Entity> {
         if (hookVarNames != null && !hookVarNames.isEmpty()) {
             syncSrc.append("args[2]?{");
             for (String key : hookVarNames) {
-                syncSrc.append("v.").append(key).append("=args[3].").append(key).append(';');
+                syncSrc.append("v.").append(key).append("=args[3].").append(key).append("??v.").append(key).append(';');
             }
             syncSrc.append("}:0;");
         }
@@ -851,6 +910,205 @@ public class HostAnimationProcessor<TEntity extends Entity> {
             }
         }
         return out;
+    }
+
+    public record OrderedJsonLayer(
+            int slotIndex,
+            String slotName,
+            PoseFrame frame,
+            int @Nullable [] drivenRotIndices,
+            int @Nullable [] drivenPosIndices,
+            int @Nullable [] drivenScaleIndices) {
+        public OrderedJsonLayer(int slotIndex, String slotName, PoseFrame frame) {
+            this(slotIndex, slotName, frame, null, null, null);
+        }
+    }
+
+    private @Nullable ClipDrivenCache resolveStateDrivenCache(String slotName, String stateOrClipName) {
+        if (this.library == null || stateOrClipName == null || stateOrClipName.isEmpty()) {
+            return null;
+        }
+        ControllerSpec spec = this.activeControllerSpecs.get(slotName);
+        if (spec != null) {
+            HostAnimationAssets.ControllerStateSpec state = spec.states().get(stateOrClipName);
+            if (state != null) {
+                String cacheKey = slotName + '\0' + stateOrClipName;
+                ClipDrivenCache cached = this.stateDrivenCache.get(cacheKey);
+                if (cached != null) {
+                    return cached;
+                }
+                List<HostAnimationAssets.BlendEntry> anims = state.animations();
+                if (anims.isEmpty()) {
+                    ClipDrivenCache empty = new ClipDrivenCache(new int[0], new int[0], new int[0], Set.of());
+                    this.stateDrivenCache.put(cacheKey, empty);
+                    return empty;
+                }
+                if (anims.size() == 1) {
+                    ClipDrivenCache single = resolveClipDrivenCache(anims.getFirst().animationName());
+                    ClipDrivenCache result = single != null
+                            ? single
+                            : new ClipDrivenCache(new int[0], new int[0], new int[0], Set.of());
+                    this.stateDrivenCache.put(cacheKey, result);
+                    return result;
+                }
+                Set<String> rotBones = new LinkedHashSet<>();
+                Set<String> posBones = new LinkedHashSet<>();
+                Set<String> scaleBones = new LinkedHashSet<>();
+                for (HostAnimationAssets.BlendEntry entry : anims) {
+                    String clipName = entry.animationName();
+                    if (clipName != null && this.library.hasClip(clipName)) {
+                        PoseAnimationLibrary.ClipSummary summary = this.library.clipSummary(clipName);
+                        rotBones.addAll(summary.rotationBones());
+                        posBones.addAll(summary.positionBones());
+                        scaleBones.addAll(summary.scaleBones());
+                    }
+                }
+                ClipDrivenCache built = new ClipDrivenCache(
+                        resolveBoneIndexArray(rotBones, this.boneIndexByName),
+                        resolveBoneIndexArray(posBones, this.boneIndexByName),
+                        resolveBoneIndexArray(scaleBones, this.boneIndexByName),
+                        Set.copyOf(rotBones));
+                this.stateDrivenCache.put(cacheKey, built);
+                return built;
+            }
+        }
+        return resolveClipDrivenCache(stateOrClipName);
+    }
+
+    private @Nullable ClipDrivenCache resolveClipDrivenCache(String clipName) {
+        if (this.library == null || clipName == null || clipName.isEmpty()) {
+            return null;
+        }
+        ClipDrivenCache cached = this.clipDrivenCache.get(clipName);
+        if (cached != null) {
+            return cached;
+        }
+        if (!this.library.hasClip(clipName)) {
+            return null;
+        }
+        PoseAnimationLibrary.ClipSummary summary = this.library.clipSummary(clipName);
+        ClipDrivenCache built = new ClipDrivenCache(
+                resolveBoneIndexArray(summary.rotationBones(), this.boneIndexByName),
+                resolveBoneIndexArray(summary.positionBones(), this.boneIndexByName),
+                resolveBoneIndexArray(summary.scaleBones(), this.boneIndexByName),
+                summary.rotationBones());
+        this.clipDrivenCache.put(clipName, built);
+        return built;
+    }
+
+    private static int[] resolveBoneIndexArray(Set<String> bones, Map<String, Integer> boneIndexByName) {
+        if (bones == null || bones.isEmpty()) {
+            return new int[0];
+        }
+        int[] raw = new int[bones.size()];
+        int count = 0;
+        for (String boneName : bones) {
+            Integer idx = boneIndexByName.get(boneName);
+            if (idx != null && idx >= 0) {
+                raw[count++] = idx;
+            }
+        }
+        return count == raw.length ? raw : java.util.Arrays.copyOf(raw, count);
+    }
+
+    private static boolean @Nullable [] toDrivenMask(int @Nullable [] indices, int boneCount) {
+        if (indices == null || indices.length == 0 || boneCount <= 0) {
+            return null;
+        }
+        boolean[] mask = new boolean[boneCount];
+        for (int idx : indices) {
+            if (idx >= 0 && idx < boneCount) {
+                mask[idx] = true;
+            }
+        }
+        return mask;
+    }
+
+    /**
+     * Composites JSON controller layers in exact controller registration order against the combined coded pose.
+     * Each bone channel (rotation / position / scale) is overwritten by a JSON layer only if that JSON layer's
+     * slot index is strictly higher than the highest coded slot that drove that bone channel (from clip track
+     * summaries, with non-bind fallback). When a layer carries explicit driven bone indices for its active state,
+     * channels whose evaluated value happens to equal the bind pose (e.g. {@code Wing.scale = [1,1,1]} or
+     * {@code LeftLeg.pos = [0,0,0]}) are preserved rather than silently dropped.
+     */
+    public static BonePose compositeOrderedJsonPoses(
+            BonePose codedPose,
+            BonePose bind,
+            List<OrderedJsonLayer> orderedLayers,
+            int[] maxCodedRotSlot,
+            int[] maxCodedPosSlot,
+            int[] maxCodedScaleSlot,
+            int fallbackCodedSlot) {
+        float[] rot = codedPose.rotations();
+        float[] pos = codedPose.translations();
+        float[] scale = codedPose.scales();
+        float[] br = bind.rotations();
+        float[] bp = bind.translations();
+        float[] bs = bind.scales();
+        int boneCount = Math.min(rot.length, br.length) / 3;
+
+        int[] effRotSlot = new int[boneCount];
+        int[] effPosSlot = new int[boneCount];
+        int[] effScaleSlot = new int[boneCount];
+        for (int b = 0; b < boneCount; b++) {
+            int i = b * 3;
+            int rSlot = b < maxCodedRotSlot.length ? maxCodedRotSlot[b] : -1;
+            int pSlot = b < maxCodedPosSlot.length ? maxCodedPosSlot[b] : -1;
+            int sSlot = b < maxCodedScaleSlot.length ? maxCodedScaleSlot[b] : -1;
+            if (rSlot < 0 && fallbackCodedSlot >= 0 && (rot[i] != br[i] || rot[i + 1] != br[i + 1] || rot[i + 2] != br[i + 2])) {
+                rSlot = fallbackCodedSlot;
+            }
+            if (pSlot < 0 && fallbackCodedSlot >= 0 && (pos[i] != bp[i] || pos[i + 1] != bp[i + 1] || pos[i + 2] != bp[i + 2])) {
+                pSlot = fallbackCodedSlot;
+            }
+            if (sSlot < 0 && fallbackCodedSlot >= 0 && (scale[i] != bs[i] || scale[i + 1] != bs[i + 1] || scale[i + 2] != bs[i + 2])) {
+                sSlot = fallbackCodedSlot;
+            }
+            effRotSlot[b] = rSlot;
+            effPosSlot[b] = pSlot;
+            effScaleSlot[b] = sSlot;
+        }
+
+        for (OrderedJsonLayer layer : orderedLayers) {
+            int layerSlot = layer.slotIndex();
+            BonePose op = layer.frame().pose();
+            float[] or = op.rotations();
+            float[] oPos = op.translations();
+            float[] os = op.scales();
+            int count = Math.min(boneCount, or.length / 3);
+            boolean[] drivenRot = toDrivenMask(layer.drivenRotIndices(), count);
+            boolean[] drivenPos = toDrivenMask(layer.drivenPosIndices(), count);
+            boolean[] drivenScale = toDrivenMask(layer.drivenScaleIndices(), count);
+            for (int b = 0; b < count; b++) {
+                int i = b * 3;
+                if (layerSlot > effRotSlot[b]
+                        && ((drivenRot != null && drivenRot[b])
+                        || or[i] != br[i] || or[i + 1] != br[i + 1] || or[i + 2] != br[i + 2])) {
+                    rot[i] = or[i];
+                    rot[i + 1] = or[i + 1];
+                    rot[i + 2] = or[i + 2];
+                    effRotSlot[b] = layerSlot;
+                }
+                if (layerSlot > effPosSlot[b]
+                        && ((drivenPos != null && drivenPos[b])
+                        || oPos[i] != bp[i] || oPos[i + 1] != bp[i + 1] || oPos[i + 2] != bp[i + 2])) {
+                    pos[i] = oPos[i];
+                    pos[i + 1] = oPos[i + 1];
+                    pos[i + 2] = oPos[i + 2];
+                    effPosSlot[b] = layerSlot;
+                }
+                if (layerSlot > effScaleSlot[b]
+                        && ((drivenScale != null && drivenScale[b])
+                        || os[i] != bs[i] || os[i + 1] != bs[i + 1] || os[i + 2] != bs[i + 2])) {
+                    scale[i] = os[i];
+                    scale[i + 1] = os[i + 1];
+                    scale[i + 2] = os[i + 2];
+                    effScaleSlot[b] = layerSlot;
+                }
+            }
+        }
+        return new BonePose(rot, pos, scale, codedPose.ownHidden(), codedPose.childrenHidden(), codedPose.glow(), codedPose.colorsRgba());
     }
 
     public static boolean isPreLayerJsonController(String slotName) {
