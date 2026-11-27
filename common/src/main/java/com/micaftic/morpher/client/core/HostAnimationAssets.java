@@ -334,16 +334,27 @@ public final class HostAnimationAssets {
         private final String initialState;
         private final Map<String, ControllerStateSpec> states;
         private final RawYsmModel.RawAnimationController raw;
+        private final boolean mergeMultilineExpr;
 
         public ControllerSpec(
                 String name,
                 String initialState,
                 Map<String, ControllerStateSpec> states,
                 RawYsmModel.RawAnimationController raw) {
+            this(name, initialState, states, raw, false);
+        }
+
+        public ControllerSpec(
+                String name,
+                String initialState,
+                Map<String, ControllerStateSpec> states,
+                RawYsmModel.RawAnimationController raw,
+                boolean mergeMultilineExpr) {
             this.name = Objects.requireNonNull(name);
             this.initialState = (initialState == null || initialState.isEmpty()) ? "default" : initialState;
             this.states = Collections.unmodifiableMap(new LinkedHashMap<>(states));
             this.raw = Objects.requireNonNull(raw);
+            this.mergeMultilineExpr = mergeMultilineExpr;
         }
 
         public String name() {
@@ -360,6 +371,14 @@ public final class HostAnimationAssets {
 
         public RawYsmModel.RawAnimationController raw() {
             return this.raw;
+        }
+
+        public boolean mergeMultilineExpr() {
+            return this.mergeMultilineExpr;
+        }
+
+        public @Nullable PoseControllerDefinition compile(PoseAnimationLibrary library) {
+            return compile(library, this.mergeMultilineExpr);
         }
 
         public @Nullable PoseControllerDefinition compile(PoseAnimationLibrary library, boolean mergeMultilineExpr) {
@@ -501,6 +520,8 @@ public final class HostAnimationAssets {
         return new BonePose(rotations, translations, scales, ownHidden, childrenHidden, glow);
     }
 
+    public static final String PARTICLE_LOCATOR_SEPARATOR = "\u0000";
+
     /**
      * Compiles a {@link PoseAnimationLibrary} via {@code spm-core}.
      * Falls back per-clip if any legacy clip has an invalid Molang snippet so valid clips still run.
@@ -510,21 +531,43 @@ public final class HostAnimationAssets {
             Collection<ClipSpec> clips,
             Skeleton skeleton,
             BonePose bindPose) {
-        if (clips.isEmpty()) {
+        if (clips == null || clips.isEmpty()) {
+            return compileLibrary(identity, Map.of(), skeleton, bindPose);
+        }
+        Map<String, ClipSpec> byKey = new LinkedHashMap<>(clips.size());
+        for (ClipSpec clip : clips) {
+            if (clip != null && clip.name() != null && !clip.name().isBlank()) {
+                byKey.put(clip.name(), clip);
+            }
+        }
+        return compileLibrary(identity, byKey, skeleton, bindPose);
+    }
+
+    /**
+     * Compiles a {@link PoseAnimationLibrary} keyed by map entry names so aliased clips
+     * (e.g. {@code lance_charge -> use_mainhand:lance}, {@code hold_mainhand:mace}) are registered
+     * under their alias names as well as their original clip names.
+     */
+    public static PoseAnimationLibrary compileLibrary(
+            String identity,
+            Map<String, ClipSpec> clipsByKey,
+            Skeleton skeleton,
+            BonePose bindPose) {
+        if (clipsByKey == null || clipsByKey.isEmpty()) {
             return PoseAnimationLibrary.fromModel(
                     emptyModelDocument(identity, skeleton, bindPose),
                     new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
                     AnimationDecodeLimits.localYsm());
         }
         try {
-            ModelDocument doc = buildModelDocument(identity, clips, skeleton, bindPose, false, false);
+            ModelDocument doc = buildModelDocument(identity, clipsByKey, skeleton, bindPose, false, false);
             return PoseAnimationLibrary.fromModel(
                     doc,
                     new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
                     AnimationDecodeLimits.localYsm());
         } catch (RuntimeException bulkFailure) {
             try {
-                ModelDocument normalizedDoc = buildModelDocument(identity, clips, skeleton, bindPose, true, false);
+                ModelDocument normalizedDoc = buildModelDocument(identity, clipsByKey, skeleton, bindPose, true, false);
                 PoseAnimationLibrary normalizedLib = PoseAnimationLibrary.fromModel(
                         normalizedDoc,
                         new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
@@ -536,32 +579,38 @@ public final class HostAnimationAssets {
             } catch (RuntimeException ignored) {
             }
 
-            List<ClipSpec> keptClips = new ArrayList<>(clips.size());
+            Map<String, ClipSpec> keptClips = new LinkedHashMap<>(clipsByKey.size());
             boolean useSanitized = false;
-            for (ClipSpec clip : clips) {
+            for (Map.Entry<String, ClipSpec> entry : clipsByKey.entrySet()) {
+                String clipKey = entry.getKey();
+                ClipSpec clip = entry.getValue();
+                if (clipKey == null || clipKey.isBlank() || clip == null) {
+                    continue;
+                }
+                Map<String, ClipSpec> singleMap = Collections.singletonMap(clipKey, clip);
                 try {
-                    ModelDocument single = buildModelDocument(identity, List.of(clip), skeleton, bindPose, true, false);
+                    ModelDocument single = buildModelDocument(identity, singleMap, skeleton, bindPose, true, false);
                     PoseAnimationLibrary.fromModel(
                             single,
                             new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
                             AnimationDecodeLimits.localYsm());
-                    keptClips.add(clip);
+                    keptClips.put(clipKey, clip);
                 } catch (RuntimeException clipFailure) {
                     try {
-                        ModelDocument singleSanitized = buildModelDocument(identity, List.of(clip), skeleton, bindPose, true, true);
+                        ModelDocument singleSanitized = buildModelDocument(identity, singleMap, skeleton, bindPose, true, true);
                         PoseAnimationLibrary.fromModel(
                                 singleSanitized,
                                 new ScriptBudget(COMPILE_BUDGET_STEPS, COMPILE_BUDGET_DEPTH, new CancellationToken()),
                                 AnimationDecodeLimits.localYsm());
-                        keptClips.add(clip);
+                        keptClips.put(clipKey, clip);
                         useSanitized = true;
                         YesSteveModel.LOGGER.warn(
                                 "[SM-ANIM] Sanitizing animation '{}' in '{}' after Core decode error: {}",
-                                clip.name(), identity, clipFailure.getMessage());
+                                clipKey, identity, clipFailure.getMessage());
                     } catch (RuntimeException unrecoverable) {
                         YesSteveModel.LOGGER.warn(
                                 "[SM-ANIM] Skipping unrecoverable animation '{}' in '{}': {}",
-                                clip.name(), identity, unrecoverable.getMessage());
+                                clipKey, identity, unrecoverable.getMessage());
                     }
                 }
             }
@@ -602,25 +651,28 @@ public final class HostAnimationAssets {
 
     private static ModelDocument buildModelDocument(
             String identity,
-            Collection<ClipSpec> clips,
+            Map<String, ClipSpec> clipsByKey,
             Skeleton skeleton,
             BonePose bindPose,
             boolean normalizeLegacy,
             boolean sanitizeInvalidExpressions) {
-        Map<String, ModelDocument.JsonValue> animEntries = new LinkedHashMap<>(clips.size() + 1);
-        for (ClipSpec clip : clips) {
+        Map<String, ModelDocument.JsonValue> animEntries = new LinkedHashMap<>(clipsByKey.size() + 1);
+        for (Map.Entry<String, ClipSpec> entry : clipsByKey.entrySet()) {
             if (animEntries.size() >= 1024) {
                 break;
             }
-            String clipName = clip.name();
-            if (clipName == null || clipName.isBlank()) {
+            String clipKey = entry.getKey();
+            ClipSpec clip = entry.getValue();
+            if (clipKey == null || clipKey.isBlank() || clip == null) {
                 continue;
             }
-            animEntries.put(clipName, rawAnimationToJson(clip.raw(), normalizeLegacy, sanitizeInvalidExpressions));
+            animEntries.put(clipKey, rawAnimationToJson(clip.raw(), normalizeLegacy, sanitizeInvalidExpressions));
         }
         // Bedrock / YSM controllers frequently reference implicit "empty" state clip.
+        // Give it explicit zero duration so query.all_animations_finished is not pinned to 0.0 forever.
         if (animEntries.size() < 1024) {
             animEntries.putIfAbsent("empty", new ModelDocument.JsonObject(Map.of(
+                    "animation_length", new ModelDocument.JsonNumber(0.0),
                     "loop", new ModelDocument.JsonString("play_once"))));
         }
         Map<String, ModelDocument.JsonValue> root = new LinkedHashMap<>();
@@ -741,7 +793,18 @@ public final class HostAnimationAssets {
             boolean normalizeLegacy,
             boolean sanitizeInvalid) {
         Map<String, ModelDocument.JsonValue> map = new LinkedHashMap<>(frames.size());
+        boolean hasExplicitZero = false;
         for (RawYsmModel.RawKeyframe rk : frames) {
+            if (Float.isFinite(rk.timestamp) && rk.timestamp == 0.0f) {
+                hasExplicitZero = true;
+                break;
+            }
+        }
+        for (RawYsmModel.RawKeyframe rk : frames) {
+            if ((!Float.isFinite(rk.timestamp) || rk.timestamp < 0.0f) && hasExplicitZero) {
+                // Do not let a negative timestamp clamp to "0" and evict an explicit t=0 keyframe.
+                continue;
+            }
             String timeKey = formatTimeKey(rk.timestamp);
             // Deduplicate colliding timestamps consistently with TreeMap ordering.
             if (map.containsKey(timeKey)) {
@@ -1015,7 +1078,12 @@ public final class HostAnimationAssets {
             String locator = new String(Base64.getDecoder().decode(trimmed.substring(thirdQuote + 1, fourthQuote)), StandardCharsets.UTF_8);
             String preScript = trimmed.substring(braceOpen + 1, braceClose).trim();
             Map<String, ModelDocument.JsonValue> obj = new LinkedHashMap<>();
-            obj.put("effect", new ModelDocument.JsonString(effect));
+            // Pack locator into effect selector as well so spm-core PoseClipTimeline
+            // (which omits parameters on particle cues) still delivers the bone locator to Host.
+            String encodedEffect = (!locator.isEmpty() && effect.length() + 1 + locator.length() <= 1024)
+                    ? effect + PARTICLE_LOCATOR_SEPARATOR + locator
+                    : effect;
+            obj.put("effect", new ModelDocument.JsonString(encodedEffect));
             if (!locator.isEmpty()) {
                 obj.put("locator", new ModelDocument.JsonString(locator));
             }
@@ -1049,6 +1117,11 @@ public final class HostAnimationAssets {
                 List<ModelDocument.JsonValue> anims = new ArrayList<>(rs.animations.size());
                 for (Map.Entry<String, String> entry : rs.animations) {
                     String animName = entry.getKey();
+                    // Preserve legacy YSM behavior (#source-0130): blank animation entries (e.g. ["idle", "", ""])
+                    // are no-op placeholders and must be skipped rather than mapped to "empty".
+                    if (animName == null || animName.isBlank()) {
+                        continue;
+                    }
                     if (library != null && !library.hasClip(animName)) {
                         if (hasEmptyClip) {
                             YesSteveModel.LOGGER.warn(
@@ -1094,8 +1167,13 @@ public final class HostAnimationAssets {
                 }
                 stateObj.put("sound_effects", new ModelDocument.JsonArray(sounds));
             }
-            stateObj.put("blend_transition", new ModelDocument.JsonNumber(rs.blendTransitionValue));
-            stateObj.put("blend_via_shortest_path", new ModelDocument.JsonBoolean(rs.blendViaShortestPath));
+            double blendTransition = resolveControllerBlendTransition(rs);
+            if (blendTransition > 0.0) {
+                stateObj.put("blend_transition", new ModelDocument.JsonNumber(blendTransition));
+            }
+            if (rs.blendViaShortestPath) {
+                stateObj.put("blend_via_shortest_path", new ModelDocument.JsonBoolean(true));
+            }
             statesJson.put(rs.name, new ModelDocument.JsonObject(stateObj));
         }
         Map<String, ModelDocument.JsonValue> ctrlObj = new LinkedHashMap<>();
@@ -1104,6 +1182,22 @@ public final class HostAnimationAssets {
         ctrlObj.put("states", new ModelDocument.JsonObject(statesJson));
         return new ModelDocument.JsonObject(Map.of(
                 "animation_controllers", new ModelDocument.JsonObject(Map.of(rac.animationName, new ModelDocument.JsonObject(ctrlObj)))));
+    }
+
+    private static double resolveControllerBlendTransition(RawYsmModel.RawControllerState rs) {
+        if (Float.isFinite(rs.blendTransitionValue) && rs.blendTransitionValue > 0.0f) {
+            return rs.blendTransitionValue;
+        }
+        if (rs.blendTransitions != null && !rs.blendTransitions.isEmpty()) {
+            double maxKey = 0.0;
+            for (Float key : rs.blendTransitions.keySet()) {
+                if (key != null && Float.isFinite(key) && key > maxKey) {
+                    maxKey = key;
+                }
+            }
+            return maxKey;
+        }
+        return 0.0;
     }
 
     private static ModelDocument.JsonArray scriptListToJson(

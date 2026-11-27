@@ -215,8 +215,8 @@ public class ModelAssemblyFactory {
         }
         if (!externalPlayerModel || useBuiltinDefaultActionPreset || useBbmodelActionPreset) {
             addWeaponAnimationAliases(object2ReferenceOpenHashMap);
-            addWeaponAnimationAliases(armAnimations);
             addFirstPersonWeaponArmAnimations(object2ReferenceOpenHashMap, armAnimations);
+            addWeaponAnimationAliases(armAnimations);
         }
         ConditionManager conditionManager = new ConditionManager();
         ObjectSet<String> objectSetKeySet = object2ReferenceOpenHashMap.keySet();

@@ -313,6 +313,14 @@ public final class HostMolangBindings {
         }
     }
 
+    private static double finite(double value) {
+        return Double.isFinite(value) ? value : 0.0;
+    }
+
+    private static MolangValue safeNumber(double value) {
+        return MolangValue.number(finite(value));
+    }
+
     public static SceneInputs buildInputs(
             HostActionEvent<?> event,
             Map<MolangBindings.Call, MolangValue> sampledCalls,
@@ -389,11 +397,21 @@ public final class HostMolangBindings {
             queries.put("is_eating", living.getUseItem().getUseAnimation() == UseAnim.EAT ? 1.0 : 0.0);
             queries.put("is_playing_dead", living.isDeadOrDying() ? 1.0 : 0.0);
             queries.put("is_sleeping", living.isSleeping() ? 1.0 : 0.0);
-            queries.put("is_using_item", InputStateKey.isUsingItem(living, InputStateKey.getUsedItemHand(living)) ? 1.0 : 0.0);
-            queries.put("item_in_use_duration", InputStateKey.getTicksUsingItem(living) / 20.0);
+            InteractionHand usedHand = InputStateKey.getUsedItemHand(living);
+            boolean usingItem = InputStateKey.isUsingItem(living, usedHand);
+            double inUseSeconds = finite(InputStateKey.getTicksUsingItem(living) / 20.0);
             ItemStack useItem = living.getUseItem();
-            queries.put("item_max_use_duration", useItem.isEmpty() ? 0.0 : useItem.getUseDuration(living) / 20.0);
-            queries.put("item_remaining_use_duration", living.isUsingItem() ? living.getUseItemRemainingTicks() / 20.0 : 0.0);
+            if (useItem.isEmpty() && usingItem) {
+                useItem = living.getItemInHand(usedHand);
+            }
+            double maxUseSeconds = useItem.isEmpty() ? 0.0 : finite(useItem.getUseDuration(living) / 20.0);
+            double remainingUseSeconds = living.isUsingItem()
+                    ? finite(living.getUseItemRemainingTicks() / 20.0)
+                    : (usingItem ? Math.max(0.0, maxUseSeconds - inUseSeconds) : 0.0);
+            queries.put("is_using_item", usingItem ? 1.0 : 0.0);
+            queries.put("item_in_use_duration", inUseSeconds);
+            queries.put("item_max_use_duration", maxUseSeconds);
+            queries.put("item_remaining_use_duration", remainingUseSeconds);
             boolean swinging = isSwinging(event, living);
             queries.put("is_swinging", swinging ? 1.0 : 0.0);
             queries.put("swing_time", swinging ? getSwingTime(event, living) / 20.0 : 0.0);
@@ -666,7 +684,173 @@ public final class HostMolangBindings {
                 commands);
     }
 
+    public static final class FrameCallCache {
+        private final @Nullable LivingEntity living;
+        private @Nullable CoreQueryFunctions.Source cachedSourceWithTags;
+        private @Nullable CoreQueryFunctions.Source cachedSourceNoTags;
+        private @Nullable java.util.Set<String> biomeTags;
+        private final CoreQueryFunctions.Equipment[] equipmentWithTags = new CoreQueryFunctions.Equipment[CoreQueryFunctions.Slot.values().length];
+        private final CoreQueryFunctions.Equipment[] equipmentNoTags = new CoreQueryFunctions.Equipment[CoreQueryFunctions.Slot.values().length];
+        private @Nullable java.util.Map<CoreQueryFunctions.BlockPosition, String> blockIds;
+        private @Nullable java.util.Map<CoreQueryFunctions.BlockPosition, java.util.Set<String>> blockTags;
+        private boolean cameraCached;
+        private double cameraPitch;
+        private double cameraYaw;
+
+        private FrameCallCache(@Nullable LivingEntity living) {
+            this.living = living;
+        }
+
+        private CoreQueryFunctions.Source source(boolean needsItemTags) {
+            if (this.living == null) {
+                throw new IllegalStateException("No living entity");
+            }
+            if (!needsItemTags) {
+                if (this.cachedSourceNoTags == null) {
+                    this.cachedSourceNoTags = createSource(false);
+                }
+                return this.cachedSourceNoTags;
+            }
+            if (this.cachedSourceWithTags == null) {
+                this.cachedSourceWithTags = createSource(true);
+            }
+            return this.cachedSourceWithTags;
+        }
+
+        private CoreQueryFunctions.Source createSource(boolean needsItemTags) {
+            final LivingEntity entity = this.living;
+            return new CoreQueryFunctions.Source() {
+                @Override
+                public java.util.Set<String> biomeTags() {
+                    if (FrameCallCache.this.biomeTags == null) {
+                        BlockPos bp = entity.blockPosition();
+                        if (!entity.level().hasChunk(bp.getX() >> 4, bp.getZ() >> 4)) {
+                            FrameCallCache.this.biomeTags = java.util.Set.of();
+                        } else {
+                            FrameCallCache.this.biomeTags = entity.level().getBiome(bp).tags()
+                                    .map(tag -> tag.location().toString())
+                                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                        }
+                    }
+                    return FrameCallCache.this.biomeTags;
+                }
+
+                @Override
+                public CoreQueryFunctions.Equipment equipment(CoreQueryFunctions.Slot slot) {
+                    int idx = slot.ordinal();
+                    CoreQueryFunctions.Equipment[] table = needsItemTags ? equipmentWithTags : equipmentNoTags;
+                    CoreQueryFunctions.Equipment cached = table[idx];
+                    if (cached != null) {
+                        return cached;
+                    }
+                    if (!needsItemTags && equipmentWithTags[idx] != null) {
+                        return equipmentWithTags[idx];
+                    }
+                    EquipmentSlot target = EquipmentSlot.valueOf(slot.name());
+                    ItemStack stack = CosmeticArmorHelper.getArmorItem(entity, target);
+                    ResourceLocation key = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                    java.util.Set<String> tags = needsItemTags && !stack.isEmpty()
+                            ? stack.getTags()
+                                    .map(tag -> tag.location().toString())
+                                    .collect(java.util.stream.Collectors.toUnmodifiableSet())
+                            : java.util.Set.of();
+                    CoreQueryFunctions.Equipment eq = new CoreQueryFunctions.Equipment(
+                            key == null ? "minecraft:air" : key.toString(),
+                            stack.isEmpty(),
+                            stack.getMaxDamage(),
+                            stack.getDamageValue(),
+                            tags);
+                    table[idx] = eq;
+                    return eq;
+                }
+
+                @Override
+                public java.util.Set<String> blockTags(CoreQueryFunctions.BlockPosition position) {
+                    if (blockTags == null) {
+                        blockTags = new java.util.HashMap<>(4);
+                    }
+                    return blockTags.computeIfAbsent(position, p -> {
+                        BlockPos pos = new BlockPos(p.x(), p.y(), p.z());
+                        if (!entity.level().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+                            return java.util.Set.of();
+                        }
+                        BlockState state = entity.level().getBlockState(pos);
+                        return state.getTags()
+                                .map(tag -> tag.location().toString())
+                                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                    });
+                }
+
+                @Override
+                public String blockId(CoreQueryFunctions.BlockPosition position) {
+                    if (blockIds == null) {
+                        blockIds = new java.util.HashMap<>(4);
+                    }
+                    if (blockIds.containsKey(position)) {
+                        return blockIds.get(position);
+                    }
+                    BlockPos pos = new BlockPos(position.x(), position.y(), position.z());
+                    String resolved = null;
+                    if (entity.level().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+                        BlockState state = entity.level().getBlockState(pos);
+                        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+                        resolved = key == null ? null : key.toString();
+                    }
+                    blockIds.put(position, resolved);
+                    return resolved;
+                }
+
+                @Override
+                public double entityX() {
+                    return finite(entity.getX());
+                }
+
+                @Override
+                public double entityY() {
+                    return finite(entity.getY());
+                }
+
+                @Override
+                public double entityZ() {
+                    return finite(entity.getZ());
+                }
+
+                private void ensureCamera() {
+                    if (!cameraCached) {
+                        cameraCached = true;
+                        Minecraft mc = Minecraft.getInstance();
+                        if (mc != null && mc.gameRenderer != null) {
+                            cameraPitch = finite(mc.gameRenderer.getMainCamera().getXRot());
+                            cameraYaw = finite(mc.gameRenderer.getMainCamera().getYRot());
+                        }
+                    }
+                }
+
+                @Override
+                public double cameraPitch() {
+                    ensureCamera();
+                    return cameraPitch;
+                }
+
+                @Override
+                public double cameraYaw() {
+                    ensureCamera();
+                    return cameraYaw;
+                }
+            };
+        }
+    }
+
+    public static FrameCallCache createCallCache(HostActionEvent<?> event) {
+        Entity entity = event.getAnimatable().getEntity();
+        return new FrameCallCache(entity instanceof LivingEntity le ? le : null);
+    }
+
     public static MolangValue resolveCall(HostActionEvent<?> event, MolangBindings.Call call) {
+        return resolveCall(event, call, null);
+    }
+
+    public static MolangValue resolveCall(HostActionEvent<?> event, MolangBindings.Call call, @Nullable FrameCallCache cache) {
         String name = call.name();
         List<MolangValue> args = call.arguments();
         Entity entity = event.getAnimatable().getEntity();
@@ -683,16 +867,12 @@ public final class HostMolangBindings {
         }
 
         if (CoreQueryFunctions.supports(name) && living != null) {
-            try {
-                var resolver = MinecraftHostSnapshotSampler.queryResolver(Minecraft.getInstance(), living, false);
-                return resolver.resolve(call);
-            } catch (RuntimeException ignored) {
-                return MolangValue.missing();
-            }
+            return resolveCoreQuerySafely(living, call, cache);
         }
 
         return switch (name) {
             case "query.debug_output" -> MolangValue.missing();
+            case "ysm.get_equipped_item_name" -> resolveYsmEquippedItemName(living, args);
             case "ysm.play_sound", "ysm.stop_sound", "ysm.stop_all_sounds", "ysm.particle", "ysm.abs_particle" ->
                     MolangValue.bool(true);
             case "ysm.relative_block_name_any" -> resolveRelativeBlockNameAny(entity, args);
@@ -716,6 +896,32 @@ public final class HostMolangBindings {
         };
     }
 
+    private static MolangValue resolveCoreQuerySafely(LivingEntity living, MolangBindings.Call call, @Nullable FrameCallCache cache) {
+        try {
+            boolean needsItemTags = "query.equipped_item_all_tags".equals(call.name())
+                    || "query.equipped_item_any_tag".equals(call.name());
+            FrameCallCache resolvedCache = cache != null && cache.living == living ? cache : new FrameCallCache(living);
+            return CoreQueryFunctions.resolve(call.name(), call.arguments(), resolvedCache.source(needsItemTags));
+        } catch (RuntimeException ignored) {
+            return MolangValue.missing();
+        }
+    }
+
+    private static MolangValue resolveYsmEquippedItemName(@Nullable LivingEntity living, List<MolangValue> args) {
+        if (living == null || args.isEmpty()) {
+            return MolangValue.text("empty");
+        }
+        String hand = textArg(args, 0);
+        ItemStack stack = "off_hand".equals(hand) || "offhand".equals(hand)
+                ? living.getOffhandItem()
+                : living.getMainHandItem();
+        if (stack.isEmpty()) {
+            return MolangValue.text("empty");
+        }
+        ResourceLocation key = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        return MolangValue.text(key == null ? "empty" : key.getPath());
+    }
+
     public static void dispatchEffects(
             HostAnimatable<?> animatable,
             HostActionEvent<?> event,
@@ -733,16 +939,33 @@ public final class HostMolangBindings {
                 entityAudio.playSound(animatable, 0, effect.resource(), false, null);
                 continue;
             }
-            if ("particle".equals(effect.kind()) && args.isEmpty()) {
-                String particleName = effect.resource();
-                Object locatorObj = effect.parameters().get("locator");
-                String locator = locatorObj == null ? "" : locatorObj.toString();
-                if (!particleName.isBlank() && pose != null && !locator.isEmpty() && entity != null) {
+            if ("particle".equals(effect.kind()) && args.size() <= 1) {
+                String rawResource = effect.resource() == null ? "" : effect.resource();
+                String locator = "";
+                if (args.size() == 1 && args.get(0) instanceof MolangValue.TextValue textLoc) {
+                    locator = textLoc.value();
+                }
+                if (locator.isEmpty()) {
+                    Object locatorObj = effect.parameters().get("locator");
+                    if (locatorObj != null) {
+                        locator = locatorObj.toString();
+                    }
+                }
+                String particleName = rawResource;
+                int sep = rawResource.indexOf(HostAnimationAssets.PARTICLE_LOCATOR_SEPARATOR);
+                if (sep >= 0) {
+                    particleName = rawResource.substring(0, sep);
+                    if (locator.isEmpty()) {
+                        locator = rawResource.substring(sep + 1);
+                    }
+                }
+                final String resolvedParticle = particleName;
+                if (!resolvedParticle.isBlank() && pose != null && !locator.isEmpty() && entity != null) {
                     pose.animationParticles.enqueue(particleKey, locator, offset -> {
                         Vector3d posVec = new Vector3d(offset.x, offset.y, offset.z);
                         mc.execute(() -> {
                             try {
-                                ParticleEffectUtil.spawnAnimationParticle(entity, particleName, posVec, entity.getRandom());
+                                ParticleEffectUtil.spawnAnimationParticle(entity, resolvedParticle, posVec, entity.getRandom());
                             } catch (Exception ignored) {
                             }
                         });
@@ -812,31 +1035,33 @@ public final class HostMolangBindings {
         if (bone == null) return MolangValue.missing();
         return switch (channel) {
             case ROT -> MolangValue.struct(Map.of(
-                    "x", MolangValue.number(Math.toDegrees(bone.getRotationX())),
-                    "y", MolangValue.number(Math.toDegrees(bone.getRotationY())),
-                    "z", MolangValue.number(Math.toDegrees(bone.getRotationZ()))));
+                    "x", safeNumber(Math.toDegrees(bone.getRotationX())),
+                    "y", safeNumber(Math.toDegrees(bone.getRotationY())),
+                    "z", safeNumber(Math.toDegrees(bone.getRotationZ()))));
             case POS -> MolangValue.struct(Map.of(
-                    "x", MolangValue.number(bone.getPositionX()),
-                    "y", MolangValue.number(bone.getPositionY()),
-                    "z", MolangValue.number(bone.getPositionZ())));
+                    "x", safeNumber(bone.getPositionX()),
+                    "y", safeNumber(bone.getPositionY()),
+                    "z", safeNumber(bone.getPositionZ())));
             case SCALE -> MolangValue.struct(Map.of(
-                    "x", MolangValue.number(bone.getScaleX()),
-                    "y", MolangValue.number(bone.getScaleY()),
-                    "z", MolangValue.number(bone.getScaleZ())));
+                    "x", safeNumber(bone.getScaleX()),
+                    "y", safeNumber(bone.getScaleY()),
+                    "z", safeNumber(bone.getScaleZ())));
             case PIVOT_ABS -> MolangValue.struct(Map.of(
-                    "x", MolangValue.number(bone.getAbsPivotX()),
-                    "y", MolangValue.number(bone.getAbsPivotY()),
-                    "z", MolangValue.number(bone.getAbsPivotZ())));
+                    "x", safeNumber(bone.getAbsPivotX()),
+                    "y", safeNumber(bone.getAbsPivotY()),
+                    "z", safeNumber(bone.getAbsPivotZ())));
         };
     }
 
     private static MolangValue resolveRelativeBlockNameAny(Entity entity, List<MolangValue> args) {
         if (args.size() <= 3) return MolangValue.bool(false);
         double dx = args.get(0).number(), dy = args.get(1).number(), dz = args.get(2).number();
-        if (Math.abs(dx) > 5.0 || Math.abs(dy) > 5.0 || Math.abs(dz) > 5.0) return MolangValue.missing();
+        if (!Double.isFinite(dx) || !Double.isFinite(dy) || !Double.isFinite(dz)
+                || Math.abs(dx) > 5.0 || Math.abs(dy) > 5.0 || Math.abs(dz) > 5.0) return MolangValue.missing();
         BlockPos pos = new BlockPos((int) Math.round(entity.getX() + dx - 0.5),
                 (int) Math.round(entity.getY() + dy - 0.5),
                 (int) Math.round(entity.getZ() + dz - 0.5));
+        if (!entity.level().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) return MolangValue.bool(false);
         BlockState state = entity.level().getBlockState(pos);
         ResourceLocation key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         if (key == null) return MolangValue.bool(false);
@@ -1024,15 +1249,15 @@ public final class HostMolangBindings {
 
     private static MolangValue vectorStruct(Vec3 v) {
         return MolangValue.struct(Map.of(
-                "x", MolangValue.number(v.x),
-                "y", MolangValue.number(v.y),
-                "z", MolangValue.number(v.z)));
+                "x", safeNumber(v.x),
+                "y", safeNumber(v.y),
+                "z", safeNumber(v.z)));
     }
 
     private static float getYawSpeed(Entity entity) {
         Minecraft mc = Minecraft.getInstance();
         if (entity != mc.player) {
-            return 20.0f * (entity.getYRot() - entity.yRotO);
+            return 20.0f * Mth.wrapDegrees(entity.getYRot() - entity.yRotO);
         }
         return PlayerEntityFrameState.getHeadYawDelta();
     }

@@ -139,16 +139,38 @@ public final class ModelScenePose {
         for (int i = 0; i < count; i++) {
             int v = i * 3;
             int o = i * MATRIX_STRIDE;
-            this.matrixData[o] = rot[v];
-            this.matrixData[o + 1] = rot[v + 1];
-            this.matrixData[o + 2] = rot[v + 2];
+            float rx = rot[v], ry = rot[v + 1], rz = rot[v + 2];
+            if (Float.isFinite(rx) && Float.isFinite(ry) && Float.isFinite(rz)) {
+                this.matrixData[o] = rx;
+                this.matrixData[o + 1] = ry;
+                this.matrixData[o + 2] = rz;
+            } else {
+                ModelBone def = this.orderedBones.get(i).getDefinition();
+                this.matrixData[o] = def.getRotX();
+                this.matrixData[o + 1] = def.getRotY();
+                this.matrixData[o + 2] = def.getRotZ();
+            }
             // Core uses meters with +X right; host matrixData stores YSM pixels with -X.
-            this.matrixData[o + 3] = -pos[v] * 16.0f;
-            this.matrixData[o + 4] = pos[v + 1] * 16.0f;
-            this.matrixData[o + 5] = pos[v + 2] * 16.0f;
-            this.matrixData[o + 6] = scale[v];
-            this.matrixData[o + 7] = scale[v + 1];
-            this.matrixData[o + 8] = scale[v + 2];
+            float px = pos[v], py = pos[v + 1], pz = pos[v + 2];
+            if (Float.isFinite(px) && Float.isFinite(py) && Float.isFinite(pz)) {
+                this.matrixData[o + 3] = -px * 16.0f;
+                this.matrixData[o + 4] = py * 16.0f;
+                this.matrixData[o + 5] = pz * 16.0f;
+            } else {
+                this.matrixData[o + 3] = 0.0f;
+                this.matrixData[o + 4] = 0.0f;
+                this.matrixData[o + 5] = 0.0f;
+            }
+            float sx = scale[v], sy = scale[v + 1], sz = scale[v + 2];
+            if (Float.isFinite(sx) && Float.isFinite(sy) && Float.isFinite(sz)) {
+                this.matrixData[o + 6] = sx;
+                this.matrixData[o + 7] = sy;
+                this.matrixData[o + 8] = sz;
+            } else {
+                this.matrixData[o + 6] = 1.0f;
+                this.matrixData[o + 7] = 1.0f;
+                this.matrixData[o + 8] = 1.0f;
+            }
             this.matrixData[o + 9] = ownHidden[i] ? 1.0f : 0.0f;
             this.matrixData[o + 10] = childrenHidden[i] ? 1.0f : 0.0f;
         }

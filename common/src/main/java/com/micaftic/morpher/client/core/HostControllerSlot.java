@@ -84,9 +84,12 @@ public class HostControllerSlot<T extends HostAnimatable<?>> {
         }
     }
 
+    private static final double MIN_PLAYBACK_SPEED = 1.0E-4;
+    private static final double MAX_PLAYBACK_SPEED = 64.0;
+
     public void setAnimationTickOverride(double tickSpeedMultiplier) {
         if (Double.isFinite(tickSpeedMultiplier) && tickSpeedMultiplier > 0.0) {
-            this.requestedSpeed = tickSpeedMultiplier;
+            this.requestedSpeed = Math.max(MIN_PLAYBACK_SPEED, Math.min(MAX_PLAYBACK_SPEED, tickSpeedMultiplier));
         }
     }
 
@@ -176,6 +179,16 @@ public class HostControllerSlot<T extends HostAnimatable<?>> {
             this.requestedAnimation = "";
             this.pendingReload = false;
         }
+        String resolvedAnimation = this.requestedAnimation;
+        if (!resolvedAnimation.isEmpty() && this.animatable != null) {
+            var library = this.animatable.resolveAnimationLibrary();
+            if (library != null && !library.hasClip(resolvedAnimation)) {
+                var fallback = this.animatable.getAnimation(resolvedAnimation);
+                if (fallback != null && fallback.name() != null && library.hasClip(fallback.name())) {
+                    resolvedAnimation = fallback.name();
+                }
+            }
+        }
         CodedPlayDecision coreDecision = switch (decision) {
             case CONTINUE -> CodedPlayDecision.CONTINUE;
             case STOP -> CodedPlayDecision.STOP;
@@ -184,7 +197,7 @@ public class HostControllerSlot<T extends HostAnimatable<?>> {
         };
         return new CodedControllerCommand(
                 coreDecision,
-                this.requestedAnimation,
+                resolvedAnimation,
                 this.requestedLoopMode,
                 this.requestedTransitionTicks,
                 this.requestedSpeed,

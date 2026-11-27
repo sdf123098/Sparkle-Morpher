@@ -31,7 +31,7 @@ public final class SpmRenderMath {
     }
 
     private static boolean isHiddenScale(ModelBoneView bone) {
-        return bone.getScaleX() == 0.0f && bone.getScaleY() == 0.0f && bone.getScaleZ() == 0.0f;
+        return bone.getScaleX() == 0.0f || bone.getScaleY() == 0.0f || bone.getScaleZ() == 0.0f;
     }
 
     public static void translateToPivotPoint(PoseStack poseStack, ModelBoneView bone) {

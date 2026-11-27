@@ -1,9 +1,9 @@
 {
-  "sourceRevision": "3cffa18799a4caff1a6147fa9c0202add60cfa98",
-  "version": "1.3.0",
-  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/893a29580f6e7df7c60ff12f905707c73fd16e3e/",
-  "artifactCommit": "893a29580f6e7df7c60ff12f905707c73fd16e3e",
-  "manifestSha256": "34e777dd336d1799343089f910ba6594dcaafaa634ddde5675d749bf9cc1e654",
+  "sourceRevision": "977623dc95ee7ad923828d40f17ac4f2e2980306",
+  "version": "1.3.1",
+  "repository": "https://raw.githubusercontent.com/AIH-Interactive/spm-core/b5b69c10cc6b15db441216688bfe7dd980452c8c/",
+  "artifactCommit": "b5b69c10cc6b15db441216688bfe7dd980452c8c",
+  "manifestSha256": "5579d30c46dd77570e10722676830d35f0ac3569cdcafaef217cd4dfe567ceee",
   "sha256": {
     "acceleration-api": "30463582cfcf933741b679ebc0f174ec5d7d278debfd882aac843b438ef856cd",
     "api": "c5495f8ba46131ec1ecb4b9b67ceb3ce19262d9774a5c5482d549a8ba048abdc",
@@ -19,7 +19,7 @@
     "parser": "44b5ed52cf0b0928cd287e52a411421c2c6ff37a2826dc11a5712d086e3d985f",
     "render-cpu": "df5d9676d25fb331864432f3b0b0a1260a9907e3dd81c28694fd696cd8f239d1",
     "runtime": "b58981c4796c1ce1e97a5b74be30486d4bf22de17a62f22f09b0404d86235476",
-    "scene": "628b3edbd4f179836ae85b405b9839b5622424a18b1d288753886e17d8940cf3",
+    "scene": "401d8be588d12301b216046bde1db02cf1a960769292aeb7f847239f6347cc43",
     "script-lua": "0e5ed9ebf1ab345793602dd1d844d196b6e4a9d85f513d5ee175114f66c43f1b"
   }
 }
